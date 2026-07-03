@@ -42,7 +42,7 @@ npx vercel deploy --prod --yes   # deploy manual a producción
 src/lib/data.ts        Capa de datos Mongo (port de mvp_data.py): fetchRows() = exclusivas vivas
                        con leads/visitas/material; fetchProgram() = programa completo con ventas y bonos.
 src/lib/kam.ts         Lookup estático inmobiliaria → KAM (generado del Sheet TARGETS).
-src/lib/access.ts      Acceso: cualquier email @pulppo.com; env ALLOWED_EMAILS suma emails de otros dominios.
+src/lib/access.ts      Allowlist cerrado de emails (hardcodeado; env ALLOWED_EMAILS lo pisa si está seteada).
 src/lib/firebase.ts    Firebase Auth de Pulppo (config JSON en NEXT_PUBLIC_FIREBASE).
 src/middleware.ts      Protege todo: sin cookie cm-user válida → redirect /login (páginas) o 401 (API).
 src/app/login/         Login SOLO con Google: auth-code → NEXT_PUBLIC_API_URL/login (backend Pulppo)
@@ -73,7 +73,7 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
 | `NEXT_PUBLIC_API_URL` | Backend Pulppo que canjea el code de Google por firebase_token |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | OAuth client de Pulppo |
 | `NEXT_PUBLIC_FIREBASE` | Config de Firebase (JSON en una línea) |
-| `ALLOWED_EMAILS` | Emails extra de otros dominios, coma-separado (opcional; @pulppo.com entra siempre) |
+| `ALLOWED_EMAILS` | Allowlist coma-separado (opcional; si está seteada pisa la lista hardcodeada) |
 
 ## Pendientes conocidos (julio 2026)
 
