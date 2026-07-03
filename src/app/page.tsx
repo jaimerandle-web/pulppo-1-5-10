@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { CarteraRow, ProgramRow, DataPayload } from '@/types';
 import CarteraTab from '@/components/CarteraTab';
 import ProgramaTab from '@/components/ProgramaTab';
+import { Select, Combobox } from '@/components/inputs';
 
 export default function Home() {
     const router = useRouter();
@@ -80,22 +81,13 @@ export default function Home() {
             </header>
 
             <div className="mt-5 flex flex-wrap items-end gap-4 rounded-xl bg-light p-4">
+                <Select label="KAM" value={kam} options={kams}
+                    onChange={(v) => { setKam(v); setInmo('(todas)'); }} className="w-44" />
+                <Combobox label="Inmobiliaria" value={inmo} allLabel="(todas)"
+                    options={inmos.filter((i) => i !== '(todas)')}
+                    placeholder="Buscar inmobiliaria…" onChange={setInmo} />
                 <div>
-                    <p className="mb-1 text-xs text-neutral-500">KAM</p>
-                    <select value={kam} onChange={(e) => { setKam(e.target.value); setInmo('(todas)'); }}
-                        className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm">
-                        {kams.map((k) => <option key={k}>{k}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <p className="mb-1 text-xs text-neutral-500">Inmobiliaria</p>
-                    <select value={inmo} onChange={(e) => setInmo(e.target.value)}
-                        className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm">
-                        {inmos.map((i) => <option key={i}>{i}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <p className="mb-1 text-xs text-neutral-500">Tipo</p>
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Tipo</p>
                     <div className="flex flex-wrap gap-2">
                         {tiposAll.map((t) => (
                             <button key={t}

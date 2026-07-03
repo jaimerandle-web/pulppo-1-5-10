@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { ProgramRow } from '@/types';
 import { Metric, Section, Caption, HBar, VBar, GroupBar, Donut, histogram, DataTable, money, SOFT, YELLOW, SEA, GRAY } from './ui';
+import { Select } from './inputs';
 
 function median(xs: number[]): number | null {
     if (!xs.length) return null;
@@ -137,13 +138,7 @@ export default function ProgramaTab({ fp }: { fp: ProgramRow[] }) {
                 {meses.length ? (
                     <>
                         <div className="mb-4 flex flex-wrap items-end gap-6">
-                            <div>
-                                <Caption>Mes de venta</Caption>
-                                <select value={mesSel} onChange={(e) => setMes(e.target.value)}
-                                    className="rounded-lg border border-neutral-300 px-3 py-2 text-sm">
-                                    {meses.map((m) => <option key={m} value={m}>{m}</option>)}
-                                </select>
-                            </div>
+                            <Select label="Mes de venta" value={mesSel} onChange={setMes} options={meses} className="w-40" />
                             <Metric label={`Vendidas en ${mesSel}`} value={rec.length} />
                             <Metric label="Bono estimado total" value={money(bonoTotal)} />
                             <button onClick={downloadCsv}

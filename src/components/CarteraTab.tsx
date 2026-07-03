@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { CATS, type CarteraRow, type ProgramRow } from '@/types';
 import { Metric, Section, Caption, HBar, DataTable, money, SOFT, YELLOW, SEA } from './ui';
+import { Select } from './inputs';
 
 function alertas(r: CarteraRow): string {
     const a: string[] = [];
@@ -96,17 +97,15 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
             <Section title="Desempeño de una propiedad">
                 {f.length ? (
                     <>
-                        <select
-                            value={selIdx}
-                            onChange={(e) => setSelIdx(Number(e.target.value))}
-                            className="mb-4 w-full max-w-xl rounded-lg border border-neutral-300 px-3 py-2 text-sm"
-                        >
-                            {f.map((r, i) => (
-                                <option key={r.id} value={i}>
-                                    {r.inmobiliaria} · {r.colonia} · {money(r.precio)} ({r.leads_total} leads)
-                                </option>
-                            ))}
-                        </select>
+                        <Select
+                            className="mb-4 w-full max-w-xl"
+                            value={String(selIdx)}
+                            onChange={(v) => setSelIdx(Number(v))}
+                            options={f.map((r, i) => ({
+                                value: String(i),
+                                label: `${r.inmobiliaria} · ${r.colonia} · ${money(r.precio)} (${r.leads_total} leads)`
+                            }))}
+                        />
                         {sel && (
                             <div className="grid gap-6 lg:grid-cols-3">
                                 <div className="space-y-3">
