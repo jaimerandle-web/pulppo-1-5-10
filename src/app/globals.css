@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@300;400;600;700&family=EB+Garamond&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  /* Tema Pulppo (mismos colores que el Streamlit original) */
+  --color-soft: #212322;
+  --color-brand-yellow: #F6BE00;
+  --color-brand-gray: #B7B7B7;
+  --color-sea: #529999;
+  --color-brand-red: #A52003;
+  --color-light: #F3F3F3;
+
+  --font-sans: 'Nunito Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'EB Garamond', Georgia, serif;
+}
+
+body {
+  background: #fff;
+  color: #212322;
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+}
