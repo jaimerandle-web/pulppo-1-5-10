@@ -42,6 +42,53 @@ export function Select({ label, value, onChange, options, className = '' }: {
     );
 }
 
+// Desplegable custom con el mismo look que el Combobox (panel, highlight amarillo), sin búsqueda.
+export function Dropdown({ label, value, onChange, options, className = '' }: {
+    label?: string;
+    value: string;
+    onChange: (v: string) => void;
+    options: string[];
+    className?: string;
+}) {
+    const [open, setOpen] = useState(false);
+    const wrap = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const onClick = (e: MouseEvent) => {
+            if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', onClick);
+        return () => document.removeEventListener('mousedown', onClick);
+    }, []);
+
+    return (
+        <div ref={wrap} className={`relative ${className}`}>
+            {label && <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">{label}</p>}
+            <button
+                onClick={() => setOpen((o) => !o)}
+                className="relative w-full rounded-xl border border-neutral-200 bg-white py-2.5 pl-3.5 pr-9 text-left text-sm shadow-sm transition-colors hover:border-neutral-300 focus:border-[#F6BE00] focus:outline-none focus:ring-2 focus:ring-[#F6BE00]/20"
+            >
+                {value}
+                <Chevron />
+            </button>
+            {open && (
+                <ul className="absolute z-20 mt-1.5 max-h-64 w-full min-w-44 overflow-auto rounded-xl border border-neutral-200 bg-white py-1 shadow-xl">
+                    {options.map((o) => (
+                        <li key={o}>
+                            <button
+                                onClick={() => { onChange(o); setOpen(false); }}
+                                className={`w-full px-3.5 py-2 text-left text-sm hover:bg-[#F6BE00]/15 ${o === value ? 'font-semibold' : ''}`}
+                            >
+                                {o}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
 // Input con autocompletado: escribís y filtra por coincidencia (sin acentos/mayúsculas).
 export function Combobox({ label, value, onChange, options, placeholder, allLabel }: {
     label?: string;

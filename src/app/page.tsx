@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { CarteraRow, ProgramRow, DataPayload } from '@/types';
 import CarteraTab from '@/components/CarteraTab';
 import ProgramaTab from '@/components/ProgramaTab';
-import { Select, Combobox } from '@/components/inputs';
+import { Combobox, Dropdown } from '@/components/inputs';
 
 export default function Home() {
     const router = useRouter();
@@ -81,7 +81,7 @@ export default function Home() {
             </header>
 
             <div className="mt-5 flex flex-wrap items-end gap-4 rounded-xl bg-light p-4">
-                <Select label="KAM" value={kam} options={kams}
+                <Dropdown label="KAM" value={kam} options={kams}
                     onChange={(v) => { setKam(v); setInmo('(todas)'); }} className="w-44" />
                 <Combobox label="Inmobiliaria" value={inmo} allLabel="(todas)"
                     options={inmos.filter((i) => i !== '(todas)')}
