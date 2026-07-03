@@ -11,7 +11,7 @@ métricas históricas del programa y el recap mensual de vendidas para calcular 
 
 - **Producción**: https://pulppo-1-5-10.vercel.app
 - **Repo**: https://github.com/jaimerandle18/centro-1-5-10 (privado — pedile acceso a Jaime si no lo tenés)
-- **Vercel**: proyecto `centro-1-5-10` en el team `pulppo` (pulppo-cx)
+- **Vercel**: proyecto `pulppo-1-5-10` en el team `pulppo` (pulppo-cx)
 
 ## Primeros pasos
 
