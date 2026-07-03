@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-    title: '1·5·10 · Centro de mando',
-    description: 'Dashboard interno del programa 1·5·10 de Pulppo'
+    title: 'Pulppo · 1·5·10',
+    description: 'Centro de mando del programa 1·5·10 de Pulppo'
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

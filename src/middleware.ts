@@ -16,5 +16,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/((?!login|api/auth|_next/static|_next/image|favicon.ico|pulppo-logo.png).*)']
+    matcher: ['/((?!login|api/auth|_next/static|_next/image|favicon.ico|pulppo-icon.png).*)']
 };

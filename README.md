@@ -25,7 +25,7 @@ src/lib/kam.ts        Lookup estático inmobiliaria → KAM (del Sheet TARGETS)
 src/lib/access.ts     Allowlist de emails (env ALLOWED_EMAILS o fallback)
 src/lib/firebase.ts   Firebase Auth de Pulppo (NEXT_PUBLIC_FIREBASE)
 src/middleware.ts     Protege todas las rutas: sin cookie cm-user válida → /login o 401
-src/app/login/        Login con Google (igual que customer-cx) o email
+src/app/login/        Login SOLO con Google (idToken de Firebase verificado en el server)
 src/app/api/data/     GET /api/data → { rows, program } con cache 10 min (?refresh=1 fuerza)
 src/app/page.tsx      Dashboard: filtros KAM/inmobiliaria/tipo + 2 pestañas
 ```

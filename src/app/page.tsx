@@ -64,7 +64,10 @@ export default function Home() {
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
             <header className="flex flex-wrap items-start justify-between gap-3">
-                <h1 className="text-3xl sm:text-4xl">Centro de mando · 1 · 5 · 10</h1>
+                <div className="flex items-center gap-3">
+                    <img src="/pulppo-icon.png" alt="Pulppo" className="h-9 w-9" />
+                    <h1 className="text-3xl sm:text-4xl">Pulppo · 1 · 5 · 10</h1>
+                </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-500">
                     <span>Datos live desde Mongo (cache 10 min)</span>
                     <button onClick={() => load(true)} className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
