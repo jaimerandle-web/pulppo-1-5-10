@@ -42,10 +42,9 @@ npx vercel deploy --prod --yes   # deploy manual a producción
 src/lib/data.ts        Capa de datos Mongo (port de mvp_data.py): fetchRows() = exclusivas vivas
                        con leads/visitas/material; fetchProgram() = programa completo con ventas y bonos.
 src/lib/kam.ts         Lookup estático inmobiliaria → KAM (generado del Sheet TARGETS).
-src/lib/access.ts      Allowlist de emails (env ALLOWED_EMAILS coma-separado, o fallback hardcodeado).
+src/lib/access.ts      Acceso: cualquier email @pulppo.com; env ALLOWED_EMAILS suma emails de otros dominios.
 src/lib/firebase.ts    Firebase Auth de Pulppo (config JSON en NEXT_PUBLIC_FIREBASE).
 src/middleware.ts      Protege todo: sin cookie cm-user válida → redirect /login (páginas) o 401 (API).
-                       Con env DISABLE_AUTH=1 se saltea (llave temporal, ver Pendientes).
 src/app/login/         Login SOLO con Google: auth-code → NEXT_PUBLIC_API_URL/login (backend Pulppo)
                        → Firebase custom token → idToken verificado server-side → cookies cm-user/cm-name.
 src/app/api/auth/      POST valida idToken contra accounts:lookup + allowlist; DELETE = logout.
@@ -74,13 +73,9 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
 | `NEXT_PUBLIC_API_URL` | Backend Pulppo que canjea el code de Google por firebase_token |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | OAuth client de Pulppo |
 | `NEXT_PUBLIC_FIREBASE` | Config de Firebase (JSON en una línea) |
-| `ALLOWED_EMAILS` | Allowlist coma-separado (opcional, hay fallback en código) |
-| `DISABLE_AUTH` | `1` = saltea el login (llave temporal) |
+| `ALLOWED_EMAILS` | Emails extra de otros dominios, coma-separado (opcional; @pulppo.com entra siempre) |
 
 ## Pendientes conocidos (julio 2026)
 
-- El OAuth client de Google NO tiene autorizado el origen `https://pulppo-1-5-10.vercel.app` todavía
-  → el botón de Google da `origin_mismatch`. Por eso production tiene `DISABLE_AUTH=1` (dashboard
-  público temporalmente). Cuando se autorice el origen: borrar esa env en Vercel y redeployar.
 - El auto-deploy por push de Git puede quedar bloqueado si el autor del commit no matchea un miembro
   del team de Vercel; el deploy manual por CLI (`npx vercel deploy --prod --yes`) siempre funciona.
