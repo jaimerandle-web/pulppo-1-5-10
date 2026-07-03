@@ -9,7 +9,7 @@ Lee en vivo de MongoDB (read-only) y muestra: pipeline de ofertas/ventas, desemp
 alertas, métricas del programa y recap mensual para bonos. Es un port a Next.js del dashboard
 original en Streamlit.
 
-- **Prod**: https://centro-1-5-10.vercel.app (proyecto `centro-1-5-10` en el team de Vercel `pulppo-cx`)
+- **Prod**: https://pulppo-1-5-10.vercel.app (proyecto `centro-1-5-10` en el team de Vercel `pulppo-cx`)
 - **Repo**: github.com/jaimerandle18/centro-1-5-10
 
 ## Stack
@@ -79,7 +79,7 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
 
 ## Pendientes conocidos (julio 2026)
 
-- El OAuth client de Google NO tiene autorizado el origen `https://centro-1-5-10.vercel.app` todavía
+- El OAuth client de Google NO tiene autorizado el origen `https://pulppo-1-5-10.vercel.app` todavía
   → el botón de Google da `origin_mismatch`. Por eso production tiene `DISABLE_AUTH=1` (dashboard
   público temporalmente). Cuando se autorice el origen: borrar esa env en Vercel y redeployar.
 - El auto-deploy por push de Git puede quedar bloqueado si el autor del commit no matchea un miembro
