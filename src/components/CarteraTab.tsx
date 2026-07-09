@@ -50,7 +50,18 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
     const precios = f.map((r) => r.precio).filter((p): p is number => p != null);
     const ticketMedio = precios.length ? precios.reduce((a, b) => a + b, 0) / precios.length : null;
 
-    const noSuper = useMemo(() => f.filter((r) => !r.superdestacada), [f]);
+    // No superdestacadas agrupadas por inmobiliaria (para subir de producto en lote).
+    const noSuperPorInmo = useMemo(() => {
+        const m: Record<string, CarteraRow[]> = {};
+        for (const r of f) if (!r.superdestacada) {
+            const k = r.inmobiliaria ?? 'Sin inmobiliaria';
+            (m[k] = m[k] || []).push(r);
+        }
+        return Object.entries(m)
+            .map(([inmobiliaria, props]) => ({ inmobiliaria, props }))
+            .sort((a, b) => b.props.length - a.props.length || a.inmobiliaria.localeCompare(b.inmobiliaria));
+    }, [f]);
+    const noSuperTotal = noSuperPorInmo.reduce((a, g) => a + g.props.length, 0);
 
     const sel = f[Math.min(selIdx, Math.max(0, f.length - 1))];
     const conAlertas = f.map((r) => ({ ...r, alertas: alertas(r) })).filter((r) => r.alertas !== '');
@@ -58,26 +69,32 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
 
     return (
         <div>
-            {noSuper.length > 0 && (
+            {noSuperTotal > 0 && (
                 <div className="mb-6 rounded-lg border-l-4 px-4 py-3" style={{ borderColor: RED, background: '#FBEAE7' }}>
                     <p className="text-sm font-semibold" style={{ color: RED }}>
-                        ⚠️ {noSuper.length} de {f.length} {noSuper.length === 1 ? 'propiedad no está superdestacada' : 'propiedades no están superdestacadas'} en Inmuebles24
+                        ⚠️ {noSuperTotal} de {f.length} {noSuperTotal === 1 ? 'propiedad no está superdestacada' : 'propiedades no están superdestacadas'} en Inmuebles24
                     </p>
                     <p className="mt-0.5 text-xs text-neutral-600">
-                        Superdestacada = <b>Home Combo</b> o <b>Home Combo Zona Demand</b>. Revisar y subir de producto:
+                        Superdestacada = <b>Home Combo</b> o <b>Home Combo Zona Demand</b>. Agrupadas por inmobiliaria para subir de producto en lote:
                     </p>
-                    <div className="mt-2 max-h-56 overflow-y-auto">
-                        <ul className="space-y-1 text-xs">
-                            {noSuper.map((r) => (
-                                <li key={r.id} className="flex flex-wrap items-center gap-x-2">
-                                    <span className="font-medium">{r.inmobiliaria ?? '—'}</span>
-                                    <span className="text-neutral-500">· {r.colonia ?? '—'}</span>
-                                    <span className="text-neutral-500">· {r.internalId ?? '—'}</span>
-                                    <span className="rounded px-1.5 py-0.5" style={{ background: '#fff', color: RED, border: `1px solid ${RED}` }}>{i24Label(r.i24_type)}</span>
-                                    <a href={r.url} target="_blank" rel="noreferrer" className="underline" style={{ color: SEA }}>ver</a>
-                                </li>
-                            ))}
-                        </ul>
+                    <div className="mt-2 max-h-72 space-y-2 overflow-y-auto">
+                        {noSuperPorInmo.map((g) => (
+                            <div key={g.inmobiliaria}>
+                                <p className="text-xs font-semibold" style={{ color: SOFT }}>
+                                    {g.inmobiliaria} <span className="font-normal text-neutral-500">({g.props.length})</span>
+                                </p>
+                                <ul className="mt-0.5 space-y-1 pl-3 text-xs">
+                                    {g.props.map((r) => (
+                                        <li key={r.id} className="flex flex-wrap items-center gap-x-2">
+                                            <span className="text-neutral-500">{r.colonia ?? '—'}</span>
+                                            <span className="text-neutral-500">· {r.internalId ?? '—'}</span>
+                                            <span className="rounded px-1.5 py-0.5" style={{ background: '#fff', color: RED, border: `1px solid ${RED}` }}>{i24Label(r.i24_type)}</span>
+                                            <a href={r.url} target="_blank" rel="noreferrer" className="underline" style={{ color: SEA }}>ver</a>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
