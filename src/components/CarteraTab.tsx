@@ -2,12 +2,24 @@
 
 import { useMemo, useState } from 'react';
 import { CATS, type CarteraRow, type ProgramRow } from '@/types';
-import { Metric, Section, Caption, HBar, DataTable, money, SOFT, YELLOW, SEA } from './ui';
+import { Metric, Section, Caption, HBar, DataTable, money, SOFT, YELLOW, SEA, RED } from './ui';
 import { Select } from './inputs';
+
+// Nombres legibles de los productos de Inmuebles24.
+const I24_LABELS: Record<string, string> = {
+    HOME_COMBO: 'Home Combo',
+    HOME_COMBO_ZONA_DEMAND: 'Home Combo Zona Demand',
+    DESTACADO_COMBO: 'Destacado Combo',
+    DESTACADO_COMBO_ZONA_DEMAND: 'Destacado Combo Zona Demand',
+    SIMPLE_COMBO: 'Simple Combo',
+    OFFLINE: 'Offline'
+};
+const i24Label = (t: string | null) => (t ? I24_LABELS[t] ?? t : 'Sin publicar');
 
 function alertas(r: CarteraRow): string {
     const a: string[] = [];
     if (r.op_status === 'offer') a.push('🟢 EN OFERTA');
+    if (!r.superdestacada) a.push(`🟠 No superdestacada (${i24Label(r.i24_type)})`);
     if ((r.leads_total || 0) === 0) a.push('🔴 Sin leads');
     if (!r.material_ok) a.push('🟡 Material incompleto');
     if ((r.dias_activa || 0) >= 150) a.push('🟡 Contrato por vencer');
@@ -38,12 +50,38 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
     const precios = f.map((r) => r.precio).filter((p): p is number => p != null);
     const ticketMedio = precios.length ? precios.reduce((a, b) => a + b, 0) / precios.length : null;
 
+    const noSuper = useMemo(() => f.filter((r) => !r.superdestacada), [f]);
+
     const sel = f[Math.min(selIdx, Math.max(0, f.length - 1))];
     const conAlertas = f.map((r) => ({ ...r, alertas: alertas(r) })).filter((r) => r.alertas !== '');
     const leadColsConDatos = CATS.filter((c) => f.reduce((a, r) => a + (r.leads[c] || 0), 0) > 0);
 
     return (
         <div>
+            {noSuper.length > 0 && (
+                <div className="mb-6 rounded-lg border-l-4 px-4 py-3" style={{ borderColor: RED, background: '#FBEAE7' }}>
+                    <p className="text-sm font-semibold" style={{ color: RED }}>
+                        ⚠️ {noSuper.length} de {f.length} {noSuper.length === 1 ? 'propiedad no está superdestacada' : 'propiedades no están superdestacadas'} en Inmuebles24
+                    </p>
+                    <p className="mt-0.5 text-xs text-neutral-600">
+                        Superdestacada = <b>Home Combo</b> o <b>Home Combo Zona Demand</b>. Revisar y subir de producto:
+                    </p>
+                    <div className="mt-2 max-h-56 overflow-y-auto">
+                        <ul className="space-y-1 text-xs">
+                            {noSuper.map((r) => (
+                                <li key={r.id} className="flex flex-wrap items-center gap-x-2">
+                                    <span className="font-medium">{r.inmobiliaria ?? '—'}</span>
+                                    <span className="text-neutral-500">· {r.colonia ?? '—'}</span>
+                                    <span className="text-neutral-500">· {r.internalId ?? '—'}</span>
+                                    <span className="rounded px-1.5 py-0.5" style={{ background: '#fff', color: RED, border: `1px solid ${RED}` }}>{i24Label(r.i24_type)}</span>
+                                    <a href={r.url} target="_blank" rel="noreferrer" className="underline" style={{ color: SEA }}>ver</a>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            )}
+
             <Section title="Avanzando · oferta y venta">
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <Metric label="🟢 En oferta" value={f.filter((r) => r.op_status === 'offer').length} />

@@ -24,6 +24,8 @@ export interface CarteraRow {
     video: boolean;
     tour: boolean;
     material_ok: boolean;
+    i24_type: string | null;   // producto en Inmuebles24 (HOME_COMBO, SIMPLE_COMBO, OFFLINE, …)
+    superdestacada: boolean;   // true si i24_type es HOME_COMBO o HOME_COMBO_ZONA_DEMAND
     url: string;
     leads: Record<string, number>; // por categoría de fuente (CATS)
 }

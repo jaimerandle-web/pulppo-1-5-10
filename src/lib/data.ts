@@ -51,8 +51,10 @@ export async function fetchRows(): Promise<CarteraRow[]> {
         videos: 1, 'marketing.Video.videoUrl': 1, virtualTour: 1,
         'address.neighborhood.name': 1, 'address.city.name': 1, 'address.state.name': 1,
         'contract.exclusive.pulppo': 1, 'contract.exclusive.durationMonths': 1,
-        'status.last': 1, pictures: 1
+        'status.last': 1, pictures: 1, 'portals.inmuebles24.type': 1
     };
+    // Superdestacada en Inmuebles24 = producto Home Combo o Home Combo Zona Demand.
+    const SUPER = new Set(['HOME_COMBO', 'HOME_COMBO_ZONA_DEMAND']);
     const props = await db.collection('properties').find(FLAG, { projection: proj }).toArray();
     const ids = props.map((p) => p._id as ObjectId);
 
@@ -98,6 +100,7 @@ export async function fetchRows(): Promise<CarteraRow[]> {
         const hasVideo = Boolean(p.videos?.length) || Boolean(p.marketing?.Video?.videoUrl);
         const hasTour = Boolean(p.virtualTour);
         const addr = p.address || {};
+        const i24Type = p.portals?.inmuebles24?.type ?? null;
         const leads: Record<string, number> = {};
         for (const c of CATS) leads[c] = lm[c] || 0;
         return {
@@ -120,6 +123,8 @@ export async function fetchRows(): Promise<CarteraRow[]> {
             video: hasVideo,
             tour: hasTour,
             material_ok: pics >= 12 && hasVideo && hasTour,
+            i24_type: i24Type,
+            superdestacada: SUPER.has(i24Type),
             url: `https://pulppo.com/propiedades/${pid}`,
             leads
         };
