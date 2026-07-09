@@ -45,6 +45,7 @@ export async function fetchRows(): Promise<CarteraRow[]> {
     const db = await getDb();
     const FLAG = { 'contract.exclusive.pulppo': { $ne: null }, 'status.last': 'published' };
     const proj = {
+        internalId: 1,
         'company.name': 1, 'agent.firstName': 1, 'agent.lastName': 1,
         type: 1, 'listing.title': 1, 'listing.value': 1, 'listing.operation': 1,
         videos: 1, 'marketing.Video.videoUrl': 1, virtualTour: 1,
@@ -101,6 +102,7 @@ export async function fetchRows(): Promise<CarteraRow[]> {
         for (const c of CATS) leads[c] = lm[c] || 0;
         return {
             id: pid,
+            internalId: p.internalId ?? null,
             inmobiliaria: p.company?.name ?? null,
             broker: [p.agent?.firstName, p.agent?.lastName].filter(Boolean).join(' '),
             kam: getKam(p.company?.name),

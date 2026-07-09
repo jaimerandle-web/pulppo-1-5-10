@@ -55,6 +55,7 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
                     {pipe.length ? (
                         <DataTable
                             columns={[
+                                { key: 'internalId', label: 'código', render: (v) => (v ? String(v) : '—') },
                                 { key: 'inmobiliaria', label: 'inmobiliaria' },
                                 { key: 'kam', label: 'kam' },
                                 { key: 'colonia', label: 'colonia' },

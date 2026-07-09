@@ -6,6 +6,7 @@ export const CATS = [
 // Una fila por exclusiva VIVA (published) con desempeño (port de fetch_rows).
 export interface CarteraRow {
     id: string;
+    internalId: string | null;
     inmobiliaria: string | null;
     broker: string;
     kam: string;
