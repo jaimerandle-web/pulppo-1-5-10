@@ -26,7 +26,7 @@ const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
 const num = (x: unknown): number | null => (typeof x === 'number' && !isNaN(x) ? x : null);
 const strip = (s: string) => s.replace(/\b(fracc\.?|fraccionamiento|colonia|col\.?|residencial|barrio|pueblo)\b/gi, '').trim();
 
-interface Comp { precio: number | null; m2: number | null; ppm2: number | null; rec: number | null; ban: number | null; zona: string | null; id: string }
+interface Comp { precio: number | null; m2: number | null; ppm2: number | null; rec: number | null; ban: number | null; zona: string | null; url: string | null; src: string }
 
 export async function renderFicha(id: string): Promise<{ code: string; html: string } | null> {
     let oid: ObjectId;
@@ -113,15 +113,29 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
         ).toArray();
     const toComp = (e: Document): Comp => {
         const ev = num(dig(e, 'listing', 'value')), em = num(dig(e, 'attributes', 'totalSurface'));
-        return { precio: ev, m2: em, ppm2: ev && em ? ev / em : null, rec: num(dig(e, 'attributes', 'suites')), ban: num(dig(e, 'attributes', 'bathrooms')), zona: (dig(e, 'address', 'neighborhood', 'name') as string) ?? (dig(e, 'address', 'city', 'name') as string) ?? null, id: String(e._id) };
+        return { precio: ev, m2: em, ppm2: ev && em ? ev / em : null, rec: num(dig(e, 'attributes', 'suites')), ban: num(dig(e, 'attributes', 'bathrooms')), zona: (dig(e, 'address', 'neighborhood', 'name') as string) ?? (dig(e, 'address', 'city', 'name') as string) ?? null, url: `https://pulppo.com/propiedades/${String(e._id)}`, src: 'Pulppo' };
     };
     let pool = city ? await fetchLive({ 'address.city.name': city }) : [];
     if (pool.length < 3 && state) pool = await fetchLive({ 'address.state.name': state });
     const poolC = pool.map(toComp);
+    // "Qué te alcanza" también contra el mercado (MLS): solo publicados, con link al portal (import.url).
+    const fetchMls = async (geo: Document): Promise<Comp[]> => {
+        const rows = await db.collection('mls').find(
+            { 'listing.operation': 'sale', type: typ, 'status.last': 'published', ...geo, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
+            { projection: { 'listing.value': 1, attributes: 1, 'address.neighborhood.name': 1, 'address.city.name': 1, 'import.url': 1 }, limit: 250 }
+        ).toArray();
+        return rows.map((e) => {
+            const ev = num(dig(e, 'listing', 'value')), em = num(dig(e, 'attributes', 'totalSurface'));
+            return { precio: ev, m2: em, ppm2: ev && em ? ev / em : null, rec: num(dig(e, 'attributes', 'suites')), ban: num(dig(e, 'attributes', 'bathrooms')), zona: (dig(e, 'address', 'neighborhood', 'name') as string) ?? (dig(e, 'address', 'city', 'name') as string) ?? null, url: (dig(e, 'import', 'url') as string) ?? null, src: 'MLS' };
+        });
+    };
+    let mls = city ? await fetchMls({ 'address.city.name': city }) : [];
+    if (mls.length < 3 && state) mls = await fetchMls({ 'address.state.name': state });
+    const alcPool = [...poolC, ...mls]; // Pulppo + mercado, para "qué te alcanza"
     const dist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
     const comps = [...poolC].sort((a, b) => dist(a) - dist(b)).slice(0, 6);
-    const alcPrecio = val ? poolC.filter((c) => c.precio && c.precio >= 0.9 * val && c.precio <= 1.1 * val).slice(0, 5) : [];
-    const alcPpm2 = ppm2 ? poolC.filter((c) => c.ppm2 && c.ppm2 >= 0.85 * ppm2 && c.ppm2 <= 1.15 * ppm2).slice(0, 5) : [];
+    const alcPrecio = val ? alcPool.filter((c) => c.precio && c.precio >= 0.9 * val && c.precio <= 1.1 * val).sort((a, b) => Math.abs((a.precio as number) - val) - Math.abs((b.precio as number) - val)).slice(0, 6) : [];
+    const alcPpm2 = ppm2 ? alcPool.filter((c) => c.ppm2 && c.ppm2 >= 0.85 * ppm2 && c.ppm2 <= 1.15 * ppm2).sort((a, b) => Math.abs((a.ppm2 as number) - ppm2) - Math.abs((b.ppm2 as number) - ppm2)).slice(0, 6) : [];
     const compPpm = comps.map((c) => c.ppm2).filter((x): x is number => x != null);
     const avgPpm = compPpm.length ? compPpm.reduce((a, b) => a + b, 0) / compPpm.length : null;
     const zonaComp = col ? await db.collection('properties').countDocuments({ 'status.last': 'published', 'listing.operation': 'sale', type: typ, 'address.neighborhood.name': col, _id: { $ne: oid } }) : 0;
@@ -178,7 +192,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const tv = leads.length ? vis / leads.length : 0;
     const to = vis ? ofertas / vis : 0;
     const vcolor = tv >= 0.2 ? SEA : tv >= 0.1 ? YEL : RED;
-    const vtxt = tv >= 0.2 ? 'tasa ok' : 'tasa baja';
+    const vtxt = tv >= 0.2 ? 'tasa ok' : tv >= 0.1 ? 'tasa moderada' : 'tasa baja';
     const fstage = (lbl: string, n: number, w: number, inside = '') => `<div class="fstage"><span class="fslbl">${lbl}</span><span class="fstrack"><span class="fsbar" style="width:${Math.max(w, 0.6)}%"></span>${inside}</span><span class="fsn">${n}</span></div>`;
     const convInline = `<span class="fconvinline"><b style="color:${vcolor}">${(tv * 100).toFixed(0)}%</b> · ${vtxt}</span>`;
     const funnel = fstage('Leads', leads.length, 100) + fstage('Visitas', vis, (100 * vis) / Math.max(leads.length, 1), convInline) + fstage('Ofertas', ofertas, (100 * ofertas) / Math.max(leads.length, 1));
@@ -186,7 +200,11 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const fuenteHtml = fuenteRows.map(([k, v]) => `<div class="frow"><span>${k}</span><span class="fbarwrap"><span class="fbar" style="width:${Math.round((100 * v) / maxF)}%"></span></span><span class="fn">${v}</span></div>`).join('');
     const compTbl = (rows: Comp[]) => {
         if (!rows.length) return '<tr><td colspan="5" style="color:#B7B7B7">Sin resultados en el rango.</td></tr>';
-        const zc = (r: Comp) => { const z = esc(String(r.zona ?? '—').slice(0, 26)); return r.id ? `<a href="https://pulppo.com/propiedades/${r.id}" target="_blank" rel="noreferrer" style="color:${SEA}">${z}</a>` : z; };
+        const zc = (r: Comp) => {
+            const z = esc(String(r.zona ?? '—').slice(0, 24));
+            const tag = r.src === 'MLS' ? ` <span style="color:${GRY};font-size:8px">MLS</span>` : '';
+            return (r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noreferrer" style="color:${SEA}">${z}</a>` : z) + tag;
+        };
         return rows.map((r) => `<tr><td>${zc(r)}</td><td class="nw">${money(r.precio)}</td><td class="nw">${r.m2 ?? '—'} m²</td><td class="nw">${r.ppm2 ? money(r.ppm2) + '/m²' : '—'}</td><td class="nw">${r.rec ?? '—'} rec<br>${r.ban ?? '—'} baños</td></tr>`).join('');
     };
     const czTxt = cz.length ? `${cz.length} cierres · mediana ${money(median(cz))} · rango ${money(Math.min(...cz))}–${money(Math.max(...cz))}` : 'sin cierres registrados';
@@ -213,7 +231,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
 .ficha-root .recap{display:flex;gap:20px;margin-top:14px}.ficha-root .recap .n{font-family:'EB Garamond',serif;font-size:22px}.ficha-root .recap .l{font-size:9px;color:${GRY};text-transform:uppercase;letter-spacing:.05em}
 .ficha-root .frow{display:flex;align-items:center;font-size:11px;margin:3px 0}.ficha-root .frow span:first-child{width:96px}
 .ficha-root .fbarwrap{flex:1;background:${LGT};height:9px;margin:0 8px}.ficha-root .fbar{display:block;height:9px;background:${BLK}}.ficha-root .fn{width:20px;text-align:right;font-weight:700}
-.ficha-root .split{display:flex;height:22px;margin-top:6px;font-size:11px;color:#fff}.ficha-root .split .a{background:${BLK};display:flex;align-items:center;padding:0 8px}.ficha-root .split .c{background:${SEA};display:flex;align-items:center;padding:0 8px}
+.ficha-root .split{display:flex;height:24px;margin-top:6px;font-size:11px;color:#fff}.ficha-root .split .a,.ficha-root .split .c{display:flex;align-items:center;padding:0 8px;white-space:nowrap;overflow:hidden}.ficha-root .split .a{background:${BLK}}.ficha-root .split .c{background:${SEA}}
 .ficha-root table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}.ficha-root th,.ficha-root td{text-align:left;padding:5px 6px;border-bottom:1px solid ${LGT};vertical-align:top}
 .ficha-root td.nw{white-space:nowrap}.ficha-root th{font-weight:700;color:${GRY};text-transform:uppercase;font-size:9px;letter-spacing:.06em}
 .ficha-root .kpi{display:flex;gap:24px;margin-top:4px}.ficha-root .kpi .n{font-family:'EB Garamond',serif;font-size:26px}.ficha-root .kpi .l{font-size:10px;color:${GRY};text-transform:uppercase;letter-spacing:.06em}
@@ -237,11 +255,11 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     <div class="grid2">
       <div>${funnel}
         <div class="recap"><div><div class="n">${l30}</div><div class="l">leads · 30 días</div></div><div><div class="n">${l90}</div><div class="l">leads · 90 días</div></div><div><div class="n">${leads.length}</div><div class="l">leads · histórico</div></div></div>
-        <div style="margin-top:14px" class="eyebrow">Leads: asesores vs. clientes</div>
-        <div class="split"><div class="a" style="width:${Math.round((100 * asesor) / Math.max(leads.length, 1))}%">${asesor} asesores</div><div class="c" style="width:${Math.round((100 * cliente) / Math.max(leads.length, 1))}%">${cliente} clientes</div></div>
       </div>
       <div><div class="eyebrow" style="margin-bottom:6px">Leads por fuente</div>${fuenteHtml}</div>
     </div>
+    <div style="margin-top:16px" class="eyebrow">Leads: asesores vs. clientes</div>
+    <div class="split"><div class="a" style="width:${Math.round((100 * asesor) / Math.max(leads.length, 1))}%">${asesor} asesores</div><div class="c" style="width:${Math.round((100 * cliente) / Math.max(leads.length, 1))}%">${cliente} clientes</div></div>
   </div>
 
   <div class="sec"><div class="eyebrow">Mercado y competencia</div><div class="accent"></div>
