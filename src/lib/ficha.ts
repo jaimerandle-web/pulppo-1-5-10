@@ -141,6 +141,31 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const avgPpm = compPpm.length ? compPpm.reduce((a, b) => a + b, 0) / compPpm.length : null;
     const zonaComp = col ? await db.collection('properties').countDocuments({ 'status.last': 'published', 'listing.operation': 'sale', type: typ, 'address.neighborhood.name': col, _id: { $ne: oid } }) : 0;
 
+    // ---- Insights de la zona: demanda (búsquedas 6m) vs oferta (mercado MLS). Colonia→ciudad; se oculta si es flaca. ----
+    const SIX = new Date(now - 182 * 86400000);
+    const nid = (dig(P, 'address', 'neighborhood', 'id') as string) ?? null;
+    const cityId = (dig(P, 'address', 'city', 'id') as string) ?? null;
+    const zoneStats = async (demField: string, demVal: string, ofeField: string, ofeVal: string) => {
+        const [dem, ofe] = await Promise.all([
+            db.collection('searches').countDocuments({ [demField]: demVal, createdAt: { $gte: SIX } }),
+            db.collection('mls').countDocuments({ 'listing.operation': 'sale', type: typ, 'status.last': 'published', [ofeField]: ofeVal })
+        ]);
+        return { dem, ofe };
+    };
+    let zonaLbl: string | null = null, zdem = 0, zofe = 0;
+    if (col && nid) { const s = await zoneStats('filters.addresses.neighborhood.name', col, 'address.neighborhood.id', nid); if (s.dem >= 15 && s.ofe >= 3) { zonaLbl = col; zdem = s.dem; zofe = s.ofe; } }
+    if (!zonaLbl && city && cityId) { const s = await zoneStats('filters.addresses.city.name', city, 'address.city.id', cityId); if (s.dem >= 15 && s.ofe >= 3) { zonaLbl = city; zdem = s.dem; zofe = s.ofe; } }
+    const zratio = zofe ? zdem / zofe : 0;
+    const zppms = [...mls, ...poolC].map((c) => c.ppm2).filter((x): x is number => x != null);
+    const zoneMed = zppms.length ? median(zppms) : null;
+    let zread = '';
+    if (zonaLbl) {
+        if (zratio >= 1) zread = 'Alta demanda y oferta limitada: buen momento para vender, debería moverse rápido.';
+        else if (zratio >= 0.3) zread = 'Demanda y oferta equilibradas: cuida precio y calidad del anuncio para destacar.';
+        else zread = 'Oferta amplia frente a la demanda: diferénciate en precio o multimedia para acelerar la venta.';
+        if (zoneMed && ppm2) zread += ` Tu $/m² (${money(ppm2)}) está ${Math.abs(Math.round((ppm2 / zoneMed - 1) * 100))}% ${ppm2 >= zoneMed ? 'arriba' : 'abajo'} de la mediana de la zona.`;
+    }
+
     // insights + plan de acción
     const insights: string[] = [
         `${leads.length} leads históricos · ${cliente} de clientes directos (${Math.round((100 * cliente) / Math.max(leads.length, 1))}%) y ${asesor} de asesores.`,
@@ -276,6 +301,16 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
         <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>
     </div>
   </div>
+
+  ${zonaLbl ? `<div class="sec"><div class="eyebrow">Insights de la zona · ${esc(zonaLbl)}</div><div class="accent"></div>
+    <div class="kpi">
+      <div><div class="n">${zdem.toLocaleString('en-US')}</div><div class="l">búsquedas · 6 meses</div></div>
+      <div><div class="n">${zofe.toLocaleString('en-US')}</div><div class="l">${esc(typ)}s en venta (mercado)</div></div>
+      <div><div class="n">${zratio >= 1 ? zratio.toFixed(1) : zratio.toFixed(2)}</div><div class="l">búsquedas por propiedad</div></div>
+      ${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana de la zona</div></div>` : ''}
+    </div>
+    <p style="margin-top:8px;font-size:12px">${zread}</p>
+  </div>` : ''}
 
   <div class="sec"><div class="eyebrow">Análisis y oportunidades</div><div class="accent"></div>
     <div class="two"><div class="box"><div class="eyebrow">Insights</div><ul>${insights.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></div><div class="box"><div class="eyebrow">Plan de acción</div><ul>${plan.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div></div>
