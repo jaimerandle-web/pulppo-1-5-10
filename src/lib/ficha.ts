@@ -192,7 +192,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const tv = leads.length ? vis / leads.length : 0;
     const to = vis ? ofertas / vis : 0;
     const vcolor = tv >= 0.2 ? SEA : tv >= 0.1 ? YEL : RED;
-    const vtxt = tv >= 0.2 ? 'tasa ok' : tv >= 0.1 ? 'tasa moderada' : 'tasa baja';
+    const vtxt = tv >= 0.2 ? '¡wow!' : tv >= 0.1 ? 'tasa ok' : 'tasa baja';
     const fstage = (lbl: string, n: number, w: number, inside = '') => `<div class="fstage"><span class="fslbl">${lbl}</span><span class="fstrack"><span class="fsbar" style="width:${Math.max(w, 0.6)}%"></span>${inside}</span><span class="fsn">${n}</span></div>`;
     const convInline = `<span class="fconvinline"><b style="color:${vcolor}">${(tv * 100).toFixed(0)}%</b> · ${vtxt}</span>`;
     const funnel = fstage('Leads', leads.length, 100) + fstage('Visitas', vis, (100 * vis) / Math.max(leads.length, 1), convInline) + fstage('Ofertas', ofertas, (100 * ofertas) / Math.max(leads.length, 1));
@@ -256,21 +256,21 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
       <div>${funnel}
         <div class="recap"><div><div class="n">${l30}</div><div class="l">leads · 30 días</div></div><div><div class="n">${l90}</div><div class="l">leads · 90 días</div></div><div><div class="n">${leads.length}</div><div class="l">leads · histórico</div></div></div>
       </div>
-      <div><div class="eyebrow" style="margin-bottom:6px">Leads por fuente</div>${fuenteHtml}</div>
+      <div><div class="eyebrow" style="margin-bottom:6px;color:${BLK}">Leads por fuente</div>${fuenteHtml}</div>
     </div>
-    <div style="margin-top:16px" class="eyebrow">Leads: asesores vs. clientes</div>
+    <div style="margin-top:16px;color:${BLK}" class="eyebrow">Leads: asesores vs. clientes</div>
     <div class="split"><div class="a" style="width:${Math.round((100 * asesor) / Math.max(leads.length, 1))}%">${asesor} asesores</div><div class="c" style="width:${Math.round((100 * cliente) / Math.max(leads.length, 1))}%">${cliente} clientes</div></div>
   </div>
 
   <div class="sec"><div class="eyebrow">Mercado y competencia</div><div class="accent"></div>
     <div class="kpi"><div><div class="n">${money(ppm2)}</div><div class="l">$/m² de esta propiedad</div></div><div><div class="n">${comps.length}</div><div class="l">comparables en zona</div></div></div>
     <div style="margin-top:6px;font-size:11px;color:${GRY}">Cierres reales de la comunidad (${esc(typ)} · ${esc(scope)}): ${czTxt}</div>
-    <div style="margin-top:10px"><div class="eyebrow">Con qué compite en la zona</div>
+    <div style="margin-top:10px"><div class="eyebrow" style="color:${BLK}">Con qué compite en la zona</div>
       <table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table></div>
     <div class="two">
-      <div><div class="eyebrow" style="margin:12px 0 2px">Qué te alcanza por el mismo presupuesto</div>
+      <div><div class="eyebrow" style="margin:12px 0 2px;color:${BLK}">Qué te alcanza por el mismo presupuesto</div>
         <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPrecio)}</table></div>
-      <div><div class="eyebrow" style="margin:12px 0 2px">Qué te alcanza por $/m² similar</div>
+      <div><div class="eyebrow" style="margin:12px 0 2px;color:${BLK}">Qué te alcanza por $/m² similar</div>
         <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>
     </div>
   </div>
