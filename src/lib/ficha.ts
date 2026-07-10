@@ -45,6 +45,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const typ = (P.type as string) ?? null;
     const ppm2 = val && m2 ? val / m2 : null;
     const code = (P.internalId as string) ?? id;
+    const broker = [dig(P, 'agent', 'firstName'), dig(P, 'agent', 'lastName')].filter(Boolean).map(String).join(' ').trim();
     const cat = (dig(P, 'portals', 'inmuebles24', 'type') as string) ?? null;
     const mlt = (dig(P, 'portals', 'mercadolibre', 'type') as string) ?? null;
     const catLbl = cat ? (CATLBL[cat] ?? cat) : '—';
@@ -246,7 +247,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     <h1>${esc(code)}</h1>
     <div class="sub">${esc(typ)} · ${esc(opTxt)} · ${esc(col)}, ${esc(city)}</div>
     <div class="price">${money(val)} · ${m2 ?? '—'} m² · ${money(ppm2)}/m²</div>
-    <div><span class="tag">${esc(dig(P, 'company', 'name'))}</span><span class="tag">${catLbl}</span><span class="tag">Publicada ${pub ? pub.toISOString().slice(0, 10) : '—'}${meses != null ? ` (${meses} meses)` : ''}</span></div>
+    <div>${broker ? `<span class="tag">${esc(broker)}</span>` : ''}<span class="tag">${esc(dig(P, 'company', 'name'))}</span><span class="tag">${catLbl}</span><span class="tag">Publicada ${pub ? pub.toISOString().slice(0, 10) : '—'}${meses != null ? ` (${meses} meses)` : ''}</span></div>
   </div>
   <img class="plogo" src="/pulppo-blanco.png" alt="Pulppo"></div>
 
