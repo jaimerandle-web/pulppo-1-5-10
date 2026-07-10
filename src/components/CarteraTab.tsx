@@ -225,7 +225,7 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
                                     </div>
                                 </div>
                                 <div className="mt-6">
-                                    <Caption>Desempeño en el tiempo · leads y visitas por semana (desde el alta)</Caption>
+                                    <Caption>Desempeño en el tiempo · leads y visitas por semana (últimos 3 meses)</Caption>
                                     {sel.serie.length ? (
                                         <TimeLine
                                             data={sel.serie.map((s) => ({ name: s.week, leads: s.leads, visitas: s.visitas }))}

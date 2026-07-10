@@ -48,13 +48,17 @@ function mondayOf(d: Date): Date {
     return x;
 }
 
-// Serie semanal de leads/visitas, rellenando con 0 las semanas sin actividad hasta hoy.
+// Serie semanal de leads/visitas de los últimos 3 meses (13 semanas), rellenando con 0 las sin actividad.
 function buildSerie(leadsWk: Record<string, number> = {}, visWk: Record<string, number> = {}) {
     const weeks = [...new Set([...Object.keys(leadsWk), ...Object.keys(visWk)])].sort();
     if (!weeks.length) return [];
     const end = mondayOf(new Date());
+    const windowStart = new Date(end);            // ventana: últimas 13 semanas (~3 meses)
+    windowStart.setUTCDate(windowStart.getUTCDate() - 7 * 12);
+    const firstActivity = new Date(weeks[0] + 'T00:00:00Z');
+    const start = firstActivity > windowStart ? firstActivity : windowStart;
     const out: { week: string; leads: number; visitas: number }[] = [];
-    for (const d = new Date(weeks[0] + 'T00:00:00Z'); d <= end; d.setUTCDate(d.getUTCDate() + 7)) {
+    for (const d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 7)) {
         const wk = d.toISOString().slice(0, 10);
         out.push({ week: wk, leads: leadsWk[wk] || 0, visitas: visWk[wk] || 0 });
     }
