@@ -212,7 +212,8 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
 
     const html = `
 <style>
-.ficha-root{width:816px;margin:0 auto;background:#fff;padding:40px 44px;color:${BLK};font-family:'Nunito Sans',sans-serif;font-size:12px;line-height:1.45}
+.ficha-root{width:816px;margin:0 auto;background:#fff;padding:40px 44px;color:${BLK};font-family:'Nunito Sans',sans-serif;font-size:12px;line-height:1.45;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.ficha-root *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 .ficha-root .dt{display:inline-block;width:8px;height:8px;margin-right:6px;vertical-align:middle}
 .ficha-root h1{font-family:'EB Garamond',serif;font-weight:400;font-size:34px;line-height:1;margin:0}
 .ficha-root .eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${GRY}}
