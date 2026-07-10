@@ -6,7 +6,7 @@ import { CATS, type CarteraRow, type ProgramRow } from '@/types';
 
 let client: MongoClient | null = null;
 
-async function getDb(): Promise<Db> {
+export async function getDb(): Promise<Db> {
     const uri = process.env.MONGO_URI;
     if (!uri) throw new Error('Falta MONGO_URI (variable de entorno). Ver .env.example');
     if (!client) {
@@ -16,7 +16,7 @@ async function getDb(): Promise<Db> {
     return client.db('pulppo');
 }
 
-function classifySource(src?: string | null): string {
+export function classifySource(src?: string | null): string {
     const s = (src || '').trim().toLowerCase();
     if (!s) return 'Sin fuente';
     if (s.includes('inmueble') || s.includes('i24')) return 'Inmuebles24';

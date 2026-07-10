@@ -218,6 +218,7 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
                                         <p className="text-sm"><b>{sel.tipo}</b> · {sel.colonia}</p>
                                         <p className="text-sm">📸 {sel.fotos} fotos · {sel.video ? '🎥' : '—'} video · {sel.tour ? '🧭' : '—'} tour</p>
                                         <a href={sel.url} target="_blank" rel="noreferrer" className="text-sm underline" style={{ color: SEA }}>Ver ficha</a>
+                                        <a href={`/ficha/${sel.id}`} target="_blank" rel="noreferrer" className="mt-1 inline-block rounded-lg px-4 py-2 text-sm text-white hover:opacity-80" style={{ background: SOFT }}>Generar reporte de desempeño</a>
                                     </div>
                                     <div className="lg:col-span-2">
                                         <Caption>Leads por fuente de esta propiedad</Caption>
