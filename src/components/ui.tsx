@@ -2,7 +2,8 @@
 
 import {
     BarChart, Bar, XAxis, YAxis, LabelList, ResponsiveContainer,
-    PieChart, Pie, Cell, ReferenceLine, Legend, Tooltip
+    PieChart, Pie, Cell, ReferenceLine, Legend, Tooltip,
+    LineChart, Line, CartesianGrid
 } from 'recharts';
 
 export const SOFT = '#212322';
@@ -93,6 +94,27 @@ export function GroupBar({ data, keys, colors, height = 300 }: {
                     </Bar>
                 ))}
             </BarChart>
+        </ResponsiveContainer>
+    );
+}
+
+// Líneas en el tiempo (desempeño semanal: leads/visitas por semana).
+export function TimeLine({ data, keys, colors, height = 260 }: {
+    data: Record<string, string | number>[]; keys: string[]; colors: string[]; height?: number;
+}) {
+    if (!data.length) return <p className="py-8 text-center text-sm text-neutral-400">Sin datos</p>;
+    return (
+        <ResponsiveContainer width="100%" height={height}>
+            <LineChart data={data} margin={{ left: 0, right: 12, top: 8, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: SOFT }} interval="preserveStartEnd" minTickGap={28} />
+                <YAxis allowDecimals={false} width={24} tick={{ fontSize: 10, fill: SOFT }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Tooltip />
+                {keys.map((k, i) => (
+                    <Line key={k} type="monotone" dataKey={k} stroke={colors[i]} strokeWidth={2} dot={false} isAnimationActive={false} />
+                ))}
+            </LineChart>
         </ResponsiveContainer>
     );
 }

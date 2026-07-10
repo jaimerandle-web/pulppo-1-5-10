@@ -41,6 +41,26 @@ function month(dt?: Date | null): string | null {
     return dt ? dt.toISOString().slice(0, 7) : null;
 }
 
+// Lunes (UTC) de la semana de una fecha, como YYYY-MM-DD (mismo criterio que $dateTrunc startOfWeek:monday).
+function mondayOf(d: Date): Date {
+    const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7));
+    return x;
+}
+
+// Serie semanal de leads/visitas, rellenando con 0 las semanas sin actividad hasta hoy.
+function buildSerie(leadsWk: Record<string, number> = {}, visWk: Record<string, number> = {}) {
+    const weeks = [...new Set([...Object.keys(leadsWk), ...Object.keys(visWk)])].sort();
+    if (!weeks.length) return [];
+    const end = mondayOf(new Date());
+    const out: { week: string; leads: number; visitas: number }[] = [];
+    for (const d = new Date(weeks[0] + 'T00:00:00Z'); d <= end; d.setUTCDate(d.getUTCDate() + 7)) {
+        const wk = d.toISOString().slice(0, 10);
+        out.push({ week: wk, leads: leadsWk[wk] || 0, visitas: visWk[wk] || 0 });
+    }
+    return out;
+}
+
 export async function fetchRows(): Promise<CarteraRow[]> {
     const db = await getDb();
     const FLAG = { 'contract.exclusive.pulppo': { $ne: null }, 'status.last': 'published' };
@@ -80,6 +100,37 @@ export async function fetchRows(): Promise<CarteraRow[]> {
         { $group: { _id: '$steps.property._id', n: { $sum: 1 } } }
     ]);
     for await (const r of visAgg) visMap[String(r._id)] = r.n;
+
+    // desempeño en el tiempo: leads y visitas por semana (lunes) por propiedad
+    const weekTrunc = (dateExpr: unknown) => ({
+        $dateToString: { date: { $dateTrunc: { date: dateExpr, unit: 'week', startOfWeek: 'monday' } }, format: '%Y-%m-%d' }
+    });
+    const weeklyLeads: Record<string, Record<string, number>> = {};
+    const lwAgg = db.collection('leads').aggregate([
+        { $match: { 'property._id': { $in: ids } } },
+        { $group: { _id: { pid: '$property._id', wk: weekTrunc('$createdAt') }, n: { $sum: 1 } } }
+    ]);
+    for await (const r of lwAgg) (weeklyLeads[String(r._id.pid)] ??= {})[r._id.wk] = r.n;
+
+    const weeklyVis: Record<string, Record<string, number>> = {};
+    const vwAgg = db.collection('visits').aggregate([
+        { $match: { 'steps.property._id': { $in: ids }, 'status.last': { $ne: 'cancelled' } } },
+        { $unwind: '$steps' },
+        { $match: { 'steps.property._id': { $in: ids } } },
+        { $group: { _id: { pid: '$steps.property._id', wk: weekTrunc({ $ifNull: ['$steps.date', '$startTime'] }) }, n: { $sum: 1 } } }
+    ]);
+    for await (const r of vwAgg) (weeklyVis[String(r._id.pid)] ??= {})[r._id.wk] = r.n;
+
+    // competencia por zona = publicados en venta en la misma colonia (todo el mercado en la base)
+    const zonas = [...new Set(props.map((p) => p.address?.neighborhood?.name).filter(Boolean))] as string[];
+    const zonaComp: Record<string, number> = {};
+    if (zonas.length) {
+        const zAgg = db.collection('properties').aggregate([
+            { $match: { 'status.last': 'published', 'listing.operation': 'sale', 'address.neighborhood.name': { $in: zonas } } },
+            { $group: { _id: '$address.neighborhood.name', n: { $sum: 1 } } }
+        ]);
+        for await (const r of zAgg) zonaComp[r._id] = r.n;
+    }
 
     // estatus de operación por propiedad
     const opMap: Record<string, string | null> = {};
@@ -125,6 +176,8 @@ export async function fetchRows(): Promise<CarteraRow[]> {
             material_ok: pics >= 12 && hasVideo && hasTour,
             i24_type: i24Type,
             superdestacada: SUPER.has(i24Type),
+            zona_oferta: addr.neighborhood?.name ? (zonaComp[addr.neighborhood.name] ?? 0) : null,
+            serie: buildSerie(weeklyLeads[pid], weeklyVis[pid]),
             url: `https://pulppo.com/propiedades/${pid}`,
             leads
         };

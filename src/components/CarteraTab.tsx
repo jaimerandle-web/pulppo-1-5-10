@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { CATS, type CarteraRow, type ProgramRow } from '@/types';
-import { Metric, Section, Caption, HBar, DataTable, money, SOFT, YELLOW, SEA, RED } from './ui';
+import { Metric, Section, Caption, HBar, TimeLine, DataTable, money, SOFT, YELLOW, SEA, RED } from './ui';
 import { Select } from './inputs';
 
 // Nombres legibles de los productos de Inmuebles24.
@@ -15,6 +15,26 @@ const I24_LABELS: Record<string, string> = {
     OFFLINE: 'Offline'
 };
 const i24Label = (t: string | null) => (t ? I24_LABELS[t] ?? t : 'Sin publicar');
+
+// Superdestacadas que menos duele bajar para liberar un cupo (mismo criterio de menor impacto):
+// ya avanzó en operación → no necesita exposición; ya capturó buen # de leads; más antigua; poca oferta en su zona.
+const ADVANCED = new Set(['offer', 'offer_blocked', 'contract', 'paying', 'closed']);
+function downgradeScore(r: CarteraRow): number {
+    let s = 0;
+    if (ADVANCED.has(r.op_status || '')) s += 1000;              // ya en oferta/venta
+    s += Math.min(r.leads_total || 0, 50) * 5;                   // ya tiene buen número de leads
+    s += Math.min(r.dias_activa ?? 0, 365) / 10;                 // más antigua
+    s += Math.max(0, 30 - (r.zona_oferta ?? 30));                // poca competencia en su zona
+    return s;
+}
+function downgradeReason(r: CarteraRow): string {
+    const p: string[] = [];
+    if (ADVANCED.has(r.op_status || '')) p.push('ya en oferta/venta');
+    if ((r.leads_total || 0) > 0) p.push(`${r.leads_total} leads`);
+    if ((r.dias_activa ?? 0) >= 120) p.push(`${r.dias_activa} días`);
+    if (r.zona_oferta != null) p.push(`${r.zona_oferta} en la zona`);
+    return p.join(' · ') || 'menor impacto relativo';
+}
 
 function alertas(r: CarteraRow): string {
     const a: string[] = [];
@@ -62,6 +82,13 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
             .sort((a, b) => b.props.length - a.props.length || a.inmobiliaria.localeCompare(b.inmobiliaria));
     }, [f]);
     const noSuperTotal = noSuperPorInmo.reduce((a, g) => a + g.props.length, 0);
+    // superdestacadas por inmobiliaria, ya ordenadas por candidato a bajar (menor impacto primero).
+    const superPorInmo = useMemo(() => {
+        const m: Record<string, CarteraRow[]> = {};
+        for (const r of f) if (r.superdestacada) (m[r.inmobiliaria ?? 'Sin inmobiliaria'] ??= []).push(r);
+        for (const k in m) m[k].sort((a, b) => downgradeScore(b) - downgradeScore(a));
+        return m;
+    }, [f]);
 
     const sel = f[Math.min(selIdx, Math.max(0, f.length - 1))];
     const conAlertas = f.map((r) => ({ ...r, alertas: alertas(r) })).filter((r) => r.alertas !== '');
@@ -77,24 +104,42 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
                     <p className="mt-0.5 text-xs text-neutral-600">
                         Superdestacada = <b>Home Combo</b> o <b>Home Combo Zona Demand</b>. Agrupadas por inmobiliaria para subir de producto en lote:
                     </p>
-                    <div className="mt-2 max-h-72 space-y-2 overflow-y-auto">
-                        {noSuperPorInmo.map((g) => (
-                            <div key={g.inmobiliaria}>
-                                <p className="text-xs font-semibold" style={{ color: SOFT }}>
-                                    {g.inmobiliaria} <span className="font-normal text-neutral-500">({g.props.length})</span>
-                                </p>
-                                <ul className="mt-0.5 space-y-1 pl-3 text-xs">
-                                    {g.props.map((r) => (
-                                        <li key={r.id} className="flex flex-wrap items-center gap-x-2">
-                                            <span className="text-neutral-500">{r.colonia ?? '—'}</span>
-                                            <span className="text-neutral-500">· {r.internalId ?? '—'}</span>
-                                            <span className="rounded px-1.5 py-0.5" style={{ background: '#fff', color: RED, border: `1px solid ${RED}` }}>{i24Label(r.i24_type)}</span>
-                                            <a href={r.url} target="_blank" rel="noreferrer" className="underline" style={{ color: SEA }}>ver</a>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ))}
+                    <div className="mt-2 max-h-80 space-y-3 overflow-y-auto">
+                        {noSuperPorInmo.map((g) => {
+                            const cand = (superPorInmo[g.inmobiliaria] || []).slice(0, Math.min(g.props.length, 3));
+                            return (
+                                <div key={g.inmobiliaria}>
+                                    <p className="text-xs font-semibold" style={{ color: SOFT }}>
+                                        {g.inmobiliaria} <span className="font-normal text-neutral-500">({g.props.length})</span>
+                                    </p>
+                                    <ul className="mt-0.5 space-y-1 pl-3 text-xs">
+                                        {g.props.map((r) => (
+                                            <li key={r.id} className="flex flex-wrap items-center gap-x-2">
+                                                <span className="text-neutral-500">{r.colonia ?? '—'}</span>
+                                                <span className="text-neutral-500">· {r.internalId ?? '—'}</span>
+                                                <span className="rounded px-1.5 py-0.5" style={{ background: '#fff', color: RED, border: `1px solid ${RED}` }}>{i24Label(r.i24_type)}</span>
+                                                <a href={r.url} target="_blank" rel="noreferrer" className="underline" style={{ color: SEA }}>ver</a>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    {cand.length > 0 ? (
+                                        <p className="mt-1 pl-3 text-xs">
+                                            <span className="font-medium" style={{ color: SEA }}>💡 Para liberar cupo, baja:</span>{' '}
+                                            {cand.map((r, i) => (
+                                                <span key={r.id} className="text-neutral-600">
+                                                    {i > 0 && ' · '}
+                                                    <b style={{ color: SOFT }}>{r.internalId ?? '—'}</b> ({i24Label(r.i24_type)} · {downgradeReason(r)})
+                                                </span>
+                                            ))}
+                                        </p>
+                                    ) : (
+                                        <p className="mt-1 pl-3 text-xs text-neutral-500">
+                                            Sin superdestacadas en esta inmobiliaria para intercambiar — requiere cupo adicional.
+                                        </p>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -159,24 +204,39 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
                             onChange={(v) => setSelIdx(Number(v))}
                             options={f.map((r, i) => ({
                                 value: String(i),
-                                label: `${r.inmobiliaria} · ${r.colonia} · ${money(r.precio)} (${r.leads_total} leads)`
+                                label: `${r.internalId ?? '—'} · ${r.inmobiliaria} · ${r.colonia} · ${money(r.precio)} (${r.leads_total} leads)`
                             }))}
                         />
                         {sel && (
-                            <div className="grid gap-6 lg:grid-cols-3">
-                                <div className="space-y-3">
-                                    <Metric label="Leads" value={sel.leads_total} />
-                                    <Metric label="Visitas" value={sel.visitas} />
-                                    <Metric label="Días activa" value={sel.dias_activa ?? '—'} />
-                                    <p className="text-sm"><b>{sel.tipo}</b> · {sel.colonia}</p>
-                                    <p className="text-sm">📸 {sel.fotos} fotos · {sel.video ? '🎥' : '—'} video · {sel.tour ? '🧭' : '—'} tour</p>
-                                    <a href={sel.url} target="_blank" rel="noreferrer" className="text-sm underline" style={{ color: SEA }}>Ver ficha</a>
+                            <>
+                                <div className="grid gap-6 lg:grid-cols-3">
+                                    <div className="space-y-3">
+                                        <Metric label="Leads" value={sel.leads_total} />
+                                        <Metric label="Visitas" value={sel.visitas} />
+                                        <Metric label="Días activa" value={sel.dias_activa ?? '—'} />
+                                        <p className="text-sm text-neutral-500">Código <b style={{ color: SOFT }}>{sel.internalId ?? '—'}</b></p>
+                                        <p className="text-sm"><b>{sel.tipo}</b> · {sel.colonia}</p>
+                                        <p className="text-sm">📸 {sel.fotos} fotos · {sel.video ? '🎥' : '—'} video · {sel.tour ? '🧭' : '—'} tour</p>
+                                        <a href={sel.url} target="_blank" rel="noreferrer" className="text-sm underline" style={{ color: SEA }}>Ver ficha</a>
+                                    </div>
+                                    <div className="lg:col-span-2">
+                                        <Caption>Leads por fuente de esta propiedad</Caption>
+                                        <HBar data={CATS.map((c) => ({ name: c, value: sel.leads[c] || 0 }))} color={SEA} height={260} />
+                                    </div>
                                 </div>
-                                <div className="lg:col-span-2">
-                                    <Caption>Leads por fuente de esta propiedad</Caption>
-                                    <HBar data={CATS.map((c) => ({ name: c, value: sel.leads[c] || 0 }))} color={SEA} height={260} />
+                                <div className="mt-6">
+                                    <Caption>Desempeño en el tiempo · leads y visitas por semana (desde el alta)</Caption>
+                                    {sel.serie.length ? (
+                                        <TimeLine
+                                            data={sel.serie.map((s) => ({ name: s.week, leads: s.leads, visitas: s.visitas }))}
+                                            keys={['leads', 'visitas']}
+                                            colors={[SEA, YELLOW]}
+                                        />
+                                    ) : (
+                                        <p className="rounded-lg bg-light px-4 py-3 text-sm">Sin leads ni visitas registrados aún para esta propiedad.</p>
+                                    )}
                                 </div>
-                            </div>
+                            </>
                         )}
                     </>
                 ) : (
@@ -188,6 +248,7 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
                 {conAlertas.length ? (
                     <DataTable
                         columns={[
+                            { key: 'internalId', label: 'código', render: (v) => (v ? String(v) : '—') },
                             { key: 'inmobiliaria', label: 'inmobiliaria' },
                             { key: 'kam', label: 'kam' },
                             { key: 'colonia', label: 'colonia' },
@@ -207,6 +268,7 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
             <Section title="Desempeño por propiedad (tabla)">
                 <DataTable
                     columns={[
+                        { key: 'internalId', label: 'código', render: (v) => (v ? String(v) : '—') },
                         { key: 'inmobiliaria', label: 'inmobiliaria' },
                         { key: 'kam', label: 'kam' },
                         { key: 'colonia', label: 'colonia' },

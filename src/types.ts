@@ -26,6 +26,8 @@ export interface CarteraRow {
     material_ok: boolean;
     i24_type: string | null;   // producto en Inmuebles24 (HOME_COMBO, SIMPLE_COMBO, OFFLINE, …)
     superdestacada: boolean;   // true si i24_type es HOME_COMBO o HOME_COMBO_ZONA_DEMAND
+    zona_oferta: number | null; // # publicados en venta en la misma colonia (competencia de la zona)
+    serie: { week: string; leads: number; visitas: number }[]; // desempeño semanal desde el alta
     url: string;
     leads: Record<string, number>; // por categoría de fuente (CATS)
 }
