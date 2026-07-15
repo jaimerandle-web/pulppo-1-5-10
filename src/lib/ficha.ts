@@ -423,12 +423,12 @@ ${promoHtml}
       ${soldMed ? `<div>– $/m² de cierre — mediana ${money(soldMed)} · promedio ${money(soldAvg)}.</div>` : ''}
       ${soldRead ? `<div style="margin-top:10px;font-size:12px;color:${BLK}">${soldRead}</div>` : ''}
     </div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`}
-    <div style="margin-top:10px"><div class="eyebrow" style="color:${BLK}">Con qué compite en la zona</div>
+    <div style="margin-top:24px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Con qué compite en la zona</div>
       <table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table></div>
     <div class="two">
-      <div><div class="eyebrow" style="margin:12px 0 2px;color:${BLK}">Qué te alcanza por el mismo presupuesto</div>
+      <div><div class="eyebrow" style="margin:20px 0 4px;color:${BLK}">Qué te alcanza por el mismo presupuesto</div>
         <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPrecio)}</table></div>
-      <div><div class="eyebrow" style="margin:12px 0 2px;color:${BLK}">Qué te alcanza por $/m² similar</div>
+      <div><div class="eyebrow" style="margin:20px 0 4px;color:${BLK}">Qué te alcanza por $/m² similar</div>
         <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>
     </div>
   </div>
