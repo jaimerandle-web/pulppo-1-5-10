@@ -155,7 +155,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     // cierres reales de la comunidad (mismo tipo), ampliando colonia→ciudad→estado hasta n>=5
     const cierres = async (geo: Document): Promise<{ price: number; ppm2: number | null }[]> => {
         const ps = await db.collection('properties').aggregate([
-            { $match: { 'status.last': 'completed', type: typ, ...geo } },
+            { $match: { 'status.last': 'completed', 'listing.operation': 'sale', type: typ, ...geo } },
             { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', as: 'op' } },
             { $limit: 400 }
         ]).toArray();
@@ -318,11 +318,16 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
         };
         return rows.map((r) => `<tr><td>${zc(r)}</td><td class="nw">${money(r.precio)}</td><td class="nw">${r.m2 ?? '—'} m²</td><td class="nw">${r.ppm2 ? money(r.ppm2) + '/m²' : '—'}</td><td class="nw">${r.rec ?? '—'} rec<br>${r.ban ?? '—'} baños</td></tr>`).join('');
     };
+    const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
     const czPrices = cz.map((c) => c.price);
-    const czTxt = czPrices.length ? `${czPrices.length} cierres · mediana ${money(median(czPrices))} · rango ${money(Math.min(...czPrices))}–${money(Math.max(...czPrices))}` : 'sin cierres registrados';
+    const czAvg = avg(czPrices);
+    const czTxt = czPrices.length ? `${czPrices.length} operación${czPrices.length === 1 ? '' : 'es'} · mediana ${money(median(czPrices))} · promedio ${money(czAvg)} · rango ${money(Math.min(...czPrices))}–${money(Math.max(...czPrices))}` : 'sin cierres registrados';
     const soldPpms = cz.map((c) => c.ppm2).filter((x): x is number => x != null);
     const soldMed = soldPpms.length ? median(soldPpms) : null;
-    const soldRead = soldMed && ppm2 ? `Tu $/m² (${money(ppm2)}) está ${Math.abs(Math.round((ppm2 / soldMed - 1) * 100))}% ${ppm2 >= soldMed ? 'arriba' : 'abajo'} del m² que se está cerrando en la zona.` : '';
+    const soldAvg = avg(soldPpms);
+    // Base del $/m²: solo los cierres que traen superficie (para poder dividir).
+    const soldBaseTxt = soldMed ? `$/m² de cierre — base ${soldPpms.length} de ${czPrices.length} cierre${czPrices.length === 1 ? '' : 's'} (con superficie): mediana ${money(soldMed)} · promedio ${money(soldAvg)}.` : '';
+    const soldRead = soldMed && ppm2 ? `Tu $/m² (${money(ppm2)}) está ${Math.abs(Math.round((ppm2 / soldMed - 1) * 100))}% ${ppm2 >= soldMed ? 'arriba' : 'abajo'} de la mediana de cierre de la zona.` : '';
     const opTxt = dig(P, 'listing', 'operation') === 'sale' ? 'Venta' : (dig(P, 'listing', 'operation') as string) ?? '';
 
     // ---- Difusión y promoción: timeline i24 + leads por categoría + estado ML ----
@@ -412,6 +417,7 @@ ${promoHtml}
   <div class="sec"><div class="eyebrow">Mercado y competencia</div><div class="accent"></div>
     <div class="kpi"><div><div class="n">${money(ppm2)}</div><div class="l">$/m² de esta propiedad</div></div><div><div class="n">${comps.length}</div><div class="l">comparables en zona</div></div>${soldMed ? `<div><div class="n">${money(soldMed)}</div><div class="l">$/m² mediana de cierres (vendido)</div></div>` : ''}${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana en venta (oferta)</div></div>` : ''}</div>
     <div style="margin-top:6px;font-size:11px;color:${GRY}">Cierres reales de la comunidad (${esc(typ)} · ${esc(scope)}): ${czTxt}</div>
+    ${soldBaseTxt ? `<div style="margin-top:2px;font-size:11px;color:${GRY}">${soldBaseTxt}</div>` : ''}
     ${soldRead ? `<div style="margin-top:4px;font-size:12px;color:${BLK}">${soldRead}</div>` : ''}
     <div style="margin-top:10px"><div class="eyebrow" style="color:${BLK}">Con qué compite en la zona</div>
       <table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table></div>
