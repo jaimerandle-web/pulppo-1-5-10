@@ -40,6 +40,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const m2 = num(dig(P, 'attributes', 'totalSurface')) ?? num(dig(P, 'attributes', 'surface'));
     const acm = num(dig(P, 'acm', 'price', 'value'));
     const col = (dig(P, 'address', 'neighborhood', 'name') as string) ?? null;
+    const street = (dig(P, 'address', 'street') as string)?.trim() || null;
     const city = (dig(P, 'address', 'city', 'name') as string) ?? null;
     const state = (dig(P, 'address', 'state', 'name') as string) ?? null;
     const typ = (P.type as string) ?? null;
@@ -268,8 +269,8 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
 </style>
 <div class="ficha-root">
   <div class="header"><div>
-    <div class="eyebrow" style="color:${YEL}">Ficha de desempeño</div>
-    <h1>${esc(code)}</h1>
+    <div class="eyebrow" style="color:${YEL}">Ficha de desempeño · ${esc(code)}</div>
+    <h1>${esc(street || code)}</h1>
     <div class="sub">${esc(typ)} · ${esc(opTxt)} · ${esc(col)}, ${esc(city)}</div>
     <div class="price">${money(val)} · ${m2 ?? '—'} m² · ${money(ppm2)}/m²</div>
     <div>${broker ? `<span class="tag">${esc(broker)}</span>` : ''}<span class="tag">${esc(dig(P, 'company', 'name'))}</span><span class="tag">${catLbl}</span><span class="tag">Publicada ${pub ? pub.toISOString().slice(0, 10) : '—'}${meses != null ? ` (${meses} meses)` : ''}</span></div>
