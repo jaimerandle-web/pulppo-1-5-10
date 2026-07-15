@@ -25,6 +25,24 @@ const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
 };
 const num = (x: unknown): number | null => (typeof x === 'number' && !isNaN(x) ? x : null);
 const strip = (s: string) => s.replace(/\b(fracc\.?|fraccionamiento|colonia|col\.?|residencial|barrio|pueblo)\b/gi, '').trim();
+const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const toDate = (x: unknown): Date | null => {
+    if (x instanceof Date) return x;
+    if (typeof x === 'string') { const d = new Date(x); return isNaN(+d) ? null : d; }
+    return null;
+};
+const fdate = (d: Date) => `${d.getUTCDate()} ${MES[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+// Categoría de promoción i24 a partir de type + status del history/aviso.
+type PromoCat = 'Super' | 'Destacado' | 'Simple' | 'Offline' | 'Otro';
+const promoCat = (t: string | null | undefined, s: string | null | undefined): PromoCat => {
+    if (s && s.toUpperCase() !== 'ONLINE') return 'Offline';
+    if (t === 'HOME_COMBO' || t === 'HOME_COMBO_ZONA_DEMAND') return 'Super';
+    if (t === 'DESTACADO_COMBO' || t === 'DESTACADO_COMBO_ZONA_DEMAND') return 'Destacado';
+    if (t === 'SIMPLE_COMBO') return 'Simple';
+    return 'Otro';
+};
+const PROMOLBL: Record<PromoCat, string> = { Super: 'Super destacado', Destacado: 'Destacado', Simple: 'Simple', Offline: 'Offline', Otro: 'Otro' };
+const PROMORD: PromoCat[] = ['Super', 'Destacado', 'Simple', 'Offline', 'Otro'];
 
 interface Comp { precio: number | null; m2: number | null; ppm2: number | null; rec: number | null; ban: number | null; zona: string | null; url: string | null; src: string }
 
@@ -67,6 +85,13 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const pub = P.publishedAt instanceof Date ? (P.publishedAt as Date) : null;
     const meses = pub ? Math.floor((now - pub.getTime()) / (30.44 * 86400000)) : null;
 
+    // contrato de exclusividad: vencimiento = start + durationMonths
+    const exStart = toDate(dig(P, 'contract', 'exclusive', 'start'));
+    const exDur = num(dig(P, 'contract', 'exclusive', 'durationMonths'));
+    let exExpiry: Date | null = null;
+    if (exStart && exDur) { exExpiry = new Date(exStart); exExpiry.setMonth(exExpiry.getMonth() + exDur); }
+    const mesesRest = exExpiry ? (exExpiry.getTime() - now) / (30.44 * 86400000) : null;
+
     // leads (con fuente, contacto y fecha)
     const leads = await db.collection('leads').find({ 'property._id': oid }, { projection: { source: 1, 'contact._id': 1, createdAt: 1 } }).toArray();
     const within = (days: number) => leads.filter((l) => l.createdAt instanceof Date && now - (l.createdAt as Date).getTime() <= days * 86400000).length;
@@ -88,6 +113,32 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     }
     const asesor = leads.filter((l) => asesorSet.has(String(dig(l, 'contact', '_id')))).length;
     const cliente = leads.length - asesor;
+
+    // ---- Promoción i24 en el tiempo: spans por categoría + leads generados en cada temporada ----
+    const i24hist = ((dig(P, 'portals', 'inmuebles24', 'history') as Document[]) || [])
+        .map((e) => ({ t: toDate(e.timestamp), type: e.type as string, status: e.status as string }))
+        .filter((e): e is { t: Date; type: string; status: string } => e.t != null)
+        .sort((a, b) => a.t.getTime() - b.t.getTime());
+    interface PSpan { a: number; b: number; cat: PromoCat }
+    const pspans: PSpan[] = i24hist.map((e, i) => ({
+        a: e.t.getTime(), b: i + 1 < i24hist.length ? i24hist[i + 1].t.getTime() : now, cat: promoCat(e.type, e.status)
+    }));
+    const pT0 = pspans.length ? pspans[0].a : now;
+    const pTotal = Math.max(1, now - pT0);
+    const catMs = new Map<PromoCat, number>();
+    const catLeads = new Map<PromoCat, number>();
+    for (const s of pspans) catMs.set(s.cat, (catMs.get(s.cat) || 0) + (s.b - s.a));
+    let leadsMedidos = 0;
+    for (const l of leads) {
+        const c = l.createdAt instanceof Date ? (l.createdAt as Date).getTime() : null;
+        if (c == null || c < pT0) continue;
+        for (const s of pspans) { if (c >= s.a && c < s.b) { catLeads.set(s.cat, (catLeads.get(s.cat) || 0) + 1); leadsMedidos++; break; } }
+    }
+    // ¿en Super destacado hoy? ¿desde cuándo (racha contigua actual)?
+    const enSuper = pspans.length > 0 && pspans[pspans.length - 1].cat === 'Super';
+    let superSince: number | null = null;
+    if (enSuper) { superSince = pspans[pspans.length - 1].a; for (let i = pspans.length - 2; i >= 0 && pspans[i].cat === 'Super'; i--) superSince = pspans[i].a; }
+    const pctSuper = Math.round(((catMs.get('Super') || 0) / pTotal) * 100);
 
     const vis = await db.collection('visits').countDocuments({ 'steps.property._id': oid, 'status.last': { $ne: 'cancelled' } });
     const ofertas = await db.collection('operations').countDocuments({ 'property._id': oid, 'status.last': { $in: [...ADVANCED] } });
@@ -204,6 +255,14 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const rowH = (lbl: string, v: string, s: 'ok' | 'warn' | 'bad' | 'na', note = '') => `<div class="srow">${dot(s)}<span class="slbl">${lbl}</span><span class="sval">${v}</span><span class="snote">${note}</span></div>`;
     let vstat: 'ok' | 'warn' | 'bad' | 'na' = 'na', vnote = '';
     if (dval == null) { vstat = 'na'; } else if (dval <= 0) { vstat = 'ok'; vnote = 'por debajo del mercado'; } else if (dval <= 10) { vstat = 'warn'; vnote = 'ligeramente por encima'; } else { vstat = 'bad'; vnote = 'por encima del mercado'; }
+    // contrato → fila de salud (semáforo por meses restantes)
+    let cstat: 'ok' | 'warn' | 'bad' | 'na' = 'na', cval = '—', cnote = 'sin fecha registrada';
+    if (mesesRest != null && exExpiry) {
+        cnote = `vence ${fdate(exExpiry)}${exDur ? ` · ${exDur} meses` : ''}`;
+        if (mesesRest < 0) { cstat = 'bad'; cval = `vencido hace ${Math.max(1, Math.round(-mesesRest))} mes${Math.round(-mesesRest) === 1 ? '' : 'es'} — renovar`; }
+        else if (mesesRest <= 2) { cstat = 'warn'; cval = `${Math.max(0, Math.round(mesesRest))} mes${Math.round(mesesRest) === 1 ? '' : 'es'} — renovar pronto`; }
+        else { cstat = 'ok'; cval = `${Math.round(mesesRest)} meses restantes`; }
+    }
     const mm = `${pics} fotos · video ${video ? '✓' : '—'} · tour ${tour ? '✓' : '—'}`;
     const tcheck = `tipo ${tipoOk ? '✓' : '✗'} · operación ${opOk ? '✓' : '✗'} · zona ${zonaOk ? '✓' : '✗'}`;
     const health = [
@@ -213,7 +272,8 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
         rowH('Descripción', `${words} palabras`, words >= 40 && words <= 200 ? 'ok' : 'warn', words >= 40 && words <= 200 ? 'longitud adecuada' : 'revisar extensión'),
         rowH('Ubicación', 'completa', 'ok', ''),
         rowH('Multimedia', mm, pics >= 12 && video ? 'ok' : 'warn'),
-        rowH('Categoría del anuncio', `${catLbl} · ${mlLbl}`, SUPER.has(cat ?? '') ? 'ok' : 'warn')
+        rowH('Categoría del anuncio', `${catLbl} · ${mlLbl}`, SUPER.has(cat ?? '') ? 'ok' : 'warn'),
+        rowH('Contrato exclusividad', cval, cstat, cnote)
     ].join('');
 
     const tv = leads.length ? vis / leads.length : 0;
@@ -236,6 +296,34 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     };
     const czTxt = cz.length ? `${cz.length} cierres · mediana ${money(median(cz))} · rango ${money(Math.min(...cz))}–${money(Math.max(...cz))}` : 'sin cierres registrados';
     const opTxt = dig(P, 'listing', 'operation') === 'sale' ? 'Venta' : (dig(P, 'listing', 'operation') as string) ?? '';
+
+    // ---- Difusión y promoción: timeline i24 + leads por categoría + estado ML ----
+    const PCOL: Record<PromoCat, string> = { Super: YEL, Destacado: SEA, Simple: GRY, Offline: RED, Otro: '#E3E3E3' };
+    const dayMs = 86400000;
+    const promoBar = pspans.map((s) => `<span style="position:absolute;left:${(((s.a - pT0) / pTotal) * 100).toFixed(2)}%;width:${Math.max(((s.b - s.a) / pTotal) * 100, 0.3).toFixed(2)}%;top:0;bottom:0;background:${PCOL[s.cat]}"></span>`).join('');
+    const promoLegend = PROMORD.filter((c) => (catMs.get(c) || 0) > 0).map((c) => `<span style="margin-right:12px;white-space:nowrap"><span style="display:inline-block;width:9px;height:9px;background:${PCOL[c]};margin-right:4px;vertical-align:middle"></span>${PROMOLBL[c]}</span>`).join('');
+    const catRows = PROMORD.filter((c) => (catMs.get(c) || 0) > 0 || (catLeads.get(c) || 0) > 0).map((c) => {
+        const d = (catMs.get(c) || 0) / dayMs, lc = catLeads.get(c) || 0, lm = d ? (lc / d) * 30.44 : 0;
+        return `<tr><td><span class="dt" style="background:${PCOL[c]}"></span>${PROMOLBL[c]}</td><td class="nw">${Math.round(d)} días</td><td class="nw">${lc}</td><td class="nw"><b>${lm.toFixed(1)}</b></td></tr>`;
+    }).join('');
+    const i24Head = pspans.length
+        ? `<b>${pctSuper}%</b> de los días en Super destacado · ${enSuper && superSince ? `en Super destacado desde ${fdate(new Date(superSince))} (${Math.round((now - superSince) / dayMs)} días)` : 'hoy NO está en Super destacado'}`
+        : 'Sin historial de promoción registrado en i24.';
+    const mlPromB = dig(P, 'portals', 'mercadolibre', 'promoted') === true || String(dig(P, 'portals', 'mercadolibre', 'promoted')).toLowerCase() === 'true';
+    const mlEnd = toDate(dig(P, 'portals', 'mercadolibre', 'endTime'));
+    const mlLine = `${mlLbl}${mlStatus ? ` · ${mlStatus.toUpperCase() === 'ONLINE' ? 'en línea' : esc(mlStatus)}` : ''} · ${mlPromB ? `promovido${mlEnd ? ` hasta ${fdate(mlEnd)}` : ''}` : 'sin promoción activa'}`;
+    const promoHtml = `
+  <div class="sec"><div class="eyebrow">Difusión y promoción</div><div class="accent"></div>
+    <div class="eyebrow" style="color:${BLK};margin-bottom:2px">Inmuebles24 — historial de categoría</div>
+    <div style="font-size:12px;margin-bottom:6px">${i24Head}</div>
+    ${pspans.length ? `<div style="position:relative;height:16px;background:${LGT}">${promoBar}</div>
+    <div style="display:flex;justify-content:space-between;font-size:9px;color:${GRY};margin-top:3px"><span>${fdate(new Date(pT0))}</span><span>hoy</span></div>
+    <div style="font-size:10px;color:${BLK};margin-top:6px">${promoLegend}</div>
+    <table style="margin-top:8px"><tr><th>Categoría</th><th>Tiempo</th><th>Leads</th><th>Leads/mes</th></tr>${catRows}</table>
+    <div style="font-size:9px;color:${GRY};margin-top:2px">${leadsMedidos} leads en el periodo medido (desde ${fdate(new Date(pT0))}). Leads/mes normaliza por los días en cada categoría.</div>` : ''}
+    <div class="eyebrow" style="color:${BLK};margin:14px 0 2px">MercadoLibre — estado actual</div>
+    <div style="font-size:12px">${mlLine}</div>
+  </div>`;
 
     const html = `
 <style>
@@ -278,6 +366,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
   <img class="plogo" src="/pulppo-blanco.png" alt="Pulppo"></div>
 
   <div class="sec"><div class="eyebrow">Salud del anuncio</div><div class="accent"></div>${health}</div>
+${promoHtml}
 
   <div class="sec"><div class="eyebrow">Demanda y funnel</div><div class="accent"></div>
     <div class="grid2">
