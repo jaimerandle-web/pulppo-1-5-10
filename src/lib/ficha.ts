@@ -307,7 +307,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const fuenteHtml = fuenteRows.map(([k, v]) => {
         const sp = fuenteSplit.get(k) || { cli: 0, ase: 0 };
         const totW = Math.round((100 * v) / maxF), cliW = v ? Math.round((100 * sp.cli) / v) : 0;
-        return `<div class="frow"><span>${k}</span><span class="fbarwrap"><span class="fcomp" style="width:${totW}%"><span class="fcli" style="width:${cliW}%">${sp.cli || ''}</span><span class="fase" style="width:${100 - cliW}%">${sp.ase || ''}</span></span></span></div>`;
+        return `<div class="frow"><span>${k}</span><span class="fbarwrap"><span class="fcomp" style="width:${totW}%"><span class="fcli" style="width:${cliW}%">${sp.cli || ''}</span><span class="fase" style="width:${100 - cliW}%">${sp.ase || ''}</span></span></span><span class="fn">${v}</span></div>`;
     }).join('');
     const compTbl = (rows: Comp[]) => {
         if (!rows.length) return '<tr><td colspan="5" style="color:#B7B7B7">Sin resultados en el rango.</td></tr>';
