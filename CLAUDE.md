@@ -44,6 +44,10 @@ src/lib/data.ts        Capa de datos Mongo (port de mvp_data.py): fetchRows() = 
 src/lib/email.ts       Generador de campañas: renderCampaign(id|codigo) llena el template on-brand
                        "Exclusiva de la semana" desde Mongo (port de build_campanas_final.py).
 src/lib/sendgrid.ts    Cliente REST v3 de SendGrid (fetch, sin deps). Fase 1: sendTestEmail (Mail Send).
+src/lib/audience.ts    Generador de base en vivo: buildAudience(id) cruza colonia→ciudad→zona + tipo
+                       contra la DEMANDA (leads.contact.email; contacts.email está vacío). Cascadeo
+                       hasta MIN=300 correos, dedup por email, excluye internos. zona_map.json = mapa
+                       ciudad→zona (extraído del trabajo de junio) para el nivel más amplio.
 src/lib/kam.ts         Lookup estático inmobiliaria → KAM (generado del Sheet TARGETS).
 src/lib/access.ts      Allowlist cerrado de emails (hardcodeado; env ALLOWED_EMAILS lo pisa si está seteada).
 src/lib/firebase.ts    Firebase Auth de Pulppo (config JSON en NEXT_PUBLIC_FIREBASE).
@@ -55,8 +59,10 @@ src/app/api/data/      GET → { rows, program } con cache en memoria 10 min (?r
 src/app/page.tsx       Dashboard client-side: filtros (KAM select, inmobiliaria autocomplete, tipo pills)
                        y 2 pestañas. El filtrado es 100% client-side sobre el payload completo.
 src/app/campanas/      Módulo de campañas de email (Fase 1): buscar propiedad → preview en iframe →
-                       enviar prueba. API en api/campanas/preview (GET) y api/campanas/test (POST,
-                       guardrail: solo destinatarios @pulppo.com hasta la Fase 2).
+                       generar base (audiencia en vivo, con descarga CSV) → enviar prueba → chequeo de
+                       solapamiento entre bases para calendarizar. API: api/campanas/preview (GET),
+                       api/campanas/audience (GET, ?format=csv), api/campanas/test (POST, guardrail
+                       @pulppo.com), api/campanas/overlap (POST codes[] → cruce por pares + tandas).
 src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabla) · ProgramaTab (métricas
                        del programa, gráficas, recap mensual con CSV) · ui.tsx (Metric, HBar, VBar, Donut,
                        DataTable, money) · inputs.tsx (Select estilizado, Combobox con búsqueda).
