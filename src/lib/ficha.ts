@@ -307,7 +307,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const fuenteHtml = fuenteRows.map(([k, v]) => {
         const sp = fuenteSplit.get(k) || { cli: 0, ase: 0 };
         const totW = Math.round((100 * v) / maxF), cliW = v ? Math.round((100 * sp.cli) / v) : 0;
-        return `<div class="frow"><span>${k}</span><span class="fbarwrap"><span class="fcomp" style="width:${totW}%"><span class="fcli" style="width:${cliW}%"></span><span class="fase" style="width:${100 - cliW}%"></span></span></span><span class="fn2">${sp.cli}<span style="color:${GRY}">·${sp.ase}</span></span></div>`;
+        return `<div class="frow"><span>${k}</span><span class="fbarwrap"><span class="fcomp" style="width:${totW}%"><span class="fcli" style="width:${cliW}%">${sp.cli || ''}</span><span class="fase" style="width:${100 - cliW}%">${sp.ase || ''}</span></span></span></div>`;
     }).join('');
     const compTbl = (rows: Comp[]) => {
         if (!rows.length) return '<tr><td colspan="5" style="color:#B7B7B7">Sin resultados en el rango.</td></tr>';
@@ -320,14 +320,16 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     };
     const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
     const czPrices = cz.map((c) => c.price);
+    const czN = czPrices.length;
     const czAvg = avg(czPrices);
-    const czTxt = czPrices.length ? `${czPrices.length} operación${czPrices.length === 1 ? '' : 'es'} · mediana ${money(median(czPrices))} · promedio ${money(czAvg)} · rango ${money(Math.min(...czPrices))}–${money(Math.max(...czPrices))}` : 'sin cierres registrados';
     const soldPpms = cz.map((c) => c.ppm2).filter((x): x is number => x != null);
     const soldMed = soldPpms.length ? median(soldPpms) : null;
     const soldAvg = avg(soldPpms);
-    // Base del $/m²: solo los cierres que traen superficie (para poder dividir).
-    const soldBaseTxt = soldMed ? `$/m² de cierre — base ${soldPpms.length} de ${czPrices.length} cierre${czPrices.length === 1 ? '' : 's'} (con superficie): mediana ${money(soldMed)} · promedio ${money(soldAvg)}.` : '';
-    const soldRead = soldMed && ppm2 ? `Tu $/m² (${money(ppm2)}) está ${Math.abs(Math.round((ppm2 / soldMed - 1) * 100))}% ${ppm2 >= soldMed ? 'arriba' : 'abajo'} de la mediana de cierre de la zona.` : '';
+    // Líneas del bloque "a cuánto se cierra en la zona".
+    const cierrePrecioLine = czN ? `mediana ${money(median(czPrices))} · promedio ${money(czAvg)} · rango ${money(Math.min(...czPrices))}–${money(Math.max(...czPrices))}` : '';
+    const cierrePpm2Line = soldMed ? `mediana ${money(soldMed)} · promedio ${money(soldAvg)}` : '';
+    const cierreScopeLine = czN ? `${esc(typ)} en ${esc(scope)} · ${czN} venta${czN === 1 ? '' : 's'} cerrada${czN === 1 ? '' : 's'}${soldPpms.length !== czN ? ` (${soldPpms.length} con superficie para calcular $/m²)` : ''}` : '';
+    const soldRead = soldMed && ppm2 ? `Esta propiedad está a ${money(ppm2)}/m²: ${Math.abs(Math.round((ppm2 / soldMed - 1) * 100))}% ${ppm2 >= soldMed ? 'por encima' : 'por debajo'} de la mediana a la que se cierra en la zona.` : '';
     const opTxt = dig(P, 'listing', 'operation') === 'sale' ? 'Venta' : (dig(P, 'listing', 'operation') as string) ?? '';
 
     // ---- Difusión y promoción: timeline i24 + leads por categoría + estado ML ----
@@ -379,8 +381,9 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
 .ficha-root .fconvinline{position:absolute;right:6px;top:0;height:18px;display:flex;align-items:center;font-size:10px;color:${BLK};white-space:nowrap}
 .ficha-root .recap{display:flex;gap:20px;margin-top:14px}.ficha-root .recap .n{font-family:'EB Garamond',serif;font-size:22px}.ficha-root .recap .l{font-size:9px;color:${GRY};text-transform:uppercase;letter-spacing:.05em}
 .ficha-root .frow{display:flex;align-items:center;font-size:11px;margin:3px 0}.ficha-root .frow span:first-child{width:96px}
-.ficha-root .fbarwrap{flex:1;background:${LGT};height:9px;margin:0 8px}.ficha-root .fbar{display:block;height:9px;background:${BLK}}.ficha-root .fn{width:20px;text-align:right;font-weight:700}
-.ficha-root .fcomp{display:flex;height:9px}.ficha-root .fcli{display:block;height:9px;background:${SEA}}.ficha-root .fase{display:block;height:9px;background:${BLK}}.ficha-root .fn2{width:44px;text-align:right;font-weight:700;white-space:nowrap}
+.ficha-root .fbarwrap{flex:1;background:${LGT};height:16px;margin:0 8px}.ficha-root .fbar{display:block;height:16px;background:${BLK}}.ficha-root .fn{width:20px;text-align:right;font-weight:700}
+.ficha-root .fcomp{display:flex;height:16px}.ficha-root .fcli,.ficha-root .fase{display:flex;align-items:center;justify-content:center;height:16px;color:#fff;font-size:9px;font-weight:700;overflow:hidden}.ficha-root .fcli{background:${SEA}}.ficha-root .fase{background:${BLK}}
+.ficha-root .srow2{display:flex;font-size:11px;padding:4px 0;border-bottom:1px solid ${LGT}}.ficha-root .srow2 .l2{width:130px;color:${GRY};font-weight:700}.ficha-root .srow2 .v2{flex:1}
 .ficha-root .split{display:flex;height:24px;margin-top:6px;font-size:11px;color:#fff}.ficha-root .split .a,.ficha-root .split .c{display:flex;align-items:center;padding:0 8px;white-space:nowrap;overflow:hidden}.ficha-root .split .a{background:${BLK}}.ficha-root .split .c{background:${SEA}}
 .ficha-root table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}.ficha-root th,.ficha-root td{text-align:left;padding:5px 6px;border-bottom:1px solid ${LGT};vertical-align:top}
 .ficha-root td.nw{white-space:nowrap}.ficha-root th{font-weight:700;color:${GRY};text-transform:uppercase;font-size:9px;letter-spacing:.06em}
@@ -408,17 +411,21 @@ ${promoHtml}
         <div class="recap"><div><div class="n">${l30}</div><div class="l">leads · 30 días</div></div><div><div class="n">${l90}</div><div class="l">leads · 90 días</div></div><div><div class="n">${leads.length}</div><div class="l">leads · histórico</div></div></div>
       </div>
       <div><div class="eyebrow" style="margin-bottom:2px;color:${BLK}">Leads por fuente</div>
-        <div style="font-size:9px;color:${GRY};margin-bottom:6px"><span style="color:${SEA}">■</span> clientes · <span style="color:${BLK}">■</span> asesores <span style="color:${GRY}">(cli·ase)</span></div>${fuenteHtml}</div>
+        <div style="font-size:9px;color:${GRY};margin-bottom:6px"><span style="color:${SEA}">■</span> clientes · <span style="color:${BLK}">■</span> asesores</div>${fuenteHtml}</div>
     </div>
-    <div style="margin-top:16px;color:${BLK}" class="eyebrow">Leads: asesores vs. clientes</div>
-    <div class="split"><div class="a" style="width:${Math.round((100 * asesor) / Math.max(leads.length, 1))}%">${asesor} asesores</div><div class="c" style="width:${Math.round((100 * cliente) / Math.max(leads.length, 1))}%">${cliente} clientes</div></div>
+    <div style="margin-top:16px;color:${BLK}" class="eyebrow">Leads: clientes vs. asesores</div>
+    <div class="split"><div class="c" style="width:${Math.round((100 * cliente) / Math.max(leads.length, 1))}%">${cliente} clientes</div><div class="a" style="width:${Math.round((100 * asesor) / Math.max(leads.length, 1))}%">${asesor} asesores</div></div>
   </div>
 
   <div class="sec"><div class="eyebrow">Mercado y competencia</div><div class="accent"></div>
     <div class="kpi"><div><div class="n">${money(ppm2)}</div><div class="l">$/m² de esta propiedad</div></div><div><div class="n">${comps.length}</div><div class="l">comparables en zona</div></div>${soldMed ? `<div><div class="n">${money(soldMed)}</div><div class="l">$/m² mediana de cierres (vendido)</div></div>` : ''}${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana en venta (oferta)</div></div>` : ''}</div>
-    <div style="margin-top:6px;font-size:11px;color:${GRY}">Cierres reales de la comunidad (${esc(typ)} · ${esc(scope)}): ${czTxt}</div>
-    ${soldBaseTxt ? `<div style="margin-top:2px;font-size:11px;color:${GRY}">${soldBaseTxt}</div>` : ''}
-    ${soldRead ? `<div style="margin-top:4px;font-size:12px;color:${BLK}">${soldRead}</div>` : ''}
+    ${czN ? `<div style="margin-top:16px">
+      <div class="eyebrow" style="color:${BLK}">A cuánto se está cerrando en la zona</div>
+      <div style="font-size:10px;color:${GRY};margin:2px 0 8px">${cierreScopeLine}</div>
+      <div class="srow2"><span class="l2">Precio de cierre</span><span class="v2">${cierrePrecioLine}</span></div>
+      ${cierrePpm2Line ? `<div class="srow2"><span class="l2">$/m² de cierre</span><span class="v2">${cierrePpm2Line}</span></div>` : ''}
+      ${soldRead ? `<div style="margin-top:10px;font-size:12px;color:${BLK}">${soldRead}</div>` : ''}
+    </div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`}
     <div style="margin-top:10px"><div class="eyebrow" style="color:${BLK}">Con qué compite en la zona</div>
       <table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table></div>
     <div class="two">
