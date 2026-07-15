@@ -41,6 +41,9 @@ npx vercel deploy --prod --yes   # deploy manual a producción
 ```
 src/lib/data.ts        Capa de datos Mongo (port de mvp_data.py): fetchRows() = exclusivas vivas
                        con leads/visitas/material; fetchProgram() = programa completo con ventas y bonos.
+src/lib/email.ts       Generador de campañas: renderCampaign(id|codigo) llena el template on-brand
+                       "Exclusiva de la semana" desde Mongo (port de build_campanas_final.py).
+src/lib/sendgrid.ts    Cliente REST v3 de SendGrid (fetch, sin deps). Fase 1: sendTestEmail (Mail Send).
 src/lib/kam.ts         Lookup estático inmobiliaria → KAM (generado del Sheet TARGETS).
 src/lib/access.ts      Allowlist cerrado de emails (hardcodeado; env ALLOWED_EMAILS lo pisa si está seteada).
 src/lib/firebase.ts    Firebase Auth de Pulppo (config JSON en NEXT_PUBLIC_FIREBASE).
@@ -51,6 +54,9 @@ src/app/api/auth/      POST valida idToken contra accounts:lookup + allowlist; D
 src/app/api/data/      GET → { rows, program } con cache en memoria 10 min (?refresh=1 fuerza).
 src/app/page.tsx       Dashboard client-side: filtros (KAM select, inmobiliaria autocomplete, tipo pills)
                        y 2 pestañas. El filtrado es 100% client-side sobre el payload completo.
+src/app/campanas/      Módulo de campañas de email (Fase 1): buscar propiedad → preview en iframe →
+                       enviar prueba. API en api/campanas/preview (GET) y api/campanas/test (POST,
+                       guardrail: solo destinatarios @pulppo.com hasta la Fase 2).
 src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabla) · ProgramaTab (métricas
                        del programa, gráficas, recap mensual con CSV) · ui.tsx (Metric, HBar, VBar, Donut,
                        DataTable, money) · inputs.tsx (Select estilizado, Combobox con búsqueda).
@@ -74,6 +80,10 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | OAuth client de Pulppo |
 | `NEXT_PUBLIC_FIREBASE` | Config de Firebase (JSON en una línea) |
 | `ALLOWED_EMAILS` | Allowlist coma-separado (opcional; si está seteada pisa la lista hardcodeada) |
+| `SENDGRID_API_KEY` | API key de SendGrid (módulo /campanas) |
+| `SENDGRID_FROM_EMAIL` | Remitente verificado en el dominio autenticado |
+| `SENDGRID_FROM_NAME` | Nombre visible del remitente (default: Pulppo) |
+| `SENDGRID_SANDBOX` | `1` = valida sin enviar; vacío = envía de verdad |
 
 ## Pendientes conocidos (julio 2026)
 

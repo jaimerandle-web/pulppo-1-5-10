@@ -71,6 +71,9 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-500">
                     <span>Datos live desde Mongo (cache 10 min)</span>
+                    <a href="/campanas" className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
+                        ✉️ Campañas
+                    </a>
                     <button onClick={() => load(true)} className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
                         🔄 Actualizar
                     </button>
