@@ -44,6 +44,9 @@ src/lib/data.ts        Capa de datos Mongo (port de mvp_data.py): fetchRows() = 
 src/lib/email.ts       Generador de campañas: renderCampaign(id|codigo) llena el template on-brand
                        "Exclusiva de la semana" desde Mongo (port de build_campanas_final.py).
 src/lib/sendgrid.ts    Cliente REST v3 de SendGrid (fetch, sin deps). Fase 1: sendTestEmail (Mail Send).
+src/lib/elegibilidad.ts Evaluador 1·5·10: evaluarElegibilidad(id) → % de aceptación (precio 40% +
+                       calidad 25% + comisión 20% + demanda 15%) sobre gates (venta·residencial·no
+                       desarrollo) y material (foto·video·tour). Reusa buildAudience para base de compradores.
 src/lib/audience.ts    Generador de base en vivo: buildAudience(id) cruza colonia→ciudad→zona + tipo
                        contra la DEMANDA (leads.contact.email; contacts.email está vacío). Cascadeo
                        hasta MIN=300 correos, dedup por email, excluye internos. zona_map.json = mapa
@@ -58,6 +61,8 @@ src/app/api/auth/      POST valida idToken contra accounts:lookup + allowlist; D
 src/app/api/data/      GET → { rows, program } con cache en memoria 10 min (?refresh=1 fuerza).
 src/app/page.tsx       Dashboard client-side: filtros (KAM select, inmobiliaria autocomplete, tipo pills)
                        y 2 pestañas. El filtrado es 100% client-side sobre el payload completo.
+src/app/evaluar/       Evaluador de elegibilidad 1·5·10: /evaluar (buscador) y /evaluar/[id] (scorecard
+                       imprimible on-brand con % de aceptación, gates, sub-scores y qué mejorar).
 src/app/campanas/      Módulo de campañas de email (Fase 1): buscar propiedad → preview en iframe →
                        generar base (audiencia en vivo, con descarga CSV) → enviar prueba → chequeo de
                        solapamiento entre bases para calendarizar. API: api/campanas/preview (GET),
