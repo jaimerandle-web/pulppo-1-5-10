@@ -77,6 +77,24 @@ export async function renderCampaign(
     return { id, code, title, subject, zona, html };
 }
 
+// Footer de baja + dirección física, requerido por SendGrid al enviar con grupo de supresión (Single
+// Sends). Se inyecta SOLO en el envío por marketing (Fase 2); el preview y la prueba usan el template
+// limpio. `<%asm_group_unsubscribe_raw_url%>` lo reemplaza SendGrid con el link real de cada destinatario.
+export function withUnsubFooter(html: string): string {
+    const addr = process.env.SENDGRID_FOOTER_ADDRESS || 'Pulppo · Ciudad de México, México';
+    const footer = `
+       <table width="100%" border="0" cellspacing="0" cellpadding="0" role="presentation">
+        <tr>
+         <td align="center" style="padding: 18px 20px 24px 20px; font-family: 'Nunito Sans', Arial, sans-serif; font-size: 12px; line-height: 18px; color: #B7B7B7;">
+          ${esc(addr)}<br />
+          Recibes este correo porque dejaste tus datos en una propiedad de Pulppo.<br />
+          <a href="<%asm_group_unsubscribe_raw_url%>" style="color: #529999; text-decoration: underline; font-weight: 700;">Cancelar suscripci&#243;n</a>
+         </td>
+        </tr>
+       </table>`;
+    return html.replace('</body>', `${footer}\n</body>`);
+}
+
 // Template "Exclusiva de la semana" (idéntico a campañas-email/_template_exclusiva.html).
 // Los links usan __ID__ = "propiedades/<id>" para apuntar a la ficha pública de pulppo.com.
 const TEMPLATE = `<!DOCTYPE html>

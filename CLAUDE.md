@@ -44,6 +44,10 @@ src/lib/data.ts        Capa de datos Mongo (port de mvp_data.py): fetchRows() = 
 src/lib/email.ts       Generador de campañas: renderCampaign(id|codigo) llena el template on-brand
                        "Exclusiva de la semana" desde Mongo (port de build_campanas_final.py).
 src/lib/sendgrid.ts    Cliente REST v3 de SendGrid (fetch, sin deps). Fase 1: sendTestEmail (Mail Send).
+src/lib/marketing.ts   Cliente SendGrid Marketing/Single Sends (fetch, sin deps). Fase 2: getOrCreateList,
+                       addContacts, createSingleSend (borrador), scheduleSingleSend/unschedule, listSingleSends
+                       + singleSendStats. Resuelve sender y grupo de baja solos (o por env). email.ts exporta
+                       withUnsubFooter() que inyecta el footer de baja obligatorio solo en el envío real.
 src/lib/elegibilidad.ts Evaluador 1·5·10: computeEval(id) = datos + renderScorecard() = HTML. % de
                        aceptación (precio 40% = mix ACM·oferta·cierres + calidad 25% + comisión 20% +
                        demanda 15%) sobre gates (venta·residencial·no desarrollo) y material (foto·video·tour).
@@ -65,11 +69,14 @@ src/app/page.tsx       Dashboard client-side: filtros (KAM select, inmobiliaria 
 src/app/evaluar/       Evaluador de elegibilidad 1·5·10: /evaluar (uno o varios códigos → tabla, modo lote
                        vía api/evaluar) y /evaluar/[id] (scorecard imprimible on-brand con % de aceptación,
                        gates, sub-scores, mix de precio y qué mejorar).
-src/app/campanas/      Módulo de campañas de email (Fase 1): buscar propiedad → preview en iframe →
-                       generar base (audiencia en vivo, con descarga CSV) → enviar prueba → chequeo de
-                       solapamiento entre bases para calendarizar. API: api/campanas/preview (GET),
-                       api/campanas/audience (GET, ?format=csv), api/campanas/test (POST, guardrail
-                       @pulppo.com), api/campanas/overlap (POST codes[] → cruce por pares + tandas).
+src/app/campanas/      Módulo de campañas de email. Fase 1: buscar propiedad → preview en iframe →
+                       generar base (audiencia en vivo, CSV) → enviar prueba → solapamiento entre bases.
+                       Fase 2 (human-in-the-loop): planear calendario anti-empalme → crear borradores en
+                       SendGrid → aprobar y programar (nada sale sin aprobación) + estado/métricas.
+                       API: preview (GET), audience (GET ?format=csv), test (POST, guardrail @pulppo.com),
+                       overlap (POST codes[]), plan (POST codes[]+start → tandas por semana), schedule
+                       (POST items[] → Single Sends borrador), approve (POST sends[] programa · DELETE ?id
+                       desprograma), sends (GET → estado + aperturas/clics/bajas).
 src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabla) · ProgramaTab (métricas
                        del programa, gráficas, recap mensual con CSV) · ui.tsx (Metric, HBar, VBar, Donut,
                        DataTable, money) · inputs.tsx (Select estilizado, Combobox con búsqueda).
@@ -97,6 +104,11 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
 | `SENDGRID_FROM_EMAIL` | Remitente verificado en el dominio autenticado |
 | `SENDGRID_FROM_NAME` | Nombre visible del remitente (default: Pulppo) |
 | `SENDGRID_SANDBOX` | `1` = valida sin enviar; vacío = envía de verdad |
+| `SENDGRID_SENDER_ID` | (Fase 2, opc.) id del Sender de marketing; si vacío se busca por `SENDGRID_FROM_EMAIL` |
+| `SENDGRID_UNSUB_GROUP_ID` | (Fase 2, opc.) id del grupo de baja; si vacío se crea "Exclusivas 1·5·10" |
+| `SENDGRID_FOOTER_ADDRESS` | (Fase 2, opc.) dirección física del footer legal (default: Pulppo · CDMX) |
+
+**Fase 2 requiere** que el `SENDGRID_API_KEY` tenga scope de **Marketing Campaigns** y un **Sender verificado**.
 
 ## Pendientes conocidos (julio 2026)
 
