@@ -30,12 +30,12 @@ export async function POST(req: Request) {
             const dateTag = it.sendAt.slice(0, 10);
             const name = `1·5·10 · ${c.code} · ${dateTag}`;
             const listId = await getOrCreateList(name);
-            await addContacts(listId, a.rows.map((r) => ({ email: r.email, nombre: r.nombre })));
+            const up = await addContacts(listId, a.rows.map((r) => ({ email: r.email, nombre: r.nombre })));
 
             const html = withUnsubFooter(c.html);
             const send = await createSingleSend({ name, subject: c.subject, html, listId });
 
-            out.push({ code: c.code, ok: true, id: send.id, status: send.status, listId, count: a.count, sendAt: it.sendAt, subject: c.subject, level: a.level });
+            out.push({ code: c.code, ok: true, id: send.id, status: send.status, listId, count: up.uploaded, skipped: up.skipped, sendAt: it.sendAt, subject: c.subject, level: a.level });
         } catch (e) {
             out.push({ code, ok: false, error: e instanceof Error ? e.message : 'Error creando el borrador' });
         }

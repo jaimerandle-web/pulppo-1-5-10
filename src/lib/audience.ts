@@ -4,6 +4,7 @@
 // Cascadeo: colonia → ciudad → zona hasta juntar al menos MIN correos. Dedup por email + excluye internos.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
+import { validEmail } from './validEmail';
 import zonaMap from './zona_map.json';
 
 const MIN = 300;                                  // umbral para ampliar al siguiente nivel
@@ -60,7 +61,7 @@ async function leadsFor(propIds: ObjectId[]): Promise<AudienceRow[]> {
         { $group: { _id: '$email', nombre: { $first: '$nombre' }, colonia: { $first: '$colonia' } } }
     ], { allowDiskUse: true, maxTimeMS: 25000 }).toArray();
     return docs
-        .filter((d) => d._id && !INTERNAL.test(String(d._id)))
+        .filter((d) => d._id && !INTERNAL.test(String(d._id)) && validEmail(String(d._id)))
         .map((d) => ({ email: String(d._id), nombre: String(d.nombre || '').trim() || '—', colonia: (d.colonia as string) ?? null }));
 }
 

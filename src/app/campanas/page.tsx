@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 interface PlanProp { code: string; title: string; colonia: string | null; ciudad: string | null; type: string | null; level: string; count: number }
 interface PlanTanda { tanda: number; sendAt: string; date: string; totalDedup: number; props: PlanProp[] }
 interface Plan { start: string; hourUtc: number; tandas: PlanTanda[]; notFound: string[]; nota: string }
-interface Draft { code: string; ok: boolean; error?: string; id?: string; status?: string; count?: number; sendAt?: string; subject?: string; level?: string }
+interface Draft { code: string; ok: boolean; error?: string; id?: string; status?: string; count?: number; skipped?: number; sendAt?: string; subject?: string; level?: string }
 interface SendStats { delivered?: number; unique_opens?: number; unique_clicks?: number; unsubscribes?: number; bounces?: number }
 interface SendRow { id: string; name?: string; status?: string; send_at?: string | null; stats?: SendStats | null }
 
@@ -410,6 +410,7 @@ export default function CampanasPage() {
                                         {t.props.map((p) => (
                                             <span key={p.code} className="rounded-lg bg-neutral-50 border border-neutral-200 px-2 py-1 text-xs text-neutral-700">
                                                 <b>{p.code}</b> · {p.colonia ?? p.ciudad ?? ''} · {p.count.toLocaleString('es-MX')} correos <span className="text-neutral-400">({p.level})</span>
+                                                {' '}<a className="text-[#529999] underline" href={`/api/campanas/preview?id=${encodeURIComponent(p.code)}`} target="_blank" rel="noreferrer">👁 ver correo</a>
                                             </span>
                                         ))}
                                     </div>
@@ -431,12 +432,17 @@ export default function CampanasPage() {
                                 {drafts.map((d, i) => (
                                     <tr key={i} className="border-b border-neutral-100">
                                         <td className="py-1.5 pr-3 font-mono">{d.code}</td>
-                                        <td className="py-1.5 pr-3">{d.ok ? `${(d.count ?? 0).toLocaleString('es-MX')} correos` : ''}</td>
+                                        <td className="py-1.5 pr-3">
+                                            {d.ok ? <>{(d.count ?? 0).toLocaleString('es-MX')} correos{d.skipped ? <span className="text-neutral-400"> ({d.skipped} inválidos descartados)</span> : null}</> : ''}
+                                        </td>
                                         <td className="py-1.5 pr-3">{d.ok ? fmtDate(d.sendAt) : ''}</td>
                                         <td className="py-1.5 pr-3">
                                             {!d.ok ? <span className="text-[#A52003]">⚠️ {d.error}</span>
                                                 : d.status === 'scheduled' ? <span className="text-[#2e6b5e]">✅ programado</span>
                                                     : <span className="text-neutral-500">📝 borrador</span>}
+                                        </td>
+                                        <td className="py-1.5 pr-3">
+                                            <a className="text-[#529999] underline" href={`/api/campanas/preview?id=${encodeURIComponent(d.code)}`} target="_blank" rel="noreferrer">👁 ver</a>
                                         </td>
                                         <td className="py-1.5">
                                             {d.ok && d.id && (d.status === 'scheduled'

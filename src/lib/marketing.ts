@@ -3,6 +3,8 @@
 // de baja obligatorio) y lo deja como BORRADOR; la programación real ocurre SOLO tras aprobación explícita
 // (human-in-the-loop). SendGrid maneja bajas, supresión (bounces/unsubs) y métricas de campaña.
 
+import { validEmail } from './validEmail';
+
 const BASE = 'https://api.sendgrid.com/v3';
 const UNSUB_GROUP_NAME = 'Exclusivas 1·5·10';
 
@@ -101,20 +103,32 @@ export async function getOrCreateList(name: string): Promise<string> {
     return String(created.id);
 }
 
-// Alta/actualización de contactos en una lista (async del lado de SendGrid; devuelve job_id). El nombre
-// se parte en first/last. Máx 30k por request (nuestras bases son < 2k).
-export async function addContacts(listId: string, rows: { email: string; nombre?: string }[]): Promise<string> {
-    const contacts = rows.slice(0, 30000).map((r) => {
+// Alta/actualización de contactos en una lista (async del lado de SendGrid; devuelve job_id + cuántos
+// se subieron). SendGrid rechaza TODO el lote si un solo correo es inválido, así que filtramos con
+// validEmail y deduplicamos aquí también (malla de seguridad extra sobre el filtro del origen).
+export async function addContacts(
+    listId: string,
+    rows: { email: string; nombre?: string }[]
+): Promise<{ jobId: string; uploaded: number; skipped: number }> {
+    const seen = new Set<string>();
+    const contacts: Array<{ email: string; first_name?: string; last_name?: string }> = [];
+    let skipped = 0;
+    for (const r of rows) {
+        const email = (r.email || '').trim().toLowerCase();
+        if (!validEmail(email) || seen.has(email)) { skipped++; continue; }
+        seen.add(email);
         const parts = (r.nombre || '').trim().split(/\s+/).filter(Boolean);
         const first = parts.shift();
         const last = parts.join(' ');
-        return { email: r.email, ...(first ? { first_name: first } : {}), ...(last ? { last_name: last } : {}) };
-    });
+        contacts.push({ email, ...(first ? { first_name: first } : {}), ...(last ? { last_name: last } : {}) });
+        if (contacts.length >= 30000) break;
+    }
+    if (!contacts.length) throw new Error('La base no tiene correos válidos para SendGrid');
     const r = await sg<{ job_id?: string }>('/marketing/contacts', {
         method: 'PUT',
         body: JSON.stringify({ list_ids: [listId], contacts })
     });
-    return r.job_id || '';
+    return { jobId: r.job_id || '', uploaded: contacts.length, skipped };
 }
 
 // --- Single Sends ---
