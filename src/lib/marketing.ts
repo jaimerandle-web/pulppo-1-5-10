@@ -3,7 +3,7 @@
 // de baja obligatorio) y lo deja como BORRADOR; la programación real ocurre SOLO tras aprobación explícita
 // (human-in-the-loop). SendGrid maneja bajas, supresión (bounces/unsubs) y métricas de campaña.
 
-import { validEmail } from './validEmail';
+import { extractEmail } from './validEmail';
 
 const BASE = 'https://api.sendgrid.com/v3';
 const UNSUB_GROUP_NAME = 'Exclusivas 1·5·10';
@@ -114,8 +114,8 @@ export async function addContacts(
     const contacts: Array<{ email: string; first_name?: string; last_name?: string }> = [];
     let skipped = 0;
     for (const r of rows) {
-        const email = (r.email || '').trim().toLowerCase();
-        if (!validEmail(email) || seen.has(email)) { skipped++; continue; }
+        const email = extractEmail(r.email || '');
+        if (!email || seen.has(email)) { skipped++; continue; }
         seen.add(email);
         const parts = (r.nombre || '').trim().split(/\s+/).filter(Boolean);
         const first = parts.shift();

@@ -17,3 +17,19 @@ export function validEmail(raw: string): boolean {
     const tld = domain.slice(domain.lastIndexOf('.') + 1);
     return /^[a-z]{2,}$/.test(tld);                 // TLD de 2+ letras
 }
+
+// Rescata el correo de un campo sucio. Muchos leads traen el mail JUNTO con el teléfono u otra basura
+// (ej. "correo@dom.com 5551234567" o "es correo@dom.com"). Tomamos el primer token separado por espacios
+// que sea un mail válido y tiramos el resto (el teléfono). Devuelve null solo si NO hay ningún mail bueno
+// (puro teléfono/nombre). No se parte por comas a propósito: "gina.escoto,taboada@gmail.com" es un mail
+// mal tecleado, no un mail + basura, y adivinar mandaría al destinatario equivocado → mejor descartarlo.
+export function extractEmail(raw: string): string | null {
+    const s = (raw || '').trim().toLowerCase();
+    if (!s) return null;
+    if (validEmail(s)) return s;
+    for (const token of s.split(/\s+/)) {
+        const clean = token.replace(/^[<"'(]+/, '').replace(/[>"'),;:]+$/, '');
+        if (validEmail(clean)) return clean;
+    }
+    return null;
+}

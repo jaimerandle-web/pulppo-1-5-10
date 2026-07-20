@@ -4,7 +4,7 @@
 // Cascadeo: colonia → ciudad → zona hasta juntar al menos MIN correos. Dedup por email + excluye internos.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
-import { validEmail } from './validEmail';
+import { extractEmail } from './validEmail';
 import zonaMap from './zona_map.json';
 
 const MIN = 300;                                  // umbral para ampliar al siguiente nivel
@@ -60,9 +60,17 @@ async function leadsFor(propIds: ObjectId[]): Promise<AudienceRow[]> {
         { $project: { email: { $toLower: '$contact.email' }, nombre: { $concat: [{ $ifNull: ['$contact.firstName', ''] }, ' ', { $ifNull: ['$contact.lastName', ''] }] }, colonia: '$property.address.neighborhood.name' } },
         { $group: { _id: '$email', nombre: { $first: '$nombre' }, colonia: { $first: '$colonia' } } }
     ], { allowDiskUse: true, maxTimeMS: 25000 }).toArray();
-    return docs
-        .filter((d) => d._id && !INTERNAL.test(String(d._id)) && validEmail(String(d._id)))
-        .map((d) => ({ email: String(d._id), nombre: String(d.nombre || '').trim() || '—', colonia: (d.colonia as string) ?? null }));
+    // Extrae el mail (tirando el tel/basura) y re-deduplica: dos registros pueden traer el mismo correo
+    // con distinta basura pegada y en Mongo cayeron en grupos distintos.
+    const out: AudienceRow[] = [];
+    const seen = new Set<string>();
+    for (const d of docs) {
+        const email = extractEmail(String(d._id ?? ''));
+        if (!email || INTERNAL.test(email) || seen.has(email)) continue;
+        seen.add(email);
+        out.push({ email, nombre: String(d.nombre || '').trim() || '—', colonia: (d.colonia as string) ?? null });
+    }
+    return out;
 }
 
 async function propIdsBy(filter: Document): Promise<ObjectId[]> {

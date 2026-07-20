@@ -167,7 +167,7 @@ const TEMPLATE = `<!DOCTYPE html>
           <!-- PROPERTY CARD -->
           <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #FFFFFF;">
            <tr>
-            <td align="center" valign="top" style="padding: 10px 20px 17px 20px;">
+            <td align="center" valign="top" style="padding: 20px 20px 17px 20px;">
              <a href="https://pulppo.com/__ID__?utm_source=sendgrid&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank" style="text-decoration: none;">
               <img src="__IMG__" width="500" height="333" alt="__TITLE__" style="display: block; width: 500px; height: auto; max-width: 100%; border: 0;" />
              </a>
@@ -199,7 +199,7 @@ const TEMPLATE = `<!DOCTYPE html>
             </td>
            </tr>
            <tr>
-            <td style="padding: 5px 30px 10px 30px;">
+            <td style="padding: 5px 30px 20px 30px;">
              <table border="0" cellpadding="0" cellspacing="0" role="presentation" style="width: 100%;">
               <tr><td bgcolor="#212322" align="left" valign="middle" style="padding: 10px 20px; background-color: #212322;">
                <div style="font-size: 20px; line-height: 100%; color: #ffffff; letter-spacing: 1px; font-weight: 700; font-family: 'Nunito Sans', Arial, sans-serif;" class="pc-w620-font-size-18px">$__PRICE__ <span style="font-weight: 400;">MXN</span></div>
