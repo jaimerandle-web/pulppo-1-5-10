@@ -2,7 +2,7 @@
 // Resuelve el problema de calendario (una persona recibe un solo correo aunque le toquen varias) sin
 // perder relevancia (cada zona ve lo suyo). Cada tarjeta conserva su utm_campaign por propiedad, así la
 // atribución de leads sigue siendo por propiedad. Reusa renderPropertyCard de email.ts.
-import { findProperty, renderPropertyCard, esc } from './email';
+import { findProperty, renderPropertyCard } from './email';
 
 export interface Digest { subject: string; html: string; zonaName: string; count: number; codes: string[] }
 
@@ -22,8 +22,8 @@ export async function renderDigest(
     if (!cards.length) return null;
 
     const body = cards.map((card) => `<tr><td style="padding:0 20px 18px 20px;">${card}</td></tr>`).join('');
-    const subject = opts.subject?.trim() || `Exclusivas de la semana en ${zonaName}`;
-    const html = TEMPLATE.replaceAll('__ZONA__', esc(zonaName)).replace('__CARDS__', body);
+    const subject = opts.subject?.trim() || 'Exclusivas de la semana';
+    const html = TEMPLATE.replace('__CARDS__', body);
     return { subject, html, zonaName, count: cards.length, codes: used };
 }
 
@@ -36,7 +36,7 @@ const TEMPLATE = `<!DOCTYPE html>
  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
  <meta name="x-apple-disable-message-reformatting" />
  <link href="https://fonts.googleapis.com/css?family=Nunito+Sans:ital,wght@0,300;0,400;0,500;0,700" rel="stylesheet" />
- <title>Exclusivas de la semana · __ZONA__</title>
+ <title>Exclusivas de la semana</title>
  <style>
  html, body { margin:0 !important; padding:0 !important; width:100% !important; -webkit-font-smoothing:antialiased; }
  table, td, th { mso-table-lspace:0 !important; mso-table-rspace:0 !important; border-collapse:collapse; }
@@ -60,7 +60,6 @@ const TEMPLATE = `<!DOCTYPE html>
         </td>
        </tr></table>
        <div style="font-size:28px;line-height:110%;color:#ffffff;letter-spacing:4px;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;text-transform:uppercase;">EXCLUSIVAS DE LA SEMANA</div>
-       <div style="margin-top:8px;font-size:16px;color:#F6BE00;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;text-transform:uppercase;letter-spacing:1px;">__ZONA__</div>
        <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td valign="top" style="padding-top:16px;line-height:1px;font-size:1px;border-bottom:1px solid #f6be00;">&nbsp;</td></tr></table>
        <div style="margin-top:16px;font-size:16px;line-height:135%;color:#ffffff;font-weight:300;font-family:'Nunito Sans',Arial,sans-serif;">Estas son las propiedades exclusivas que seleccionamos esta semana en tu zona. Oportunidades que no estar&#225;n disponibles por mucho tiempo &#128142;</div>
       </td></tr>
@@ -76,8 +75,8 @@ const TEMPLATE = `<!DOCTYPE html>
      <table width="100%" border="0" cellspacing="0" cellpadding="0" role="presentation">
       <tr><td valign="top" style="padding:0 20px;background-color:#ffffff;" bgcolor="#ffffff">
        <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr>
-        <td valign="middle" style="padding:14px 10px;"><div style="font-size:16px;line-height:21px;color:#333333;font-family:'Nunito Sans',Arial,sans-serif;">&#191;Quieres ver m&#225;s propiedades de lujo?</div></td>
-        <td valign="middle" align="right" style="padding:10px;"><a style="display:inline-block;background-color:#212322;padding:8px 28px;font-family:'Nunito Sans',Arial,sans-serif;text-decoration:none;" href="https://pulppo.com/departamento-o-casa-o-casa-en-condominio-venta-desde-25000000-pesos-exclusiva?utm_source=email&amp;utm_medium=email&amp;utm_campaign=exclusivas_semana" target="_blank"><span style="font-size:15px;color:#ffffff;font-weight:500;font-family:'Nunito Sans',Arial,sans-serif;">Ver aqu&#237;</span></a></td>
+        <td valign="middle" style="padding:14px 10px;"><div style="font-size:16px;line-height:21px;color:#333333;font-family:'Nunito Sans',Arial,sans-serif;">&#191;Quieres ver m&#225;s propiedades en exclusiva?</div></td>
+        <td valign="middle" align="right" style="padding:10px;"><a style="display:inline-block;background-color:#212322;padding:8px 28px;font-family:'Nunito Sans',Arial,sans-serif;text-decoration:none;" href="https://pulppo.com/m/propiedades-en-exclusiva?utm_source=email&amp;utm_medium=email&amp;utm_campaign=exclusivas_semana" target="_blank"><span style="font-size:15px;color:#ffffff;font-weight:500;font-family:'Nunito Sans',Arial,sans-serif;">Ver aqu&#237;</span></a></td>
        </tr></table>
       </td></tr>
      </table>

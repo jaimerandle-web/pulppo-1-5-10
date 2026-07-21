@@ -119,7 +119,7 @@ export function renderPropertyCard(P: Document): string {
  </td></tr>
  <tr><td style="padding:0 26px 8px 26px;"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr>${cell(m2 == null ? '—' : `${Math.round(m2)} m&#178;`, 'Superficie')}${cell(rec, 'Rec&#225;maras')}${cell(banos, 'Ba&#241;os')}${cell(park, 'Estac.')}</tr></table></td></tr>
  <tr><td style="padding:2px 26px 0 26px;"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td bgcolor="#212322" align="left" valign="middle" style="padding:9px 16px;background-color:#212322;"><div style="font-size:18px;line-height:100%;color:#ffffff;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">$${price == null ? '—' : Math.round(price).toLocaleString('en-US')} <span style="font-weight:400;">MXN</span></div></td></tr></table></td></tr>
- <tr><td style="padding:10px 26px 4px 26px;"><a href="${link}" target="_blank" style="display:inline-block;box-sizing:border-box;width:100%;background-color:#F6BE00;padding:12px;text-align:center;text-decoration:none;"><span style="font-size:16px;line-height:20px;color:#212322;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">VER DETALLES</span></a></td></tr>
+ <tr><td style="padding:10px 26px 14px 26px;"><a href="${link}" target="_blank" style="display:inline-block;box-sizing:border-box;width:100%;background-color:#F6BE00;padding:12px;text-align:center;text-decoration:none;"><span style="font-size:16px;line-height:20px;color:#212322;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">VER DETALLES</span></a></td></tr>
 </table>`;
 }
 

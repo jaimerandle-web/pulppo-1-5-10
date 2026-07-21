@@ -7,8 +7,8 @@ import { useRouter } from 'next/navigation';
 // (Fase 1) · planear calendario anti-empalme → crear borradores → aprobar y programar por SendGrid
 // Single Sends (Fase 2, human-in-the-loop: nada sale hasta que alguien aprueba).
 interface PlanProp { code: string; title: string; colonia: string | null; ciudad: string | null }
-interface PlanZone { key: string; zonaName: string; count: number; sendAt: string; date: string; props: PlanProp[] }
-interface Plan { start: string; hourUtc: number; zones: PlanZone[]; notFound: string[]; nota: string }
+interface PlanSend { key: string; zonaName: string; week: number; count: number; sendAt: string; date: string; props: PlanProp[] }
+interface Plan { start: string; hourUtc: number; sends: PlanSend[]; notFound: string[]; nota: string }
 interface Draft { key?: string; zonaName?: string; ok: boolean; error?: string; id?: string; status?: string; count?: number; props?: string[]; sendAt?: string; subject?: string }
 interface SendStats { delivered?: number; unique_opens?: number; unique_clicks?: number; unsubscribes?: number; bounces?: number }
 interface SendRow { id: string; name?: string; status?: string; send_at?: string | null; stats?: SendStats | null }
@@ -36,7 +36,7 @@ export default function CampanasPage() {
     const [planCodes, setPlanCodes] = useState('');
     const [planStart, setPlanStart] = useState('');
     const [plan, setPlan] = useState<Plan | null>(null);
-    const [zoneDates, setZoneDates] = useState<Record<string, string>>({});
+    const [sendDates, setSendDates] = useState<Record<string, string>>({});
     const [planLoading, setPlanLoading] = useState(false);
     const [drafts, setDrafts] = useState<Draft[]>([]);
     const [schedLoading, setSchedLoading] = useState(false);
@@ -134,8 +134,8 @@ export default function CampanasPage() {
             if (!res.ok) throw new Error(d.error || 'No se pudo planear');
             setPlan(d);
             const dates: Record<string, string> = {};
-            for (const z of d.zones as PlanZone[]) dates[z.key] = z.date;
-            setZoneDates(dates);
+            for (const s of d.sends as PlanSend[]) dates[s.key] = s.date;
+            setSendDates(dates);
         } catch (e) {
             setF2err(e instanceof Error ? e.message : 'Error');
         } finally { setPlanLoading(false); }
@@ -143,16 +143,16 @@ export default function CampanasPage() {
 
     async function createDrafts() {
         if (!plan) return;
-        const zones = plan.zones.map((z) => ({
-            key: z.key,
-            codes: z.props.map((p) => p.code),
-            sendAt: sendAtOf(zoneDates[z.key] || z.date, plan.hourUtc)
+        const sendsPayload = plan.sends.map((s) => ({
+            key: s.key,
+            codes: s.props.map((p) => p.code),
+            sendAt: sendAtOf(sendDates[s.key] || s.date, plan.hourUtc)
         }));
-        if (!zones.length) { setF2err('No hay zonas en el plan'); return; }
+        if (!sendsPayload.length) { setF2err('No hay correos en el plan'); return; }
         setSchedLoading(true); setF2err(''); setF2msg('');
         try {
             const res = await fetch('/api/campanas/schedule', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zones })
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sends: sendsPayload })
             });
             if (res.status === 401) { router.push('/login'); return; }
             const d = await res.json();
@@ -370,9 +370,9 @@ export default function CampanasPage() {
                     </button>
                 </div>
                 <p className="mt-1 text-xs text-neutral-500">
-                    3 pasos: <b>1)</b> agrupo las propiedades por <b>zona</b> en un digest &quot;Exclusivas de la semana&quot; (un correo
-                    por zona, varias propiedades) · <b>2)</b> creo los borradores en SendGrid (con footer de baja) · <b>3)</b> tú
-                    apruebas y recién ahí se programan. Nada se envía sin tu aprobación.
+                    3 pasos: <b>1)</b> agrupo las propiedades por <b>zona</b> en digests &quot;Exclusivas de la semana&quot; (máx 3
+                    propiedades por correo; si sobran, pasan a la siguiente semana) · <b>2)</b> creo los borradores en SendGrid ·
+                    <b>3)</b> tú apruebas y recién ahí se programan. Nada se envía sin tu aprobación.
                 </p>
 
                 {/* Paso 1 · Planear */}
@@ -386,7 +386,7 @@ export default function CampanasPage() {
                         <button className={btnDark} onClick={planCampaigns} disabled={planLoading}>
                             {planLoading ? 'Planeando…' : '1) Planear por zona'}
                         </button>
-                        <span className="text-[11px] text-neutral-400">Máx. 40 códigos · envío 09:00 MX</span>
+                        <span className="text-[11px] text-neutral-400">Máx. 100 códigos · máx 3 por correo · envío 09:00 MX</span>
                     </div>
                 </div>
 
@@ -397,19 +397,20 @@ export default function CampanasPage() {
                             <div className="rounded-lg bg-[#fdeeea] px-3 py-2 text-xs text-[#A52003]">No encontradas: {plan.notFound.join(', ')}</div>
                         )}
                         <div className="flex flex-col gap-3">
-                            {plan.zones.map((z) => (
-                                <div key={z.key} className="rounded-lg border border-neutral-300 p-3">
+                            {plan.sends.map((s) => (
+                                <div key={s.key} className="rounded-lg border border-neutral-300 p-3">
                                     <div className="flex flex-wrap items-center gap-3">
-                                        <b className="text-sm">📍 {z.zonaName}</b>
+                                        <span className="rounded bg-[#212322] px-2 py-0.5 text-xs font-bold text-white">Semana {s.week}</span>
+                                        <b className="text-sm">📍 {s.zonaName}</b>
                                         <input type="date" className="rounded-lg border border-neutral-300 px-2 py-1 text-sm"
-                                            value={zoneDates[z.key] ?? z.date}
-                                            onChange={(e) => setZoneDates((prev) => ({ ...prev, [z.key]: e.target.value }))} />
-                                        <span className="text-xs text-neutral-500">{z.props.length} propiedad(es) · ~{z.count.toLocaleString('es-MX')} correos</span>
+                                            value={sendDates[s.key] ?? s.date}
+                                            onChange={(e) => setSendDates((prev) => ({ ...prev, [s.key]: e.target.value }))} />
+                                        <span className="text-xs text-neutral-500">{s.props.length} propiedad(es) · ~{s.count.toLocaleString('es-MX')} correos</span>
                                         <a className="text-xs text-[#529999] underline" target="_blank" rel="noreferrer"
-                                            href={`/api/campanas/preview?zona=${encodeURIComponent(z.zonaName)}&codes=${encodeURIComponent(z.props.map((p) => p.code).join(','))}`}>👁 ver correo del digest</a>
+                                            href={`/api/campanas/preview?zona=${encodeURIComponent(s.zonaName)}&codes=${encodeURIComponent(s.props.map((p) => p.code).join(','))}`}>👁 ver correo</a>
                                     </div>
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                        {z.props.map((p) => (
+                                        {s.props.map((p) => (
                                             <span key={p.code} className="rounded-lg bg-neutral-50 border border-neutral-200 px-2 py-1 text-xs text-neutral-700">
                                                 <b>{p.code}</b> · {p.colonia ?? p.ciudad ?? ''}
                                             </span>
