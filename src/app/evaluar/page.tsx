@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 interface Row {
     code: string; title?: string; typ?: string | null; col?: string | null; city?: string | null;
-    score?: number; banda?: string; okIntr?: boolean; okMat?: boolean; faltaMat?: string[];
+    score?: number; banda?: string; okIntr?: boolean; esDesarrollo?: boolean; okMat?: boolean; faltaMat?: string[];
     ppm2?: number | null; vsAcm?: number | null; vsOferta?: number | null; vsCierre?: number | null;
     velocidadMed?: number | null; meses?: number | null; notFound?: boolean; error?: string;
 }
@@ -49,7 +49,7 @@ export default function EvaluarBuscador() {
             <p className="mb-4 text-sm text-neutral-600">
                 Evalúa si una propiedad tiene la salud para entrar al programa y valer la inversión de superdestacarla:
                 <b> precio competitivo</b> (mix ACM · oferta · cierres), <b>calidad del aviso</b>, <b>comisión</b> y
-                <b> demanda de zona</b>. Requiere venta, residencial y no desarrollo; el material (foto+video+tour) se marca aparte.
+                <b> demanda de zona</b>. Requiere venta y residencial; si es desarrollo hay posible rechazo (se revisa caso a caso); el material (foto+video+tour) se marca aparte.
                 Puedes pegar <b>uno o varios códigos</b> (uno por línea o separados por coma).
             </p>
 
@@ -84,7 +84,7 @@ export default function EvaluarBuscador() {
                                         <><td className="py-2 pr-3 font-mono">{r.code}</td><td className="py-2 pr-3 text-neutral-400" colSpan={7}>{r.notFound ? 'no encontrada' : r.error}</td></>
                                     ) : (
                                         <>
-                                            <td className="py-2 pr-3"><b className="font-mono">{r.code}</b><div className="text-xs text-neutral-500">{r.typ} · {r.col}, {r.city}</div></td>
+                                            <td className="py-2 pr-3"><b className="font-mono">{r.code}</b><div className="text-xs text-neutral-500">{r.typ} · {r.col}, {r.city}</div>{r.esDesarrollo && <div className="mt-0.5 inline-block rounded bg-[#F6BE00] px-1.5 py-0.5 text-[10px] font-bold text-[#212322]">⚠️ desarrollo · posible rechazo</div>}</td>
                                             <td className="py-2 pr-3">
                                                 <span className="rounded px-2 py-0.5 text-xs font-bold text-white" style={{ background: bandaColor(r.banda) }}>
                                                     {r.okIntr ? `${r.score}% · ${r.banda}` : 'No aplica'}

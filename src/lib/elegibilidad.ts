@@ -1,6 +1,7 @@
 // Evaluador de elegibilidad 1·5·10: ¿vale la pena meter una propiedad al programa y superdestacarla?
 // Da un % de aceptación (precio competitivo vs mix ACM·oferta·cierres + calidad del aviso + comisión +
-// demanda de zona) sobre gates intrínsecos (venta · residencial · no desarrollo) y requisitos de material
+// demanda de zona) sobre gates intrínsecos (venta · residencial; ser desarrollo NO descalifica: solo
+// dispara un disclaimer de "posible rechazo") y requisitos de material
 // (fotos · video · tour). computeEval() = datos estructurados (usado por scorecard y modo lote);
 // renderScorecard() = HTML on-brand imprimible.
 import { ObjectId, type Document } from 'mongodb';
@@ -28,6 +29,7 @@ export interface EvalResult {
     col: string | null; city: string | null; street: string | null;
     val: number | null; acm: number | null; m2: number | null; ppm2: number | null;
     intr: { k: string; ok: boolean }[]; okIntr: boolean;
+    esDesarrollo: boolean;
     mat: { k: string; ok: boolean; v: string }[]; okMat: boolean; faltaMat: string[];
     sPrecio: number; sCalidad: number; sComision: number; sDemanda: number; score: number;
     banda: string; bandaTxt: string;
@@ -156,10 +158,11 @@ export async function computeEval(id: string, opts: { withBase?: boolean } = {})
     const sDemanda = dem >= 15 ? clamp(0.3 + 0.7 * clamp(ratio)) : clamp(dem / 15) * 0.4;
     const score = Math.round(40 * sPrecio + 25 * sCalidad + 20 * sComision + 15 * sDemanda);
 
+    // Ser desarrollo NO descalifica: solo dispara un disclaimer de "posible rechazo" (se revisa caso a
+    // caso). Los gates intrínsecos que sí descalifican son venta y residencial.
     const intr = [
         { k: 'En venta', ok: op === 'sale' },
-        { k: 'Residencial (casa/depto)', ok: !!typ && RESIDENCIAL.has(typ) },
-        { k: 'No es desarrollo', ok: !esDesarrollo }
+        { k: 'Residencial (casa/depto)', ok: !!typ && RESIDENCIAL.has(typ) }
     ];
     const mat = [
         { k: '12+ fotos', ok: pics >= 12, v: `${pics} fotos` },
@@ -192,7 +195,7 @@ export async function computeEval(id: string, opts: { withBase?: boolean } = {})
 
     return {
         id: String(P._id), code, title: (dig(P, 'listing', 'title') as string) ?? code, typ, op, col, city, street,
-        val, acm, m2, ppm2, intr, okIntr, mat, okMat, faltaMat,
+        val, acm, m2, ppm2, intr, okIntr, esDesarrollo, mat, okMat, faltaMat,
         sPrecio, sCalidad, sComision, sDemanda, score, banda, bandaTxt,
         sAcm, sSold, sOferta, askingMed, soldMed, vsAcm, vsOferta, vsCierre,
         q, comm, tipoOk, opOk, zonaOk, descOk, words, dem, ofe, velocidadMed, meses, nuevoPrecio,
@@ -246,6 +249,7 @@ export function renderScorecard(r: EvalResult): string {
   </div>
 
   ${!r.okIntr ? `<div class="banner" style="background:${RED}">No aplica al programa: ${esc(r.intr.filter((x) => !x.ok).map((x) => x.k.toLowerCase()).join(', '))}.</div>` : ''}
+  ${r.esDesarrollo ? `<div class="banner" style="background:${YEL};color:${BLK}">⚠️ Es un desarrollo: posible rechazo. Revisar caso a caso con el equipo del programa antes de activar.</div>` : ''}
 
   <div class="sec"><div class="eyebrow">¿Aplica al programa?</div><div class="accent"></div>
     <div class="grid2">
@@ -289,7 +293,7 @@ export function renderScorecard(r: EvalResult): string {
     <div class="box"><ul>${r.lev.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>
   </div>
 
-  <div class="foot">Pulppo · 1·5·10 — Evaluación de elegibilidad generada ${new Date().toISOString().slice(0, 10)}. Datos en vivo. Requiere venta, residencial y no desarrollo; material (foto+video+tour) para activar.</div>
+  <div class="foot">Pulppo · 1·5·10 — Evaluación de elegibilidad generada ${new Date().toISOString().slice(0, 10)}. Datos en vivo. Requiere venta y residencial; si es desarrollo hay posible rechazo (revisar caso a caso); material (foto+video+tour) para activar.</div>
 </div>`;
 }
 

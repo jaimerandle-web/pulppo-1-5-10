@@ -17,7 +17,7 @@ export async function POST(req: Request) {
             if (!r) return { code: c, notFound: true };
             return {
                 code: r.code, title: r.title, typ: r.typ, col: r.col, city: r.city,
-                score: r.score, banda: r.banda, okIntr: r.okIntr, okMat: r.okMat, faltaMat: r.faltaMat,
+                score: r.score, banda: r.banda, okIntr: r.okIntr, esDesarrollo: r.esDesarrollo, okMat: r.okMat, faltaMat: r.faltaMat,
                 val: r.val, ppm2: r.ppm2, vsAcm: r.vsAcm, vsOferta: r.vsOferta, vsCierre: r.vsCierre,
                 velocidadMed: r.velocidadMed, meses: r.meses
             };
