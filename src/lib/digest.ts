@@ -21,9 +21,15 @@ export async function renderDigest(
     }
     if (!cards.length) return null;
 
+    const one = cards.length === 1;   // singular vs plural en título, asunto e intro
+    const heading = one ? 'EXCLUSIVA DE LA SEMANA' : 'EXCLUSIVAS DE LA SEMANA';
+    const intro = one
+        ? 'Esta es la propiedad exclusiva que seleccionamos esta semana para ti. Una oportunidad que no estar&#225; disponible por mucho tiempo &#128142;'
+        : 'Estas son las propiedades exclusivas que seleccionamos esta semana en tu zona. Oportunidades que no estar&#225;n disponibles por mucho tiempo &#128142;';
+
     const body = cards.map((card) => `<tr><td style="padding:0 20px 18px 20px;">${card}</td></tr>`).join('');
-    const subject = opts.subject?.trim() || 'Exclusivas de la semana';
-    const html = TEMPLATE.replace('__CARDS__', body);
+    const subject = opts.subject?.trim() || (one ? 'Exclusiva de la semana' : 'Exclusivas de la semana');
+    const html = TEMPLATE.replace('__HEADING__', heading).replace('__INTRO__', intro).replace('__CARDS__', body);
     return { subject, html, zonaName, count: cards.length, codes: used };
 }
 
@@ -59,9 +65,9 @@ const TEMPLATE = `<!DOCTYPE html>
           <img src="https://api-postcards.designmodo.com/files/images/user-91775/image-1718405050778.png" width="150" height="64" alt="Pulppo" style="display:block;width:150px;height:auto;border:0;" /></a>
         </td>
        </tr></table>
-       <div style="font-size:28px;line-height:110%;color:#ffffff;letter-spacing:4px;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;text-transform:uppercase;">EXCLUSIVAS DE LA SEMANA</div>
+       <div style="font-size:28px;line-height:110%;color:#ffffff;letter-spacing:4px;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;text-transform:uppercase;">__HEADING__</div>
        <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td valign="top" style="padding-top:16px;line-height:1px;font-size:1px;border-bottom:1px solid #f6be00;">&nbsp;</td></tr></table>
-       <div style="margin-top:16px;font-size:16px;line-height:135%;color:#ffffff;font-weight:300;font-family:'Nunito Sans',Arial,sans-serif;">Estas son las propiedades exclusivas que seleccionamos esta semana en tu zona. Oportunidades que no estar&#225;n disponibles por mucho tiempo &#128142;</div>
+       <div style="margin-top:16px;font-size:16px;line-height:135%;color:#ffffff;font-weight:300;font-family:'Nunito Sans',Arial,sans-serif;">__INTRO__</div>
       </td></tr>
      </table>
 
