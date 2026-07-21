@@ -24,6 +24,9 @@ export function classifySource(src?: string | null): string {
     if (s.includes('lamudi')) return 'Lamudi';
     if (s.includes('propiedades.com') || s.includes('vivanuncios') || s.includes('trovit') || s.includes('icasas')) return 'Otros portales';
     if (s.includes('whats') || s === 'wa') return 'WhatsApp';
+    // Correo: pulppo.com captura utm_source=email → lead.source='email' (nuestras campañas 1·5·10 y
+    // newsletters usan ese source; el detalle por propiedad va en lead.campaign = exclusiva_<código>).
+    if (s === 'email' || s.includes('newsletter') || s.includes('correo') || s.includes('mailchimp') || s.includes('sendgrid')) return 'Correo';
     if (s.includes('pulppo')) return 'Pulppo';
     if (s.includes('broker') || s.includes('red')) return 'Red brokers';
     if (s === 'fb' || s === 'ig' || s.includes('face') || s.includes('insta') || s.includes('tiktok') || s.includes('social')) return 'Redes sociales';

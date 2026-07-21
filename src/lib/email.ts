@@ -68,6 +68,10 @@ export async function renderCampaign(
     const pics = ((P.pictures as Document[]) || []).filter((x) => x.public !== false);
     const img = optimizeImg((pics[0]?.url as string) ?? (pics[0]?.src as string) ?? '');
 
+    // utm_campaign de todos los links. pulppo.com captura utm_source=email → lead.source='email' y
+    // utm_campaign → lead.campaign, así que un lead que llene el form/WhatsApp tras el correo queda como
+    // source='email', campaign='exclusiva_<código>'. Detección: source='email' (todos los del correo 1·5·10)
+    // + campaign='exclusiva_<código>' (por propiedad). Ver classifySource → 'Correo' en src/lib/data.ts.
     const campaign = `exclusiva_${code}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
     const hook = opts.hook?.trim() || (zona ? `Una propiedad que lo tiene todo en ${zona}` : 'Una oportunidad única, seleccionada para ti');
     const subject = opts.subject?.trim() || `Exclusiva de la semana: ${title}`;
@@ -149,7 +153,7 @@ const TEMPLATE = `<!DOCTYPE html>
           <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
            <tr>
             <td align="right" valign="top" style="padding: 0px 0px 20px 0px;">
-             <a href="https://pulppo.com/?utm_source=email&amp;utm_medium=mkt&amp;utm_campaign=exclusiva" target="_blank" style="text-decoration: none;">
+             <a href="https://pulppo.com/?utm_source=email&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank" style="text-decoration: none;">
               <img src="https://api-postcards.designmodo.com/files/images/user-91775/image-1718405050778.png" width="160" height="68" alt="Pulppo" style="display: block; width: 160px; height: auto; max-width: 100%; border: 0;" />
              </a>
             </td>
@@ -179,14 +183,14 @@ const TEMPLATE = `<!DOCTYPE html>
           <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #FFFFFF;">
            <tr>
             <td align="center" valign="top" style="padding: 20px 20px 17px 20px;">
-             <a href="https://pulppo.com/__ID__?utm_source=sendgrid&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank" style="text-decoration: none;">
+             <a href="https://pulppo.com/__ID__?utm_source=email&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank" style="text-decoration: none;">
               <img src="__IMG__" width="500" height="333" alt="__TITLE__" style="display: block; width: 500px; height: auto; max-width: 100%; border: 0;" />
              </a>
             </td>
            </tr>
            <tr>
             <td valign="top" style="padding: 0px 0px 20px 30px;">
-             <a href="https://pulppo.com/__ID__?utm_source=sendgrid&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank" style="text-decoration: none;">
+             <a href="https://pulppo.com/__ID__?utm_source=email&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank" style="text-decoration: none;">
               <span style="font-size: 20px; line-height: 23px; text-align: left; color: #212322; font-weight: 700; font-family: 'Nunito Sans', Arial, sans-serif; display: inline-block;" class="pc-w620-font-size-18px">__TITLE__</span>
              </a>
             </td>
@@ -226,7 +230,7 @@ const TEMPLATE = `<!DOCTYPE html>
           <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
            <tr>
             <th valign="top" align="center" style="padding: 20px 0px 0px 0px; text-align: center;">
-             <a style="display: inline-block; box-sizing: border-box; background-color: #ffffff; padding: 14px 19px; width: 100%; font-family: 'Nunito Sans', Arial, sans-serif; text-align: center; text-decoration: none;" href="https://pulppo.com/__ID__?utm_source=sendgrid&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank"><span style="font-size: 20px; line-height: 24px; color: #212322; letter-spacing: -0.2px; font-weight: 700; font-family: 'Nunito Sans', Arial, sans-serif;">DESCUBRE M&#193;S DETALLES</span></a>
+             <a style="display: inline-block; box-sizing: border-box; background-color: #ffffff; padding: 14px 19px; width: 100%; font-family: 'Nunito Sans', Arial, sans-serif; text-align: center; text-decoration: none;" href="https://pulppo.com/__ID__?utm_source=email&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank"><span style="font-size: 20px; line-height: 24px; color: #212322; letter-spacing: -0.2px; font-weight: 700; font-family: 'Nunito Sans', Arial, sans-serif;">DESCUBRE M&#193;S DETALLES</span></a>
             </th>
            </tr>
           </table>
@@ -247,7 +251,7 @@ const TEMPLATE = `<!DOCTYPE html>
              <div style="font-size: 16px; line-height: 21px; color: #333333; font-weight: 400; font-family: 'Nunito Sans', Arial, sans-serif;" class="pc-w620-font-size-16px">&#191;Te gustar&#237;a ver m&#225;s<br>propiedades de lujo?</div>
             </td>
             <td valign="middle" align="right" style="padding: 10px;">
-             <a style="display: inline-block; background-color: #212322; padding: 7px 30px; font-family: 'Nunito Sans', Arial, sans-serif; text-decoration: none;" href="https://pulppo.com/departamento-o-casa-o-casa-en-condominio-venta-desde-25000000-pesos-exclusiva?utm_source=sendgrid&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank"><span style="font-size: 16px; line-height: 24px; color: #ffffff; font-weight: 500; font-family: 'Nunito Sans', Arial, sans-serif;">Ver aqu&#237;</span></a>
+             <a style="display: inline-block; background-color: #212322; padding: 7px 30px; font-family: 'Nunito Sans', Arial, sans-serif; text-decoration: none;" href="https://pulppo.com/departamento-o-casa-o-casa-en-condominio-venta-desde-25000000-pesos-exclusiva?utm_source=email&amp;utm_medium=email&amp;utm_campaign=__CAMPAIGN__" target="_blank"><span style="font-size: 16px; line-height: 24px; color: #ffffff; font-weight: 500; font-family: 'Nunito Sans', Arial, sans-serif;">Ver aqu&#237;</span></a>
             </td>
            </tr>
           </table>
