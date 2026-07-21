@@ -13,6 +13,15 @@ const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
 };
 const num = (x: unknown): number | null => (typeof x === 'number' && !isNaN(x) ? x : null);
 const intOrDash = (x: unknown) => { const n = num(x); return n == null ? '—' : String(Math.round(n)); };
+// Baños contando medios baños (attributes.toilettes = aseo/medio baño = 0.5). Ej. 4 baños + 2 medios = 5.
+const bathrooms = (P: Document | null | undefined): string => {
+    const full = num(dig(P, 'attributes', 'bathrooms'));
+    const half = num(dig(P, 'attributes', 'toilettes'));
+    if (full == null && half == null) return '—';
+    const total = (full ?? 0) + 0.5 * (half ?? 0);
+    if (total === 0) return '—';
+    return Number.isInteger(total) ? String(total) : total.toFixed(1);
+};
 
 // URL pública de la propiedad en pulppo.com (misma convención que src/lib/data.ts).
 const propUrl = (id: string) => `https://pulppo.com/propiedades/${id}`;
@@ -59,7 +68,7 @@ export async function renderCampaign(
     const price = num(dig(P, 'listing', 'value'));
     const m2 = num(dig(P, 'attributes', 'totalSurface')) ?? num(dig(P, 'attributes', 'surface'));
     const rec = dig(P, 'attributes', 'suites');
-    const banos = dig(P, 'attributes', 'bathrooms');
+    const banos = bathrooms(P);
     const park = dig(P, 'attributes', 'parkings');
     const zona = (dig(P, 'address', 'neighborhood', 'name') as string)
         ?? (dig(P, 'address', 'city', 'name') as string) ?? null;
@@ -83,7 +92,7 @@ export async function renderCampaign(
         __IMG__: esc(img),
         __M2__: m2 == null ? '—' : String(Math.round(m2)),
         __REC__: intOrDash(rec),
-        __BANOS__: intOrDash(banos),
+        __BANOS__: banos,
         __PARK__: intOrDash(park),
         __PRICE__: price == null ? '—' : Math.round(price).toLocaleString('en-US'),
         __CAMPAIGN__: campaign
@@ -102,7 +111,7 @@ export function renderPropertyCard(P: Document): string {
     const price = num(dig(P, 'listing', 'value'));
     const m2 = num(dig(P, 'attributes', 'totalSurface')) ?? num(dig(P, 'attributes', 'surface'));
     const rec = intOrDash(dig(P, 'attributes', 'suites'));
-    const banos = intOrDash(dig(P, 'attributes', 'bathrooms'));
+    const banos = bathrooms(P);
     const park = intOrDash(dig(P, 'attributes', 'parkings'));
     const pics = ((P.pictures as Document[]) || []).filter((x) => x.public !== false);
     const img = esc(optimizeImg((pics[0]?.url as string) ?? (pics[0]?.src as string) ?? ''));
@@ -117,7 +126,7 @@ export function renderPropertyCard(P: Document): string {
  <tr><td valign="top" style="padding:2px 26px 8px 26px;">
   <a href="${link}" target="_blank" style="text-decoration:none;"><span style="font-size:19px;line-height:22px;color:#212322;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">${esc(title)}</span></a>
  </td></tr>
- <tr><td style="padding:0 26px 8px 26px;"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr>${cell(m2 == null ? '—' : `${Math.round(m2)} m&#178;`, 'Superficie')}${cell(rec, 'Rec&#225;maras')}${cell(banos, 'Ba&#241;os')}${cell(park, 'Estac.')}</tr></table></td></tr>
+ <tr><td style="padding:0 26px 8px 26px;"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr>${cell(m2 == null ? '—' : `${Math.round(m2)}`, 'm&#178; totales')}${cell(rec, 'Rec&#225;maras')}${cell(banos, 'Ba&#241;os')}${cell(park, 'Estac.')}</tr></table></td></tr>
  <tr><td style="padding:2px 26px 0 26px;"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td bgcolor="#212322" align="left" valign="middle" style="padding:9px 16px;background-color:#212322;"><div style="font-size:18px;line-height:100%;color:#ffffff;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">$${price == null ? '—' : Math.round(price).toLocaleString('en-US')} <span style="font-weight:400;">MXN</span></div></td></tr></table></td></tr>
  <tr><td style="padding:10px 26px 14px 26px;"><a href="${link}" target="_blank" style="display:inline-block;box-sizing:border-box;width:100%;background-color:#F6BE00;padding:12px;text-align:center;text-decoration:none;"><span style="font-size:16px;line-height:20px;color:#212322;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">VER DETALLES</span></a></td></tr>
 </table>`;
@@ -230,13 +239,13 @@ const TEMPLATE = `<!DOCTYPE html>
             <td style="padding: 0px 30px 10px 30px;">
              <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
               <tr>
-               <td align="left" valign="top" style="padding: 0 10px;"><div style="font-size: 20px; color: #212322; font-weight: 700; font-family: 'Nunito Sans', Arial, sans-serif;" class="pc-w620-font-size-16px">__M2__ m&#178;</div></td>
+               <td align="left" valign="top" style="padding: 0 10px;"><div style="font-size: 20px; color: #212322; font-weight: 700; font-family: 'Nunito Sans', Arial, sans-serif;" class="pc-w620-font-size-16px">__M2__</div></td>
                <td align="left" valign="top" style="padding: 0 10px;"><div style="font-size: 20px; color: #212322; font-weight: 700; font-family: 'Nunito Sans', Arial, sans-serif;">__REC__</div></td>
                <td align="left" valign="top" style="padding: 0 10px;"><div style="font-size: 20px; color: #212322; font-weight: 700; font-family: 'Nunito Sans', Arial, sans-serif;" class="pc-w620-font-size-16px">__BANOS__</div></td>
                <td align="left" valign="top" style="padding: 0 10px;"><div style="font-size: 20px; color: #212322; font-weight: 700; font-family: 'Nunito Sans', Arial, sans-serif;">__PARK__</div></td>
               </tr>
               <tr>
-               <td bgcolor="#FFFFFF" align="left" valign="top" style="padding: 10px;"><div style="font-size: 15px; color: #212322; font-family: 'Nunito Sans', Arial, sans-serif;">Superficie total</div></td>
+               <td bgcolor="#FFFFFF" align="left" valign="top" style="padding: 10px;"><div style="font-size: 15px; color: #212322; font-family: 'Nunito Sans', Arial, sans-serif;">m&#178; totales</div></td>
                <td align="left" valign="top" style="padding: 10px;"><div style="font-size: 15px; color: #212322; font-family: 'Nunito Sans', Arial, sans-serif;">Rec&#225;maras</div></td>
                <td align="left" valign="top" style="padding: 10px;"><div style="font-size: 15px; color: #212322; font-family: 'Nunito Sans', Arial, sans-serif;">Ba&#241;os</div></td>
                <td align="left" valign="top" style="padding: 10px;"><div style="font-size: 15px; color: #212322; font-family: 'Nunito Sans', Arial, sans-serif;">Estacionamientos</div></td>
