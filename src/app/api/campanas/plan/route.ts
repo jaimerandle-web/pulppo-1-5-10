@@ -1,12 +1,12 @@
 import { buildAudience } from '@/lib/audience';
 
 // Planeador de calendario (Fase 2, paso 1): POST { codes[], start?, hour? }. Arma la base de cada
-// propiedad, detecta empalmes y reparte las que se cruzan en SEMANAS distintas (una "tanda" por semana).
-// NO toca SendGrid: es solo el plan para que la persona lo revise y apruebe. Reusa la lógica de overlap.
+// propiedad y reparte en SEMANAS de forma que cada propiedad llegue a TODA su base (no se parte la
+// audiencia) SIN que nadie reciba dos la misma semana: dos propiedades comparten semana solo si sus
+// bases son DISJUNTAS (no comparten ni una persona). Coloreo greedy. NO toca SendGrid.
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const SEP = 0.15;              // ≥15% de correos compartidos → van en semanas distintas
 const DEFAULT_HOUR_UTC = 15;   // 09:00 en México (UTC-6, sin horario de verano)
 
 interface Base {
@@ -23,13 +23,11 @@ function nextMonday(from: Date): Date {
     return d;
 }
 
-// % de cruce sobre la base más chica.
-function overlapPct(a: Set<string>, b: Set<string>): number {
-    if (!a.size || !b.size) return 0;
+// ¿Las dos bases no comparten NI UNA persona? (recorre la más chica).
+function disjoint(a: Set<string>, b: Set<string>): boolean {
     const [small, big] = a.size <= b.size ? [a, b] : [b, a];
-    let shared = 0;
-    for (const e of small) if (big.has(e)) shared++;
-    return shared / small.size;
+    for (const e of small) if (big.has(e)) return false;
+    return true;
 }
 
 export async function POST(req: Request) {
@@ -51,11 +49,13 @@ export async function POST(req: Request) {
             bases.push({ code: a.code, title: a.title, colonia: a.colonia, ciudad: a.ciudad, type: a.type, level: a.level, count: a.count, set: new Set(a.rows.map((r) => r.email)) });
         }
 
-        // Greedy: una base entra a una tanda solo si su cruce con TODAS las de esa tanda es < SEP.
+        // Coloreo greedy: una base entra a una semana solo si es DISJUNTA con TODAS las de esa semana.
+        // Así nadie recibe dos correos la misma semana y cada propiedad conserva su base completa. Base
+        // más grande primero (heurística estándar de coloreo).
         const ordered = bases.filter((b) => b.count > 0).sort((a, b) => b.count - a.count);
         const tandas: Base[][] = [];
         for (const b of ordered) {
-            const slot = tandas.find((grp) => grp.every((x) => overlapPct(b.set, x.set) < SEP));
+            const slot = tandas.find((grp) => grp.every((x) => disjoint(b.set, x.set)));
             if (slot) slot.push(b); else tandas.push([b]);
         }
 
@@ -80,8 +80,8 @@ export async function POST(req: Request) {
             tandas: schedule,
             notFound: bases.filter((b) => b.count === 0).map((b) => b.code),
             nota: schedule.length <= 1
-                ? 'Las bases casi no se cruzan: pueden salir la misma semana.'
-                : `Se reparten en ${schedule.length} semanas para que nadie reciba dos correos empalmados.`
+                ? 'Ninguna comparte público: pueden salir la misma semana con su base completa.'
+                : `Se reparten en ${schedule.length} semanas para que cada propiedad llegue a TODA su base sin que nadie reciba dos la misma semana.`
         });
     } catch (e) {
         return Response.json({ error: e instanceof Error ? e.message : 'Error planeando el calendario' }, { status: 500 });

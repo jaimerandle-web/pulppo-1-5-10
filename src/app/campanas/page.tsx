@@ -433,7 +433,7 @@ export default function CampanasPage() {
                                     <tr key={i} className="border-b border-neutral-100">
                                         <td className="py-1.5 pr-3 font-mono">{d.code}</td>
                                         <td className="py-1.5 pr-3">
-                                            {d.ok ? <>{(d.count ?? 0).toLocaleString('es-MX')} correos{d.skipped ? <span className="text-neutral-400"> ({d.skipped.toLocaleString('es-MX')} movidos a otra propiedad de la semana)</span> : null}</> : ''}
+                                            {d.ok ? <>{(d.count ?? 0).toLocaleString('es-MX')} correos{d.skipped ? <span className="text-neutral-400"> ({d.skipped.toLocaleString('es-MX')} inválidos)</span> : null}</> : ''}
                                         </td>
                                         <td className="py-1.5 pr-3">{d.ok ? fmtDate(d.sendAt) : ''}</td>
                                         <td className="py-1.5 pr-3">
