@@ -17,6 +17,17 @@ const intOrDash = (x: unknown) => { const n = num(x); return n == null ? '—' :
 // URL pública de la propiedad en pulppo.com (misma convención que src/lib/data.ts).
 const propUrl = (id: string) => `https://pulppo.com/propiedades/${id}`;
 
+// Las fotos de Mongo (images.pulppo.com) vienen en resolución original (~1.5 MB) y hacen lento el correo.
+// El correo solo muestra la portada a 500px, así que la servimos redimensionada por el optimizador de
+// imágenes de pulppo.com (Next/Image): ~70 KB (22× más ligera). Solo aplica a fotos propias; cualquier
+// otra URL se deja igual. Next negocia el formato por Accept, así que a Outlook (sin webp) le da JPEG.
+const IMG_W = 750;   // ancho pedido (display 500px → nítido en retina). Anchos válidos: 640/750/828/1080
+const IMG_Q = 70;    // calidad
+function optimizeImg(raw: string): string {
+    if (!raw || !/^https?:\/\/images\.pulppo\.com\//i.test(raw)) return raw;
+    return `https://pulppo.com/_next/image?url=${encodeURIComponent(raw)}&w=${IMG_W}&q=${IMG_Q}`;
+}
+
 export interface Campaign {
     id: string;        // ObjectId de la propiedad (para links/UTMs)
     code: string;      // internalId legible (CTA-422)
@@ -55,7 +66,7 @@ export async function renderCampaign(
 
     // Portada = primera foto pública.
     const pics = ((P.pictures as Document[]) || []).filter((x) => x.public !== false);
-    const img = (pics[0]?.url as string) ?? (pics[0]?.src as string) ?? '';
+    const img = optimizeImg((pics[0]?.url as string) ?? (pics[0]?.src as string) ?? '');
 
     const campaign = `exclusiva_${code}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
     const hook = opts.hook?.trim() || (zona ? `Una propiedad que lo tiene todo en ${zona}` : 'Una oportunidad única, seleccionada para ti');
