@@ -120,6 +120,46 @@ export async function buildAudience(idOrCode: string): Promise<Audience | null> 
     return { id, code, title, type, colonia: nbName, ciudad: cityName, zona, level, count: rows.length, rows };
 }
 
+// --- Digest por zona ---
+// Agrupa varias propiedades por su ZONA y arma la base del digest = unión (dedup) de la demanda de las
+// propiedades de esa zona. Reusa buildAudience por propiedad. La zona sale del mapeo ciudad→zona; si la
+// ciudad no está mapeada, la propiedad se agrupa por su ciudad.
+export interface ZoneDigest {
+    key: string; zonaName: string;
+    props: { code: string; title: string; colonia: string | null; ciudad: string | null }[];
+    rows: AudienceRow[]; count: number;
+}
+
+export async function buildZoneDigests(codes: string[]): Promise<ZoneDigest[]> {
+    const clean = [...new Set(codes.map((c) => c.trim()).filter(Boolean))];
+    const groups = new Map<string, { key: string; props: ZoneDigest['props']; rows: AudienceRow[]; seen: Set<string> }>();
+    for (const c of clean) {
+        const a = await buildAudience(c);
+        if (!a) continue;
+        const key = a.zona || a.ciudad || 'Otras';
+        const g = groups.get(key) || { key, props: [], rows: [], seen: new Set<string>() };
+        g.props.push({ code: a.code, title: a.title, colonia: a.colonia, ciudad: a.ciudad });
+        for (const r of a.rows) if (!g.seen.has(r.email)) { g.seen.add(r.email); g.rows.push(r); }
+        groups.set(key, g);
+    }
+    return [...groups.values()].map((g) => ({ key: g.key, zonaName: g.key, props: g.props, rows: g.rows, count: g.rows.length }));
+}
+
+// Dedup entre zonas: quien compra en dos zonas se queda en UNA sola (la zona de base más grande primero),
+// para que nadie reciba dos digests la misma semana. Muta rows/count. Devuelve el mismo arreglo.
+export function dedupZoneDigests(digests: ZoneDigest[]): ZoneDigest[] {
+    const claimed = new Set<string>();
+    for (const g of [...digests].sort((a, b) => b.count - a.count)) {
+        g.rows = g.rows.filter((r) => {
+            if (claimed.has(r.email)) return false;
+            claimed.add(r.email);
+            return true;
+        });
+        g.count = g.rows.length;
+    }
+    return digests;
+}
+
 export function audienceCsv(a: Audience): string {
     const q = (s: unknown) => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const lines = ['nombre,email,colonia_buscada'];

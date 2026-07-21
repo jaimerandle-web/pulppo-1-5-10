@@ -1,11 +1,27 @@
 import { renderCampaign } from '@/lib/email';
+import { renderDigest } from '@/lib/digest';
 
-// Preview del email de una campaña. ?id=<ObjectId|codigo> → HTML renderizado para el iframe.
-// &format=json → { id, code, title, subject, zona } para prellenar la UI. &hook= override opcional.
+// Preview del email. Individual: ?id=<ObjectId|codigo> → HTML (o &format=json para prellenar la UI).
+// Digest por zona: ?zona=<nombre>&codes=CTA-422,DSJ-888 → HTML del correo multi-propiedad de la zona.
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
     const url = new URL(req.url);
+
+    // Preview del digest por zona
+    const codesParam = url.searchParams.get('codes');
+    if (codesParam) {
+        const codes = codesParam.split(/[\s,;]+/).map((c) => c.trim()).filter(Boolean);
+        const zona = url.searchParams.get('zona')?.trim() || 'tu zona';
+        try {
+            const d = await renderDigest(zona, codes);
+            if (!d) return Response.json({ error: 'No se pudo armar el digest' }, { status: 404 });
+            return new Response(d.html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        } catch (e) {
+            return Response.json({ error: e instanceof Error ? e.message : 'Error generando el preview' }, { status: 500 });
+        }
+    }
+
     const id = url.searchParams.get('id')?.trim();
     if (!id) return Response.json({ error: 'Falta el parámetro id' }, { status: 400 });
     const hook = url.searchParams.get('hook') || undefined;

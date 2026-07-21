@@ -44,6 +44,9 @@ src/lib/data.ts        Capa de datos Mongo (port de mvp_data.py): fetchRows() = 
 src/lib/email.ts       Generador de campañas: renderCampaign(id|codigo) llena el template on-brand
                        "Exclusiva de la semana" desde Mongo (port de build_campanas_final.py).
 src/lib/sendgrid.ts    Cliente REST v3 de SendGrid (fetch, sin deps). Fase 1: sendTestEmail (Mail Send).
+src/lib/digest.ts      Digest "Exclusivas de la semana · <Zona>": renderDigest(zona, codes[]) = un correo
+                       con VARIAS propiedades de una zona (reusa renderPropertyCard de email.ts). Cada
+                       tarjeta conserva su utm_campaign por propiedad (atribución de leads por propiedad).
 src/lib/marketing.ts   Cliente SendGrid Marketing/Single Sends (fetch, sin deps). Fase 2: getOrCreateList,
                        addContacts, createSingleSend (borrador), scheduleSingleSend/unschedule, listSingleSends
                        + singleSendStats. Resuelve sender y grupo de baja solos (o por env). email.ts exporta
@@ -71,12 +74,14 @@ src/app/evaluar/       Evaluador de elegibilidad 1·5·10: /evaluar (uno o vario
                        gates, sub-scores, mix de precio y qué mejorar).
 src/app/campanas/      Módulo de campañas de email. Fase 1: buscar propiedad → preview en iframe →
                        generar base (audiencia en vivo, CSV) → enviar prueba → solapamiento entre bases.
-                       Fase 2 (human-in-the-loop): planear calendario anti-empalme → crear borradores en
-                       SendGrid → aprobar y programar (nada sale sin aprobación) + estado/métricas.
-                       API: preview (GET), audience (GET ?format=csv), test (POST, guardrail @pulppo.com),
-                       overlap (POST codes[]), plan (POST codes[]+start → tandas por semana), schedule
-                       (POST items[] → Single Sends borrador), approve (POST sends[] programa · DELETE ?id
-                       desprograma), sends (GET → estado + aperturas/clics/bajas).
+                       Fase 2 (human-in-the-loop): planear DIGEST POR ZONA → crear borradores en SendGrid
+                       → aprobar y programar (nada sale sin aprobación) + estado/métricas. Digest = un
+                       correo "Exclusivas de la semana" por zona con varias propiedades → cada persona
+                       recibe un solo correo; las zonas casi no se cruzan (dedup entre zonas) y todas
+                       pueden salir la misma semana. API: preview (GET; ?id= individual o ?zona=&codes=
+                       digest), audience (GET ?format=csv), test (POST, guardrail @pulppo.com), plan (POST
+                       codes[]+start → zonas), schedule (POST zones[] → un Single Send digest por zona),
+                       approve (POST sends[] programa · DELETE ?id desprograma), sends (GET → estado+métricas).
 src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabla) · ProgramaTab (métricas
                        del programa, gráficas, recap mensual con CSV) · ui.tsx (Metric, HBar, VBar, Donut,
                        DataTable, money) · inputs.tsx (Select estilizado, Combobox con búsqueda).

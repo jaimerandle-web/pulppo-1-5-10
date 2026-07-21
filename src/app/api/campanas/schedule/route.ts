@@ -1,46 +1,48 @@
-import { renderCampaign, withUnsubFooter } from '@/lib/email';
-import { buildAudience } from '@/lib/audience';
+import { withUnsubFooter } from '@/lib/email';
+import { renderDigest } from '@/lib/digest';
+import { buildZoneDigests, dedupZoneDigests } from '@/lib/audience';
 import { getOrCreateList, addContacts, createSingleSend } from '@/lib/marketing';
 
-// Fase 2, paso 2: POST { items: [{ code, sendAt, subject?, hook? }] }. Por cada propiedad arma su base
-// COMPLETA en vivo (no se parte ni se mueve a nadie: cada propiedad llega a todos sus posibles), crea la
-// Lista en SendGrid, sube los contactos y crea el Single Send como BORRADOR con el footer de baja. NO lo
-// programa: eso queda para la aprobación (api/campanas/approve). El anti-empalme lo resuelve el planeador
-// mandando las propiedades que comparten público a semanas distintas.
+// Fase 2, paso 2: POST { zones: [{ key, codes[], sendAt, subject? }] }. Por cada ZONA arma el digest
+// "Exclusivas de la semana" (varias propiedades en un correo), crea la Lista, sube la base de la zona
+// (dedup entre zonas) y crea el Single Send como BORRADOR. NO lo programa: eso queda para la aprobación.
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-interface Item { code?: string; sendAt?: string; subject?: string; hook?: string }
-type Ready = Required<Pick<Item, 'code' | 'sendAt'>> & Item;
+interface ZoneIn { key?: string; codes?: string[]; sendAt?: string; subject?: string }
 
 export async function POST(req: Request) {
-    let body: { items?: Item[] };
+    let body: { zones?: ZoneIn[] };
     try { body = await req.json(); } catch { return Response.json({ error: 'JSON inválido' }, { status: 400 }); }
 
-    const items = (body.items || []).filter((i): i is Ready => !!i?.code && !!i?.sendAt).slice(0, 20);
-    if (!items.length) return Response.json({ error: 'No hay campañas para crear' }, { status: 400 });
+    const zonesIn = (body.zones || []).filter((z) => z && Array.isArray(z.codes) && z.codes.length && z.sendAt).slice(0, 40);
+    if (!zonesIn.length) return Response.json({ error: 'No hay zonas para crear' }, { status: 400 });
+
+    // Reagrupa TODOS los códigos por zona (grouping canónico) + dedup entre zonas, para que las bases
+    // coincidan con lo que vio la persona en el plan.
+    const allCodes = [...new Set(zonesIn.flatMap((z) => z.codes || []))];
+    const digests = dedupZoneDigests(await buildZoneDigests(allCodes));
 
     const out: Array<Record<string, unknown>> = [];
-    for (const it of items) {
-        const code = it.code.trim();
+    for (const d of digests) {
+        const input = zonesIn.find((z) => z.key === d.key);
+        const sendAt = input?.sendAt;
         try {
-            const c = await renderCampaign(code, { subject: it.subject, hook: it.hook });
-            if (!c) { out.push({ code, ok: false, error: 'Propiedad no encontrada' }); continue; }
+            if (!d.rows.length) { out.push({ key: d.key, zonaName: d.zonaName, ok: false, error: 'Base vacía' }); continue; }
+            const render = await renderDigest(d.zonaName, d.props.map((p) => p.code), { subject: input?.subject });
+            if (!render) { out.push({ key: d.key, zonaName: d.zonaName, ok: false, error: 'No se pudo armar el digest' }); continue; }
 
-            const a = await buildAudience(code);
-            if (!a || !a.count) { out.push({ code, ok: false, error: 'La base salió vacía' }); continue; }
-
-            const dateTag = it.sendAt.slice(0, 10);
-            const name = `1·5·10 · ${c.code} · ${dateTag}`;
+            const dateTag = (sendAt || '').slice(0, 10);
+            const name = `1·5·10 · Exclusivas ${d.zonaName} · ${dateTag}`;
             const listId = await getOrCreateList(name);
-            const up = await addContacts(listId, a.rows.map((r) => ({ email: r.email, nombre: r.nombre })));
+            const up = await addContacts(listId, d.rows.map((r) => ({ email: r.email, nombre: r.nombre })));
 
-            const html = withUnsubFooter(c.html);
-            const send = await createSingleSend({ name, subject: c.subject, html, listId });
+            const html = withUnsubFooter(render.html);
+            const send = await createSingleSend({ name, subject: render.subject, html, listId });
 
-            out.push({ code: c.code, ok: true, id: send.id, status: send.status, listId, count: up.uploaded, skipped: up.skipped, sendAt: it.sendAt, subject: c.subject, level: a.level });
+            out.push({ key: d.key, zonaName: d.zonaName, ok: true, id: send.id, status: send.status, listId, count: up.uploaded, props: render.codes, sendAt, subject: render.subject });
         } catch (e) {
-            out.push({ code, ok: false, error: e instanceof Error ? e.message : 'Error creando el borrador' });
+            out.push({ key: d.key, zonaName: d.zonaName, ok: false, error: e instanceof Error ? e.message : 'Error creando el borrador' });
         }
     }
 

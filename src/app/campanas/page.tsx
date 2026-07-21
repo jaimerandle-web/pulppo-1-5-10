@@ -6,10 +6,10 @@ import { useRouter } from 'next/navigation';
 // Generador de campañas 1·5·10: buscar propiedad → preview del email on-brand → enviar prueba
 // (Fase 1) · planear calendario anti-empalme → crear borradores → aprobar y programar por SendGrid
 // Single Sends (Fase 2, human-in-the-loop: nada sale hasta que alguien aprueba).
-interface PlanProp { code: string; title: string; colonia: string | null; ciudad: string | null; type: string | null; level: string; count: number }
-interface PlanTanda { tanda: number; sendAt: string; date: string; totalDedup: number; props: PlanProp[] }
-interface Plan { start: string; hourUtc: number; tandas: PlanTanda[]; notFound: string[]; nota: string }
-interface Draft { code: string; ok: boolean; error?: string; id?: string; status?: string; count?: number; skipped?: number; sendAt?: string; subject?: string; level?: string }
+interface PlanProp { code: string; title: string; colonia: string | null; ciudad: string | null }
+interface PlanZone { key: string; zonaName: string; count: number; sendAt: string; date: string; props: PlanProp[] }
+interface Plan { start: string; hourUtc: number; zones: PlanZone[]; notFound: string[]; nota: string }
+interface Draft { key?: string; zonaName?: string; ok: boolean; error?: string; id?: string; status?: string; count?: number; props?: string[]; sendAt?: string; subject?: string }
 interface SendStats { delivered?: number; unique_opens?: number; unique_clicks?: number; unsubscribes?: number; bounces?: number }
 interface SendRow { id: string; name?: string; status?: string; send_at?: string | null; stats?: SendStats | null }
 
@@ -36,7 +36,7 @@ export default function CampanasPage() {
     const [planCodes, setPlanCodes] = useState('');
     const [planStart, setPlanStart] = useState('');
     const [plan, setPlan] = useState<Plan | null>(null);
-    const [tandaDates, setTandaDates] = useState<Record<number, string>>({});
+    const [zoneDates, setZoneDates] = useState<Record<string, string>>({});
     const [planLoading, setPlanLoading] = useState(false);
     const [drafts, setDrafts] = useState<Draft[]>([]);
     const [schedLoading, setSchedLoading] = useState(false);
@@ -133,9 +133,9 @@ export default function CampanasPage() {
             const d = await res.json();
             if (!res.ok) throw new Error(d.error || 'No se pudo planear');
             setPlan(d);
-            const dates: Record<number, string> = {};
-            for (const t of d.tandas as PlanTanda[]) dates[t.tanda] = t.date;
-            setTandaDates(dates);
+            const dates: Record<string, string> = {};
+            for (const z of d.zones as PlanZone[]) dates[z.key] = z.date;
+            setZoneDates(dates);
         } catch (e) {
             setF2err(e instanceof Error ? e.message : 'Error');
         } finally { setPlanLoading(false); }
@@ -143,23 +143,23 @@ export default function CampanasPage() {
 
     async function createDrafts() {
         if (!plan) return;
-        const items: { code: string; sendAt: string }[] = [];
-        for (const t of plan.tandas) {
-            const date = tandaDates[t.tanda] || t.date;
-            for (const p of t.props) items.push({ code: p.code, sendAt: sendAtOf(date, plan.hourUtc) });
-        }
-        if (!items.length) { setF2err('No hay campañas en el plan'); return; }
+        const zones = plan.zones.map((z) => ({
+            key: z.key,
+            codes: z.props.map((p) => p.code),
+            sendAt: sendAtOf(zoneDates[z.key] || z.date, plan.hourUtc)
+        }));
+        if (!zones.length) { setF2err('No hay zonas en el plan'); return; }
         setSchedLoading(true); setF2err(''); setF2msg('');
         try {
             const res = await fetch('/api/campanas/schedule', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items })
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zones })
             });
             if (res.status === 401) { router.push('/login'); return; }
             const d = await res.json();
             if (!res.ok) throw new Error(d.error || 'No se pudieron crear los borradores');
             setDrafts(d.items as Draft[]);
             const okN = (d.items as Draft[]).filter((x) => x.ok).length;
-            setF2msg(`📝 ${okN} borrador(es) creado(s) en SendGrid. Revísalos y aprueba para programar.`);
+            setF2msg(`📝 ${okN} borrador(es) de digest creado(s) en SendGrid. Revísalos y aprueba para programar.`);
         } catch (e) {
             setF2err(e instanceof Error ? e.message : 'Error');
         } finally { setSchedLoading(false); }
@@ -370,9 +370,9 @@ export default function CampanasPage() {
                     </button>
                 </div>
                 <p className="mt-1 text-xs text-neutral-500">
-                    3 pasos: <b>1)</b> planeo el calendario repartiendo las bases que se cruzan en semanas distintas ·
-                    <b> 2)</b> creo los borradores en SendGrid (con footer de baja) · <b>3)</b> tú apruebas y recién ahí se programan.
-                    Nada se envía sin tu aprobación.
+                    3 pasos: <b>1)</b> agrupo las propiedades por <b>zona</b> en un digest &quot;Exclusivas de la semana&quot; (un correo
+                    por zona, varias propiedades) · <b>2)</b> creo los borradores en SendGrid (con footer de baja) · <b>3)</b> tú
+                    apruebas y recién ahí se programan. Nada se envía sin tu aprobación.
                 </p>
 
                 {/* Paso 1 · Planear */}
@@ -384,9 +384,9 @@ export default function CampanasPage() {
                         <label className="text-xs font-semibold text-neutral-600">Semana de inicio (lunes)</label>
                         <input type="date" className={inputCls} value={planStart} onChange={(e) => setPlanStart(e.target.value)} />
                         <button className={btnDark} onClick={planCampaigns} disabled={planLoading}>
-                            {planLoading ? 'Planeando…' : '1) Planear calendario'}
+                            {planLoading ? 'Planeando…' : '1) Planear por zona'}
                         </button>
-                        <span className="text-[11px] text-neutral-400">Máx. 20 códigos · envío 09:00 MX</span>
+                        <span className="text-[11px] text-neutral-400">Máx. 40 códigos · envío 09:00 MX</span>
                     </div>
                 </div>
 
@@ -397,20 +397,21 @@ export default function CampanasPage() {
                             <div className="rounded-lg bg-[#fdeeea] px-3 py-2 text-xs text-[#A52003]">No encontradas: {plan.notFound.join(', ')}</div>
                         )}
                         <div className="flex flex-col gap-3">
-                            {plan.tandas.map((t) => (
-                                <div key={t.tanda} className="rounded-lg border border-neutral-300 p-3">
+                            {plan.zones.map((z) => (
+                                <div key={z.key} className="rounded-lg border border-neutral-300 p-3">
                                     <div className="flex flex-wrap items-center gap-3">
-                                        <b className="text-sm">Semana {t.tanda}</b>
+                                        <b className="text-sm">📍 {z.zonaName}</b>
                                         <input type="date" className="rounded-lg border border-neutral-300 px-2 py-1 text-sm"
-                                            value={tandaDates[t.tanda] ?? t.date}
-                                            onChange={(e) => setTandaDates((prev) => ({ ...prev, [t.tanda]: e.target.value }))} />
-                                        <span className="text-xs text-neutral-500">{t.props.length} propiedad(es) · ~{t.totalDedup.toLocaleString('es-MX')} correos (sin repetir)</span>
+                                            value={zoneDates[z.key] ?? z.date}
+                                            onChange={(e) => setZoneDates((prev) => ({ ...prev, [z.key]: e.target.value }))} />
+                                        <span className="text-xs text-neutral-500">{z.props.length} propiedad(es) · ~{z.count.toLocaleString('es-MX')} correos</span>
+                                        <a className="text-xs text-[#529999] underline" target="_blank" rel="noreferrer"
+                                            href={`/api/campanas/preview?zona=${encodeURIComponent(z.zonaName)}&codes=${encodeURIComponent(z.props.map((p) => p.code).join(','))}`}>👁 ver correo del digest</a>
                                     </div>
                                     <div className="mt-2 flex flex-wrap gap-2">
-                                        {t.props.map((p) => (
+                                        {z.props.map((p) => (
                                             <span key={p.code} className="rounded-lg bg-neutral-50 border border-neutral-200 px-2 py-1 text-xs text-neutral-700">
-                                                <b>{p.code}</b> · {p.colonia ?? p.ciudad ?? ''} · {p.count.toLocaleString('es-MX')} correos <span className="text-neutral-400">({p.level})</span>
-                                                {' '}<a className="text-[#529999] underline" href={`/api/campanas/preview?id=${encodeURIComponent(p.code)}`} target="_blank" rel="noreferrer">👁 ver correo</a>
+                                                <b>{p.code}</b> · {p.colonia ?? p.ciudad ?? ''}
                                             </span>
                                         ))}
                                     </div>
@@ -431,9 +432,9 @@ export default function CampanasPage() {
                             <tbody>
                                 {drafts.map((d, i) => (
                                     <tr key={i} className="border-b border-neutral-100">
-                                        <td className="py-1.5 pr-3 font-mono">{d.code}</td>
+                                        <td className="py-1.5 pr-3"><b>📍 {d.zonaName}</b>{d.props?.length ? <span className="text-neutral-400"> · {d.props.length} props</span> : null}</td>
                                         <td className="py-1.5 pr-3">
-                                            {d.ok ? <>{(d.count ?? 0).toLocaleString('es-MX')} correos{d.skipped ? <span className="text-neutral-400"> ({d.skipped.toLocaleString('es-MX')} inválidos)</span> : null}</> : ''}
+                                            {d.ok ? `${(d.count ?? 0).toLocaleString('es-MX')} correos` : ''}
                                         </td>
                                         <td className="py-1.5 pr-3">{d.ok ? fmtDate(d.sendAt) : ''}</td>
                                         <td className="py-1.5 pr-3">
@@ -442,7 +443,8 @@ export default function CampanasPage() {
                                                     : <span className="text-neutral-500">📝 borrador</span>}
                                         </td>
                                         <td className="py-1.5 pr-3">
-                                            <a className="text-[#529999] underline" href={`/api/campanas/preview?id=${encodeURIComponent(d.code)}`} target="_blank" rel="noreferrer">👁 ver</a>
+                                            {d.ok && d.props?.length ? <a className="text-[#529999] underline" target="_blank" rel="noreferrer"
+                                                href={`/api/campanas/preview?zona=${encodeURIComponent(d.zonaName || '')}&codes=${encodeURIComponent(d.props.join(','))}`}>👁 ver</a> : null}
                                         </td>
                                         <td className="py-1.5">
                                             {d.ok && d.id && (d.status === 'scheduled'

@@ -4,7 +4,7 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 
-const esc = (s: unknown) =>
+export const esc = (s: unknown) =>
     String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
     let x: unknown = d;
@@ -38,7 +38,7 @@ export interface Campaign {
 }
 
 // Resuelve por ObjectId o por internalId (código legible tipo CTA-422).
-async function findProperty(idOrCode: string): Promise<Document | null> {
+export async function findProperty(idOrCode: string): Promise<Document | null> {
     const db = await getDb();
     let P: Document | null = null;
     try { P = await db.collection('properties').findOne({ _id: new ObjectId(idOrCode) }); } catch { /* no es ObjectId */ }
@@ -90,6 +90,37 @@ export async function renderCampaign(
     };
     const html = Object.entries(map).reduce((s, [k, v]) => s.replaceAll(k, v), TEMPLATE);
     return { id, code, title, subject, zona, html };
+}
+
+// Tarjeta de una propiedad (bloque blanco: foto + título + atributos + precio + CTA) para el digest
+// multi-propiedad "Exclusivas de la semana". Cada tarjeta conserva su utm_campaign=exclusiva_<código>
+// para que la atribución de leads siga siendo POR PROPIEDAD (ver classifySource → 'Correo').
+export function renderPropertyCard(P: Document): string {
+    const id = String(P._id);
+    const code = (P.internalId as string) ?? id;
+    const title = (dig(P, 'listing', 'title') as string) ?? `Exclusiva ${code}`;
+    const price = num(dig(P, 'listing', 'value'));
+    const m2 = num(dig(P, 'attributes', 'totalSurface')) ?? num(dig(P, 'attributes', 'surface'));
+    const rec = intOrDash(dig(P, 'attributes', 'suites'));
+    const banos = intOrDash(dig(P, 'attributes', 'bathrooms'));
+    const park = intOrDash(dig(P, 'attributes', 'parkings'));
+    const pics = ((P.pictures as Document[]) || []).filter((x) => x.public !== false);
+    const img = esc(optimizeImg((pics[0]?.url as string) ?? (pics[0]?.src as string) ?? ''));
+    const campaign = `exclusiva_${code}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const link = `https://pulppo.com/propiedades/${id}?utm_source=email&amp;utm_medium=email&amp;utm_campaign=${campaign}`;
+    const cell = (n: string, l: string) =>
+        `<td align="left" valign="top" width="25%"><div style="font-size:18px;color:#212322;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">${n}</div><div style="font-size:12px;color:#212322;font-family:'Nunito Sans',Arial,sans-serif;">${l}</div></td>`;
+    return `<table width="100%" border="0" cellspacing="0" cellpadding="0" role="presentation" style="background-color:#FFFFFF;">
+ <tr><td align="center" valign="top" style="padding:18px 18px 10px 18px;">
+  <a href="${link}" target="_blank" style="text-decoration:none;"><img src="${img}" width="500" height="333" alt="${esc(title)}" style="display:block;width:100%;max-width:520px;height:auto;border:0;" /></a>
+ </td></tr>
+ <tr><td valign="top" style="padding:2px 26px 8px 26px;">
+  <a href="${link}" target="_blank" style="text-decoration:none;"><span style="font-size:19px;line-height:22px;color:#212322;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">${esc(title)}</span></a>
+ </td></tr>
+ <tr><td style="padding:0 26px 8px 26px;"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr>${cell(m2 == null ? '—' : `${Math.round(m2)} m&#178;`, 'Superficie')}${cell(rec, 'Rec&#225;maras')}${cell(banos, 'Ba&#241;os')}${cell(park, 'Estac.')}</tr></table></td></tr>
+ <tr><td style="padding:2px 26px 0 26px;"><table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation"><tr><td bgcolor="#212322" align="left" valign="middle" style="padding:9px 16px;background-color:#212322;"><div style="font-size:18px;line-height:100%;color:#ffffff;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">$${price == null ? '—' : Math.round(price).toLocaleString('en-US')} <span style="font-weight:400;">MXN</span></div></td></tr></table></td></tr>
+ <tr><td style="padding:10px 26px 4px 26px;"><a href="${link}" target="_blank" style="display:inline-block;box-sizing:border-box;width:100%;background-color:#F6BE00;padding:12px;text-align:center;text-decoration:none;"><span style="font-size:16px;line-height:20px;color:#212322;font-weight:700;font-family:'Nunito Sans',Arial,sans-serif;">VER DETALLES</span></a></td></tr>
+</table>`;
 }
 
 // Footer de baja + dirección física, requerido por SendGrid al enviar con grupo de supresión (Single
