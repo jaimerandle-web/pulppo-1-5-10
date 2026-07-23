@@ -152,6 +152,30 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const vis = await db.collection('visits').countDocuments({ 'steps.property._id': oid, 'status.last': { $ne: 'cancelled' } });
     const ofertas = await db.collection('operations').countDocuments({ 'property._id': oid, 'status.last': { $in: [...ADVANCED] } });
 
+    // ---- Comportamiento en el tiempo: vistas del anuncio (metrics type='view', TODAS las fuentes) + leads, por mes ----
+    // metrics.property viene como ObjectId (avisos nuevos) o string (viejos): matchear ambos. Cada evento = 1 vista.
+    const viewAgg = await db.collection('metrics').aggregate([
+        { $match: { property: { $in: [oid, id] }, type: 'view' } },
+        { $group: { _id: { $dateToString: { date: '$createdAt', format: '%Y-%m' } }, n: { $sum: 1 } } }
+    ]).toArray();
+    const viewsByMonth = new Map<string, number>();
+    for (const r of viewAgg) if (r._id) viewsByMonth.set(r._id as string, r.n as number);
+    const leadsByMonth = new Map<string, number>();
+    for (const l of leads) {
+        const d = l.createdAt instanceof Date ? (l.createdAt as Date) : null;
+        if (!d) continue;
+        const k = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        leadsByMonth.set(k, (leadsByMonth.get(k) || 0) + 1);
+    }
+    // rango mensual desde la publicación (o la primera actividad) hasta hoy, rellenando con 0
+    const actKeys = [...viewsByMonth.keys(), ...leadsByMonth.keys()].sort();
+    const serieStart = pub ?? (actKeys.length ? new Date(`${actKeys[0]}-01T00:00:00Z`) : new Date(now));
+    const serieMeses: { m: string; v: number; l: number }[] = [];
+    for (const d = new Date(Date.UTC(serieStart.getUTCFullYear(), serieStart.getUTCMonth(), 1)); d.getTime() <= now; d.setUTCMonth(d.getUTCMonth() + 1)) {
+        const k = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        serieMeses.push({ m: k, v: viewsByMonth.get(k) || 0, l: leadsByMonth.get(k) || 0 });
+    }
+
     // cierres reales de la comunidad (mismo tipo), ampliando colonia→ciudad→estado hasta n>=5
     const cierres = async (geo: Document): Promise<{ price: number; ppm2: number | null; m2: number | null }[]> => {
         const ps = await db.collection('properties').aggregate([
@@ -357,6 +381,33 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     <div style="font-size:12px">${mlLine}</div>
   </div>`;
 
+    // ---- Comportamiento en el tiempo (general): vistas + leads por mes desde la publicación ----
+    const mlabel = (k: string) => { const [y, mo] = k.split('-'); return `${MES[+mo - 1]} ${y.slice(2)}`; };
+    const maxV = Math.max(1, ...serieMeses.map((x) => x.v));
+    const maxL = Math.max(1, ...serieMeses.map((x) => x.l));
+    const totalV = serieMeses.reduce((a, b) => a + b.v, 0);
+    const peakV = serieMeses.reduce((a, b) => (b.v > a.v ? b : a), { m: '', v: 0, l: 0 });
+    const peakL = serieMeses.reduce((a, b) => (b.l > a.l ? b : a), { m: '', v: 0, l: 0 });
+    const barsRow = (key: 'v' | 'l', color: string, max: number) =>
+        `<div style="display:flex;gap:1px;align-items:flex-end;height:40px">${serieMeses.map((x) => {
+            const val = x[key]; const h = Math.round((val / max) * 100);
+            return `<span title="${mlabel(x.m)}: ${val}" style="flex:1;display:flex;align-items:flex-end;height:100%"><span style="width:100%;height:${h}%;min-height:${val > 0 ? 2 : 0}px;background:${color}"></span></span>`;
+        }).join('')}</div>`;
+    const axis = `<div style="display:flex;gap:1px">${serieMeses.map((x, i) => {
+        const lbl = i === 0 || i === serieMeses.length - 1 ? mlabel(x.m) : (x.m.endsWith('-01') ? x.m.slice(0, 4) : '');
+        return `<span style="flex:1;text-align:center;font-size:8px;color:${GRY};white-space:nowrap;overflow:hidden">${lbl}</span>`;
+    }).join('')}</div>`;
+    const comportHtml = serieMeses.length ? `
+  <div class="sec"><div class="eyebrow">Comportamiento en el tiempo</div><div class="accent"></div>
+    <div style="font-size:12px;margin-bottom:8px">Vistas del anuncio y leads por mes desde que se publicó${pub ? ` (${fdate(pub)})` : ''}, para ver los momentos de más interés.</div>
+    <div style="display:grid;grid-template-columns:52px 1fr;gap:6px 8px;align-items:center">
+      <div class="eyebrow" style="color:${SEA};margin:0">Vistas</div><div>${barsRow('v', SEA, maxV)}</div>
+      <div class="eyebrow" style="color:${BLK};margin:0">Leads</div><div>${barsRow('l', YEL, maxL)}</div>
+      <div></div><div>${axis}</div>
+    </div>
+    <div style="font-size:9px;color:${GRY};margin-top:6px">${totalV.toLocaleString('en-US')} vistas y ${leads.length} leads en total · pico de vistas ${peakV.v ? `en ${mlabel(peakV.m)} (${peakV.v})` : '—'} · pico de leads ${peakL.l ? `en ${mlabel(peakL.m)} (${peakL.l})` : '—'}. Cada barra normaliza a su propio máximo (vistas y leads tienen escalas distintas). Vistas = eventos de vista de todas las fuentes.</div>
+  </div>` : '';
+
     const html = `
 <style>
 .ficha-root{width:816px;margin:0 auto;background:#fff;padding:40px 44px;color:${BLK};font-family:'Nunito Sans',sans-serif;font-size:12px;line-height:1.45;print-color-adjust:exact;-webkit-print-color-adjust:exact}
@@ -401,6 +452,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
 
   <div class="sec"><div class="eyebrow">Salud del anuncio</div><div class="accent"></div>${health}</div>
 ${promoHtml}
+${comportHtml}
 
   <div class="sec"><div class="eyebrow">Demanda y funnel</div><div class="accent"></div>
     <div class="grid2">
