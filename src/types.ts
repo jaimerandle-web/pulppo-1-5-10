@@ -117,6 +117,22 @@ export interface SocialPropRow {
     mediums: Record<string, number>;
 }
 
+// Un lead individual de Meta (nivel lead, con contacto) para el recap de seguimiento.
+export interface RecentLeadRow {
+    id: string;                            // id de la propiedad (para link)
+    fecha: string | null;                  // ISO createdAt
+    inmobiliaria: string | null;
+    kam: string;
+    internalId: string | null;
+    broker: string | null;
+    direccion: string | null;              // calle y número (address.street)
+    red: 'Facebook' | 'Instagram';
+    medio: string | null;                  // medium (form/whatsapp/lead ads…)
+    nombre: string | null;
+    whatsapp: string | null;
+    email: string | null;
+}
+
 export interface CampaignPerf {
     liveCount: number;
     email: {
@@ -135,6 +151,7 @@ export interface CampaignPerf {
         fuga: number;
         conSocial: number;
         sinSocial: number;
+        recientes: RecentLeadRow[];
     };
     generatedAt: string;
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CampaignPayload, SocialPropRow, SendItem } from '@/types';
+import type { CampaignPayload, SendItem } from '@/types';
 import { Metric, Section, Caption, HBar, DataTable, YELLOW, SEA } from './ui';
 
 const pct = (num?: number | null, den?: number | null) =>
@@ -46,6 +46,7 @@ export default function CampanasTab({ kam, inmo }: { kam: string; inmo: string }
 
     const email = useMemo(() => matchFilters(data?.perf.email.porPropiedad || []), [data, kam, inmo]);
     const social = useMemo(() => matchFilters(data?.perf.social.porPropiedad || []), [data, kam, inmo]);
+    const recientes = useMemo(() => matchFilters(data?.perf.social.recientes || []), [data, kam, inmo]);
 
     if (loading) return <p className="mt-10 text-center text-sm text-neutral-500">Consultando campañas…</p>;
     if (error) return <p className="mt-10 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>;
@@ -168,27 +169,35 @@ export default function CampanasTab({ kam, inmo }: { kam: string; inmo: string }
                 </div>
 
                 <div className="mt-5">
-                    <Caption>Redes por propiedad · salud de atribución</Caption>
+                    <Caption>Últimos leads de redes (para dar seguimiento) · {recientes.length} más recientes</Caption>
                     <DataTable
                         columns={[
-                            { key: 'titulo', label: 'Propiedad', render: (v, r) => (
+                            { key: 'inmobiliaria', label: 'Inmobiliaria' },
+                            { key: 'internalId', label: 'Propiedad', render: (v, r) => (
                                 <a href={`https://pulppo.com/propiedades/${r.id}`} target="_blank" rel="noreferrer" className="text-[#529999] hover:underline">
-                                    {(v as string) || '(sin título)'}
+                                    {(v as string) || '—'}
                                 </a>
                             ) },
-                            { key: 'inmobiliaria', label: 'Inmobiliaria' },
-                            { key: 'colonia', label: 'Colonia' },
-                            { key: 'facebook', label: 'Facebook' },
-                            { key: 'instagram', label: 'Instagram' },
-                            { key: 'social_total', label: 'Total' },
-                            { key: 'salud', label: 'Bien atribuidos', render: (_v, r) => {
-                                const row = r as unknown as SocialPropRow;
-                                return `${pct(row.bien_atribuidos, row.social_total)}${row.fuga ? ` · ${row.fuga} fuga` : ''}`;
+                            { key: 'broker', label: 'Broker' },
+                            { key: 'direccion', label: 'Dirección' },
+                            { key: 'fecha', label: 'Fecha', render: (v) => fecha(v as string) },
+                            { key: 'medio', label: 'Por medio', render: (v, r) => `${(r.red as string) === 'Instagram' ? 'IG' : 'FB'} · ${(v as string) || '—'}` },
+                            { key: 'nombre', label: 'Nombre' },
+                            { key: 'whatsapp', label: 'WhatsApp', render: (v) => {
+                                const tel = v ? String(v) : '';
+                                const digits = tel.replace(/\D/g, '');
+                                return digits ? <a href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer" className="text-[#529999] hover:underline">{tel}</a> : '—';
                             } },
-                            { key: 'mediums', label: 'Por medio', render: (v) => medios(v as Record<string, number>) }
+                            { key: 'email', label: 'Email', render: (v) => {
+                                const e = v ? String(v) : '';
+                                return e ? <a href={`mailto:${e}`} className="text-[#529999] hover:underline">{e}</a> : '—';
+                            } }
                         ]}
-                        rows={social as unknown as Record<string, unknown>[]}
+                        rows={recientes as unknown as Record<string, unknown>[]}
                     />
+                    <p className="mt-2 text-xs text-neutral-400">
+                        Contacto de leads que llegaron por Facebook/Instagram a las exclusivas vivas, del más reciente al más viejo.
+                    </p>
                 </div>
             </Section>
 

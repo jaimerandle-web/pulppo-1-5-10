@@ -9,7 +9,7 @@
 import { ObjectId, type Db } from 'mongodb';
 import { getDb } from './data';
 import { getKam } from './kam';
-import type { CampaignPerf, EmailPropRow, EmailCampaign, SocialPropRow } from '@/types';
+import type { CampaignPerf, EmailPropRow, EmailCampaign, SocialPropRow, RecentLeadRow } from '@/types';
 
 // Universo Meta = Facebook + Instagram, tolerando todas las variantes de escritura que hay en Mongo.
 // Instagram: 'ig', 'IGShopping', 'instagram'. Facebook: 'facebook', 'fb', 'fb-SiteLink-1/2/11'.
@@ -38,8 +38,9 @@ export async function fetchCampaignPerf(): Promise<CampaignPerf> {
     const db: Db = await getDb();
     const FLAG = { 'contract.exclusive.pulppo': { $ne: null }, 'status.last': 'published' };
     const proj = {
-        internalId: 1, 'company.name': 1, type: 1, 'listing.title': 1, 'listing.value': 1,
-        'address.neighborhood.name': 1, 'address.city.name': 1
+        internalId: 1, 'company.name': 1, 'agent.firstName': 1, 'agent.lastName': 1, type: 1,
+        'listing.title': 1, 'listing.value': 1,
+        'address.neighborhood.name': 1, 'address.city.name': 1, 'address.street': 1
     };
     const props = await db.collection('properties').find(FLAG, { projection: proj }).toArray();
     const ids = props.map((p) => p._id as ObjectId);
@@ -122,6 +123,41 @@ export async function fetchCampaignPerf(): Promise<CampaignPerf> {
         totalPrograma += r.leads as number;
     }
 
+    // Últimos leads de Meta (nivel lead, para dar seguimiento): quién llegó, por qué medio y su contacto.
+    const recientes: RecentLeadRow[] = [];
+    const recentCur = db.collection('leads').find(
+        { 'property._id': { $in: ids }, source: { $regex: '^fb|face|^ig|insta', $options: 'i' } },
+        {
+            projection: {
+                source: 1, medium: 1, createdAt: 1, phone: 1, email: 1, 'property._id': 1,
+                'contact.firstName': 1, 'contact.lastName': 1, 'contact.phone': 1, 'contact.email': 1
+            }
+        }
+    ).sort({ createdAt: -1 }).limit(200);
+    for await (const l of recentCur) {
+        const net = normSocial(l.source);
+        if (!net) continue;
+        const pid = String(l.property?._id);
+        const p = meta.get(pid);
+        if (!p) continue;
+        const c = l.contact || {};
+        recientes.push({
+            id: pid,
+            fecha: iso(l.createdAt),
+            inmobiliaria: p.company?.name ?? null,
+            kam: getKam(p.company?.name),
+            internalId: p.internalId ?? null,
+            broker: [p.agent?.firstName, p.agent?.lastName].filter(Boolean).join(' ') || null,
+            direccion: p.address?.street ?? null,
+            red: net,
+            medio: (l.medium || '').trim() || null,
+            nombre: [c.firstName, c.lastName].filter(Boolean).join(' ') || null,
+            whatsapp: c.phone ?? l.phone ?? null,
+            email: c.email ?? l.email ?? null
+        });
+        if (recientes.length >= 120) break;
+    }
+
     const emailRows = [...emailByProp.values()].sort((a, b) => b.email_leads - a.email_leads);
     const socialRows = [...socialByProp.values()].sort((a, b) => b.social_total - a.social_total);
     const toSeries = (o: Record<string, number>) => Object.entries(o).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -143,7 +179,8 @@ export async function fetchCampaignPerf(): Promise<CampaignPerf> {
             bienAtribuidos: socBien,
             fuga: socFuga,
             conSocial: socialRows.length,
-            sinSocial: props.length - socialRows.length
+            sinSocial: props.length - socialRows.length,
+            recientes
         },
         generatedAt: new Date().toISOString()
     };
