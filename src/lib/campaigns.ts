@@ -2,8 +2,8 @@
 //  1) Correo: ¿funcionaron los envíos y para qué propiedades? → leads source='email' (utm_source=email)
 //     atribuidos por propiedad + campaña (campaign='exclusiva_<código>'), cruzados con el engagement real
 //     del envío (aperturas/clics) que vive en SendGrid (se une en la API, no aquí).
-//  2) Redes / pixel: ¿está bien conectado el pixel por propiedad? → leads de Facebook/Instagram por
-//     propiedad, normalizando la fuente (fb/ig/IGShopping…) y midiendo la "salud de atribución" por el
+//  2) Redes / pixel: ¿está bien conectado el pixel por propiedad? → leads de Meta (Facebook: facebook/fb/
+//     fb-SiteLink-* · Instagram: ig/IGShopping) por propiedad, normalizando la fuente y midiendo la "salud de atribución" por el
 //     campo `medium`: limpio (form/whatsapp/lead ads) vs fuga (referrers/URLs que se colaron al medium
 //     porque el UTM no viajó → señal de pixel mal conectado).
 import { ObjectId, type Db } from 'mongodb';
@@ -11,12 +11,13 @@ import { getDb } from './data';
 import { getKam } from './kam';
 import type { CampaignPerf, EmailPropRow, EmailCampaign, SocialPropRow } from '@/types';
 
-// Facebook (incluye Audience Network) e Instagram, tolerando las variantes de escritura que hay en Mongo.
+// Universo Meta = Facebook + Instagram, tolerando todas las variantes de escritura que hay en Mongo.
+// Instagram: 'ig', 'IGShopping', 'instagram'. Facebook: 'facebook', 'fb', 'fb-SiteLink-1/2/11'.
 function normSocial(src?: string | null): 'Facebook' | 'Instagram' | null {
     const s = (src || '').trim().toLowerCase();
     if (!s) return null;
-    if (s === 'ig' || s.startsWith('ig') || s.includes('insta')) return 'Instagram';
-    if (s.includes('face') || s === 'fb' || s.startsWith('fb') || s === 'an') return 'Facebook';
+    if (s.startsWith('ig') || s.includes('insta')) return 'Instagram';
+    if (s.startsWith('fb') || s.includes('face')) return 'Facebook';
     return null;
 }
 
