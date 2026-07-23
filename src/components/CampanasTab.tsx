@@ -169,8 +169,9 @@ export default function CampanasTab({ kam, inmo }: { kam: string; inmo: string }
                 </div>
 
                 <div className="mt-5">
-                    <Caption>Últimos leads de redes (para dar seguimiento) · {recientes.length} más recientes</Caption>
+                    <Caption>Últimos leads de redes (para dar seguimiento) · clic en un encabezado para ordenar</Caption>
                     <DataTable
+                        sortable searchable csvName="leads_redes_1-5-10"
                         columns={[
                             { key: 'inmobiliaria', label: 'Inmobiliaria' },
                             { key: 'internalId', label: 'Propiedad', render: (v, r) => (
@@ -180,8 +181,10 @@ export default function CampanasTab({ kam, inmo }: { kam: string; inmo: string }
                             ) },
                             { key: 'broker', label: 'Broker' },
                             { key: 'direccion', label: 'Dirección' },
-                            { key: 'fecha', label: 'Fecha', render: (v) => fecha(v as string) },
-                            { key: 'medio', label: 'Por medio', render: (v, r) => `${(r.red as string) === 'Instagram' ? 'IG' : 'FB'} · ${(v as string) || '—'}` },
+                            { key: 'fecha', label: 'Fecha', render: (v) => fecha(v as string), value: (r) => fecha(r.fecha as string) },
+                            { key: 'medio', label: 'Por medio',
+                                render: (v, r) => `${(r.red as string) === 'Instagram' ? 'IG' : 'FB'} · ${(v as string) || '—'}`,
+                                value: (r) => `${(r.red as string) === 'Instagram' ? 'IG' : 'FB'} · ${(r.medio as string) || ''}` },
                             { key: 'nombre', label: 'Nombre' },
                             { key: 'whatsapp', label: 'WhatsApp', render: (v) => {
                                 const tel = v ? String(v) : '';
@@ -196,7 +199,7 @@ export default function CampanasTab({ kam, inmo }: { kam: string; inmo: string }
                         rows={recientes as unknown as Record<string, unknown>[]}
                     />
                     <p className="mt-2 text-xs text-neutral-400">
-                        Contacto de leads que llegaron por Facebook/Instagram a las exclusivas vivas, del más reciente al más viejo.
+                        Contacto de leads que llegaron por Facebook/Instagram a las exclusivas vivas. El CSV respeta el filtro y el orden actual.
                     </p>
                 </div>
             </Section>

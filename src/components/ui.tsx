@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import {
     BarChart, Bar, XAxis, YAxis, LabelList, ResponsiveContainer,
     PieChart, Pie, Cell, ReferenceLine, Legend, Tooltip,
@@ -152,34 +153,120 @@ export function histogram(values: number[], nbins = 20): { name: string; value: 
     }));
 }
 
-// Tabla genérica con scroll horizontal.
-export function DataTable({ columns, rows }: {
-    columns: { key: string; label: string; render?: (v: unknown, row: Record<string, unknown>) => React.ReactNode }[];
+// Tabla genérica con scroll horizontal. Opcionalmente ordenable (click en el header), con buscador
+// (searchable) y descarga CSV (csvName). `value(row)` da el valor crudo para ordenar/buscar/exportar
+// cuando `render` muestra algo distinto (links, formato); si no se da, se usa row[key].
+export interface Column {
+    key: string;
+    label: string;
+    render?: (v: unknown, row: Record<string, unknown>) => React.ReactNode;
+    value?: (row: Record<string, unknown>) => string | number;
+}
+
+function cellValue(c: Column, r: Record<string, unknown>): string | number {
+    if (c.value) return c.value(r);
+    const v = r[c.key];
+    return v == null ? '' : (v as string | number);
+}
+
+function toCsv(columns: Column[], rows: Record<string, unknown>[]): string {
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const head = columns.map((c) => esc(c.label)).join(',');
+    const body = rows.map((r) => columns.map((c) => esc(cellValue(c, r))).join(',')).join('\n');
+    return '﻿' + head + '\n' + body; // BOM para que Excel respete acentos
+}
+
+export function DataTable({ columns, rows, sortable, searchable, csvName }: {
+    columns: Column[];
     rows: Record<string, unknown>[];
+    sortable?: boolean;
+    searchable?: boolean;
+    csvName?: string;
 }) {
-    if (!rows.length) return <p className="py-4 text-sm text-neutral-400">Sin filas.</p>;
+    const [q, setQ] = useState('');
+    const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
+
+    const view = useMemo(() => {
+        let out = rows;
+        if (q.trim()) {
+            const s = q.toLowerCase();
+            out = out.filter((r) => columns.some((c) => String(cellValue(c, r)).toLowerCase().includes(s)));
+        }
+        if (sort) {
+            const c = columns.find((x) => x.key === sort.key);
+            if (c) {
+                out = [...out].sort((a, b) => {
+                    const av = cellValue(c, a), bv = cellValue(c, b);
+                    const cmp = typeof av === 'number' && typeof bv === 'number'
+                        ? av - bv
+                        : String(av).localeCompare(String(bv), 'es', { numeric: true });
+                    return cmp * sort.dir;
+                });
+            }
+        }
+        return out;
+    }, [rows, columns, q, sort]);
+
+    const toggleSort = (key: string) =>
+        setSort((s) => (s?.key === key ? (s.dir === 1 ? { key, dir: -1 } : null) : { key, dir: 1 }));
+
+    function download() {
+        const blob = new Blob([toCsv(columns, view)], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${csvName}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
     return (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200">
-            <table className="w-full text-left text-xs">
-                <thead className="bg-light">
-                    <tr>
-                        {columns.map((c) => (
-                            <th key={c.key} className="whitespace-nowrap px-3 py-2 font-semibold">{c.label}</th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((r, i) => (
-                        <tr key={i} className="border-t border-neutral-100 hover:bg-neutral-50">
-                            {columns.map((c) => (
-                                <td key={c.key} className="whitespace-nowrap px-3 py-1.5">
-                                    {c.render ? c.render(r[c.key], r) : String(r[c.key] ?? '—')}
-                                </td>
+        <div>
+            {(searchable || csvName) && (
+                <div className="mb-2 flex items-center gap-2">
+                    {searchable && (
+                        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar…"
+                            className="w-56 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs focus:border-neutral-500 focus:outline-none" />
+                    )}
+                    {csvName && (
+                        <button onClick={download} disabled={!view.length}
+                            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50 disabled:opacity-40">
+                            ⬇️ CSV
+                        </button>
+                    )}
+                    {searchable && <span className="text-xs text-neutral-400">{view.length} filas</span>}
+                </div>
+            )}
+            {!view.length ? (
+                <p className="py-4 text-sm text-neutral-400">Sin filas.</p>
+            ) : (
+                <div className="overflow-x-auto rounded-lg border border-neutral-200">
+                    <table className="w-full text-left text-xs">
+                        <thead className="bg-light">
+                            <tr>
+                                {columns.map((c) => (
+                                    <th key={c.key}
+                                        onClick={sortable ? () => toggleSort(c.key) : undefined}
+                                        className={`whitespace-nowrap px-3 py-2 font-semibold ${sortable ? 'cursor-pointer select-none hover:bg-neutral-100' : ''}`}>
+                                        {c.label}{sortable && sort?.key === c.key ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {view.map((r, i) => (
+                                <tr key={i} className="border-t border-neutral-100 hover:bg-neutral-50">
+                                    {columns.map((c) => (
+                                        <td key={c.key} className="whitespace-nowrap px-3 py-1.5">
+                                            {c.render ? c.render(r[c.key], r) : String(r[c.key] ?? '—')}
+                                        </td>
+                                    ))}
+                                </tr>
                             ))}
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
     );
 }
