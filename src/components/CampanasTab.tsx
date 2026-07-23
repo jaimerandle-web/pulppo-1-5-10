@@ -90,13 +90,14 @@ export default function CampanasTab({ kam, inmo }: { kam: string; inmo: string }
                     <div>
                         <Caption>Envíos en SendGrid · entrega → apertura → clic (por envío)</Caption>
                         <DataTable
+                            sortable searchable csvName="envios_1-5-10"
                             columns={[
                                 { key: 'name', label: 'Envío' },
-                                { key: 'status', label: 'Estado', render: (v) => estadoEnvio(v as string) },
-                                { key: 'send_at', label: 'Fecha', render: (v) => fecha(v as string) },
-                                { key: 'delivered', label: 'Entregados', render: (_v, r) => ((r.stats as SendItem['stats'])?.delivered ?? '—') },
-                                { key: 'ap', label: 'Apertura', render: (_v, r) => { const s = r.stats as SendItem['stats']; return pct(s?.unique_opens ?? s?.opens, s?.delivered); } },
-                                { key: 'cl', label: 'Clic', render: (_v, r) => { const s = r.stats as SendItem['stats']; return pct(s?.unique_clicks ?? s?.clicks, s?.delivered); } }
+                                { key: 'status', label: 'Estado', render: (v) => estadoEnvio(v as string), value: (r) => estadoEnvio(r.status as string) },
+                                { key: 'send_at', label: 'Fecha', render: (v) => fecha(v as string), value: (r) => fecha(r.send_at as string) },
+                                { key: 'delivered', label: 'Entregados', render: (_v, r) => ((r.stats as SendItem['stats'])?.delivered ?? '—'), value: (r) => (r.stats as SendItem['stats'])?.delivered ?? '' },
+                                { key: 'ap', label: 'Apertura', render: (_v, r) => { const s = r.stats as SendItem['stats']; return pct(s?.unique_opens ?? s?.opens, s?.delivered); }, value: (r) => { const s = r.stats as SendItem['stats']; return pct(s?.unique_opens ?? s?.opens, s?.delivered); } },
+                                { key: 'cl', label: 'Clic', render: (_v, r) => { const s = r.stats as SendItem['stats']; return pct(s?.unique_clicks ?? s?.clicks, s?.delivered); }, value: (r) => { const s = r.stats as SendItem['stats']; return pct(s?.unique_clicks ?? s?.clicks, s?.delivered); } }
                             ]}
                             rows={sends as unknown as Record<string, unknown>[]}
                         />
@@ -109,17 +110,18 @@ export default function CampanasTab({ kam, inmo }: { kam: string; inmo: string }
                     <div>
                         <Caption>Leads atribuidos al correo, por propiedad (source=email)</Caption>
                         <DataTable
+                            sortable searchable csvName="leads_correo_1-5-10"
                             columns={[
                                 { key: 'titulo', label: 'Propiedad', render: (v, r) => (
                                     <a href={`https://pulppo.com/propiedades/${r.id}`} target="_blank" rel="noreferrer" className="text-[#529999] hover:underline">
                                         {(v as string) || '(sin título)'}
                                     </a>
-                                ) },
+                                ), value: (r) => (r.titulo as string) || '' },
                                 { key: 'inmobiliaria', label: 'Inmobiliaria' },
                                 { key: 'campaign', label: 'Campaña' },
                                 { key: 'email_leads', label: 'Leads' },
-                                { key: 'por_medio', label: 'Por medio', render: (v) => medios(v as Record<string, number>) },
-                                { key: 'ultima', label: 'Último', render: (v) => fecha(v as string) }
+                                { key: 'por_medio', label: 'Por medio', render: (v) => medios(v as Record<string, number>), value: (r) => medios(r.por_medio as Record<string, number>) },
+                                { key: 'ultima', label: 'Último', render: (v) => fecha(v as string), value: (r) => fecha(r.ultima as string) }
                             ]}
                             rows={email as unknown as Record<string, unknown>[]}
                         />
