@@ -388,24 +388,39 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const totalV = serieMeses.reduce((a, b) => a + b.v, 0);
     const peakV = serieMeses.reduce((a, b) => (b.v > a.v ? b : a), { m: '', v: 0, l: 0 });
     const peakL = serieMeses.reduce((a, b) => (b.l > a.l ? b : a), { m: '', v: 0, l: 0 });
-    const barsRow = (key: 'v' | 'l', color: string, max: number) =>
-        `<div style="display:flex;gap:1px;align-items:flex-end;height:40px">${serieMeses.map((x) => {
-            const val = x[key]; const h = Math.round((val / max) * 100);
-            return `<span title="${mlabel(x.m)}: ${val}" style="flex:1;display:flex;align-items:flex-end;height:100%"><span style="width:100%;height:${h}%;min-height:${val > 0 ? 2 : 0}px;background:${color}"></span></span>`;
-        }).join('')}</div>`;
-    const axis = `<div style="display:flex;gap:1px">${serieMeses.map((x, i) => {
-        const lbl = i === 0 || i === serieMeses.length - 1 ? mlabel(x.m) : (x.m.endsWith('-01') ? x.m.slice(0, 4) : '');
-        return `<span style="flex:1;text-align:center;font-size:8px;color:${GRY};white-space:nowrap;overflow:hidden">${lbl}</span>`;
-    }).join('')}</div>`;
+    // Gráfica de LÍNEAS (SVG inline, imprimible): dos series con eje de meses marcado con ticks.
+    const CW = 728, CH = 168, PADL = 12, PADR = 14, PADT = 12, PADB = 26;
+    const plotW = CW - PADL - PADR, plotH = CH - PADT - PADB, baseY = PADT + plotH;
+    const N = serieMeses.length;
+    const xOf = (i: number) => (N <= 1 ? PADL + plotW / 2 : PADL + (i / (N - 1)) * plotW);
+    const yOf = (v: number, max: number) => PADT + (1 - (max ? v / max : 0)) * plotH;
+    const linePath = (key: 'v' | 'l', max: number) =>
+        serieMeses.map((x, i) => `${i ? 'L' : 'M'}${xOf(i).toFixed(1)},${yOf(x[key], max).toFixed(1)}`).join(' ');
+    const dots = (key: 'v' | 'l', max: number, color: string) =>
+        serieMeses.map((x, i) => (x[key] > 0 ? `<circle cx="${xOf(i).toFixed(1)}" cy="${yOf(x[key], max).toFixed(1)}" r="2.1" fill="${color}"/>` : '')).join('');
+    const step = Math.max(1, Math.ceil(N / 8));
+    const ticks = serieMeses.map((x, i) => {
+        if (!(i % step === 0 || i === N - 1)) return '';
+        const xx = xOf(i).toFixed(1);
+        const anchor = i === 0 ? 'start' : i === N - 1 ? 'end' : 'middle';
+        return `<line x1="${xx}" y1="${baseY}" x2="${xx}" y2="${baseY + 4}" stroke="${GRY}"/><text x="${xx}" y="${CH - 8}" font-size="10" font-weight="700" fill="${BLK}" text-anchor="${anchor}">${mlabel(x.m)}</text>`;
+    }).join('');
+    const svg = `<svg viewBox="0 0 ${CW} ${CH}" width="100%" preserveAspectRatio="none" style="display:block;height:${CH}px">
+    <line x1="${PADL}" y1="${baseY}" x2="${PADL + plotW}" y2="${baseY}" stroke="${LGT}"/>
+    ${ticks}
+    <path d="${linePath('v', maxV)}" fill="none" stroke="${SEA}" stroke-width="2"/>
+    <path d="${linePath('l', maxL)}" fill="none" stroke="${YEL}" stroke-width="2"/>
+    ${dots('v', maxV, SEA)}${dots('l', maxL, YEL)}
+  </svg>`;
+    const legend = `<div style="font-size:10px;color:${BLK};margin-bottom:4px">
+      <span style="display:inline-block;width:16px;height:3px;background:${SEA};vertical-align:middle;margin-right:5px"></span>Vistas (máx ${maxV}/mes)
+      <span style="display:inline-block;width:16px;height:3px;background:${YEL};vertical-align:middle;margin:0 5px 0 16px"></span>Leads (máx ${maxL}/mes)</div>`;
     const comportHtml = serieMeses.length ? `
   <div class="sec"><div class="eyebrow">Comportamiento en el tiempo</div><div class="accent"></div>
     <div style="font-size:12px;margin-bottom:8px">Vistas del anuncio y leads por mes desde que se publicó${pub ? ` (${fdate(pub)})` : ''}, para ver los momentos de más interés.</div>
-    <div style="display:grid;grid-template-columns:52px 1fr;gap:6px 8px;align-items:center">
-      <div class="eyebrow" style="color:${SEA};margin:0">Vistas</div><div>${barsRow('v', SEA, maxV)}</div>
-      <div class="eyebrow" style="color:${BLK};margin:0">Leads</div><div>${barsRow('l', YEL, maxL)}</div>
-      <div></div><div>${axis}</div>
-    </div>
-    <div style="font-size:9px;color:${GRY};margin-top:6px">${totalV.toLocaleString('en-US')} vistas y ${leads.length} leads en total · pico de vistas ${peakV.v ? `en ${mlabel(peakV.m)} (${peakV.v})` : '—'} · pico de leads ${peakL.l ? `en ${mlabel(peakL.m)} (${peakL.l})` : '—'}. Cada barra normaliza a su propio máximo (vistas y leads tienen escalas distintas). Vistas = eventos de vista de todas las fuentes.</div>
+    ${legend}
+    ${svg}
+    <div style="font-size:9px;color:${GRY};margin-top:6px">${totalV.toLocaleString('en-US')} vistas y ${leads.length} leads en total · pico de vistas ${peakV.v ? `en ${mlabel(peakV.m)} (${peakV.v})` : '—'} · pico de leads ${peakL.l ? `en ${mlabel(peakL.m)} (${peakL.l})` : '—'}. Cada línea usa su propia escala (vistas y leads difieren mucho). Vistas = eventos de vista de todas las fuentes.</div>
   </div>` : '';
 
     const html = `
