@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { CarteraRow, ProgramRow, DataPayload } from '@/types';
 import CarteraTab from '@/components/CarteraTab';
 import ProgramaTab from '@/components/ProgramaTab';
+import CampanasTab from '@/components/CampanasTab';
 import { Combobox, Dropdown } from '@/components/inputs';
 
 export default function Home() {
@@ -12,7 +13,7 @@ export default function Home() {
     const [data, setData] = useState<DataPayload | null>(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState<'cartera' | 'programa'>('cartera');
+    const [tab, setTab] = useState<'cartera' | 'programa' | 'campanas'>('cartera');
     const [kam, setKam] = useState('(todos)');
     const [inmo, setInmo] = useState('(todas)');
     const [tipos, setTipos] = useState<string[]>([]);
@@ -109,7 +110,7 @@ export default function Home() {
             </div>
 
             <div className="mt-6 flex gap-1 border-b border-neutral-200">
-                {([['cartera', '📋 Cartera y operación'], ['programa', '📈 Programa (general)']] as const).map(([id, label]) => (
+                {([['cartera', '📋 Cartera y operación'], ['programa', '📈 Programa (general)'], ['campanas', '📣 Campañas']] as const).map(([id, label]) => (
                     <button key={id} onClick={() => setTab(id)}
                         className={`px-4 py-2.5 text-sm font-semibold transition-colors ${tab === id
                             ? 'border-b-2 border-[#F6BE00] text-[#212322]'
@@ -121,7 +122,9 @@ export default function Home() {
 
             {loading && <p className="mt-10 text-center text-sm text-neutral-500">Consultando Mongo…</p>}
             {error && <p className="mt-10 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-            {!loading && !error && data && (tab === 'cartera' ? <CarteraTab f={f} fp={fp} /> : <ProgramaTab fp={fp} />)}
+            {!loading && !error && data && tab === 'cartera' && <CarteraTab f={f} fp={fp} />}
+            {!loading && !error && data && tab === 'programa' && <ProgramaTab fp={fp} />}
+            {tab === 'campanas' && <CampanasTab kam={kam} inmo={inmo} />}
         </div>
     );
 }

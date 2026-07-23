@@ -73,3 +73,91 @@ export interface DataPayload {
     program: ProgramRow[];
     fetchedAt: string;
 }
+
+// ---- Desempeño de campañas (pestaña Campañas) ----
+
+// Una exclusiva viva con leads atribuidos al correo (source='email').
+export interface EmailPropRow {
+    id: string;
+    internalId: string | null;
+    titulo: string | null;
+    inmobiliaria: string | null;
+    kam: string;
+    colonia: string | null;
+    tipo: string | null;
+    precio: number | null;
+    campaign: string | null;              // exclusiva_<código> (o el newsletter viejo)
+    email_leads: number;
+    por_medio: Record<string, number>;    // whatsapp / form / call …
+    ultima: string | null;                // ISO del lead más reciente
+}
+
+// Campaña de correo detectada en toda la base (contexto histórico).
+export interface EmailCampaign {
+    campaign: string | null;
+    leads: number;
+    ultima: string | null;
+    es_1_5_10: boolean;                    // esquema nuevo exclusiva_<código>
+}
+
+// Una exclusiva viva con leads de redes (Facebook/Instagram) + salud de atribución del pixel.
+export interface SocialPropRow {
+    id: string;
+    internalId: string | null;
+    titulo: string | null;
+    inmobiliaria: string | null;
+    kam: string;
+    colonia: string | null;
+    tipo: string | null;
+    facebook: number;
+    instagram: number;
+    social_total: number;
+    bien_atribuidos: number;               // medium limpio (form/whatsapp/lead ads)
+    fuga: number;                          // medium vacío o referrer/URL → pixel/UTM sin conectar
+    mediums: Record<string, number>;
+}
+
+export interface CampaignPerf {
+    liveCount: number;
+    email: {
+        porPropiedad: EmailPropRow[];
+        campanas: EmailCampaign[];
+        totalLive: number;
+        totalPrograma: number;
+    };
+    social: {
+        porPropiedad: SocialPropRow[];
+        totalFacebook: number;
+        totalInstagram: number;
+        mediumBreakdown: { name: string; value: number }[];
+        sourceSpellings: { name: string; value: number }[];
+        bienAtribuidos: number;
+        fuga: number;
+        conSocial: number;
+        sinSocial: number;
+    };
+    generatedAt: string;
+}
+
+// Estado + métricas de un Single Send de SendGrid (envío 1·5·10).
+export interface SendItem {
+    id: string;
+    name: string | null;
+    status: string | null;
+    send_at: string | null;
+    stats: {
+        delivered?: number;
+        opens?: number;
+        unique_opens?: number;
+        clicks?: number;
+        unique_clicks?: number;
+        unsubscribes?: number;
+        bounces?: number;
+    } | null;
+}
+
+export interface CampaignPayload {
+    perf: CampaignPerf;
+    sends: SendItem[];
+    sendsError: string | null;             // si SendGrid no respondió (sin key/scope)
+}
