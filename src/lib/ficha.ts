@@ -142,10 +142,12 @@ const nameFromTitle = (title: string | null): string | null => {
     const ens = [...t.toLowerCase().matchAll(/\ben\b/g)];
     let cand = ens.length ? t.slice((ens[ens.length - 1].index ?? 0) + 2) : t;
     cand = cand.split(/[,–]| a \d+ ?min| con | para /i)[0];
-    cand = cand.replace(GEN_RE, ' ').replace(/\b\d+\s*(m2|mts|m²|recamaras?|rec)\b/gi, ' ').replace(/\(?m2d\d+\)?/gi, ' ').replace(/[¡!¿?.]/g, ' ').replace(/^\s*\d+\s*/, ' ');
+    cand = cand.replace(GEN_RE, ' ').replace(/\b\d+\s*(m2|mts|m²|recamaras?|rec)\b/gi, ' ').replace(/\(?m2d\d+\)?/gi, ' ').replace(/[¡!¿?.:;"']/g, ' ').replace(/^\s*\d+\s*/, ' ');
     let parts = cand.replace(/\s+/g, ' ').trim().replace(/^[-,\s]+|[-,\s]+$/g, '').split(' ').filter(Boolean);
     while (parts.length >= 2 && NOISE_TAIL.has(nrm(parts.slice(-2).join(' ')))) parts = parts.slice(0, -2);
     while (parts.length && NOISE_TAIL.has(nrm(parts[parts.length - 1]))) parts = parts.slice(0, -1);
+    // quitar colas sueltas de un solo carácter / número / puntuación (ej. "... 3 R", '... : "')
+    while (parts.length && /^([^A-Za-zÁÉÍÓÚÑáéíóúñ0-9]+|\d+|[A-Za-zÁÉÍÓÚÑáéíóúñ])$/.test(parts[parts.length - 1])) parts = parts.slice(0, -1);
     cand = strip(parts.join(' '));
     if (cand.replace(/\s/g, '').length < 3 || ['venta', 'renta', 'cuajimalpa', 'cdmx'].includes(nrm(cand))) return null;
     return titleCase(cand).slice(0, 26);
@@ -175,12 +177,38 @@ const nameFromDesc = (desc: string | null, col: string | null): string | null =>
     }
     return null;
 };
-// MLS: título → descripción → colonia.
-const buildingName = (c: Comp): string => nameFromTitle(c.street) ?? nameFromDesc(c.desc, c.col) ?? (c.col ? strip(c.col) : c.zona ?? '—');
-const buildingId = (c: Comp): { main: string; sub: string } => {
-    const main = c.dev ? strip(c.dev).slice(0, 26) : c.src === 'Pulppo' ? cleanStreet(c.street || '') || (c.zona ?? '—') : buildingName(c);
+// Mapa de colonias conocidas del área (nrm → display), para no confundir una colonia con un edificio.
+type ColMap = Map<string, string>;
+const knownColsOf = (pool: Comp[], s: Subj): ColMap => {
+    const map: ColMap = new Map();
+    const add = (raw?: string | null) => { const d = raw ? strip(raw) : ''; const k = nrm(d); if (k && !map.has(k)) map.set(k, d); };
+    for (const c of pool) add(c.col);
+    add(s.col);
+    return map;
+};
+// Si el nombre ES o EMPIEZA con una colonia conocida, no identifica un edificio; devuelve el display de esa colonia.
+const matchColonia = (name: string, cols: ColMap): string | null => {
+    const n = nrm(name); if (!n) return null;
+    for (const [k, disp] of cols) if (n === k || n.startsWith(k + ' ')) return disp;
+    return null;
+};
+// MLS: nombre propio del título → de la descripción → colonia. Cuando solo hay colonia (no un edificio),
+// se muestra colonia + m² para que los comparables sean distinguibles y cotejables con la tabla.
+const buildingName = (c: Comp, cols: ColMap): string => {
+    const titleName = nameFromTitle(c.street);
+    const titleCol = titleName ? matchColonia(titleName, cols) : null;
+    if (titleName && !titleCol) return titleName; // nombre propio real
+    const descName = nameFromDesc(c.desc, c.col);
+    if (descName && !matchColonia(descName, cols)) return descName;
+    // solo colonia: la del campo → la que venga en el título → zona/municipio, con m² para distinguir
+    const colLbl = (c.col ? strip(c.col) : '') || titleCol || (c.zona ?? '');
+    return colLbl ? (c.m2 ? `${colLbl} · ${c.m2} m²` : colLbl) : '—';
+};
+const buildingId = (c: Comp, cols: ColMap): { main: string; sub: string } => {
+    const main = c.dev ? strip(c.dev).slice(0, 26) : c.src === 'Pulppo' ? cleanStreet(c.street || '') || (c.zona ?? '—') : buildingName(c, cols);
     const colLbl = c.col ? strip(c.col) : c.zona || '';
-    const sub = (nrm(main) === nrm(colLbl) ? [c.src] : [colLbl, c.src]).filter(Boolean).join(' · ');
+    const startsCol = !!colLbl && nrm(main).startsWith(nrm(colLbl));
+    const sub = (startsCol ? [c.src] : [colLbl, c.src]).filter(Boolean).join(' · ');
     return { main, sub };
 };
 
@@ -214,10 +242,10 @@ const alcGeneralInsights = (ranked: Comp[], s: Subj): string[] => {
 };
 
 // Fila de la tabla "qué te alcanza": Inmueble (calle+número · desarrollo) · Precio · Sup. · Rec/Baños · Insight.
-const alcTblRows = (rows: Comp[], s: Subj): string => {
+const alcTblRows = (rows: Comp[], s: Subj, knownCols: ColMap): string => {
     if (!rows.length) return '<tr><td colspan="5" style="color:#B7B7B7">Sin resultados en el rango de presupuesto.</td></tr>';
     return rows.map((r) => {
-        const { main, sub } = buildingId(r);
+        const { main, sub } = buildingId(r, knownCols);
         const name = esc(String(main).slice(0, 46));
         const link = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noreferrer" style="color:${SEA}">${name}</a>` : name;
         return `<tr><td>${link}${sub ? `<br><span style="color:${GRY};font-size:9px">${esc(sub)}</span>` : ''}</td><td class="nw">${money(r.precio)}</td><td class="nw">${r.m2 ?? '—'} m²</td><td class="nw">${r.rec ?? '—'} rec · ${r.ban ?? '—'} b</td><td style="font-size:10px;line-height:1.4">${alcInsightFor(s, r)}</td></tr>`;
@@ -225,11 +253,11 @@ const alcTblRows = (rows: Comp[], s: Subj): string => {
 };
 // Comparación de amenidades: matriz edificios×amenidades. Presente = punto de color, ausente = gris.
 // Se lee de un vistazo qué tiene cada edificio y dónde gana o pierde el tuyo. '' si no aplica.
-const amenCompareHtml = (top: Comp[], s: Subj): string => {
+const amenCompareHtml = (top: Comp[], s: Subj, knownCols: ColMap): string => {
     if (s.myAmen.length < 2) return '';
     const comps = top.filter((c) => c.amen.length).slice(0, 5); // hasta 5 comparables con amenidades
     if (!comps.length) return '';
-    const buildings = [{ label: 'Tu edificio', amen: s.myAmen }, ...comps.map((c) => ({ label: buildingId(c).main, amen: c.amen }))];
+    const buildings = [{ label: 'Tu edificio', amen: s.myAmen }, ...comps.map((c) => ({ label: buildingId(c, knownCols).main, amen: c.amen }))];
     // universo de amenidades (unión), ordenado por cuántos edificios la tienen (desc)
     const uni = new Map<string, string>(); // clave normalizada → nombre a mostrar
     for (const b of buildings) for (const a of b.amen) if (!uni.has(nrm(a))) uni.set(nrm(a), a);
@@ -237,7 +265,7 @@ const amenCompareHtml = (top: Comp[], s: Subj): string => {
     const count = (k: string) => buildings.filter((b) => has(b.amen, k)).length;
     const rows = [...uni.entries()].sort((a, b) => count(b[0]) - count(a[0])).slice(0, 16);
     const dotY = `<span style="color:${SEA};font-weight:700">●</span>`, dotN = '<span style="color:#D8D8D8">·</span>';
-    const head = `<tr><th style="width:148px">Amenidad</th>${buildings.map((b, i) => `<th style="text-align:center;${i === 0 ? `color:${BLK}` : ''}">${esc(String(b.label).slice(0, 16))}</th>`).join('')}</tr>`;
+    const head = `<tr><th style="width:148px">Amenidad</th>${buildings.map((b, i) => `<th style="text-align:center;font-size:10px;white-space:normal;line-height:1.25;${i === 0 ? `color:${BLK}` : ''}">${esc(String(b.label).slice(0, 38))}</th>`).join('')}</tr>`;
     const body = rows.map(([k, name]) => `<tr><td>${esc(name)}</td>${buildings.map((b) => `<td style="text-align:center">${has(b.amen, k) ? dotY : dotN}</td>`).join('')}</tr>`).join('');
     const totals = `<tr><td style="font-weight:700;color:${GRY}">Total amenidades</td>${buildings.map((b) => `<td style="text-align:center;font-weight:700">${b.amen.length}</td>`).join('')}</tr>`;
     return `<div style="margin-top:22px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Amenidades: tu edificio vs. comparables</div>
@@ -404,6 +432,7 @@ export async function renderFicha(id: string, opts?: { token?: string }): Promis
     // comparables vivos (Pulppo + mercado MLS) + "qué te alcanza"
     const subj: Subj = { oid, typ, city, state, val, m2, ppm2, col, rec, lat: myLat, lng: myLng, myAmen, street };
     const alcPool = await buildAlcPool(db, subj);
+    const knownCols = knownColsOf(alcPool, subj);
     const dist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
     const comps = alcPool.filter((c) => c.src === 'Pulppo').sort((a, b) => dist(a) - dist(b)).slice(0, 6);
     // "Qué te alcanza por el mismo presupuesto": ranking por qué tan ad-hoc es → top 10 en la ficha, resto en /comparables.
@@ -674,9 +703,9 @@ ${comportHtml}
       <table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table></div>
     <div style="margin-top:22px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Qué te alcanza por el mismo presupuesto</div>
       <div style="font-size:10px;color:${GRY};margin-bottom:4px">Comparables vivos en tu mismo rango de precio (±10%) y hasta 1.5 km, ordenados de más a menos parecidos a tu inmueble (colonia, cercanía, tamaño, presupuesto y amenidades).</div>
-      <table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcTop, subj)}</table>
+      <table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcTop, subj, knownCols)}</table>
       ${alcMore ? `<div style="font-size:10px;margin-top:4px"><a href="${moreHref}" style="color:${SEA};font-weight:700">Ver los ${alcRanked.length} comparables →</a></div>` : ''}
-      ${amenCompareHtml(alcTop, subj)}
+      ${amenCompareHtml(alcTop, subj, knownCols)}
       ${alcInsights.length ? `<div class="box" style="margin-top:16px"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : ''}
     </div>
     <div style="margin-top:20px;opacity:.7"><div class="eyebrow" style="color:${GRY};margin-bottom:4px">Referencia · qué te alcanza por $/m² similar</div>
@@ -726,6 +755,7 @@ export async function renderComparables(id: string, opts?: { token?: string }): 
         myAmen: svcAmen(P), street
     };
     const alcPool = await buildAlcPool(db, subj);
+    const knownCols = knownColsOf(alcPool, subj);
     const alcRanked = rankAlcance(alcPool, subj);
     const alcInsights = alcGeneralInsights(alcRanked, subj);
     const backHref = `/ficha/${encodeURIComponent(id)}${opts?.token ? `?token=${encodeURIComponent(opts.token)}` : ''}`;
@@ -747,8 +777,8 @@ export async function renderComparables(id: string, opts?: { token?: string }): 
   <div class="fx-noprint" style="margin-top:8px"><a href="${backHref}" style="color:${SEA};font-weight:700;font-size:11px">← Volver a la ficha</a></div>
   <div class="accent" style="margin-top:14px"></div>
   <div style="font-size:11px;color:${GRY};margin-bottom:4px">${alcRanked.length} comparables vivos en tu mismo rango de precio (±10%) y hasta 1.5 km, ordenados de más a menos parecidos a tu inmueble.</div>
-  <table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcRanked, subj)}</table>
-  ${amenCompareHtml(alcRanked, subj)}
+  <table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcRanked, subj, knownCols)}</table>
+  ${amenCompareHtml(alcRanked, subj, knownCols)}
   ${alcInsights.length ? `<div class="box"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : ''}
 </div>`;
     return { code, html };
