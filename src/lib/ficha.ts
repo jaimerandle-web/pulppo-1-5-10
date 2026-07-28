@@ -126,12 +126,35 @@ const rankAlcance = (pool: Comp[], s: Subj): Comp[] =>
         .filter((c) => { const k = kmOf(s, c); return k == null || k <= MAX_KM; })
         .sort((a, b) => scoreComp(s, b) - scoreComp(s, a));
 
-// Identidad del edificio: nombre del desarrollo si existe → calle real (Pulppo) → título recortado (MLS).
-// El MLS no trae calle/edificio estructurado; su address.street es el título del anuncio.
-const trimTitle = (t: string) => (t.length > 42 ? t.slice(0, 42).trim() + ' (…)' : t);
+// Identidad del edificio. Pulppo trae desarrollo/calle limpios; el MLS no: su address.street es el
+// título de marketing del anuncio ("DEPARTAMENTO EN VENTA EN..."), así que hay que extraer el nombre
+// propio (edificio/desarrollo/colonia) del título y, si no sale limpio, caer a la colonia.
+const SMALL = new Set(['de', 'la', 'las', 'del', 'los', 'y', 'en', 'a', 'el']);
+const GEN_RE = /renta\s*[-/]\s*venta|venta\s*[-/]\s*renta|se\s+vende\s+o\s+renta|se\s+vende|se\s+renta|preventa|en\s+venta|en\s+renta|\bventa\b|\brenta\b|\bvendo\b|\bvende\b|\brento\b|departamentos?|deptos?|dpto|penthouses?|\bph\b|garden\s+house|garden|\bloft\b|estudio|oportunidad|exclusivos?|lujosos?|de\s+lujo|espl[eé]ndidos?|espectaculares?|hermosos?|amplios?|nuevos?|para\s+estrenar|amueblados?|equipados?|incre[ií]bles?|inigualables?|roof\s+privado|con\s+roof/gi;
+const NOISE_TAIL = new Set(['cuajimalpa', 'cdmx', 'cuajimalpa de morelos', 'ciudad de mexico', 'mexico', 'morelos', 'col']);
+const titleCase = (s: string) => s.split(/\s+/).map((w, i) => (i > 0 && SMALL.has(w.toLowerCase()) ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())).join(' ');
+const cleanStreet = (s: string) => s.split('(')[0].replace(/\bdepto\.?\b.*/i, '').trim();
+// Extrae el nombre propio del título de marketing del MLS (o cae a la colonia).
+const buildingName = (title: string | null, col: string | null): string => {
+    const fallback = col ? strip(col) : '—';
+    const t0 = (title || '').trim();
+    if (!t0) return fallback;
+    const t = t0.split(/[|(]/)[0];
+    const ens = [...t.toLowerCase().matchAll(/\ben\b/g)];
+    let cand = ens.length ? t.slice((ens[ens.length - 1].index ?? 0) + 2) : t;
+    cand = cand.split(/[,–]| a \d+ ?min| con | para /i)[0];
+    cand = cand.replace(GEN_RE, ' ').replace(/\b\d+\s*(m2|mts|m²|recamaras?|rec)\b/gi, ' ').replace(/\(?m2d\d+\)?/gi, ' ').replace(/[¡!¿?.]/g, ' ').replace(/^\s*\d+\s*/, ' ');
+    let parts = cand.replace(/\s+/g, ' ').trim().replace(/^[-,\s]+|[-,\s]+$/g, '').split(' ').filter(Boolean);
+    while (parts.length >= 2 && NOISE_TAIL.has(nrm(parts.slice(-2).join(' ')))) parts = parts.slice(0, -2);
+    while (parts.length && NOISE_TAIL.has(nrm(parts[parts.length - 1]))) parts = parts.slice(0, -1);
+    cand = strip(parts.join(' '));
+    if (cand.replace(/\s/g, '').length < 3 || ['venta', 'renta', 'cuajimalpa', 'cdmx'].includes(nrm(cand))) return fallback;
+    return titleCase(cand).slice(0, 26);
+};
 const buildingId = (c: Comp): { main: string; sub: string } => {
-    const main = c.dev ? strip(c.dev) : c.src === 'Pulppo' ? (c.street || c.zona || '—') : trimTitle(c.street || c.zona || '—');
-    const sub = [c.col ? strip(c.col) : c.zona || '', c.src].filter(Boolean).join(' · ');
+    const main = c.dev ? strip(c.dev).slice(0, 26) : c.src === 'Pulppo' ? cleanStreet(c.street || '') || (c.zona ?? '—') : buildingName(c.street, c.col);
+    const colLbl = c.col ? strip(c.col) : c.zona || '';
+    const sub = (nrm(main) === nrm(colLbl) ? [c.src] : [colLbl, c.src]).filter(Boolean).join(' · ');
     return { main, sub };
 };
 
