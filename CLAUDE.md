@@ -56,6 +56,10 @@ src/lib/marketing.ts   Cliente SendGrid Marketing/Single Sends (fetch, sin deps)
                        leen de vuelta (claimedPropertyCodes/parseCodesFromName) para no reenviar una propiedad
                        que ya está en un envío (borrador/programado/enviado, ventana 90d). plan/ la excluye y
                        avisa (alreadySent); schedule/ re-renderiza el digest solo con las propiedades frescas.
+                       ANTI-DUPLICADO del LISTADO por semana: misma zona = misma lista = mismo público, así que
+                       no se programan dos envíos de la misma zona en la misma semana ISO (scheduledZoneWeeks /
+                       isoWeekKey / zoneWeekKey, leídos del name del Single Send). plan/ recorre el envío a la
+                       siguiente semana libre de esa zona; schedule/ rechaza el duplicado como malla de seguridad.
 src/lib/elegibilidad.ts Evaluador 1·5·10: computeEval(id) = datos + renderScorecard() = HTML. % de
                        aceptación (precio 40% = mix ACM·oferta·cierres + calidad 25% + comisión 20% +
                        demanda 15%) sobre gates (venta·residencial·no desarrollo) y material (foto·video·tour).

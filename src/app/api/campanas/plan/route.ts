@@ -1,5 +1,5 @@
 import { buildZoneDigests, dedupZoneDigests } from '@/lib/audience';
-import { claimedPropertyCodes } from '@/lib/marketing';
+import { claimedPropertyCodes, scheduledZoneWeeks, isoWeekKey, zoneWeekKey } from '@/lib/marketing';
 
 // Planeador (Fase 2, paso 1): POST { codes[], start?, hour? }. Agrupa por ZONA en digests "Exclusivas de
 // la semana" (varias propiedades en un correo). MÁX 3 propiedades por correo: si una zona tiene más de 3,
@@ -42,19 +42,30 @@ export async function POST(req: Request) {
         const digests = dedupZoneDigests(await buildZoneDigests(fresh));
         digests.sort((a, b) => b.count - a.count);
 
-        // Un "envío" = un correo (zona + bloque de máx 3). El bloque i de cada zona va a la semana i.
+        // Anti-duplicado del LISTADO por semana: no programar dos envíos de la misma zona en la misma semana ISO
+        // (misma lista = mismo público). Se saltan las zona×semana ya ocupadas por un envío existente.
+        let taken = new Map<string, { zona: string; date: string; week: string; status: string }>();
+        try { taken = await scheduledZoneWeeks(); } catch { /* si SendGrid falla, se planea sin el filtro */ }
+        const weekOf = (offset: number) => { const d = new Date(start); d.setUTCDate(d.getUTCDate() + offset * 7); d.setUTCHours(hourUtc, 0, 0, 0); return d; };
+
+        // Un "envío" = un correo (zona + bloque de máx 3). Cada bloque de la zona toma la SIGUIENTE semana libre.
         const sends = [];
+        let shifted = 0;
         for (const d of digests) {
-            for (let i = 0; i * MAX_PER_MAIL < d.props.length; i++) {
-                const chunk = d.props.slice(i * MAX_PER_MAIL, i * MAX_PER_MAIL + MAX_PER_MAIL);
-                const send = new Date(start);
-                send.setUTCDate(send.getUTCDate() + i * 7);
-                send.setUTCHours(hourUtc, 0, 0, 0);
+            const chunks: (typeof d.props)[] = [];
+            for (let i = 0; i * MAX_PER_MAIL < d.props.length; i++) chunks.push(d.props.slice(i * MAX_PER_MAIL, i * MAX_PER_MAIL + MAX_PER_MAIL));
+            let offset = 0;
+            for (let ci = 0; ci < chunks.length; ci++) {
+                let send = weekOf(offset), wk = isoWeekKey(send);
+                while (taken.has(zoneWeekKey(d.zonaName, wk))) { offset++; send = weekOf(offset); wk = isoWeekKey(send); }
+                if (offset > ci) shifted++;
+                taken.set(zoneWeekKey(d.zonaName, wk), { zona: d.zonaName, date: send.toISOString().slice(0, 10), week: wk, status: 'plan' });
                 sends.push({
-                    key: `${d.key}#${i}`, zonaName: d.zonaName, week: i + 1,
+                    key: `${d.key}#${ci}`, zonaName: d.zonaName, week: offset + 1,
                     sendAt: send.toISOString(), date: send.toISOString().slice(0, 10),
-                    count: d.count, props: chunk
+                    count: d.count, props: chunks[ci]
                 });
+                offset++;
             }
         }
         sends.sort((a, b) => a.week - b.week || b.count - a.count);
@@ -65,7 +76,7 @@ export async function POST(req: Request) {
 
         return Response.json({
             start: start.toISOString(), hourUtc, sends, notFound, alreadySent,
-            nota: `${digests.length} zona(s) · máx ${MAX_PER_MAIL} por correo → ${sends.length} correo(s) en ${weeks} semana(s). Una persona recibe a lo más un correo por semana.${alreadySent.length ? ` ${alreadySent.length} propiedad(es) excluida(s) por ya estar en un envío.` : ''}`
+            nota: `${digests.length} zona(s) · máx ${MAX_PER_MAIL} por correo → ${sends.length} correo(s) en ${weeks} semana(s). Una persona recibe a lo más un correo por semana.${alreadySent.length ? ` ${alreadySent.length} propiedad(es) excluida(s) por ya estar en un envío.` : ''}${shifted ? ` ${shifted} correo(s) recorrido(s) de semana porque esa zona ya tenía envío.` : ''}`
         });
     } catch (e) {
         return Response.json({ error: e instanceof Error ? e.message : 'Error planeando el calendario' }, { status: 500 });

@@ -208,6 +208,39 @@ export async function claimedPropertyCodes(windowDays = 90): Promise<Map<string,
     return map;
 }
 
+// --- Anti-duplicado del LISTADO de correos por semana ---
+// Misma zona = misma lista = misma audiencia exacta; y las zonas se diseñan casi disjuntas y se dedup dentro
+// del lote. Así que basta con no programar dos envíos de la MISMA zona en la MISMA semana ISO (eso mandaría
+// el correo dos veces a toda la lista). La zona y la fecha se leen del `name` del Single Send.
+const NAME_ZONE_DATE_RE = /Exclusivas\s+(.+?)\s+·\s+(\d{4}-\d{2}-\d{2})/;
+const zonaNrm = (z: string) => z.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+export function isoWeekKey(d: Date): string {
+    const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7) + 3); // jueves de esa semana ISO
+    const firstThu = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+    firstThu.setUTCDate(firstThu.getUTCDate() - ((firstThu.getUTCDay() + 6) % 7) + 3);
+    const week = 1 + Math.round((t.getTime() - firstThu.getTime()) / (7 * 864e5));
+    return `${t.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+export const zoneWeekKey = (zona: string, isoWeek: string): string => `${zonaNrm(zona)}|${isoWeek}`;
+export interface ZoneWeekInfo { zona: string; date: string; week: string; status: string }
+// Zonas×semana ya ocupadas por un Single Send activo (borrador/programado/enviado). La semana sale de la
+// FECHA del name (disponible también en borradores, a diferencia de send_at).
+export async function scheduledZoneWeeks(): Promise<Map<string, ZoneWeekInfo>> {
+    const sends = await listSingleSends();
+    const map = new Map<string, ZoneWeekInfo>();
+    for (const s of sends) {
+        const status = String(s.status || '');
+        if (status === 'canceled') continue;
+        const m = NAME_ZONE_DATE_RE.exec(s.name || '');
+        if (!m) continue;
+        const zona = m[1].trim(), date = m[2];
+        const week = isoWeekKey(new Date(`${date}T00:00:00Z`));
+        map.set(zoneWeekKey(zona, week), { zona, date, week, status });
+    }
+    return map;
+}
+
 export interface SendStats { delivered?: number; opens?: number; unique_opens?: number; clicks?: number; unique_clicks?: number; unsubscribes?: number; bounces?: number }
 
 export async function singleSendStats(id: string): Promise<SendStats> {

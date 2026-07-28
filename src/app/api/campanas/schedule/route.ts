@@ -1,7 +1,7 @@
 import { withUnsubFooter } from '@/lib/email';
 import { renderDigest } from '@/lib/digest';
 import { buildZoneDigests, dedupZoneDigests } from '@/lib/audience';
-import { getOrCreateList, addContacts, createSingleSend, encodeCodesInName, claimedPropertyCodes, type ClaimInfo } from '@/lib/marketing';
+import { getOrCreateList, addContacts, createSingleSend, encodeCodesInName, claimedPropertyCodes, scheduledZoneWeeks, isoWeekKey, zoneWeekKey, type ClaimInfo } from '@/lib/marketing';
 
 // Fase 2, paso 2: POST { sends: [{ key, codes[≤3], sendAt, subject? }] }. Cada "send" es un correo digest
 // (una zona + un bloque de máx 3 propiedades). Va a la base de SU zona (dedup entre zonas). Crea la Lista
@@ -27,7 +27,8 @@ export async function POST(req: Request) {
     // Anti-duplicado de propiedades: nunca reenviar una que ya está en un Single Send (ni entre lotes ni
     // dentro de este). Se re-renderiza el digest solo con las propiedades "frescas".
     let claimed = new Map<string, ClaimInfo>();
-    try { claimed = await claimedPropertyCodes(); } catch { /* si SendGrid falla, se sigue sin el filtro */ }
+    let zoneWeeks = new Map<string, { zona: string; date: string; week: string; status: string }>();
+    try { [claimed, zoneWeeks] = await Promise.all([claimedPropertyCodes(), scheduledZoneWeeks()]); } catch { /* si SendGrid falla, se sigue sin el filtro */ }
     const justUsed = new Set<string>();
 
     const out: Array<Record<string, unknown>> = [];
@@ -36,6 +37,10 @@ export async function POST(req: Request) {
         const d = byKey.get(zonaKey);
         try {
             if (!d || !d.rows.length) { out.push({ key: s.key, zonaName: d?.zonaName, ok: false, error: 'Base vacía' }); continue; }
+            // Anti-duplicado del listado: no crear dos envíos de la misma zona en la misma semana ISO.
+            const wk = isoWeekKey(new Date(s.sendAt || ''));
+            const zwk = zoneWeekKey(d.zonaName, wk);
+            if (zoneWeeks.has(zwk)) { out.push({ key: s.key, zonaName: d.zonaName, ok: false, error: `Ya hay un envío de ${d.zonaName} en la semana ${wk}` }); continue; }
             const wanted = (s.codes || []).map((c) => c.toUpperCase());
             const dup = wanted.filter((c) => claimed.has(c) || justUsed.has(c));
             const codesFresh = wanted.filter((c) => !claimed.has(c) && !justUsed.has(c));
@@ -55,6 +60,7 @@ export async function POST(req: Request) {
             const html = withUnsubFooter(render.html);
             const send = await createSingleSend({ name, subject: render.subject, html, listId });
             for (const c of render.codes) justUsed.add(c.toUpperCase());
+            zoneWeeks.set(zwk, { zona: d.zonaName, date: dateTag, week: wk, status: 'draft' });
 
             out.push({ key: s.key, zonaName: d.zonaName, ok: true, id: send.id, status: send.status, listId, count: d.count, props: render.codes, skipped: dup, sendAt: s.sendAt, subject: render.subject });
         } catch (e) {
