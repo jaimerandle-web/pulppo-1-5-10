@@ -281,13 +281,19 @@ const amenCompareHtml = (top: Comp[], s: Subj, knownCols: ColMap): string => {
       <table>${head}${body}${totals}</table></div>`;
 };
 
+// Resuelve una propiedad por ObjectId o por internalId (código tipo "DMJ-523"), para que la ficha sirva
+// tanto para exclusivas 1·5·10 como para cualquier propiedad aislada por su código.
+const findPropertyDoc = async (db: Awaited<ReturnType<typeof getDb>>, id: string): Promise<Document | null> => {
+    try { const p = await db.collection('properties').findOne({ _id: new ObjectId(id) }); if (p) return p; } catch { /* no es ObjectId */ }
+    return db.collection('properties').findOne({ internalId: id.trim().toUpperCase() });
+};
+
 export async function renderFicha(id: string, opts?: { token?: string }): Promise<{ code: string; html: string } | null> {
     const moreHref = `/ficha/${encodeURIComponent(id)}/comparables${opts?.token ? `?token=${encodeURIComponent(opts.token)}` : ''}`;
-    let oid: ObjectId;
-    try { oid = new ObjectId(id); } catch { return null; }
     const db = await getDb();
-    const P = await db.collection('properties').findOne({ _id: oid });
+    const P = await findPropertyDoc(db, id);
     if (!P) return null;
+    const oid = P._id as ObjectId;
     const now = Date.now();
 
     const val = num(dig(P, 'listing', 'value'));
@@ -741,11 +747,10 @@ ${comportHtml}
 
 // "Ver más": lista COMPLETA de comparables por el mismo presupuesto (ranking ad-hoc), página propia.
 export async function renderComparables(id: string, opts?: { token?: string }): Promise<{ code: string; html: string } | null> {
-    let oid: ObjectId;
-    try { oid = new ObjectId(id); } catch { return null; }
     const db = await getDb();
-    const P = await db.collection('properties').findOne({ _id: oid });
+    const P = await findPropertyDoc(db, id);
     if (!P) return null;
+    const oid = P._id as ObjectId;
     const val = num(dig(P, 'listing', 'value'));
     const m2 = num(dig(P, 'attributes', 'totalSurface')) ?? num(dig(P, 'attributes', 'surface'));
     const col = (dig(P, 'address', 'neighborhood', 'name') as string) ?? null;
