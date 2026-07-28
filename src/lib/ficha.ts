@@ -45,9 +45,144 @@ const promoCat = (t: string | null | undefined, s: string | null | undefined): P
 const PROMOLBL: Record<PromoCat, string> = { Super: 'Super destacado', Destacado: 'Destacado', Simple: 'Simple', Offline: 'Offline', Otro: 'Otro' };
 const PROMORD: PromoCat[] = ['Super', 'Destacado', 'Simple', 'Offline', 'Otro'];
 
-interface Comp { precio: number | null; m2: number | null; ppm2: number | null; rec: number | null; ban: number | null; zona: string | null; url: string | null; src: string; street: string | null }
+interface Comp { precio: number | null; m2: number | null; ppm2: number | null; rec: number | null; ban: number | null; zona: string | null; col: string | null; url: string | null; src: string; street: string | null; dev: string | null; amen: string[]; lat: number | null; lng: number | null }
+// Amenidades = servicios comunes del edificio (services con type===1); type===2 son características
+// interiores del depto (sala, comedor…) y no cuentan como amenidad.
+const svcAmen = (e: Document | null | undefined): string[] =>
+    (((e as Document)?.services as Document[]) || [])
+        .filter((s) => (s as Record<string, unknown>).type === 1 && (s as Record<string, unknown>).name)
+        .map((s) => String((s as Record<string, unknown>).name));
+const haversineKm = (aLat: number, aLng: number, bLat: number, bLng: number): number => {
+    const R = 6371, toR = Math.PI / 180;
+    const dLat = (bLat - aLat) * toR, dLng = (bLng - aLng) * toR;
+    const s = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * toR) * Math.cos(bLat * toR) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(s));
+};
+// Convierte un doc (properties o mls) a Comp, con desarrollo, amenidades y coordenadas.
+const toComp = (e: Document, src: 'Pulppo' | 'MLS'): Comp => {
+    const ev = num(dig(e, 'listing', 'value')), em = num(dig(e, 'attributes', 'totalSurface'));
+    const loc = (dig(e, 'address', 'location', 'coordinates') as number[]) || [];
+    const url = src === 'MLS' ? ((dig(e, 'import', 'url') as string) ?? null) : `https://pulppo.com/propiedades/${String(e._id)}`;
+    return {
+        precio: ev, m2: em, ppm2: ev && em ? ev / em : null,
+        rec: num(dig(e, 'attributes', 'suites')), ban: num(dig(e, 'attributes', 'bathrooms')),
+        zona: (dig(e, 'address', 'neighborhood', 'name') as string) ?? (dig(e, 'address', 'city', 'name') as string) ?? null,
+        col: (dig(e, 'address', 'neighborhood', 'name') as string) ?? null,
+        url, src, street: (dig(e, 'address', 'street') as string) ?? null,
+        dev: (dig(e, 'development', 'name') as string)?.trim() || null, amen: svcAmen(e),
+        lat: typeof loc[1] === 'number' ? loc[1] : null, lng: typeof loc[0] === 'number' ? loc[0] : null
+    };
+};
+const COMP_PROJ = { 'listing.value': 1, attributes: 1, 'address.neighborhood.name': 1, 'address.city.name': 1, 'address.street': 1, 'address.location': 1, services: 1, 'development.name': 1 };
 
-export async function renderFicha(id: string): Promise<{ code: string; html: string } | null> {
+// Datos del inmueble analizado que necesita la sección "Qué te alcanza" (comparte renderFicha y la
+// página de "ver más"). Se deriva del documento de la propiedad.
+interface Subj { oid: ObjectId; typ: string | null; city: string | null; state: string | null; val: number | null; m2: number | null; ppm2: number | null; col: string | null; rec: number | null; lat: number | null; lng: number | null; myAmen: string[]; street: string | null }
+
+// Pool de comparables vivos (Pulppo + mercado MLS), con fallback colonia/ciudad→estado y sin la propia.
+const buildAlcPool = async (db: Awaited<ReturnType<typeof getDb>>, s: Subj): Promise<Comp[]> => {
+    const live = async (geo: Document): Promise<Comp[]> =>
+        (await db.collection('properties').find(
+            { 'status.last': 'published', 'listing.operation': 'sale', type: s.typ, ...geo, _id: { $ne: s.oid }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
+            { projection: COMP_PROJ, limit: 200 }
+        ).toArray()).map((e) => toComp(e, 'Pulppo'));
+    const market = async (geo: Document): Promise<Comp[]> =>
+        (await db.collection('mls').find(
+            { 'listing.operation': 'sale', type: s.typ, 'status.last': 'published', ...geo, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
+            { projection: { ...COMP_PROJ, 'import.url': 1 }, limit: 250 }
+        ).toArray()).map((e) => toComp(e, 'MLS'));
+    let poolC = s.city ? await live({ 'address.city.name': s.city }) : [];
+    if (poolC.length < 3 && s.state) poolC = await live({ 'address.state.name': s.state });
+    let mls = s.city ? await market({ 'address.city.name': s.city }) : [];
+    if (mls.length < 3 && s.state) mls = await market({ 'address.state.name': s.state });
+    // Excluir la MISMA propiedad (aunque venga duplicada del MLS): por calle igual o precio+superficie casi idénticos.
+    const selfStreet = nrm(s.street);
+    const isSelf = (c: Comp) =>
+        (!!selfStreet && !!c.street && nrm(c.street) === selfStreet) ||
+        (!!s.val && !!c.precio && !!s.m2 && !!c.m2 && Math.abs(c.precio - s.val) / s.val < 0.01 && Math.abs(c.m2 - s.m2) / s.m2 < 0.02);
+    return [...poolC, ...mls].filter((c) => !isSelf(c));
+};
+
+// Ranking "qué tan ad-hoc es el comparable": misma colonia > cercanía > tamaño > presupuesto > amenidades > recámaras.
+const kmOf = (s: Subj, c: Comp): number | null =>
+    s.lat != null && s.lng != null && c.lat != null && c.lng != null ? haversineKm(s.lat, s.lng, c.lat, c.lng) : null;
+const sameCol = (s: Subj, c: Comp): boolean => {
+    const a = nrm(strip(s.col || '')); return !!a && !!c.col && nrm(strip(c.col)) === a;
+};
+const scoreComp = (s: Subj, c: Comp): number => {
+    let sc = 0;
+    if (sameCol(s, c)) sc += 60;
+    const km = kmOf(s, c); if (km != null) sc += Math.max(0, 30 - km * 6);
+    if (s.m2 && c.m2) sc += Math.max(0, 40 - (Math.abs(c.m2 - s.m2) / s.m2) * 100);
+    if (s.val && c.precio) sc += Math.max(0, 20 - (Math.abs(c.precio - s.val) / s.val) * 100);
+    if (s.myAmen.length && c.amen.length) { const set = new Set(s.myAmen.map(nrm)); sc += Math.min(18, c.amen.filter((a) => set.has(nrm(a))).length * 3); }
+    if (s.rec && c.rec && s.rec === c.rec) sc += 8;
+    return sc;
+};
+const rankAlcance = (pool: Comp[], s: Subj): Comp[] =>
+    (s.val ? pool.filter((c) => c.precio != null && c.precio >= 0.9 * s.val! && c.precio <= 1.1 * s.val!) : [])
+        .sort((a, b) => scoreComp(s, b) - scoreComp(s, a));
+
+// Insight por fila: por qué es comparable (zona/cercanía) + qué tiene mejor tu depto o el suyo (tamaño, precio, $/m², amenidades).
+const pctDiff = (a: number, b: number) => Math.round(((a - b) / b) * 100);
+const alcInsightFor = (s: Subj, c: Comp): string => {
+    const parts: string[] = [];
+    const km = kmOf(s, c);
+    if (sameCol(s, c)) parts.push('misma colonia');
+    else if (km != null) parts.push(`a ${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'}${c.col ? ` · ${esc(strip(c.col))}` : ''}`);
+    else if (c.col) parts.push(esc(strip(c.col)));
+    if (s.m2 && c.m2) { const d = pctDiff(c.m2, s.m2); parts.push(Math.abs(d) < 3 ? 'mismo tamaño' : d > 0 ? `+${d}% de superficie` : `${d}% (más chico)`); }
+    if (s.val && c.precio) { const d = pctDiff(c.precio, s.val); parts.push(Math.abs(d) < 2 ? 'mismo presupuesto' : d > 0 ? `${money(c.precio - s.val)} más caro` : `${money(s.val - c.precio)} más barato`); }
+    if (s.ppm2 && c.ppm2) { const d = pctDiff(c.ppm2, s.ppm2); if (Math.abs(d) >= 5) parts.push(`$/m² ${d > 0 ? d + '% más alto' : Math.abs(d) + '% más bajo'}`); }
+    if (s.myAmen.length || c.amen.length) { const dif = c.amen.length - s.myAmen.length; if (dif > 0) parts.push(`+${dif} amenidades`); else if (dif < 0) parts.push(`${dif} amenidades`); }
+    return parts.join(' · ');
+};
+const alcGeneralInsights = (ranked: Comp[], s: Subj): string[] => {
+    if (!ranked.length) return [];
+    const out: string[] = [];
+    const sc = ranked.filter((c) => sameCol(s, c)).length;
+    out.push(`${ranked.length} opción${ranked.length === 1 ? '' : 'es'} en tu mismo rango de presupuesto (±10%)${sc ? `, ${sc} en tu misma colonia` : ''}.`);
+    if (s.m2) {
+        const big = ranked.filter((c) => c.m2 && c.m2 > s.m2! * 1.05).length, small = ranked.filter((c) => c.m2 && c.m2 < s.m2! * 0.95).length;
+        out.push(`Por tu presupuesto: ${big} son más grandes y ${small} más chicas que tus ${s.m2} m².`);
+        const bigger = ranked.filter((c) => c.m2).sort((a, b) => (b.m2 as number) - (a.m2 as number))[0];
+        if (bigger && bigger.m2 && bigger.m2 > s.m2) out.push(`Con lo mismo se alcanza hasta ${bigger.m2} m² (${esc(String(strip(bigger.dev || '') || bigger.street || bigger.zona || '—'))}), ${pctDiff(bigger.m2, s.m2)}% más grande — úsalo para justificar tu precio o resaltar ubicación/estado.`);
+    }
+    if (s.ppm2) { const cheaper = ranked.filter((c) => c.ppm2 && c.ppm2 < s.ppm2! * 0.95).length; if (cheaper) out.push(`${cheaper} comparable${cheaper === 1 ? '' : 's'} ofrece${cheaper === 1 ? '' : 'n'} mejor $/m² que el tuyo (${money(s.ppm2)}): anticipa objeciones de precio con tus diferenciadores.`); }
+    return out;
+};
+
+// Fila de la tabla "qué te alcanza": Inmueble (calle+número · desarrollo) · Precio · Sup. · Rec/Baños · Insight.
+const alcTblRows = (rows: Comp[], s: Subj): string => {
+    if (!rows.length) return '<tr><td colspan="5" style="color:#B7B7B7">Sin resultados en el rango de presupuesto.</td></tr>';
+    return rows.map((r) => {
+        const name = esc(String(r.street || r.zona || '—').slice(0, 44));
+        const link = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noreferrer" style="color:${SEA}">${name}</a>` : name;
+        const sub = [r.dev ? esc(strip(r.dev)) : '', r.src === 'MLS' ? 'MLS' : ''].filter(Boolean).join(' · ');
+        return `<tr><td>${link}${sub ? `<br><span style="color:${GRY};font-size:9px">${sub}</span>` : ''}</td><td class="nw">${money(r.precio)}</td><td class="nw">${r.m2 ?? '—'} m²</td><td class="nw">${r.rec ?? '—'} rec · ${r.ban ?? '—'} b</td><td style="font-size:10px;line-height:1.4">${alcInsightFor(s, r)}</td></tr>`;
+    }).join('');
+};
+// Comparación de amenidades del edificio (tu inmueble vs comparables con amenidades). '' si no aplica.
+const amenCompareHtml = (top: Comp[], s: Subj): string => {
+    if (s.myAmen.length < 2) return '';
+    const withA = top.filter((c) => c.amen.length).slice(0, 6);
+    if (!withA.length) return '';
+    const mySet = new Set(s.myAmen.map(nrm));
+    const chips = s.myAmen.map((a) => `<span style="display:inline-block;border:1px solid ${LGT};padding:2px 7px;margin:2px 3px 0 0;font-size:10px">${esc(a)}</span>`).join('');
+    const rowsH = withA.map((c) => {
+        const cs = new Set(c.amen.map(nrm));
+        const falta = s.myAmen.filter((a) => !cs.has(nrm(a)));       // el tuyo tiene, el suyo no
+        const extra = c.amen.filter((a) => !mySet.has(nrm(a)));      // el suyo tiene, el tuyo no
+        const dif = `${falta.length ? `<span style="color:${RED}">− ${esc(falta.slice(0, 6).join(', '))}</span>` : ''}${falta.length && extra.length ? '<br>' : ''}${extra.length ? `<span style="color:${SEA}">+ ${esc(extra.slice(0, 6).join(', '))}</span>` : ''}${!falta.length && !extra.length ? 'mismas amenidades' : ''}`;
+        return `<tr><td>${esc(String(c.street || c.dev || c.zona || '—').slice(0, 30))}${c.dev ? `<br><span style="color:${GRY};font-size:9px">${esc(strip(c.dev))}</span>` : ''}</td><td class="nw">${c.amen.length}</td><td style="font-size:10px;line-height:1.4">${dif}</td></tr>`;
+    }).join('');
+    return `<div style="margin-top:22px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Amenidades: tu edificio vs. comparables</div>
+      <div style="font-size:10px;color:${GRY};margin-bottom:4px">Tu edificio (${s.myAmen.length}): ${chips}</div>
+      <table><tr><th>Edificio</th><th># amenidades</th><th>Diferencia vs tu edificio (− le falta · + tiene de más)</th></tr>${rowsH}</table></div>`;
+};
+
+export async function renderFicha(id: string, opts?: { token?: string }): Promise<{ code: string; html: string } | null> {
+    const moreHref = `/ficha/${encodeURIComponent(id)}/comparables${opts?.token ? `?token=${encodeURIComponent(opts.token)}` : ''}`;
     let oid: ObjectId;
     try { oid = new ObjectId(id); } catch { return null; }
     const db = await getDb();
@@ -65,6 +200,11 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const typ = (P.type as string) ?? null;
     const ppm2 = val && m2 ? val / m2 : null;
     const code = (P.internalId as string) ?? id;
+    const rec = num(dig(P, 'attributes', 'suites'));
+    const myLoc = (dig(P, 'address', 'location', 'coordinates') as number[]) || [];
+    const myLat = typeof myLoc[1] === 'number' ? myLoc[1] : null, myLng = typeof myLoc[0] === 'number' ? myLoc[0] : null;
+    const myAmen = svcAmen(P);
+    const devName = (dig(P, 'development', 'name') as string)?.trim() || null;
     const broker = [dig(P, 'agent', 'firstName'), dig(P, 'agent', 'lastName')].filter(Boolean).map(String).join(' ').trim();
     const cat = (dig(P, 'portals', 'inmuebles24', 'type') as string) ?? null;
     const mlt = (dig(P, 'portals', 'mercadolibre', 'type') as string) ?? null;
@@ -137,8 +277,11 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     const catMs = new Map<PromoCat, number>();
     const catLeads = new Map<PromoCat, number>();
     for (const s of pspans) catMs.set(s.cat, (catMs.get(s.cat) || 0) + (s.b - s.a));
+    // Solo leads originados en Inmuebles24: la categoría de promoción es un concepto de i24, así que
+    // los leads de otras fuentes (redes, WhatsApp, otros portales) NO se atribuyen a estas categorías.
+    const i24Leads = leads.filter((l) => classifySource(l.source as string) === 'Inmuebles24');
     let leadsMedidos = 0;
-    for (const l of leads) {
+    for (const l of i24Leads) {
         const c = l.createdAt instanceof Date ? (l.createdAt as Date).getTime() : null;
         if (c == null || c < pT0) continue;
         for (const s of pspans) { if (c >= s.a && c < s.b) { catLeads.set(s.cat, (catLeads.get(s.cat) || 0) + 1); leadsMedidos++; break; } }
@@ -194,44 +337,17 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     if (cz.length < 5 && city) { scope = city; cz = await cierres({ 'address.city.name': city }); }
     if (cz.length < 5 && state) { scope = state; cz = await cierres({ 'address.state.name': state }); }
 
-    // comparables vivos + "qué te alcanza" (todos con link al aviso)
-    const fetchLive = async (geo: Document): Promise<Document[]> =>
-        db.collection('properties').find(
-            { 'status.last': 'published', 'listing.operation': 'sale', type: typ, ...geo, _id: { $ne: oid }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
-            { projection: { 'listing.value': 1, attributes: 1, 'address.neighborhood.name': 1, 'address.city.name': 1, 'address.street': 1 }, limit: 200 }
-        ).toArray();
-    const toComp = (e: Document): Comp => {
-        const ev = num(dig(e, 'listing', 'value')), em = num(dig(e, 'attributes', 'totalSurface'));
-        return { precio: ev, m2: em, ppm2: ev && em ? ev / em : null, rec: num(dig(e, 'attributes', 'suites')), ban: num(dig(e, 'attributes', 'bathrooms')), zona: (dig(e, 'address', 'neighborhood', 'name') as string) ?? (dig(e, 'address', 'city', 'name') as string) ?? null, url: `https://pulppo.com/propiedades/${String(e._id)}`, src: 'Pulppo', street: (dig(e, 'address', 'street') as string) ?? null };
-    };
-    let pool = city ? await fetchLive({ 'address.city.name': city }) : [];
-    if (pool.length < 3 && state) pool = await fetchLive({ 'address.state.name': state });
-    const poolC = pool.map(toComp);
-    // "Qué te alcanza" también contra el mercado (MLS): solo publicados, con link al portal (import.url).
-    const fetchMls = async (geo: Document): Promise<Comp[]> => {
-        const rows = await db.collection('mls').find(
-            { 'listing.operation': 'sale', type: typ, 'status.last': 'published', ...geo, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
-            { projection: { 'listing.value': 1, attributes: 1, 'address.neighborhood.name': 1, 'address.city.name': 1, 'address.street': 1, 'import.url': 1 }, limit: 250 }
-        ).toArray();
-        return rows.map((e) => {
-            const ev = num(dig(e, 'listing', 'value')), em = num(dig(e, 'attributes', 'totalSurface'));
-            return { precio: ev, m2: em, ppm2: ev && em ? ev / em : null, rec: num(dig(e, 'attributes', 'suites')), ban: num(dig(e, 'attributes', 'bathrooms')), zona: (dig(e, 'address', 'neighborhood', 'name') as string) ?? (dig(e, 'address', 'city', 'name') as string) ?? null, url: (dig(e, 'import', 'url') as string) ?? null, src: 'MLS', street: (dig(e, 'address', 'street') as string) ?? null };
-        });
-    };
-    let mls = city ? await fetchMls({ 'address.city.name': city }) : [];
-    if (mls.length < 3 && state) mls = await fetchMls({ 'address.state.name': state });
-    // Excluir la MISMA propiedad que se analiza (aunque venga del MLS por easybroker): por calle
-    // igual, o por precio+superficie casi idénticos (= el mismo anuncio duplicado en otro portal).
-    const selfStreet = nrm(street);
-    const isSelf = (c: Comp) => {
-        if (selfStreet && c.street && nrm(c.street) === selfStreet) return true;
-        if (val && c.precio && m2 && c.m2 && Math.abs(c.precio - val) / val < 0.01 && Math.abs(c.m2 - m2) / m2 < 0.02) return true;
-        return false;
-    };
-    const alcPool = [...poolC, ...mls].filter((c) => !isSelf(c)); // Pulppo + mercado, sin la propia
+    // comparables vivos (Pulppo + mercado MLS) + "qué te alcanza"
+    const subj: Subj = { oid, typ, city, state, val, m2, ppm2, col, rec, lat: myLat, lng: myLng, myAmen, street };
+    const alcPool = await buildAlcPool(db, subj);
     const dist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
-    const comps = [...poolC].filter((c) => !isSelf(c)).sort((a, b) => dist(a) - dist(b)).slice(0, 6);
-    const alcPrecio = val ? alcPool.filter((c) => c.precio && c.precio >= 0.9 * val && c.precio <= 1.1 * val).sort((a, b) => Math.abs((a.precio as number) - val) - Math.abs((b.precio as number) - val)).slice(0, 6) : [];
+    const comps = alcPool.filter((c) => c.src === 'Pulppo').sort((a, b) => dist(a) - dist(b)).slice(0, 6);
+    // "Qué te alcanza por el mismo presupuesto": ranking por qué tan ad-hoc es → top 10 en la ficha, resto en /comparables.
+    const alcRanked = rankAlcance(alcPool, subj);
+    const alcTop = alcRanked.slice(0, 10);
+    const alcMore = Math.max(0, alcRanked.length - 10);
+    const alcInsights = alcGeneralInsights(alcRanked, subj);
+    // "$/m² similar" queda como referencia secundaria.
     const alcPpm2 = ppm2 ? alcPool.filter((c) => c.ppm2 && c.ppm2 >= 0.85 * ppm2 && c.ppm2 <= 1.15 * ppm2).sort((a, b) => Math.abs((a.ppm2 as number) - ppm2) - Math.abs((b.ppm2 as number) - ppm2)).slice(0, 6) : [];
     const compPpm = comps.map((c) => c.ppm2).filter((x): x is number => x != null);
     const avgPpm = compPpm.length ? compPpm.reduce((a, b) => a + b, 0) / compPpm.length : null;
@@ -252,7 +368,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     if (col && nid) { const s = await zoneStats('filters.addresses.neighborhood.name', col, 'address.neighborhood.id', nid); if (s.dem >= 15 && s.ofe >= 3) { zonaLbl = col; zdem = s.dem; zofe = s.ofe; } }
     if (!zonaLbl && city && cityId) { const s = await zoneStats('filters.addresses.city.name', city, 'address.city.id', cityId); if (s.dem >= 15 && s.ofe >= 3) { zonaLbl = city; zdem = s.dem; zofe = s.ofe; } }
     const zratio = zofe ? zdem / zofe : 0;
-    const zppms = [...mls, ...poolC].map((c) => c.ppm2).filter((x): x is number => x != null);
+    const zppms = alcPool.map((c) => c.ppm2).filter((x): x is number => x != null);
     const zoneMed = zppms.length ? median(zppms) : null;
     let zread = '';
     if (zonaLbl) {
@@ -375,8 +491,8 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
     ${pspans.length ? `<div style="position:relative;height:16px;background:${LGT}">${promoBar}</div>
     <div style="display:flex;justify-content:space-between;font-size:9px;color:${GRY};margin-top:3px"><span>${fdate(new Date(pT0))}</span><span>hoy</span></div>
     <div style="font-size:10px;color:${BLK};margin-top:6px">${promoLegend}</div>
-    <table style="margin-top:8px"><tr><th>Categoría</th><th>Tiempo</th><th>Leads</th><th>Leads/mes</th></tr>${catRows}</table>
-    <div style="font-size:9px;color:${GRY};margin-top:2px">${leadsMedidos} leads en el periodo medido (desde ${fdate(new Date(pT0))}). Leads/mes normaliza por los días en cada categoría.</div>` : ''}
+    <table style="margin-top:8px"><tr><th>Categoría</th><th>Tiempo</th><th>Leads i24</th><th>Leads i24/mes</th></tr>${catRows}</table>
+    <div style="font-size:9px;color:${GRY};margin-top:2px">Solo leads originados en Inmuebles24 (${leadsMedidos} de ${leads.length} históricos) desde ${fdate(new Date(pT0))}; leads de redes, WhatsApp u otros portales no se atribuyen a estas categorías. Leads/mes normaliza por los días en cada categoría.</div>` : ''}
     <div class="eyebrow" style="color:${BLK};margin:14px 0 2px">MercadoLibre — estado actual</div>
     <div style="font-size:12px">${mlLine}</div>
   </div>`;
@@ -459,7 +575,7 @@ export async function renderFicha(id: string): Promise<{ code: string; html: str
   <div class="header"><div>
     <div class="eyebrow" style="color:${YEL}">Ficha de desempeño · ${esc(code)}</div>
     <h1>${esc(street || code)}</h1>
-    <div class="sub">${esc(typ)} · ${esc(opTxt)} · ${esc(col)}, ${esc(city)}</div>
+    <div class="sub">${esc(typ)} · ${esc(opTxt)} · ${esc(col)}, ${esc(city)}${devName ? ` · ${esc(devName)}` : ''}</div>
     <div class="price">${money(val)} · ${m2 ?? '—'} m² · ${money(ppm2)}/m²</div>
     <div>${broker ? `<span class="tag">${esc(broker)}</span>` : ''}<span class="tag">${esc(dig(P, 'company', 'name'))}</span><span class="tag">${catLbl}</span><span class="tag">Publicada ${pub ? pub.toISOString().slice(0, 10) : '—'}${meses != null ? ` (${meses} meses)` : ''}</span></div>
   </div>
@@ -492,12 +608,16 @@ ${comportHtml}
     </div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`}
     <div style="margin-top:24px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Con qué compite en la zona</div>
       <table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table></div>
-    <div class="two">
-      <div><div class="eyebrow" style="margin:20px 0 4px;color:${BLK}">Qué te alcanza por el mismo presupuesto</div>
-        <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPrecio)}</table></div>
-      <div><div class="eyebrow" style="margin:20px 0 4px;color:${BLK}">Qué te alcanza por $/m² similar</div>
-        <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>
+    <div style="margin-top:22px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Qué te alcanza por el mismo presupuesto</div>
+      <div style="font-size:10px;color:${GRY};margin-bottom:4px">Comparables vivos en tu mismo rango de precio (±10%), ordenados de más a menos parecidos a tu inmueble (colonia, cercanía, tamaño, presupuesto y amenidades).</div>
+      <table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcTop, subj)}</table>
+      ${alcMore ? `<div style="font-size:10px;margin-top:4px"><a href="${moreHref}" style="color:${SEA};font-weight:700">Ver los ${alcRanked.length} comparables →</a></div>` : ''}
+      ${amenCompareHtml(alcTop, subj)}
+      ${alcInsights.length ? `<div class="box" style="margin-top:16px"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : ''}
     </div>
+    <div style="margin-top:20px;opacity:.7"><div class="eyebrow" style="color:${GRY};margin-bottom:4px">Referencia · qué te alcanza por $/m² similar</div>
+      <div style="font-size:10px;color:${GRY};margin-bottom:4px">Menos relevante: mismo $/m² (±15%), como referencia de mercado.</div>
+      <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>
   </div>
 
   ${zonaLbl ? `<div class="sec"><div class="eyebrow">Insights de la zona · ${esc(zonaLbl)}</div><div class="accent"></div>
@@ -514,6 +634,58 @@ ${comportHtml}
     <div class="two"><div class="box"><div class="eyebrow">Insights</div><ul>${insights.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></div><div class="box"><div class="eyebrow">Plan de acción</div><ul>${plan.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div></div>
   </div>
   <div class="foot">Pulppo · 1·5·10 — Ficha generada ${new Date().toISOString().slice(0, 10)}. Datos en vivo de la comunidad Pulppo. Valuación del motor ACM.</div>
+</div>`;
+    return { code, html };
+}
+
+// "Ver más": lista COMPLETA de comparables por el mismo presupuesto (ranking ad-hoc), página propia.
+export async function renderComparables(id: string, opts?: { token?: string }): Promise<{ code: string; html: string } | null> {
+    let oid: ObjectId;
+    try { oid = new ObjectId(id); } catch { return null; }
+    const db = await getDb();
+    const P = await db.collection('properties').findOne({ _id: oid });
+    if (!P) return null;
+    const val = num(dig(P, 'listing', 'value'));
+    const m2 = num(dig(P, 'attributes', 'totalSurface')) ?? num(dig(P, 'attributes', 'surface'));
+    const col = (dig(P, 'address', 'neighborhood', 'name') as string) ?? null;
+    const street = (dig(P, 'address', 'street') as string)?.trim() || null;
+    const city = (dig(P, 'address', 'city', 'name') as string) ?? null;
+    const state = (dig(P, 'address', 'state', 'name') as string) ?? null;
+    const typ = (P.type as string) ?? null;
+    const ppm2 = val && m2 ? val / m2 : null;
+    const code = (P.internalId as string) ?? id;
+    const myLoc = (dig(P, 'address', 'location', 'coordinates') as number[]) || [];
+    const subj: Subj = {
+        oid, typ, city, state, val, m2, ppm2, col,
+        rec: num(dig(P, 'attributes', 'suites')),
+        lat: typeof myLoc[1] === 'number' ? myLoc[1] : null, lng: typeof myLoc[0] === 'number' ? myLoc[0] : null,
+        myAmen: svcAmen(P), street
+    };
+    const alcPool = await buildAlcPool(db, subj);
+    const alcRanked = rankAlcance(alcPool, subj);
+    const alcInsights = alcGeneralInsights(alcRanked, subj);
+    const backHref = `/ficha/${encodeURIComponent(id)}${opts?.token ? `?token=${encodeURIComponent(opts.token)}` : ''}`;
+    const html = `
+<style>
+.ficha-root{width:816px;margin:0 auto;background:#fff;padding:40px 44px;color:${BLK};font-family:'Nunito Sans',sans-serif;font-size:12px;line-height:1.45;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.ficha-root h1{font-family:'EB Garamond',serif;font-weight:400;font-size:30px;line-height:1;margin:0}
+.ficha-root .eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${GRY}}
+.ficha-root .accent{width:50px;height:1px;background:${YEL};margin:8px 0 14px}
+.ficha-root table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}.ficha-root th,.ficha-root td{text-align:left;padding:5px 6px;border-bottom:1px solid ${LGT};vertical-align:top}
+.ficha-root td.nw{white-space:nowrap}.ficha-root th{font-weight:700;color:${GRY};text-transform:uppercase;font-size:9px;letter-spacing:.06em}
+.ficha-root .box{background:${LGT};padding:16px 18px;margin-top:16px}.ficha-root ul{margin-left:16px}.ficha-root li{margin:4px 0;list-style:disc}
+@media print{.ficha-root{margin:0;padding:24px 30px}.fx-noprint{display:none!important}@page{size:Letter;margin:0}}
+</style>
+<div class="ficha-root">
+  <div class="eyebrow" style="color:${SEA}">Qué te alcanza por el mismo presupuesto · ${esc(code)}</div>
+  <h1>${esc(street || code)}</h1>
+  <div style="font-size:12px;color:${GRY};margin-top:6px">${esc(typ)} · ${esc(col)}, ${esc(city)} · ${money(val)} · ${m2 ?? '—'} m² · ${money(ppm2)}/m²</div>
+  <div class="fx-noprint" style="margin-top:8px"><a href="${backHref}" style="color:${SEA};font-weight:700;font-size:11px">← Volver a la ficha</a></div>
+  <div class="accent" style="margin-top:14px"></div>
+  <div style="font-size:11px;color:${GRY};margin-bottom:4px">${alcRanked.length} comparables vivos en tu mismo rango de precio (±10%), ordenados de más a menos parecidos a tu inmueble.</div>
+  <table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcRanked, subj)}</table>
+  ${amenCompareHtml(alcRanked, subj)}
+  ${alcInsights.length ? `<div class="box"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : ''}
 </div>`;
     return { code, html };
 }

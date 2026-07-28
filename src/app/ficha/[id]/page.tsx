@@ -9,9 +9,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function FichaPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
-    const ficha = await renderFicha(id);
-    if (!ficha) notFound();
     const token = await fichaToken(id);
+    const ficha = await renderFicha(id, { token });
+    if (!ficha) notFound();
     return (
         <>
             <div className="fx-noprint" style={{ position: 'fixed', top: 12, right: 12, zIndex: 50, display: 'flex', gap: 8 }}>

@@ -8,8 +8,8 @@ export async function middleware(req: NextRequest) {
     const email = req.cookies.get('cm-user')?.value;
     if (isAllowed(email)) return NextResponse.next();
 
-    // Acceso público a una ficha con token válido (link para brokers, sin login).
-    const m = req.nextUrl.pathname.match(/^\/ficha\/([^/]+)\/?$/);
+    // Acceso público a una ficha (y su "ver más" de comparables) con token válido (link para brokers, sin login).
+    const m = req.nextUrl.pathname.match(/^\/ficha\/([^/]+)(?:\/comparables)?\/?$/);
     if (m) {
         const token = req.nextUrl.searchParams.get('token');
         if (token && token === (await fichaToken(decodeURIComponent(m[1])))) return NextResponse.next();
