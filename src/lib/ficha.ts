@@ -45,7 +45,7 @@ const promoCat = (t: string | null | undefined, s: string | null | undefined): P
 const PROMOLBL: Record<PromoCat, string> = { Super: 'Super destacado', Destacado: 'Destacado', Simple: 'Simple', Offline: 'Offline', Otro: 'Otro' };
 const PROMORD: PromoCat[] = ['Super', 'Destacado', 'Simple', 'Offline', 'Otro'];
 
-interface Comp { precio: number | null; m2: number | null; ppm2: number | null; rec: number | null; ban: number | null; zona: string | null; col: string | null; url: string | null; src: string; street: string | null; dev: string | null; amen: string[]; lat: number | null; lng: number | null }
+interface Comp { precio: number | null; m2: number | null; ppm2: number | null; rec: number | null; ban: number | null; zona: string | null; col: string | null; url: string | null; src: string; street: string | null; dev: string | null; desc: string | null; amen: string[]; lat: number | null; lng: number | null }
 // Amenidades = servicios comunes del edificio (services con type===1); type===2 son características
 // interiores del depto (sala, comedor…) y no cuentan como amenidad.
 const svcAmen = (e: Document | null | undefined): string[] =>
@@ -69,11 +69,11 @@ const toComp = (e: Document, src: 'Pulppo' | 'MLS'): Comp => {
         zona: (dig(e, 'address', 'neighborhood', 'name') as string) ?? (dig(e, 'address', 'city', 'name') as string) ?? null,
         col: (dig(e, 'address', 'neighborhood', 'name') as string) ?? null,
         url, src, street: (dig(e, 'address', 'street') as string) ?? null,
-        dev: (dig(e, 'development', 'name') as string)?.trim() || null, amen: svcAmen(e),
+        dev: (dig(e, 'development', 'name') as string)?.trim() || null, desc: (dig(e, 'listing', 'description') as string) ?? null, amen: svcAmen(e),
         lat: typeof loc[1] === 'number' ? loc[1] : null, lng: typeof loc[0] === 'number' ? loc[0] : null
     };
 };
-const COMP_PROJ = { 'listing.value': 1, attributes: 1, 'address.neighborhood.name': 1, 'address.city.name': 1, 'address.street': 1, 'address.location': 1, services: 1, 'development.name': 1 };
+const COMP_PROJ = { 'listing.value': 1, 'listing.description': 1, attributes: 1, 'address.neighborhood.name': 1, 'address.city.name': 1, 'address.street': 1, 'address.location': 1, services: 1, 'development.name': 1 };
 
 // Datos del inmueble analizado que necesita la sección "Qué te alcanza" (comparte renderFicha y la
 // página de "ver más"). Se deriva del documento de la propiedad.
@@ -134,11 +134,10 @@ const GEN_RE = /renta\s*[-/]\s*venta|venta\s*[-/]\s*renta|se\s+vende\s+o\s+renta
 const NOISE_TAIL = new Set(['cuajimalpa', 'cdmx', 'cuajimalpa de morelos', 'ciudad de mexico', 'mexico', 'morelos', 'col']);
 const titleCase = (s: string) => s.split(/\s+/).map((w, i) => (i > 0 && SMALL.has(w.toLowerCase()) ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())).join(' ');
 const cleanStreet = (s: string) => s.split('(')[0].replace(/\bdepto\.?\b.*/i, '').trim();
-// Extrae el nombre propio del título de marketing del MLS (o cae a la colonia).
-const buildingName = (title: string | null, col: string | null): string => {
-    const fallback = col ? strip(col) : '—';
+// Paso 1: intentar sacar el nombre propio del título de marketing del MLS. null si no sale limpio.
+const nameFromTitle = (title: string | null): string | null => {
     const t0 = (title || '').trim();
-    if (!t0) return fallback;
+    if (!t0) return null;
     const t = t0.split(/[|(]/)[0];
     const ens = [...t.toLowerCase().matchAll(/\ben\b/g)];
     let cand = ens.length ? t.slice((ens[ens.length - 1].index ?? 0) + 2) : t;
@@ -148,11 +147,38 @@ const buildingName = (title: string | null, col: string | null): string => {
     while (parts.length >= 2 && NOISE_TAIL.has(nrm(parts.slice(-2).join(' ')))) parts = parts.slice(0, -2);
     while (parts.length && NOISE_TAIL.has(nrm(parts[parts.length - 1]))) parts = parts.slice(0, -1);
     cand = strip(parts.join(' '));
-    if (cand.replace(/\s/g, '').length < 3 || ['venta', 'renta', 'cuajimalpa', 'cdmx'].includes(nrm(cand))) return fallback;
+    if (cand.replace(/\s/g, '').length < 3 || ['venta', 'renta', 'cuajimalpa', 'cdmx'].includes(nrm(cand))) return null;
     return titleCase(cand).slice(0, 26);
 };
+// Paso 2: si el título no dio nombre, buscar en la descripción tras una señal fuerte (residencial/edificio/
+// torre/desarrollo/condominio...) un nombre propio limpio que ADEMÁS aporte algo distinto a la colonia.
+const saLower = (w: string) => w.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const DESC_KEY = /(?:residencial|edificio|torre|desarrollo|condominio|conjunto|complejo|privada)\s+([^,.\n;:]+)/gi;
+const DESC_STOP = new Set(['esta', 'situado', 'situada', 'ubicado', 'ubicada', 'cuenta', 'con', 'dispone', 'es', 'muy', 'exclusivo', 'exclusiva', 'lujoso', 'lujosa', 'amplio', 'amplia', 'nuevo', 'nueva', 'solo', 'sola', 'sobre', 'para', 'tiene', 'ofrece', 'se', 'un', 'una', 'gran', 'hermoso', 'hermosa', 'moderno', 'moderna', 'ideal', 'excelente', 'excelentes', 'magnifico', 'precioso', 'bonito', 'mas', 'menos', 'rodeado', 'tranquilo', 'cerca', 'frente', 'pequeno', 'residencial', 'edificio', 'torre', 'departamento', 'depto', 'penthouse', 'en', 'a', 'el', 'que', 'tipo', 'estilo', 'zona', 'col', 'colonia', 'ph', 'loft', 'casa', 'venta', 'renta', 'desarrollo', 'condominio', 'conjunto', 'complejo', 'privada', 'ubicacion', 'dos', 'tres', 'entrada', 'entradas', 'club', 'golf', 'tower', 'towers', 'park', 'hospital', 'av', 'avenida', 'calle', 'blvd', 'boulevard', 'paseo', 'carretera', 'carr', 'parque']);
+const nameFromDesc = (desc: string | null, col: string | null): string | null => {
+    if (!desc) return null;
+    const coln = nrm(col);
+    for (const m of desc.matchAll(DESC_KEY)) {
+        const out: string[] = [];
+        for (const w of m[1].trim().split(/\s+/)) {
+            const wl = saLower(w).replace(/[.,]/g, '');
+            if (SMALL.has(wl)) { if (out.length) { out.push(w); continue; } else break; }
+            if (DESC_STOP.has(wl) || !/^[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(w) || w.charAt(0) !== w.charAt(0).toUpperCase()) break;
+            out.push(w);
+            if (out.length >= 3) break;
+        }
+        while (out.length && SMALL.has(saLower(out[out.length - 1]))) out.pop();
+        const cand = strip(out.join(' ').trim());
+        const cn = nrm(cand);
+        if (cn.replace(/\s/g, '').length < 3 || (coln && (coln.includes(cn) || cn.includes(coln)))) continue;
+        return titleCase(cand).slice(0, 26);
+    }
+    return null;
+};
+// MLS: título → descripción → colonia.
+const buildingName = (c: Comp): string => nameFromTitle(c.street) ?? nameFromDesc(c.desc, c.col) ?? (c.col ? strip(c.col) : c.zona ?? '—');
 const buildingId = (c: Comp): { main: string; sub: string } => {
-    const main = c.dev ? strip(c.dev).slice(0, 26) : c.src === 'Pulppo' ? cleanStreet(c.street || '') || (c.zona ?? '—') : buildingName(c.street, c.col);
+    const main = c.dev ? strip(c.dev).slice(0, 26) : c.src === 'Pulppo' ? cleanStreet(c.street || '') || (c.zona ?? '—') : buildingName(c);
     const colLbl = c.col ? strip(c.col) : c.zona || '';
     const sub = (nrm(main) === nrm(colLbl) ? [c.src] : [colLbl, c.src]).filter(Boolean).join(' · ');
     return { main, sub };
