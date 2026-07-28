@@ -192,24 +192,32 @@ const matchColonia = (name: string, cols: ColMap): string | null => {
     for (const [k, disp] of cols) if (n === k || n.startsWith(k + ' ')) return disp;
     return null;
 };
-// MLS: nombre propio del título → de la descripción → colonia. Cuando solo hay colonia (no un edificio),
-// se muestra colonia + m² para que los comparables sean distinguibles y cotejables con la tabla.
-const buildingName = (c: Comp, cols: ColMap): string => {
+// Resuelve la identidad del comparable. named=false cuando NO se pudo identificar el edificio y solo
+// queda la colonia: esos van al FINAL de la tabla y el broker abre el link del aviso para ubicar cuál es.
+// MLS: nombre propio del título → de la descripción → colonia (del campo, o la que venga en el título).
+const resolveBuilding = (c: Comp, cols: ColMap): { name: string; named: boolean } => {
+    if (c.dev) return { name: strip(c.dev).slice(0, 26), named: true };
+    if (c.src === 'Pulppo') { const st = cleanStreet(c.street || ''); return st ? { name: st, named: true } : { name: c.zona ?? '—', named: false }; }
     const titleName = nameFromTitle(c.street);
     const titleCol = titleName ? matchColonia(titleName, cols) : null;
-    if (titleName && !titleCol) return titleName; // nombre propio real
+    if (titleName && !titleCol) return { name: titleName, named: true };
     const descName = nameFromDesc(c.desc, c.col);
-    if (descName && !matchColonia(descName, cols)) return descName;
-    // solo colonia: la del campo → la que venga en el título → zona/municipio, con m² para distinguir
+    if (descName && !matchColonia(descName, cols)) return { name: descName, named: true };
     const colLbl = (c.col ? strip(c.col) : '') || titleCol || (c.zona ?? '');
-    return colLbl ? (c.m2 ? `${colLbl} · ${c.m2} m²` : colLbl) : '—';
+    return { name: colLbl || '—', named: false };
 };
 const buildingId = (c: Comp, cols: ColMap): { main: string; sub: string } => {
-    const main = c.dev ? strip(c.dev).slice(0, 26) : c.src === 'Pulppo' ? cleanStreet(c.street || '') || (c.zona ?? '—') : buildingName(c, cols);
+    const main = resolveBuilding(c, cols).name;
     const colLbl = c.col ? strip(c.col) : c.zona || '';
     const startsCol = !!colLbl && nrm(main).startsWith(nrm(colLbl));
     const sub = (startsCol ? [c.src] : [colLbl, c.src]).filter(Boolean).join(' · ');
     return { main, sub };
+};
+// Ordena poniendo primero los comparables con edificio identificado; los "solo colonia" al final (rank estable).
+const orderNamedFirst = (ranked: Comp[], cols: ColMap): Comp[] => {
+    const named: Comp[] = [], rest: Comp[] = [];
+    for (const c of ranked) (resolveBuilding(c, cols).named ? named : rest).push(c);
+    return [...named, ...rest];
 };
 
 // Insight por fila: por qué es comparable (zona/cercanía) + qué tiene mejor tu depto o el suyo (tamaño, precio, $/m², amenidades).
@@ -435,8 +443,8 @@ export async function renderFicha(id: string, opts?: { token?: string }): Promis
     const knownCols = knownColsOf(alcPool, subj);
     const dist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
     const comps = alcPool.filter((c) => c.src === 'Pulppo').sort((a, b) => dist(a) - dist(b)).slice(0, 6);
-    // "Qué te alcanza por el mismo presupuesto": ranking por qué tan ad-hoc es → top 10 en la ficha, resto en /comparables.
-    const alcRanked = rankAlcance(alcPool, subj);
+    // "Qué te alcanza por el mismo presupuesto": ranking por qué tan ad-hoc es, con los "solo colonia" al final → top 10 en la ficha, resto en /comparables.
+    const alcRanked = orderNamedFirst(rankAlcance(alcPool, subj), knownCols);
     const alcTop = alcRanked.slice(0, 10);
     const alcMore = Math.max(0, alcRanked.length - 10);
     const alcInsights = alcGeneralInsights(alcRanked, subj);
@@ -756,7 +764,7 @@ export async function renderComparables(id: string, opts?: { token?: string }): 
     };
     const alcPool = await buildAlcPool(db, subj);
     const knownCols = knownColsOf(alcPool, subj);
-    const alcRanked = rankAlcance(alcPool, subj);
+    const alcRanked = orderNamedFirst(rankAlcance(alcPool, subj), knownCols);
     const alcInsights = alcGeneralInsights(alcRanked, subj);
     const backHref = `/ficha/${encodeURIComponent(id)}${opts?.token ? `?token=${encodeURIComponent(opts.token)}` : ''}`;
     const html = `
