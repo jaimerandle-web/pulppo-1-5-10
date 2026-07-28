@@ -49,8 +49,13 @@ src/lib/digest.ts      Digest "Exclusivas de la semana · <Zona>": renderDigest(
                        tarjeta conserva su utm_campaign por propiedad (atribución de leads por propiedad).
 src/lib/marketing.ts   Cliente SendGrid Marketing/Single Sends (fetch, sin deps). Fase 2: getOrCreateList,
                        addContacts, createSingleSend (borrador), scheduleSingleSend/unschedule, listSingleSends
-                       + singleSendStats. Resuelve sender y grupo de baja solos (o por env). email.ts exporta
-                       withUnsubFooter() que inyecta el footer de baja obligatorio solo en el envío real.
+                       (paginado) + singleSendStats. Resuelve sender y grupo de baja solos (o por env). email.ts
+                       exporta withUnsubFooter() que inyecta el footer de baja obligatorio solo en el envío real.
+                       ANTI-DUPLICADO de propiedades (Mongo es read-only → la verdad vive en SendGrid): los
+                       códigos de cada digest se guardan en el `name` del Single Send (encodeCodesInName) y se
+                       leen de vuelta (claimedPropertyCodes/parseCodesFromName) para no reenviar una propiedad
+                       que ya está en un envío (borrador/programado/enviado, ventana 90d). plan/ la excluye y
+                       avisa (alreadySent); schedule/ re-renderiza el digest solo con las propiedades frescas.
 src/lib/elegibilidad.ts Evaluador 1·5·10: computeEval(id) = datos + renderScorecard() = HTML. % de
                        aceptación (precio 40% = mix ACM·oferta·cierres + calidad 25% + comisión 20% +
                        demanda 15%) sobre gates (venta·residencial·no desarrollo) y material (foto·video·tour).

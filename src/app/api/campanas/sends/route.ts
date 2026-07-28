@@ -1,4 +1,4 @@
-import { listSingleSends, singleSendStats } from '@/lib/marketing';
+import { listSingleSends, singleSendStats, parseCodesFromName } from '@/lib/marketing';
 
 // Estado de las campañas 1·5·10 en SendGrid (Single Sends que arma este tool, por prefijo de nombre):
 // borrador / programado / enviado, con métricas (entregados, aperturas, clics, bajas) para los ya enviados.
@@ -15,7 +15,9 @@ export async function GET() {
             const sent = s.status === 'triggered' || s.status === 'sent';
             let stats = null;
             if (sent) { try { stats = await singleSendStats(id); } catch { stats = null; } }
-            return { id, name: s.name, status: s.status, send_at: s.send_at ?? null, stats };
+            const codes = parseCodesFromName(s.name);
+            const name = (s.name || '').replace(/\s*\[[^\]]+\]\s*$/, ''); // ocultar el sufijo de códigos
+            return { id, name, codes, status: s.status, send_at: s.send_at ?? null, stats };
         }));
 
         items.sort((a, b) => String(b.send_at || '').localeCompare(String(a.send_at || '')));

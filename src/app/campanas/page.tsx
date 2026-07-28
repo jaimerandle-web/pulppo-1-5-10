@@ -8,7 +8,8 @@ import { useRouter } from 'next/navigation';
 // Single Sends (Fase 2, human-in-the-loop: nada sale hasta que alguien aprueba).
 interface PlanProp { code: string; title: string; colonia: string | null; ciudad: string | null }
 interface PlanSend { key: string; zonaName: string; week: number; count: number; sendAt: string; date: string; props: PlanProp[] }
-interface Plan { start: string; hourUtc: number; sends: PlanSend[]; notFound: string[]; nota: string }
+interface PlanDup { code: string; status: string; sendAt: string | null }
+interface Plan { start: string; hourUtc: number; sends: PlanSend[]; notFound: string[]; alreadySent?: PlanDup[]; nota: string }
 interface Draft { key?: string; zonaName?: string; ok: boolean; error?: string; id?: string; status?: string; count?: number; props?: string[]; sendAt?: string; subject?: string }
 interface SendStats { delivered?: number; unique_opens?: number; unique_clicks?: number; unsubscribes?: number; bounces?: number }
 interface SendRow { id: string; name?: string; status?: string; send_at?: string | null; stats?: SendStats | null }
@@ -395,6 +396,11 @@ export default function CampanasPage() {
                         <div className="rounded-lg bg-[#fffdf5] px-3 py-2 text-sm text-neutral-700 border border-[#F6BE00]">{plan.nota}</div>
                         {plan.notFound.length > 0 && (
                             <div className="rounded-lg bg-[#fdeeea] px-3 py-2 text-xs text-[#A52003]">No encontradas: {plan.notFound.join(', ')}</div>
+                        )}
+                        {plan.alreadySent && plan.alreadySent.length > 0 && (
+                            <div className="rounded-lg bg-[#fffbe6] px-3 py-2 text-xs text-[#8a6d00] border border-[#F0E2A8]">
+                                Excluidas por ya estar en un envío (SendGrid): {plan.alreadySent.map((d) => `${d.code}${d.sendAt ? ` · ${d.sendAt.slice(0, 10)}` : ` · ${d.status}`}`).join(', ')}
+                            </div>
                         )}
                         <div className="flex flex-col gap-3">
                             {plan.sends.map((s) => (

@@ -168,8 +168,44 @@ export async function unscheduleSingleSend(id: string): Promise<void> {
 interface SgSingleSend { id: string | number; name?: string; status?: string; send_at?: string }
 
 export async function listSingleSends(): Promise<SgSingleSend[]> {
-    const r = await sg<{ result?: SgSingleSend[] }>('/marketing/singlesends?page_size=100');
-    return r.result || [];
+    let path: string = '/marketing/singlesends?page_size=100';
+    const out: SgSingleSend[] = [];
+    for (let guard = 0; guard < 20 && path; guard++) {
+        const r = await sg<{ result?: SgSingleSend[]; _metadata?: { next?: string } }>(path);
+        out.push(...(r.result || []));
+        const next = r._metadata?.next;
+        path = next ? next.replace(BASE, '') : '';
+    }
+    return out;
+}
+
+// --- Anti-duplicado de propiedades (Mongo es read-only, así que la fuente de verdad es SendGrid) ---
+// Los códigos de propiedad de cada digest se guardan en el `name` del Single Send como sufijo " [DLI-1,DLI-2]".
+// Así se pueden leer de vuelta con listSingleSends() para no reenviar una propiedad que ya salió/está en cola.
+const CODES_RE = /\[([^\]]+)\]\s*$/;
+export function encodeCodesInName(base: string, codes: string[]): string {
+    const tag = codes.length ? ` [${codes.map((c) => c.toUpperCase()).join(',')}]` : '';
+    return (base.slice(0, 99 - tag.length) + tag).slice(0, 100);
+}
+export function parseCodesFromName(name?: string): string[] {
+    const m = CODES_RE.exec(name || '');
+    return m ? m[1].split(',').map((c) => c.trim().toUpperCase()).filter(Boolean) : [];
+}
+export interface ClaimInfo { name: string; status: string; sendAt: string | null }
+// Propiedades ya comprometidas en un Single Send activo (borrador/programado/enviado) dentro de la ventana.
+// Los borradores (sin fecha) siempre cuentan; programados/enviados solo si caen dentro de windowDays.
+export async function claimedPropertyCodes(windowDays = 90): Promise<Map<string, ClaimInfo>> {
+    const sends = await listSingleSends();
+    const cutoff = Date.now() - windowDays * 864e5;
+    const map = new Map<string, ClaimInfo>();
+    for (const s of sends) {
+        const status = String(s.status || '');
+        if (status === 'canceled') continue;
+        const sendAt = s.send_at ? String(s.send_at) : null;
+        if (sendAt && new Date(sendAt).getTime() < cutoff) continue;
+        for (const code of parseCodesFromName(s.name)) if (!map.has(code)) map.set(code, { name: s.name || '', status, sendAt });
+    }
+    return map;
 }
 
 export interface SendStats { delivered?: number; opens?: number; unique_opens?: number; clicks?: number; unique_clicks?: number; unsubscribes?: number; bounces?: number }

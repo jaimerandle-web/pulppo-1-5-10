@@ -1,7 +1,7 @@
 import { withUnsubFooter } from '@/lib/email';
 import { renderDigest } from '@/lib/digest';
 import { buildZoneDigests, dedupZoneDigests } from '@/lib/audience';
-import { getOrCreateList, addContacts, createSingleSend } from '@/lib/marketing';
+import { getOrCreateList, addContacts, createSingleSend, encodeCodesInName, claimedPropertyCodes, type ClaimInfo } from '@/lib/marketing';
 
 // Fase 2, paso 2: POST { sends: [{ key, codes[≤3], sendAt, subject? }] }. Cada "send" es un correo digest
 // (una zona + un bloque de máx 3 propiedades). Va a la base de SU zona (dedup entre zonas). Crea la Lista
@@ -24,13 +24,23 @@ export async function POST(req: Request) {
     const byKey = new Map(digests.map((d) => [d.key, d]));
     const listOf = new Map<string, string>();   // zonaKey → listId (subir la base una sola vez por zona)
 
+    // Anti-duplicado de propiedades: nunca reenviar una que ya está en un Single Send (ni entre lotes ni
+    // dentro de este). Se re-renderiza el digest solo con las propiedades "frescas".
+    let claimed = new Map<string, ClaimInfo>();
+    try { claimed = await claimedPropertyCodes(); } catch { /* si SendGrid falla, se sigue sin el filtro */ }
+    const justUsed = new Set<string>();
+
     const out: Array<Record<string, unknown>> = [];
     for (const s of sendsIn) {
         const zonaKey = (s.key || '').split('#')[0];
         const d = byKey.get(zonaKey);
         try {
             if (!d || !d.rows.length) { out.push({ key: s.key, zonaName: d?.zonaName, ok: false, error: 'Base vacía' }); continue; }
-            const render = await renderDigest(d.zonaName, s.codes || [], { subject: s.subject });
+            const wanted = (s.codes || []).map((c) => c.toUpperCase());
+            const dup = wanted.filter((c) => claimed.has(c) || justUsed.has(c));
+            const codesFresh = wanted.filter((c) => !claimed.has(c) && !justUsed.has(c));
+            if (!codesFresh.length) { out.push({ key: s.key, zonaName: d.zonaName, ok: false, error: 'Todas las propiedades ya están en un envío', dup }); continue; }
+            const render = await renderDigest(d.zonaName, codesFresh, { subject: s.subject });
             if (!render) { out.push({ key: s.key, zonaName: d.zonaName, ok: false, error: 'No se pudo armar el digest' }); continue; }
 
             let listId = listOf.get(zonaKey);
@@ -41,11 +51,12 @@ export async function POST(req: Request) {
             }
 
             const dateTag = (s.sendAt || '').slice(0, 10);
-            const name = `1·5·10 · Exclusivas ${d.zonaName} · ${dateTag}`;
+            const name = encodeCodesInName(`1·5·10 · Exclusivas ${d.zonaName} · ${dateTag}`, render.codes);
             const html = withUnsubFooter(render.html);
             const send = await createSingleSend({ name, subject: render.subject, html, listId });
+            for (const c of render.codes) justUsed.add(c.toUpperCase());
 
-            out.push({ key: s.key, zonaName: d.zonaName, ok: true, id: send.id, status: send.status, listId, count: d.count, props: render.codes, sendAt: s.sendAt, subject: render.subject });
+            out.push({ key: s.key, zonaName: d.zonaName, ok: true, id: send.id, status: send.status, listId, count: d.count, props: render.codes, skipped: dup, sendAt: s.sendAt, subject: render.subject });
         } catch (e) {
             out.push({ key: s.key, zonaName: d?.zonaName, ok: false, error: e instanceof Error ? e.message : 'Error creando el borrador' });
         }
