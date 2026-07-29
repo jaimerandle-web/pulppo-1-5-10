@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { DataPayload } from '@/types';
 import { Combobox, Dropdown, Select } from '@/components/inputs';
 
 /* ------------------------------------------------------------------ *
@@ -11,7 +10,7 @@ import { Combobox, Dropdown, Select } from '@/components/inputs';
  * Aún NO conecta el motor de datos (gen_reporte_plus.py → endpoint TS).
  * ------------------------------------------------------------------ */
 
-const SEA = '#529999', RED = '#A52003', SOFT = '#212322', YEL = '#F6BE00', GRAY = '#B7B7B7';
+const SEA = '#529999', SOFT = '#212322', YEL = '#F6BE00', GRAY = '#B7B7B7';
 
 // Secciones del documento (el "hasta qué sí / qué no incluir").
 const SECCIONES = [
@@ -29,10 +28,22 @@ const SECCIONES = [
 function Card({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
     return (
         <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+            {/* título de sección en gris (jerarquía), lo que se elige va en soft black */}
             <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">{title}</p>
             {hint && <p className="mt-0.5 text-[11px] text-neutral-400">{hint}</p>}
             <div className="mt-3">{children}</div>
         </section>
+    );
+}
+
+// Etiqueta de cada control (lo que el usuario elige) → soft black.
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+    return (
+        <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: SOFT }}>{label}</p>
+            {children}
+            {hint && <p className="mt-1 text-[11px] text-neutral-400">{hint}</p>}
+        </div>
     );
 }
 
@@ -51,7 +62,7 @@ function Chips({ options, value, onChange, multi = true }: {
                     <button key={o} onClick={() => toggle(o)}
                         className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${on
                             ? 'border-transparent bg-[#212322] text-white'
-                            : 'border-neutral-300 bg-white hover:bg-neutral-50'}`}>
+                            : 'border-neutral-300 bg-white text-[#212322] hover:bg-neutral-50'}`}>
                         {o}
                     </button>
                 );
@@ -62,7 +73,7 @@ function Chips({ options, value, onChange, multi = true }: {
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
     return (
-        <button onClick={() => onChange(!on)} className="flex items-center gap-2.5 text-sm">
+        <button onClick={() => onChange(!on)} className="flex items-center gap-2.5 text-sm text-[#212322]">
             <span className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${on ? 'bg-[#529999]' : 'bg-neutral-300'}`}>
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </span>
@@ -71,27 +82,28 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
     );
 }
 
+type Row = { kam?: string; inmobiliaria?: string | null };
+
 export default function AnalisisGeneral() {
     const router = useRouter();
-    const [inmos, setInmos] = useState<string[]>([]);
-    const [kams, setKams] = useState<string[]>([]);
+    const [allInmos, setAllInmos] = useState<string[]>([]);
+    const [kams, setKams] = useState<string[]>(['(todos)']);
+    const [kamByInmo, setKamByInmo] = useState<Record<string, string>>({});
 
     // ---- estado de la configuración ----
     const [kam, setKam] = useState('(todos)');
     const [inmo, setInmo] = useState('(todas)');
     const [operacion, setOperacion] = useState('Ambas');
-    const [universo, setUniverso] = useState('Solo publicadas hoy');
     const [ventCierres, setVentCierres] = useState('Últimos 24 meses');
     const [ventDemanda, setVentDemanda] = useState('Últimos 12 meses');
-    const [referencias, setReferencias] = useState<string[]>(['ACM (valor estimado)', 'Oferta de zona', 'Cierres reales']);
-    const [taxonomia, setTaxonomia] = useState('Ale · óptimo / no competitivo / fuera de mercado');
-    const [umbralCaro, setUmbralCaro] = useState('+20% (recomendado)');
+    const [zombie, setZombie] = useState('Últimos 90 días');
+    const [referencias, setReferencias] = useState<string[]>(['ACM (valor estimado)', 'Oferta de zona', 'Cierres reales', 'Qué te alcanza por el mismo precio']);
     const [destacados, setDestacados] = useState(false);
-    const [zombieAncla, setZombieAncla] = useState('2026-06-01');
     const [secciones, setSecciones] = useState<string[]>(
         SECCIONES.filter((s) => s.id !== 'destacados').map((s) => s.id)
     );
-    const [cortes, setCortes] = useState<string[]>(['Por zona', 'Por tipo', 'Por ticket']);
+    const [cortes, setCortes] = useState<string[]>(['Por zona', 'Por tipo', 'Por ticket', 'Por operación']);
+    const [portalMode, setPortalMode] = useState('Todas las fuentes');
     const [portales, setPortales] = useState<string[]>(['Inmuebles24', 'MercadoLibre', 'EasyBroker']);
     const [recoEnfoque, setRecoEnfoque] = useState<string[]>(['Precio', 'Ficha', 'Diversificar canales']);
     const [recoTono, setRecoTono] = useState('Directivo');
@@ -99,21 +111,34 @@ export default function AnalisisGeneral() {
     const [audiencia, setAudiencia] = useState('KAM (interno)');
     const [benchmark, setBenchmark] = useState('vs promedio de mercado');
 
-    // Poblar inmobiliaria/KAM desde el mismo endpoint del home.
+    // Poblar inmobiliarias: TODAS las compañías con inventario (/api/companies).
+    // KAM y el mapa inmobiliaria→KAM salen de /api/data (solo cubre 1·5·10; es filtro opcional).
     useEffect(() => {
         (async () => {
             try {
-                const res = await fetch('/api/data');
-                if (res.status === 401) { router.push('/login'); return; }
-                const d: DataPayload = await res.json();
-                const rows = d.rows || [];
-                setKams(['(todos)', ...Array.from(new Set(rows.map((r) => r.kam).filter(Boolean))).sort()]);
-                setInmos(Array.from(new Set(rows.map((r) => r.inmobiliaria).filter(Boolean) as string[])).sort());
-            } catch { /* mock: si falla, los combos quedan vacíos */ }
+                const r = await fetch('/api/companies');
+                if (r.status === 401) { router.push('/login'); return; }
+                const d = await r.json();
+                if (Array.isArray(d.companies)) setAllInmos(d.companies);
+            } catch { /* mock */ }
+            try {
+                const r2 = await fetch('/api/data');
+                if (r2.ok) {
+                    const d2 = await r2.json();
+                    const rows: Row[] = d2.rows || [];
+                    setKams(['(todos)', ...Array.from(new Set(rows.map((r) => r.kam).filter(Boolean) as string[])).sort()]);
+                    const m: Record<string, string> = {};
+                    rows.forEach((r) => { if (r.inmobiliaria && r.kam) m[r.inmobiliaria] = r.kam; });
+                    setKamByInmo(m);
+                }
+            } catch { /* mock */ }
         })();
     }, [router]);
 
-    const inmosFiltrados = useMemo(() => inmos, [inmos]); // (si luego quieres filtrar por KAM, aquí)
+    const inmosFiltrados = useMemo(
+        () => (kam === '(todos)' ? allInmos : allInmos.filter((i) => kamByInmo[i] === kam)),
+        [allInmos, kam, kamByInmo]
+    );
 
     // Cuando se apaga destacados, quitar esa sección del checklist.
     useEffect(() => {
@@ -123,7 +148,6 @@ export default function AnalisisGeneral() {
     const seccionesElegidas = SECCIONES.filter((s) => secciones.includes(s.id) && (!s.needs || destacados));
 
     function generar() {
-        // MOCK — aquí irá el fetch a /api/analisis con toda la config.
         alert('Preview mock. Conectar /api/analisis (puerto de gen_reporte_plus.py) para datos reales.');
     }
 
@@ -149,54 +173,53 @@ export default function AnalisisGeneral() {
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
                 {/* ---------------- CONFIGURADOR ---------------- */}
                 <div className="flex flex-col gap-4">
-                    <Card title="1 · Inmobiliaria">
+                    <Card title="1 · Inmobiliaria" hint={`${allInmos.length || '—'} inmobiliarias con inventario publicado`}>
                         <div className="flex flex-col gap-3">
-                            <Dropdown label="KAM" value={kam} options={kams.length ? kams : ['(todos)']}
-                                onChange={(v) => { setKam(v); setInmo('(todas)'); }} />
-                            <Combobox label="Inmobiliaria" value={inmo} allLabel="(todas)"
-                                options={inmosFiltrados} placeholder="Buscar inmobiliaria…" onChange={setInmo} />
+                            <Field label="KAM (filtro opcional)">
+                                <Dropdown value={kam} options={kams} onChange={(v) => { setKam(v); setInmo('(todas)'); }} />
+                            </Field>
+                            <Field label="Inmobiliaria">
+                                <Combobox value={inmo} allLabel="(todas)" options={inmosFiltrados} placeholder="Buscar inmobiliaria…" onChange={setInmo} />
+                            </Field>
                         </div>
                     </Card>
 
-                    <Card title="Alcance de datos">
+                    <Card title="Alcance de datos" hint="Análisis sobre propiedades publicadas hoy.">
                         <div className="flex flex-col gap-3.5">
-                            <div>
-                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Operación</p>
+                            <Field label="Operación">
                                 <Chips multi={false} options={['Ambas', 'Venta', 'Renta']} value={[operacion]} onChange={(v) => setOperacion(v[0])} />
-                            </div>
-                            <Select label="Universo de propiedades" value={universo} onChange={setUniverso}
-                                options={['Solo publicadas hoy', 'Incluir vendidas y dadas de baja']} />
-                            <div>
-                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Cortes de segmentación</p>
+                            </Field>
+                            <Field label="Cortes de segmentación"
+                                hint="Quita “Por operación” para no comparar venta vs. renta; quita “Por ticket” para no hablar de rangos de precio.">
                                 <Chips options={['Por zona', 'Por tipo', 'Por ticket', 'Por operación']} value={cortes} onChange={setCortes} />
-                            </div>
+                            </Field>
                         </div>
                     </Card>
 
                     <Card title="2 · Rangos de comparables (fechas)">
-                        <div className="flex flex-col gap-3">
-                            <Select label="Comparables de cierres" value={ventCierres} onChange={setVentCierres}
-                                options={['Últimos 12 meses', 'Últimos 24 meses', 'Últimos 36 meses']} />
-                            <Select label="Demanda de zona (búsquedas)" value={ventDemanda} onChange={setVentDemanda}
-                                options={['Últimos 6 meses', 'Últimos 12 meses', 'YTD 2026']} />
-                            <div>
-                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Zombie · sin leads desde</p>
-                                <input type="date" value={zombieAncla} onChange={(e) => setZombieAncla(e.target.value)}
-                                    className="w-full rounded-xl border border-neutral-200 bg-white py-2.5 px-3.5 text-sm shadow-sm focus:border-[#F6BE00] focus:outline-none focus:ring-2 focus:ring-[#F6BE00]/20" />
-                            </div>
+                        <div className="flex flex-col gap-3.5">
+                            <Field label="Comparables de cierres">
+                                <Select value={ventCierres} onChange={setVentCierres} options={['Últimos 12 meses', 'Últimos 24 meses', 'Últimos 36 meses']} />
+                            </Field>
+                            <Field label="Demanda de zona (búsquedas)">
+                                <Select value={ventDemanda} onChange={setVentDemanda} options={['Últimos 6 meses', 'Últimos 12 meses', 'YTD 2026']} />
+                            </Field>
+                            <Field label="Zombie · sin leads en">
+                                <Select value={zombie} onChange={setZombie} options={['Últimos 30 días', 'Últimos 90 días', 'Últimos 6 meses', 'Totales']} />
+                            </Field>
                         </div>
                     </Card>
 
-                    <Card title="Referencias y reglas de precio">
-                        <div className="flex flex-col gap-3.5">
-                            <div>
-                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Referencias a mostrar</p>
-                                <Chips options={['ACM (valor estimado)', 'Oferta de zona', 'Cierres reales']} value={referencias} onChange={setReferencias} />
+                    <Card title="Referencias de precio">
+                        <div className="flex flex-col gap-3">
+                            <Field label="Referencias a mostrar">
+                                <Chips options={['ACM (valor estimado)', 'Oferta de zona', 'Cierres reales', 'Qué te alcanza por el mismo precio']}
+                                    value={referencias} onChange={setReferencias} />
+                            </Field>
+                            <div className="rounded-lg bg-[#F3F3F3] px-3 py-2.5 text-[11px] leading-relaxed" style={{ color: SOFT }}>
+                                El estado de precio lo trae el <b>ACM</b> (óptimo / no competitivo / fuera de mercado). Regla fija:
+                                <b> arriba de +15% sobre ACM = red flag</b>. No es configurable.
                             </div>
-                            <Select label="Taxonomía de precio" value={taxonomia} onChange={setTaxonomia}
-                                options={['Ale · óptimo / no competitivo / fuera de mercado', 'Competitivo / en línea / caro']} />
-                            <Select label="Umbral de “caro”" value={umbralCaro} onChange={setUmbralCaro}
-                                options={['+15%', '+20% (recomendado)', '+25%']} />
                         </div>
                     </Card>
 
@@ -207,7 +230,7 @@ export default function AnalisisGeneral() {
                                 const locked = !!s.needs && !destacados;
                                 const on = secciones.includes(s.id) && !locked;
                                 return (
-                                    <label key={s.id} className={`flex items-center gap-2.5 text-sm ${locked ? 'opacity-40' : 'cursor-pointer'}`}>
+                                    <label key={s.id} className={`flex items-center gap-2.5 text-sm text-[#212322] ${locked ? 'opacity-40' : 'cursor-pointer'}`}>
                                         <input type="checkbox" disabled={locked} checked={on}
                                             onChange={() => setSecciones((prev) => prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id])}
                                             className="h-4 w-4 accent-[#529999]" />
@@ -215,32 +238,45 @@ export default function AnalisisGeneral() {
                                     </label>
                                 );
                             })}
-                            <div className="mt-1">
-                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Portales en “qué mueve tus leads”</p>
-                                <Chips options={['Inmuebles24', 'MercadoLibre', 'EasyBroker', 'Otros']} value={portales} onChange={setPortales} />
+                            <div className="mt-2">
+                                <Field label="Leads por fuente (“qué mueve tus leads”)">
+                                    <Chips multi={false} options={['Todas las fuentes', 'Fuentes principales', 'Análisis general (sin desglose)']}
+                                        value={[portalMode]} onChange={(v) => setPortalMode(v[0])} />
+                                </Field>
+                                {portalMode === 'Fuentes principales' && (
+                                    <div className="mt-2.5">
+                                        <Chips options={['Inmuebles24', 'MercadoLibre', 'EasyBroker', 'Pulppo', 'Otros']} value={portales} onChange={setPortales} />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </Card>
 
                     <Card title="4 · Recomendaciones">
                         <div className="flex flex-col gap-3.5">
-                            <div>
-                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Enfoque</p>
+                            <Field label="Enfoque">
                                 <Chips options={['Precio', 'Ficha', 'Diversificar canales', 'Visibilidad']} value={recoEnfoque} onChange={setRecoEnfoque} />
-                            </div>
+                            </Field>
                             <div className="grid grid-cols-2 gap-3">
-                                <Select label="Tono" value={recoTono} onChange={setRecoTono} options={['Directivo', 'Sugerente']} />
-                                <Select label="Cantidad" value={recoCantidad} onChange={setRecoCantidad} options={['Top 3', 'Top 6', 'Todas']} />
+                                <Field label="Tono">
+                                    <Select value={recoTono} onChange={setRecoTono} options={['Directivo', 'Sugerente']} />
+                                </Field>
+                                <Field label="Cantidad">
+                                    <Select value={recoCantidad} onChange={setRecoCantidad} options={['Top 3', 'Top 6', 'Top 10']} />
+                                </Field>
                             </div>
                         </div>
                     </Card>
 
                     <Card title="Presentación">
-                        <div className="grid grid-cols-1 gap-3">
-                            <Select label="Audiencia / tono del documento" value={audiencia} onChange={setAudiencia}
-                                options={['KAM (interno)', 'Inmobiliaria (cliente)']} />
-                            <Select label="Benchmark" value={benchmark} onChange={setBenchmark}
-                                options={['Ninguno', 'vs promedio de mercado', 'vs su tier']} />
+                        <div className="flex flex-col gap-3.5">
+                            <Field label="Audiencia / tono del documento">
+                                <Select value={audiencia} onChange={setAudiencia} options={['KAM (interno)', 'Inmobiliaria (cliente)']} />
+                            </Field>
+                            <Field label="Benchmark"
+                                hint="“Promedio de mercado” = medianas de $/m² de la zona (oferta publicada y cierres) de TODAS las inmobiliarias en las mismas colonias/tickets. “Tier” = mismo nivel de aviso/volumen.">
+                                <Select value={benchmark} onChange={setBenchmark} options={['Ninguno', 'vs promedio de mercado', 'vs su tier']} />
+                            </Field>
                         </div>
                     </Card>
                 </div>
@@ -256,7 +292,6 @@ export default function AnalisisGeneral() {
                     </div>
 
                     <div id="preview-sheet" className="mx-auto max-w-[8.5in] rounded-lg border border-neutral-200 bg-white p-10 shadow-sm">
-                        {/* encabezado del documento (on-brand) */}
                         <p className="text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: SOFT }}>
                             Análisis de inventario · {audiencia === 'KAM (interno)' ? 'Uso interno KAM' : 'Para la inmobiliaria'}
                         </p>
@@ -265,11 +300,10 @@ export default function AnalisisGeneral() {
                             {inmo === '(todas)' ? 'Nombre de la inmobiliaria' : inmo}
                         </h2>
                         <p className="mt-1 text-xs" style={{ color: GRAY }}>
-                            {operacion} · {universo.toLowerCase()} · cierres {ventCierres.toLowerCase()} · demanda {ventDemanda.toLowerCase()}
+                            {operacion} · publicadas hoy · cierres {ventCierres.toLowerCase()} · demanda {ventDemanda.toLowerCase()} · zombie {zombie.toLowerCase()}
                             {benchmark !== 'Ninguno' && ` · ${benchmark}`}
                         </p>
 
-                        {/* fila de stats de ejemplo */}
                         <div className="mt-5 flex gap-2">
                             {[['114', 'propiedades'], ['53%', 'sobre mercado'], ['0.8', 'leads / prop'], ['23', 'listas para vender']].map(([n, l]) => (
                                 <div key={l} className="flex-1 bg-[#F3F3F3] p-3">
@@ -279,7 +313,6 @@ export default function AnalisisGeneral() {
                             ))}
                         </div>
 
-                        {/* índice de secciones elegidas */}
                         <div className="mt-6 space-y-3">
                             {seccionesElegidas.map((s, i) => (
                                 <div key={s.id} className="border-b border-neutral-100 pb-3">
@@ -288,7 +321,7 @@ export default function AnalisisGeneral() {
                                         <h3 className="text-[15px]" style={{ fontFamily: 'var(--font-serif)' }}>{s.label}</h3>
                                     </div>
                                     <p className="mt-1 pl-6 text-[11px] leading-relaxed text-neutral-500">
-                                        {previewLine(s.id, { referencias, taxonomia, cortes, portales, recoEnfoque, recoTono, recoCantidad })}
+                                        {previewLine(s.id, { referencias, cortes, portalMode, portales, recoEnfoque, recoTono, recoCantidad })}
                                     </p>
                                 </div>
                             ))}
@@ -307,14 +340,17 @@ export default function AnalisisGeneral() {
 
 // Línea descriptiva por sección, reflejando la configuración elegida.
 function previewLine(id: string, c: {
-    referencias: string[]; taxonomia: string; cortes: string[]; portales: string[];
+    referencias: string[]; cortes: string[]; portalMode: string; portales: string[];
     recoEnfoque: string[]; recoTono: string; recoCantidad: string;
 }): string {
+    const fuentes = c.portalMode === 'Fuentes principales'
+        ? c.portales.join(', ') || 'sin fuentes'
+        : c.portalMode === 'Análisis general (sin desglose)' ? 'sin desglose por fuente' : 'todas las fuentes';
     switch (id) {
-        case 'inventario': return `Distribución del inventario ${c.cortes.map((x) => x.toLowerCase()).join(', ')}, contra la demanda de cada zona.`;
-        case 'precio': return `Matriz precio × calidad × leads usando ${c.referencias.join(', ') || 'referencias de precio'}. Taxonomía: ${c.taxonomia.split('·')[0].trim().toLowerCase()}.`;
+        case 'inventario': return `Distribución del inventario ${c.cortes.map((x) => x.toLowerCase()).join(', ') || '(sin cortes)'}, contra la demanda de cada zona.`;
+        case 'precio': return `Matriz precio × calidad × leads usando ${c.referencias.join(', ') || 'referencias de precio'}. Estado de precio del ACM.`;
         case 'destacados': return 'Cómo se ha destacado el inventario y el lift de leads (L/L con vs. sin destacado).';
-        case 'funnel': return 'Embudo lead → visita → cierre por tipo de operación, con recap mensual.';
+        case 'funnel': return `Embudo lead → visita → cierre; leads por fuente: ${fuentes}.`;
         case 'yoy': return 'Comparación año contra año (2025 vs 2026) de inventario, leads y comisión.';
         case 'top10': return 'Propiedades con alta demanda y pocos leads, con la palanca accionable de cada una.';
         case 'reco': return `${c.recoCantidad} recomendaciones (${c.recoEnfoque.join(', ').toLowerCase() || 'sin enfoque'}), tono ${c.recoTono.toLowerCase()}.`;
