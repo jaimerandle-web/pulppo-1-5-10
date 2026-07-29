@@ -27,7 +27,7 @@ const SECCIONES = [
 // ---- primitivas de UI, en el look de la app ----
 function Card({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
     return (
-        <section className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+        <section className="rounded-[2px] border border-neutral-200 bg-white p-4">
             {/* título de sección en gris (jerarquía), lo que se elige va en soft black */}
             <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">{title}</p>
             {hint && <p className="mt-0.5 text-[11px] text-neutral-400">{hint}</p>}
@@ -60,7 +60,7 @@ function Chips({ options, value, onChange, multi = true }: {
                 const on = value.includes(o);
                 return (
                     <button key={o} onClick={() => toggle(o)}
-                        className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${on
+                        className={`rounded-[2px] border px-3 py-1.5 text-xs transition-colors ${on
                             ? 'border-transparent bg-[#212322] text-white'
                             : 'border-neutral-300 bg-white text-[#212322] hover:bg-neutral-50'}`}>
                         {o}
@@ -74,8 +74,8 @@ function Chips({ options, value, onChange, multi = true }: {
 function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
     return (
         <button onClick={() => onChange(!on)} className="flex items-center gap-2.5 text-sm text-[#212322]">
-            <span className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${on ? 'bg-[#529999]' : 'bg-neutral-300'}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            <span className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-[3px] transition-colors ${on ? 'bg-[#529999]' : 'bg-neutral-300'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-[2px] bg-white transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </span>
             <span>{label}</span>
         </button>
@@ -166,8 +166,8 @@ export default function AnalisisGeneral() {
                     </div>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-500">
-                    <span className="rounded-full bg-[#F6BE00]/20 px-2.5 py-1 font-semibold text-[#8a6d00]">Vista previa · datos de ejemplo</span>
-                    <a href="/" className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">← Inicio</a>
+                    <span className="rounded-[2px] bg-[#F6BE00]/20 px-2.5 py-1 font-semibold text-[#8a6d00]">Vista previa · datos de ejemplo</span>
+                    <a href="/" className="rounded-[2px] border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">← Inicio</a>
                 </div>
             </header>
 
@@ -217,7 +217,11 @@ export default function AnalisisGeneral() {
                                 <Chips options={['ACM (valor estimado)', 'Oferta de zona', 'Cierres reales', 'Qué te alcanza por el mismo precio']}
                                     value={referencias} onChange={setReferencias} />
                             </Field>
-                            <div className="rounded-lg bg-[#F3F3F3] px-3 py-2.5 text-[11px] leading-relaxed" style={{ color: SOFT }}>
+                            <label className="flex items-start gap-2.5 text-[11px] leading-relaxed text-[#212322]">
+                                <input type="checkbox" checked={mlsGeneral} onChange={() => setMlsGeneral((v) => !v)} className="mt-0.5 h-3.5 w-3.5 accent-[#529999]" />
+                                <span>Incluir también el <b>MLS general</b> en la oferta de zona (más cobertura, pero más sucio: pcom, inventario ya vendido sin limpiar).</span>
+                            </label>
+                            <div className="rounded-[2px] bg-[#F3F3F3] px-3 py-2.5 text-[11px] leading-relaxed" style={{ color: SOFT }}>
                                 El estado de precio lo trae el <b>ACM</b> (óptimo / no competitivo / fuera de mercado). Regla fija:
                                 <b> arriba de +15% sobre ACM = red flag</b>. No es configurable.
                             </div>
@@ -266,7 +270,7 @@ export default function AnalisisGeneral() {
                                     <Select value={recoCantidad} onChange={setRecoCantidad} options={['Top 3', 'Top 6', 'Top 10']} />
                                 </Field>
                             </div>
-                            <div className="rounded-lg bg-[#F3F3F3] px-3 py-2.5 text-[11px] leading-relaxed" style={{ color: SOFT }}>
+                            <div className="rounded-[2px] bg-[#F3F3F3] px-3 py-2.5 text-[11px] leading-relaxed" style={{ color: SOFT }}>
                                 Regla fija: <b>nunca recomienda priorizar renta sobre venta</b> (venta siempre prioriza por rendimiento).
                                 Los cortes de segmentación describen el inventario, <b>no</b> generan recomendaciones de mix.
                             </div>
@@ -279,14 +283,8 @@ export default function AnalisisGeneral() {
                                 <Select value={audiencia} onChange={setAudiencia} options={['KAM (interno)', 'Inmobiliaria (cliente)']} />
                             </Field>
                             <Field label="Benchmark"
-                                hint="“Promedio de mercado” = mix del MLS de Inmuebles24 (oferta publicada) + cierres reales de todas las inmobiliarias, por colonia/ticket. “Tier” = mismo nivel de aviso/volumen.">
-                                <Select value={benchmark} onChange={setBenchmark} options={['Ninguno', 'vs promedio de mercado', 'vs su tier']} />
-                                {benchmark === 'vs promedio de mercado' && (
-                                    <label className="mt-2 flex items-start gap-2.5 text-[11px] leading-relaxed text-[#212322]">
-                                        <input type="checkbox" checked={mlsGeneral} onChange={() => setMlsGeneral((v) => !v)} className="mt-0.5 h-3.5 w-3.5 accent-[#529999]" />
-                                        <span>Incluir también el <b>MLS general</b> (más cobertura, pero más sucio: pcom, inventario ya vendido sin limpiar).</span>
-                                    </label>
-                                )}
+                                hint="“Promedio de mercado” = mix del MLS de Inmuebles24 (oferta publicada) + cierres reales de todas las inmobiliarias, por colonia/ticket. “Mejores inmobiliarias” = referencia contra las de mejor desempeño (sin exponer su nivel).">
+                                <Select value={benchmark} onChange={setBenchmark} options={['Ninguno', 'vs promedio de mercado', 'vs mejores inmobiliarias']} />
                             </Field>
                         </div>
                     </Card>
@@ -297,12 +295,12 @@ export default function AnalisisGeneral() {
                     <div className="mb-3 flex items-center justify-between">
                         <p className="text-sm text-neutral-500">{seccionesElegidas.length} secciones · {inmo === '(todas)' ? 'sin inmobiliaria' : inmo}</p>
                         <div className="flex gap-2">
-                            <button onClick={() => window.print()} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50">🖨️ PDF</button>
-                            <button onClick={generar} className="rounded-lg bg-[#212322] px-4 py-1.5 text-sm font-semibold text-white hover:bg-black">Generar</button>
+                            <button onClick={() => window.print()} className="rounded-[2px] border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50">PDF</button>
+                            <button onClick={generar} className="rounded-[2px] bg-[#212322] px-4 py-1.5 text-sm font-semibold text-white hover:bg-black">Generar</button>
                         </div>
                     </div>
 
-                    <div id="preview-sheet" className="mx-auto max-w-[8.5in] rounded-lg border border-neutral-200 bg-white p-10 shadow-sm">
+                    <div id="preview-sheet" className="mx-auto max-w-[8.5in] rounded-[2px] border border-neutral-200 bg-white p-10">
                         <p className="text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: SOFT }}>
                             Análisis de inventario · {audiencia === 'KAM (interno)' ? 'Uso interno KAM' : 'Para la inmobiliaria'}
                         </p>
