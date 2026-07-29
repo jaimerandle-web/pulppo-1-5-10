@@ -110,6 +110,7 @@ export default function AnalisisGeneral() {
     const [recoCantidad, setRecoCantidad] = useState('Top 6');
     const [audiencia, setAudiencia] = useState('KAM (interno)');
     const [benchmark, setBenchmark] = useState('vs promedio de mercado');
+    const [mlsGeneral, setMlsGeneral] = useState(false);
 
     // Poblar inmobiliarias: TODAS las compañías con inventario (/api/companies).
     // KAM y el mapa inmobiliaria→KAM salen de /api/data (solo cubre 1·5·10; es filtro opcional).
@@ -265,6 +266,10 @@ export default function AnalisisGeneral() {
                                     <Select value={recoCantidad} onChange={setRecoCantidad} options={['Top 3', 'Top 6', 'Top 10']} />
                                 </Field>
                             </div>
+                            <div className="rounded-lg bg-[#F3F3F3] px-3 py-2.5 text-[11px] leading-relaxed" style={{ color: SOFT }}>
+                                Regla fija: <b>nunca recomienda priorizar renta sobre venta</b> (venta siempre prioriza por rendimiento).
+                                Los cortes de segmentación describen el inventario, <b>no</b> generan recomendaciones de mix.
+                            </div>
                         </div>
                     </Card>
 
@@ -274,8 +279,14 @@ export default function AnalisisGeneral() {
                                 <Select value={audiencia} onChange={setAudiencia} options={['KAM (interno)', 'Inmobiliaria (cliente)']} />
                             </Field>
                             <Field label="Benchmark"
-                                hint="“Promedio de mercado” = medianas de $/m² de la zona (oferta publicada y cierres) de TODAS las inmobiliarias en las mismas colonias/tickets. “Tier” = mismo nivel de aviso/volumen.">
+                                hint="“Promedio de mercado” = mix del MLS de Inmuebles24 (oferta publicada) + cierres reales de todas las inmobiliarias, por colonia/ticket. “Tier” = mismo nivel de aviso/volumen.">
                                 <Select value={benchmark} onChange={setBenchmark} options={['Ninguno', 'vs promedio de mercado', 'vs su tier']} />
+                                {benchmark === 'vs promedio de mercado' && (
+                                    <label className="mt-2 flex items-start gap-2.5 text-[11px] leading-relaxed text-[#212322]">
+                                        <input type="checkbox" checked={mlsGeneral} onChange={() => setMlsGeneral((v) => !v)} className="mt-0.5 h-3.5 w-3.5 accent-[#529999]" />
+                                        <span>Incluir también el <b>MLS general</b> (más cobertura, pero más sucio: pcom, inventario ya vendido sin limpiar).</span>
+                                    </label>
+                                )}
                             </Field>
                         </div>
                     </Card>
