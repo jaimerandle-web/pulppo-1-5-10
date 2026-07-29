@@ -321,7 +321,7 @@ export async function renderFicha(id: string, opts?: { token?: string }): Promis
     const mlStatus = dig(P, 'portals', 'mercadolibre', 'status') as string | null;
     const dval = acm && val ? ((val - acm) / acm) * 100 : null;
     const title = (dig(P, 'listing', 'title') as string) ?? '';
-    const desc = (dig(P, 'listing', 'extra', 'description') as string) ?? '';
+    const desc = (dig(P, 'listing', 'description') as string) ?? (dig(P, 'listing', 'extra', 'description') as string) ?? '';
     const words = desc.trim() ? desc.trim().split(/\s+/).length : 0;
     const zonaOk = !!(col && strip(col) && strip(col).split(/\s+/).some((w) => w.length > 3 && title.toLowerCase().includes(w.toLowerCase())));
     const tipoOk = !!(typ && title.toLowerCase().includes(typ.toLowerCase()));
@@ -398,7 +398,16 @@ export async function renderFicha(id: string, opts?: { token?: string }): Promis
     if (enSuper) { superSince = pspans[pspans.length - 1].a; for (let i = pspans.length - 2; i >= 0 && pspans[i].cat === 'Super'; i--) superSince = pspans[i].a; }
     const pctSuper = Math.round(((catMs.get('Super') || 0) / pTotal) * 100);
 
-    const vis = await db.collection('visits').countDocuments({ 'steps.property._id': oid, 'status.last': { $ne: 'cancelled' } });
+    // Visitas por VISITANTE ÚNICO (no por cita): un mismo contacto que vino varias veces cuenta 1. Se
+    // excluyen canceladas y se diferencia confirmadas (ya sucedieron) de solo-pendientes (aún no).
+    const visAgg = await db.collection('visits').aggregate([
+        { $match: { 'steps.property._id': oid, 'status.last': { $ne: 'cancelled' } } },
+        { $group: { _id: { $ifNull: ['$contact._id', { $ifNull: ['$contact.email', '$_id'] }] }, conf: { $max: { $cond: [{ $eq: ['$status.last', 'confirmed'] }, 1, 0] } } } },
+        { $group: { _id: null, visitantes: { $sum: 1 }, confirmados: { $sum: '$conf' } } }
+    ]).toArray();
+    const visConf = (visAgg[0]?.confirmados as number) ?? 0;   // visitantes con visita confirmada
+    const visPend = ((visAgg[0]?.visitantes as number) ?? 0) - visConf;   // visitantes solo con visita pendiente
+    const vis = visConf;   // el funnel/conversión usan las visitas reales (confirmadas)
     const ofertas = await db.collection('operations').countDocuments({ 'property._id': oid, 'status.last': { $in: [...ADVANCED] } });
 
     // ---- Comportamiento en el tiempo: vistas del anuncio (metrics type='view', TODAS las fuentes) + leads, por mes ----
@@ -549,7 +558,10 @@ export async function renderFicha(id: string, opts?: { token?: string }): Promis
     const vtxt = tv >= 0.2 ? '¡wow!' : tv >= 0.1 ? 'tasa ok' : 'tasa baja';
     const fstage = (lbl: string, n: number, w: number, inside = '') => `<div class="fstage"><span class="fslbl">${lbl}</span><span class="fstrack"><span class="fsbar" style="width:${Math.max(w, 0.6)}%"></span>${inside}</span><span class="fsn">${n}</span></div>`;
     const convInline = `<span class="fconvinline"><b style="color:${vcolor}">${(tv * 100).toFixed(0)}%</b> · ${vtxt}</span>`;
-    const funnel = fstage('Leads', leads.length, 100) + fstage('Visitas', vis, (100 * vis) / Math.max(leads.length, 1), convInline) + fstage('Ofertas', ofertas, (100 * ofertas) / Math.max(leads.length, 1));
+    // Etapa de Visitas: visitantes únicos confirmados, con las pendientes diferenciadas (aún no ocurren).
+    const pendSuffix = visPend ? `<span style="color:${GRY};font-weight:400;font-size:10px"> +${visPend} pend.</span>` : '';
+    const visStage = `<div class="fstage"><span class="fslbl">Visitas</span><span class="fstrack"><span class="fsbar" style="width:${Math.max((100 * vis) / Math.max(leads.length, 1), 0.6)}%"></span>${convInline}</span><span class="fsn">${vis}${pendSuffix}</span></div>`;
+    const funnel = fstage('Leads', leads.length, 100) + visStage + fstage('Ofertas', ofertas, (100 * ofertas) / Math.max(leads.length, 1));
     const maxF = Math.max(1, ...fuenteRows.map(([, v]) => v));
     const fuenteHtml = fuenteRows.map(([k, v]) => {
         const sp = fuenteSplit.get(k) || { cli: 0, ase: 0 };
