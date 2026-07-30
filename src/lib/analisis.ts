@@ -80,6 +80,13 @@ export interface AnalisisData {
     yoyMix: { year: number; sale: number; rent: number; com: number }[];
     yoyReading: string;
     top10: { code: string; nb: string; val: number; sp: number | null; leads: number; dz: number; lev: string[] }[];
+    destacados: {
+        sdNow: number; dNow: number; simpleNow: number; pctDest: number;
+        splits: { sd: { sale: number; rent: number }; d: { sale: number; rent: number }; simple: { sale: number; rent: number } };
+        monthly: { month: string; tiers: { tier: string; n: number }[]; dest: number }[];
+        llTier: { tier: string; saleLL: number | null; saleLeads: number; rentLL: number | null; rentLeads: number }[];
+        reading: string;
+    };
 }
 
 async function resolveCompany(db: Db, name: string): Promise<{ id: ObjectId; name: string }> {
@@ -438,6 +445,98 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const top10 = cand10.sort((a, b) => b.score - a.score).slice(0, 10)
         .map(({ code, nb, val, sp, leads, dz, lev }) => ({ code, nb, val, sp, leads, dz, lev }));
 
+    // ===================== DESTACADOS (nivel de aviso + L/L) =====================
+    const MES = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const TIER_ORDER = ['Súper destacado', 'Destacado', 'Simple', 'Offline'];
+    const MONTHS: [number, number][] = [];
+    for (let m = 1; m <= NOW.getUTCMonth() + 1; m++) MONTHS.push([NOW.getUTCFullYear(), m]);
+    const mkey = (y: number, m: number) => `${y}-${m}`;
+
+    const histProps = await db.collection('properties').find(
+        { 'company._id': CID, 'portals.inmuebles24': { $exists: true } },
+        { projection: { 'portals.inmuebles24.history': 1, 'portals.inmuebles24.type': 1, updatedAt: 1 } }
+    ).toArray();
+    const pid2seq = new Map<string, [Date, string | null][]>();
+    const monthTierAll: Record<string, Record<string, number>> = {};
+    const monthTierOp: Record<'sale' | 'rent', Record<string, Record<string, number>>> = { sale: {}, rent: {} };
+    for (const [y, m] of MONTHS) { monthTierAll[mkey(y, m)] = {}; monthTierOp.sale[mkey(y, m)] = {}; monthTierOp.rent[mkey(y, m)] = {}; }
+    for (const p of histProps) {
+        const i24 = (gv(p, 'portals', 'inmuebles24') || {}) as Document;
+        const seq = ((i24.history as Document[]) || [])
+            .map((h) => [asDt(h.timestamp), tierName(h.type)] as [Date | null, string | null])
+            .filter((x): x is [Date, string | null] => !!x[0]);
+        const cur = tierName(i24.type);
+        if (cur) seq.push([asDt(p.updatedAt) || NOW, cur]);
+        seq.sort((a, b) => a[0].getTime() - b[0].getTime());
+        pid2seq.set(String(p._id), seq);
+        const pop = pid2op.get(String(p._id));
+        for (const [y, m] of MONTHS) {
+            const end = monthEnd(y, m); let st: string | null = null;
+            for (const [dd, tt] of seq) { if (dd < end) st = tt; else break; }
+            if (st && st !== 'Offline') {
+                monthTierAll[mkey(y, m)][st] = (monthTierAll[mkey(y, m)][st] || 0) + 1;
+                if (pop === 'sale' || pop === 'rent') monthTierOp[pop][mkey(y, m)][st] = (monthTierOp[pop][mkey(y, m)][st] || 0) + 1;
+            }
+        }
+    }
+    const avmOp: Record<'sale' | 'rent', Record<string, number>> = { sale: {}, rent: {} };
+    for (const op of ['sale', 'rent'] as const) for (const t of TIER_ORDER)
+        avmOp[op][t] = MONTHS.reduce((s, [y, m]) => s + (monthTierOp[op][mkey(y, m)][t] || 0), 0);
+    const tierAt = (pid: string, d: Date): string | null => {
+        let st: string | null = null;
+        for (const [t, tt] of (pid2seq.get(pid) || [])) { if (t.getTime() <= d.getTime()) st = tt; else break; }
+        return st;
+    };
+    // leads YTD (únicos) atribuidos al nivel que tenía el aviso cuando llegó el contacto
+    const tlYtdOp: Record<'sale' | 'rent', Record<string, number>> = { sale: {}, rent: {} };
+    const dSeen = new Set<string>();
+    const dc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: YTD0 } },
+        { projection: { 'property._id': 1, createdAt: 1, 'contact.phone': 1, 'contact.email': 1, 'contact._id': 1 } });
+    for await (const l of dc) {
+        const d = asDt(l.createdAt); if (!d) continue;
+        const pid = String(gv(l, 'property', '_id')); const op = pid2op.get(pid);
+        if (op !== 'sale' && op !== 'rent') continue;
+        const who = gv(l, 'contact', 'phone') || gv(l, 'contact', 'email') || String(gv(l, 'contact', '_id') || l._id);
+        const k = `${pid}|${who}`; if (dSeen.has(k)) continue; dSeen.add(k);
+        const st = tierAt(pid, d);
+        if (st && st !== 'Offline') tlYtdOp[op][st] = (tlYtdOp[op][st] || 0) + 1;
+    }
+    const tierNowOp: Record<'sale' | 'rent', Record<string, number>> = { sale: {}, rent: {} };
+    for (const it of items) if (it.op === 'sale' || it.op === 'rent') { const t = it.tier || 'Sin i24'; tierNowOp[it.op][t] = (tierNowOp[it.op][t] || 0) + 1; }
+    const sdNow = (tierNowOp.sale['Súper destacado'] || 0) + (tierNowOp.rent['Súper destacado'] || 0);
+    const dNow = (tierNowOp.sale['Destacado'] || 0) + (tierNowOp.rent['Destacado'] || 0);
+    const simpleNow = (tierNowOp.sale['Simple'] || 0) + (tierNowOp.rent['Simple'] || 0);
+    const llTier = ['Súper destacado', 'Destacado', 'Simple'].map((t) => ({
+        tier: t,
+        saleLL: avmOp.sale[t] >= 3 ? (tlYtdOp.sale[t] || 0) / avmOp.sale[t] : null, saleLeads: tlYtdOp.sale[t] || 0,
+        rentLL: avmOp.rent[t] >= 3 ? (tlYtdOp.rent[t] || 0) / avmOp.rent[t] : null, rentLeads: tlYtdOp.rent[t] || 0,
+    }));
+    const boostOp = (op: 'sale' | 'rent'): number | null => {
+        const s = avmOp[op]['Simple'] >= 3 ? (tlYtdOp[op]['Simple'] || 0) / avmOp[op]['Simple'] : null;
+        const cand = ['Súper destacado', 'Destacado'].filter((t) => avmOp[op][t] >= 3).map((t) => (tlYtdOp[op][t] || 0) / avmOp[op][t]);
+        if (!s || !cand.length) return null;
+        return Math.max(...cand) / s;
+    };
+    const bv = boostOp('sale'), br = boostOp('rent');
+    const rindeTxt = (op: string, b: number | null) => b === null
+        ? `en ${op} casi no has destacado (sin datos para comparar)`
+        : b >= 1.15 ? `en ${op} destacar rinde ${b.toFixed(1)}× más` : `en ${op} destacar no rinde más que el simple`;
+    let destReading = `Con tus datos, ${rindeTxt('venta', bv)} y ${rindeTxt('renta', br)}.`;
+    if (sdNow + dNow === 0) destReading += ` Hoy tienes 0 avisos destacados — enfoca el impulso en tus ${joyas} propiedades competitivas y de buena calidad.`;
+    const destacados = {
+        sdNow, dNow, simpleNow, pctDest: (sdNow + dNow) / (N || 1),
+        splits: {
+            sd: { sale: tierNowOp.sale['Súper destacado'] || 0, rent: tierNowOp.rent['Súper destacado'] || 0 },
+            d: { sale: tierNowOp.sale['Destacado'] || 0, rent: tierNowOp.rent['Destacado'] || 0 },
+            simple: { sale: tierNowOp.sale['Simple'] || 0, rent: tierNowOp.rent['Simple'] || 0 },
+        },
+        monthly: MONTHS.map(([y, m]) => ({
+            month: MES[m], tiers: TIER_ORDER.map((t) => ({ tier: t, n: monthTierAll[mkey(y, m)][t] || 0 })),
+            dest: (monthTierAll[mkey(y, m)]['Súper destacado'] || 0) + (monthTierAll[mkey(y, m)]['Destacado'] || 0),
+        })),
+        llTier, reading: destReading,
+    };
+
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: leadsWinTotal / (N || 1), leadsLabel, ofertaLabel,
@@ -446,6 +545,6 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
         insightInv, insightPrecio,
         funnel, funnelReading, recos,
-        yoy, yoyMix, yoyReading, top10,
+        yoy, yoyMix, yoyReading, top10, destacados,
     };
 }
