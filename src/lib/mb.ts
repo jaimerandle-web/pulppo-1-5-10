@@ -3,6 +3,7 @@
 // precio vs. oferta MLS y vs. cierres Pulppo, competencia, calidad) + funnel comercial. Datos en vivo.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
+import { getKam } from './kam';
 
 const ADVANCED = new Set(['offer', 'offer_blocked', 'contract', 'paying', 'closed']);
 const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
@@ -201,4 +202,40 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         leads30, leads30prev, resp, respMedMin: median(allResp),
         calAltaPct: props.length ? Math.round((100 * nAlta) / props.length) : 0, benchAltaPct, props: rows
     };
+}
+
+// --- Índice para KAMs: recap de todas las inmobiliarias, con su KAM y liga a /mb/[companyId] ---
+export interface MBIndexRow { companyId: string; name: string; kam: string; nProps: number; nVenta: number; nRenta: number; calAltaPct: number; leads30: number }
+export async function fetchIndex(): Promise<MBIndexRow[]> {
+    const db = await getDb();
+    const pc = await db.collection('properties').aggregate([
+        { $match: { 'status.last': 'published', 'company._id': { $exists: true } } },
+        { $group: { _id: '$company._id', name: { $first: '$company.name' }, email: { $first: '$company.email' },
+            total: { $sum: 1 },
+            venta: { $sum: { $cond: [{ $eq: ['$listing.operation', 'sale'] }, 1, 0] } },
+            renta: { $sum: { $cond: [{ $eq: ['$listing.operation', 'rent'] }, 1, 0] } },
+            alta: { $sum: { $cond: [{ $eq: ['$qualityScore', 3] }, 1, 0] } } } }
+    ], { allowDiskUse: true }).toArray();
+    const cids = pc.map((r) => r._id as ObjectId);
+    const masters = await db.collection('agents').aggregate([
+        { $match: { type: 'master', 'company._id': { $in: cids } } },
+        { $group: { _id: '$company._id', n: { $sum: 1 } } }
+    ]).toArray();
+    const masterSet = new Set(masters.map((m) => String(m._id)));
+    const l30 = await db.collection('leads').aggregate([
+        { $match: { 'company._id': { $in: cids }, createdAt: { $gte: D30 } } },
+        { $group: { _id: '$company._id', n: { $sum: 1 } } }
+    ], { allowDiskUse: true }).toArray();
+    const l30Map = new Map(l30.map((r) => [String(r._id), r.n as number]));
+    const excl = (s: string) => /tuhabi|habi|prueba|test|demo/i.test(s);
+    const rows: MBIndexRow[] = [];
+    for (const r of pc) {
+        const id = String(r._id), name = (r.name as string) ?? '';
+        if (!masterSet.has(id) || excl(`${name} ${r.email ?? ''}`)) continue;
+        const total = r.total as number;
+        rows.push({ companyId: id, name, kam: getKam(name), nProps: total, nVenta: r.venta as number, nRenta: r.renta as number,
+            calAltaPct: total ? Math.round((100 * (r.alta as number)) / total) : 0, leads30: l30Map.get(id) ?? 0 });
+    }
+    rows.sort((a, b) => a.kam.localeCompare(b.kam) || b.nProps - a.nProps);
+    return rows;
 }
