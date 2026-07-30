@@ -108,14 +108,17 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const cloMap = await countBy('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': 'closed' });
 
     // --- mercado por zona ---
-    const demandNb = new Map<string, number>();
+    // demanda partida por operación: a cada propiedad se le asigna la demanda de SU operación (venta/renta).
+    const demandSale = new Map<string, number>(), demandRent = new Map<string, number>();
     if (nbids.length) {
         const dr = await db.collection('searches').aggregate([
             { $match: { 'filters.addresses.id': { $in: nbids }, createdAt: { $gte: YTD0 } } },
             { $unwind: '$filters.addresses' }, { $match: { 'filters.addresses.id': { $in: nbids } } },
-            { $group: { _id: '$filters.addresses.id', n: { $sum: 1 } } }
+            { $group: { _id: '$filters.addresses.id',
+                sale: { $sum: { $cond: [{ $eq: ['$filters.operation', 'sale'] }, 1, 0] } },
+                rent: { $sum: { $cond: [{ $eq: ['$filters.operation', 'rent'] }, 1, 0] } } } }
         ], { allowDiskUse: true }).toArray();
-        for (const r of dr) demandNb.set(String(r._id), r.n as number);
+        for (const r of dr) { demandSale.set(String(r._id), r.sale as number); demandRent.set(String(r._id), r.rent as number); }
     }
     const offNb = new Map<string, number[]>(), offCi = new Map<string, number[]>(), supplyNb = new Map<string, number>();
     if (nbids.length) {
@@ -166,7 +169,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const pub = dig(p, 'publishedAt');
         const dias = pub instanceof Date ? Math.max(0, Math.round((now - pub.getTime()) / 864e5)) : null;
         const leads = leadsMap.get(hex) ?? 0, vis = visMap.get(hex) ?? 0, vistas = viewMap.get(hex) ?? 0, ofertas = ofMap.get(hex) ?? 0, cierres = cloMap.get(hex) ?? 0;
-        const demanda = nb ? (demandNb.get(nb) ?? 0) : 0;
+        const demanda = nb ? ((op === 'sale' ? demandSale.get(nb) : op === 'rent' ? demandRent.get(nb) : 0) ?? 0) : 0;
         const calidad = CAL[num(dig(p, 'qualityScore')) ?? 2] ?? 'Media';
         const ag = dig(p, 'agent') as Document | undefined;
         const asesor = [dig(ag, 'firstName'), dig(ag, 'lastName')].filter(Boolean).join(' ').trim() || '—';

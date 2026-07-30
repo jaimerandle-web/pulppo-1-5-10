@@ -7,7 +7,7 @@ const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = 
 const R = 2; // design system Pulppo: esquinas cuadradas
 const money = (n?: number | null) => (n == null || isNaN(n) ? '—' : `$${Math.round(n).toLocaleString('en-US')}`);
 const f = (n: number) => n.toLocaleString('es-MX');
-const saludColor = (c: string) => (c === 'Alta' ? SEA : c === 'Baja' ? RED : '#666');
+const calidadColor = (c: string) => (c === 'Alta' ? SEA : c === 'Baja' ? RED : '#666');
 const vsCell = (v: number | null) => {
     if (v == null) return <span style={{ color: GRY }}>—</span>;
     const col = v > 10 ? RED : v < -5 ? SEA : '#555';
@@ -83,7 +83,7 @@ const COLS: Col[] = [
     { key: 'colonia', label: 'Colonia' }, { key: 'precio', label: 'Precio', num: true },
     { key: 'vsOferta', label: 'vs. oferta', num: true }, { key: 'vsCierres', label: 'vs. cierres', num: true },
     { key: 'compite', label: 'Compite', num: true }, { key: 'demanda', label: 'Demanda', num: true },
-    { key: 'calidad', label: 'Salud' }, { key: 'dias', label: 'Días', num: true },
+    { key: 'calidad', label: 'Calidad' }, { key: 'dias', label: 'Días', num: true },
     { key: 'vistas', label: 'Vistas', num: true }, { key: 'leads', label: 'Leads', num: true },
     { key: 'visitas', label: 'Visitas', num: true }, { key: 'ofertas', label: 'Ofertas', num: true }
 ];
@@ -141,23 +141,24 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
 
             <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
-                    <thead><tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)}>{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}</tr></thead>
+                    <thead><tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)}>{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}<th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Reporte</th></tr></thead>
                     <tbody>
                         {rows.map((p) => (
                             <tr key={p.id}>
-                                <td style={td}><Link href={`/ficha/${p.id}`} style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                <td style={td}><Link href={`/ficha/${p.id}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
                                 <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td><td style={{ ...td, color: GRY }}>{p.colonia}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{money(p.precio)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsCierres)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{p.compite ?? '—'}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.demanda)}</td>
-                                <td style={td}><span style={{ color: saludColor(p.calidad), fontWeight: 600 }}>{p.calidad}</span></td>
+                                <td style={td}><span style={{ color: calidadColor(p.calidad), fontWeight: 600 }}>{p.calidad}</span></td>
                                 <td style={{ ...td, textAlign: 'right', color: GRY }}>{p.dias ?? '—'}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.vistas)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.leads)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
+                                <td style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
                             </tr>
                         ))}
                     </tbody>
@@ -269,7 +270,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                 <tbody>
                                     {topOpp.map((p) => (
                                         <tr key={p.id}>
-                                            <td style={ttd}><Link href={`/ficha/${p.id}`} style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                            <td style={ttd}><Link href={`/ficha/${p.id}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
                                             <td style={{ ...ttd, color: GRY }}>{p.colonia}</td><td style={ttd}>{p.op}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{money(p.precio)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
@@ -301,7 +302,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <div>
                         <div style={eyebrow}>Generador de análisis</div><div style={accent} />
                         <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 30, margin: 0 }}>Análisis de tu inmobiliaria</h1>
-                        <div style={sub}>Reporte on-brand por inmobiliaria (salud, funnel, zonas, año vs. año) con desglose por asesor.</div>
+                        <div style={sub}>Reporte on-brand por inmobiliaria (calidad, funnel, zonas, año vs. año) con desglose por asesor.</div>
                         <div style={{ marginTop: 20, background: LGT, borderRadius: R, padding: '28px 24px', textAlign: 'center' }}>
                             <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22 }}>En construcción</div>
                             <div style={{ fontSize: 12, color: '#555', marginTop: 8, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>Aquí vivirá el generador del reporte de desempeño integrado y en vivo, con la vista partida por asesor/productor.</div>
