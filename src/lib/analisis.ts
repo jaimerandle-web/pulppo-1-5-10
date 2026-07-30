@@ -52,6 +52,7 @@ export interface AnalisisConfig {
     inmo: string;                 // nombre (regex case-insensitive)
     operacion?: string;           // 'Ambas' | 'Venta' | 'Renta'
     ventDemanda?: string;         // 'Últimos 6 meses' | 'Últimos 12 meses' | 'YTD 2026'
+    mlsGeneral?: boolean;         // oferta/zona contra el MLS i24 completo en vez de la red Pulppo
 }
 
 export interface AnalisisData {
@@ -60,7 +61,8 @@ export interface AnalisisData {
     N: number;
     opSplit: { sale: number; rent: number };
     llProp: number;               // leads YTD / N
-    zones: { nb: string; n: number; oferta: number; precio: number | null; dem: number; leads: number; cal: string }[];
+    ofertaLabel: string;          // "red Pulppo" | "MLS i24"
+    zones: { nb: string; n: number; oferta: number; vsZona: number | null; dem: number; leads: number }[];
     invVsDemand: { band: string; invPct: number; demPct: number; inv: number; dem: number }[];
     matrix: { q: string; cells: { p: string; n: number; ll: number }[] }[];
     priceLead: { cls: string; props: number; leads: number; ll: number }[];
@@ -103,21 +105,23 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         { projection: {
             listing: 1, type: 1, 'acm.price.value': 1, qualityScore: 1, pictures: 1,
             virtualTour: 1, 'address.neighborhood': 1, internalId: 1, publishedAt: 1,
-            'portals.inmuebles24.type': 1,
+            'portals.inmuebles24.type': 1, 'attributes.totalSurface': 1, 'attributes.roofedSurface': 1,
         } }
     ).toArray();
 
     type Item = { pid: ObjectId; nb: string | null; nbid: string | null; op: string | null;
-        val: number; sp: number | null; q3: number | null; tour: boolean; tier: string | null };
+        val: number; sp: number | null; ppm2: number | null; q3: number | null; tour: boolean; tier: string | null };
     const items: Item[] = pub.map((p) => {
         const nb = (gv(p, 'address', 'neighborhood') || {}) as Record<string, unknown>;
         const val = (num(gv(p, 'listing', 'value')) || 0);
         const acm = num(gv(p, 'acm', 'price', 'value'));
+        const m2 = num(gv(p, 'attributes', 'totalSurface')) || num(gv(p, 'attributes', 'roofedSurface'));
         return {
             pid: p._id as ObjectId,
             nb: (nb.name as string) || null, nbid: (nb.id as string) || null,
             op: (gv(p, 'listing', 'operation') as string) || null,
             val, sp: val && acm ? val / acm : null,
+            ppm2: val && m2 ? val / m2 : null,
             q3: num(p.qualityScore), tour: !!p.virtualTour,
             tier: tierName(gv(p, 'portals', 'inmuebles24', 'type')),
         };
@@ -172,23 +176,34 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const byNb = new Map<string, Item[]>();
     for (const it of items) if (it.nb) { const a = byNb.get(it.nb) || []; a.push(it); byNb.set(it.nb, a); }
     const topZones = [...byNb.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 7);
-    // "oferta" = total de propiedades publicadas en esa colonia (TODAS las inmobiliarias)
     const zoneNbids = [...new Set(topZones.map(([, its]) => its[0].nbid).filter(Boolean) as string[])];
-    const ofertaByNbid: Record<string, number> = {};
+    // Fuente de la "oferta" de la zona: red Pulppo (properties) o MLS i24 completo (mls).
+    const ofertaColl = cfg.mlsGeneral ? 'mls' : 'properties';
+    const ofertaLabel = cfg.mlsGeneral ? 'MLS i24' : 'red Pulppo';
+    const ofertaByNbid: Record<string, number> = {};       // # publicadas en la colonia
+    const zonePpm2: Record<string, number | null> = {};    // mediana $/m² de venta en la colonia
     if (zoneNbids.length) {
-        const agg = db.collection('properties').aggregate([
+        const aggN = db.collection(ofertaColl).aggregate([
             { $match: { 'status.last': 'published', 'address.neighborhood.id': { $in: zoneNbids } } },
             { $group: { _id: '$address.neighborhood.id', n: { $sum: 1 } } },
-        ]);
-        for await (const r of agg) ofertaByNbid[r._id as string] = r.n as number;
+        ], { allowDiskUse: true });
+        for await (const r of aggN) ofertaByNbid[r._id as string] = r.n as number;
+        const aggP = db.collection(ofertaColl).aggregate([
+            { $match: { 'status.last': 'published', 'listing.operation': 'sale',
+                'address.neighborhood.id': { $in: zoneNbids },
+                'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } } },
+            { $project: { nbid: '$address.neighborhood.id', ppm2: { $divide: ['$listing.value', '$attributes.totalSurface'] } } },
+            { $group: { _id: '$nbid', vals: { $push: '$ppm2' } } },
+        ], { allowDiskUse: true });
+        for await (const r of aggP) zonePpm2[r._id as string] = median(r.vals as number[]);
     }
     const zones = topZones.map(([nb, its]) => {
         const nbid = its[0].nbid;
-        const precio = median(its.filter((i) => i.op === 'sale').map((i) => i.val)) ?? median(its.map((i) => i.val));
-        const cal = median(its.map((i) => i.q3));
-        return { nb, n: its.length, oferta: (nbid && ofertaByNbid[nbid]) || 0,
-            precio, dem: (nbid && demandByNb[nbid]) || 0, leads: leadsByNb[nb] || 0,
-            cal: cal != null ? (CAL[Math.round(cal)] || '—') : '—' };
+        const herPpm2 = median(its.filter((i) => i.op === 'sale').map((i) => i.ppm2));
+        const zPpm2 = nbid ? zonePpm2[nbid] : null;
+        const vsZona = herPpm2 && zPpm2 ? Math.round((herPpm2 / zPpm2 - 1) * 100) : null;
+        return { nb, n: its.length, oferta: (nbid && ofertaByNbid[nbid]) || 0, vsZona,
+            dem: (nbid && demandByNb[nbid]) || 0, leads: leadsByNb[nb] || 0 };
     });
 
     // --- inventario vs demanda por ticket ---
@@ -244,7 +259,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
-        llProp: ytdLeads / (N || 1),
+        llProp: ytdLeads / (N || 1), ofertaLabel,
         zones, invVsDemand, matrix, priceLead,
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
         insightInv, insightPrecio,

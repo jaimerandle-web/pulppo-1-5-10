@@ -12,8 +12,6 @@ import type { AnalisisData } from '@/lib/analisis';
  * ------------------------------------------------------------------ */
 
 const SEA = '#529999', SOFT = '#212322', YEL = '#F6BE00', GRAY = '#B7B7B7', RED = '#A52003';
-const money = (n?: number | null) =>
-    n == null ? '—' : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
 const f0 = (n: number) => Math.round(n).toLocaleString('es-MX');
 
 // Secciones del documento (el "hasta qué sí / qué no incluir").
@@ -162,7 +160,7 @@ export default function AnalisisGeneral() {
         try {
             const res = await fetch('/api/analisis', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inmo, operacion, ventDemanda }),
+                body: JSON.stringify({ inmo, operacion, ventDemanda, mlsGeneral }),
             });
             if (res.status === 401) { router.push('/login'); return; }
             const d = await res.json();
@@ -173,7 +171,7 @@ export default function AnalisisGeneral() {
         } finally { setLoading(false); }
     }
     // La config cambió → el preview actual queda obsoleto.
-    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda]);
+    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, mlsGeneral]);
 
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
@@ -418,11 +416,11 @@ const CAL_COL: Record<string, string> = { Alta: '#2f6b6b', Media: '#9CC4C4', Baj
 function InventarioView({ d }: { d: AnalisisData }) {
     return (
         <div className="mt-2 pl-6">
-            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, cuánta oferta hay en total y la demanda de la zona.</p>
+            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, la oferta total de la zona y qué tan competitivo es tu precio.</p>
             <table className="w-full border-collapse text-[11px]">
                 <thead>
                     <tr className="border-b" style={{ borderColor: SOFT }}>
-                        {['Colonia', 'Tus props', 'Oferta zona', 'Tu precio mediano', 'Demanda', 'Leads 2026', 'Calidad ficha'].map((h, i) => (
+                        {['Colonia', 'Tus props', 'Oferta zona', 'Precio vs. zona', 'Demanda', 'Leads 2026'].map((h, i) => (
                             <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i ? 'text-right' : 'text-left'}`}>{h}</th>
                         ))}
                     </tr>
@@ -433,16 +431,17 @@ function InventarioView({ d }: { d: AnalisisData }) {
                             <td className="py-1 font-semibold">{z.nb}</td>
                             <td className="py-1 text-right">{z.n}</td>
                             <td className="py-1 text-right" style={{ color: GRAY }}>{f0(z.oferta)}</td>
-                            <td className="py-1 text-right">{money(z.precio)}</td>
+                            <td className="py-1 text-right font-semibold" style={{ color: z.vsZona == null ? GRAY : z.vsZona > 3 ? RED : z.vsZona < -3 ? SEA : SOFT }}>
+                                {z.vsZona == null ? '—' : `${z.vsZona > 0 ? '+' : ''}${z.vsZona}%`}
+                            </td>
                             <td className="py-1 text-right">{f0(z.dem)}</td>
                             <td className="py-1 text-right">{f0(z.leads)}</td>
-                            <td className="py-1 text-right">{z.cal}</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
-                Oferta zona = propiedades publicadas en esa colonia por todas las inmobiliarias. Precio mediano = de tu inventario. Calidad ficha = mediana de tus fichas (Alta/Media/Baja, score de Pulppo).
+                Oferta zona = propiedades publicadas en esa colonia ({d.ofertaLabel}). Precio vs. zona = tu $/m² mediano vs. la mediana de la zona (<b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato).
             </p>
             <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>
                 Tu inventario en venta vs. la demanda del mercado, por rango de precio.
