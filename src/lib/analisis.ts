@@ -64,7 +64,7 @@ export interface AnalisisData {
     llProp: number;               // leads (ventana) / N
     leadsLabel: string;           // etiqueta de la ventana de leads
     ofertaLabel: string;          // "red Pulppo" | "MLS i24"
-    leadsComp: { cliente: number; broker: number; incontactables: number; totalOp: { sale: number; rent: number } };
+    leadsComp: { cliente: number; broker: number; incontactables: number; duplicados: number; total: number; totalOp: { sale: number; rent: number } };
     zones: { nb: string; n: number; oferta: number; vsZona: number | null; dem: number; leads: number }[];
     invVsDemand: { band: string; invPct: number; demPct: number; inv: number; dem: number }[];
     matrix: { q: string; cells: { p: string; n: number; ll: number }[] }[];
@@ -290,9 +290,10 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     const leadsByOp = zero(), contByOp = zero(), cleanByOp = zero();
     let ytdLeadsAll = 0, ytdVis = 0, h1Leads25 = 0, h1Leads26 = 0;
-    let compCliente = 0, compBroker = 0, compIncont = 0;
+    let compCliente = 0, compBroker = 0, compIncont = 0, compDup = 0;
+    const dupSet = new Set<string>();   // clave propiedad+contacto → repetición = duplicado
     const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: H1_25[0] } },
-        { projection: { 'property._id': 1, answeredAt: 1, createdAt: 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1 } });
+        { projection: { 'property._id': 1, answeredAt: 1, createdAt: 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1 } });
     for await (const l of lc) {
         const d = asDt(l.createdAt); if (!d) continue;
         const op = pid2op.get(String(gv(l, 'property', '_id')));
@@ -300,11 +301,16 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
             ytdLeadsAll++;
             if (op === 'sale' || op === 'rent') {
                 leadsByOp[op]++;
-                const contactable = !!(gv(l, 'contact', 'phone') || gv(l, 'contact', 'email'));
+                const phone = gv(l, 'contact', 'phone'), email = gv(l, 'contact', 'email');
+                const contactable = !!(phone || email);
                 const broker = !!gv(l, 'contact', 'company', '_id');   // el contacto pertenece a una inmobiliaria
                 if (contactable) cleanByOp[op]++; else compIncont++;
                 if (broker) compBroker++; else compCliente++;
                 if (l.answeredAt) contByOp[op]++;
+                // duplicado = mismo contacto en la misma propiedad (repite un lead ya visto)
+                const who = phone || email || String(gv(l, 'contact', '_id') || l._id);
+                const dupKey = `${String(gv(l, 'property', '_id'))}|${who}`;
+                if (dupSet.has(dupKey)) compDup++; else dupSet.add(dupKey);
             }
         }
         if (d >= H1_25[0] && d < H1_25[1]) h1Leads25++;
@@ -429,7 +435,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: leadsWinTotal / (N || 1), leadsLabel, ofertaLabel,
-        leadsComp: { cliente: compCliente, broker: compBroker, incontactables: compIncont, totalOp: { sale: leadsByOp.sale, rent: leadsByOp.rent } },
+        leadsComp: { cliente: compCliente, broker: compBroker, incontactables: compIncont, duplicados: compDup, total: leadsByOp.sale + leadsByOp.rent, totalOp: { sale: leadsByOp.sale, rent: leadsByOp.rent } },
         zones, invVsDemand, matrix, priceLead,
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
         insightInv, insightPrecio,

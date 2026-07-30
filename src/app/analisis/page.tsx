@@ -566,7 +566,17 @@ function FunnelView({ d }: { d: AnalisisData }) {
                     </div>
                 ))}
             </div>
-            <p className="mt-1 text-[9px]" style={{ color: GRAY }}>Broker = el contacto pertenece a una inmobiliaria (no comprador final). Sin contacto = sin teléfono ni correo (incontactable).</p>
+            <p className="mt-1 text-[9px]" style={{ color: GRAY }}>Broker = el contacto está asociado a una empresa/inmobiliaria (no comprador final). Sin contacto = sin teléfono ni correo.</p>
+            {(() => {
+                const tot = d.leadsComp.total || 1;
+                const brPct = Math.round(100 * d.leadsComp.broker / tot);
+                const dupPct = Math.round(100 * d.leadsComp.duplicados / tot);
+                return (
+                    <p className="mt-2 text-[11px] leading-relaxed" style={{ color: SOFT }}>
+                        <b>{brPct}%</b> de tus leads 2026 son de <b>brokers</b> (no compradores finales) · <b>{f0(d.leadsComp.duplicados)}</b> leads <b>duplicados</b> ({dupPct}%: mismo contacto en la misma propiedad).
+                    </p>
+                );
+            })()}
             {d.funnelReading && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{d.funnelReading}</p>}
         </div>
     );
