@@ -13,7 +13,8 @@ const FALLBACK_EMAILS: string[] = [
     'alonso@pulppo.com',
     'luis@pulppo.com',
     'leonardoherrera@tuhabi.mx', // externo (Habi)
-    'multimediapulppo@pulppo.com'
+    'multimediapulppo@pulppo.com',
+    'claudio@pulppo.com'
 ];
 
 export function allowedEmails(): string[] {
