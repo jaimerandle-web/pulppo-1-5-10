@@ -177,12 +177,17 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const leadsByPid: Record<string, number> = {};
     const leadsByNb: Record<string, number> = {};
     let leadsWinTotal = 0;
+    const invSeen = new Set<string>();   // dedup: mismo contacto en la misma propiedad = 1 lead único
     const leadCur = db.collection('leads').find(
         { 'property._id': { $in: pubIds }, createdAt: { $gte: leadsStart } },
-        { projection: { 'property._id': 1, createdAt: 1 } }
+        { projection: { 'property._id': 1, createdAt: 1, 'contact.phone': 1, 'contact.email': 1, 'contact._id': 1 } }
     );
     for await (const l of leadCur) {
         const pid = String(gv(l, 'property', '_id'));
+        const who = gv(l, 'contact', 'phone') || gv(l, 'contact', 'email') || String(gv(l, 'contact', '_id') || l._id);
+        const k = `${pid}|${who}`;
+        if (invSeen.has(k)) continue;   // duplicado → no cuenta
+        invSeen.add(k);
         leadsByPid[pid] = (leadsByPid[pid] || 0) + 1;
         leadsWinTotal++;
         const nb = pid2nb.get(pid);
@@ -297,20 +302,21 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     for await (const l of lc) {
         const d = asDt(l.createdAt); if (!d) continue;
         const op = pid2op.get(String(gv(l, 'property', '_id')));
-        if (d >= YTD0) {
-            ytdLeadsAll++;
-            if (op === 'sale' || op === 'rent') {
+        if (d >= YTD0 && (op === 'sale' || op === 'rent')) {
+            const phone = gv(l, 'contact', 'phone'), email = gv(l, 'contact', 'email');
+            // duplicado = mismo contacto en la misma propiedad → se descarta de TODO el funnel
+            const who = phone || email || String(gv(l, 'contact', '_id') || l._id);
+            const dupKey = `${String(gv(l, 'property', '_id'))}|${who}`;
+            if (dupSet.has(dupKey)) { compDup++; }
+            else {
+                dupSet.add(dupKey);
+                ytdLeadsAll++;
                 leadsByOp[op]++;
-                const phone = gv(l, 'contact', 'phone'), email = gv(l, 'contact', 'email');
                 const contactable = !!(phone || email);
-                const broker = !!gv(l, 'contact', 'company', '_id');   // el contacto pertenece a una inmobiliaria
+                const broker = !!gv(l, 'contact', 'company', '_id');   // el contacto está asociado a una empresa/inmobiliaria
                 if (contactable) cleanByOp[op]++; else compIncont++;
                 if (broker) compBroker++; else compCliente++;
                 if (l.answeredAt) contByOp[op]++;
-                // duplicado = mismo contacto en la misma propiedad (repite un lead ya visto)
-                const who = phone || email || String(gv(l, 'contact', '_id') || l._id);
-                const dupKey = `${String(gv(l, 'property', '_id'))}|${who}`;
-                if (dupSet.has(dupKey)) compDup++; else dupSet.add(dupKey);
             }
         }
         if (d >= H1_25[0] && d < H1_25[1]) h1Leads25++;
@@ -335,7 +341,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         if ((last === 'closed' || last === 'paying') && xd && xd >= YTD0) closesByOp[t]++;
     }
     const buildFunnel = (title: string, op: string) => {
-        const raw: [string, number][] = [['Leads', leadsByOp[op]], ['Leads limpios', cleanByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
+        const raw: [string, number][] = [['Leads únicos', leadsByOp[op]], ['Leads limpios', cleanByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
         let prev: number | null = null;
         return { title, steps: raw.map(([label, value]) => { const rate = prev && prev > 0 ? value / prev : null; prev = value; return { label, value, rate }; }) };
     };

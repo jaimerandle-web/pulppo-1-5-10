@@ -348,7 +348,7 @@ export default function AnalisisGeneral() {
                             {(data
                                 ? [[String(data.N), 'propiedades publicadas', `${data.opSplit.sale} venta · ${data.opSplit.rent} renta`],
                                    [`${Math.round(data.pctCaro * 100)}%`, 'de tu venta, fuera de mercado', `${data.nCaro} props +20% sobre ACM`],
-                                   [data.llProp.toFixed(1), 'leads por propiedad (2026)', ''],
+                                   [data.llProp.toFixed(1), 'leads únicos / propiedad', data.leadsLabel],
                                    [String(data.joyas), 'listas para vender', `${data.joyasAlta} con calidad Alta`]]
                                 : [['—', 'propiedades', ''], ['—', 'sobre mercado', ''], ['—', 'leads / prop', ''], ['—', 'listas para vender', '']]
                             ).map(([n, l, cmp], idx) => (
@@ -556,7 +556,7 @@ function FunnelView({ d }: { d: AnalisisData }) {
                     </div>
                 ))}
             </div>
-            <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Composición de tus leads 2026</p>
+            <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Composición de tus leads únicos 2026</p>
             <div className="flex gap-2">
                 {[['Cliente', d.leadsComp.cliente, SEA_D], ['Broker', d.leadsComp.broker, GRAY], ['Sin contacto', d.leadsComp.incontactables, RED],
                   ['Venta', d.leadsComp.totalOp.sale, SEA], ['Renta', d.leadsComp.totalOp.rent, '#9CC4C4']].map(([l, n, col]) => (
@@ -569,11 +569,12 @@ function FunnelView({ d }: { d: AnalisisData }) {
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>Broker = el contacto está asociado a una empresa/inmobiliaria (no comprador final). Sin contacto = sin teléfono ni correo.</p>
             {(() => {
                 const tot = d.leadsComp.total || 1;
+                const gross = tot + d.leadsComp.duplicados || 1;
                 const brPct = Math.round(100 * d.leadsComp.broker / tot);
-                const dupPct = Math.round(100 * d.leadsComp.duplicados / tot);
+                const dupPct = Math.round(100 * d.leadsComp.duplicados / gross);
                 return (
                     <p className="mt-2 text-[11px] leading-relaxed" style={{ color: SOFT }}>
-                        <b>{brPct}%</b> de tus leads 2026 son de <b>brokers</b> (no compradores finales) · <b>{f0(d.leadsComp.duplicados)}</b> leads <b>duplicados</b> ({dupPct}%: mismo contacto en la misma propiedad).
+                        <b>{brPct}%</b> de tus leads únicos son de <b>brokers</b> (no compradores finales) · se quitaron <b>{f0(d.leadsComp.duplicados)}</b> duplicados ({dupPct}% del bruto: mismo contacto en la misma propiedad).
                     </p>
                 );
             })()}
