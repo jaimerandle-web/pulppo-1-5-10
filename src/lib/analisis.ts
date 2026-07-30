@@ -73,6 +73,10 @@ export interface AnalisisData {
     funnel: { title: string; steps: { label: string; value: number; rate: number | null }[] }[];
     funnelReading: string;
     recos: { enfoque: string; title: string; body: string; sev: number }[];
+    yoy: { label: string; a: number; b: number; fmt: 'int' | 'dec' | 'pct' | 'pct2' | 'money'; goodUp: boolean }[];
+    yoyMix: { year: number; sale: number; rent: number; com: number }[];
+    yoyReading: string;
+    top10: { code: string; nb: string; val: number; sp: number | null; leads: number; dz: number; lev: string[] }[];
 }
 
 async function resolveCompany(db: Db, name: string): Promise<{ id: ObjectId; name: string }> {
@@ -94,6 +98,8 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     const NOW = new Date();
     const YTD0 = new Date(Date.UTC(NOW.getUTCFullYear(), 0, 1));
+    const H1_25: [Date, Date] = [new Date(Date.UTC(2025, 0, 1)), new Date(Date.UTC(2025, 6, 1))];
+    const H1_26: [Date, Date] = [new Date(Date.UTC(2026, 0, 1)), new Date(Date.UTC(2026, 6, 1))];
     const demandStart = (() => {
         const w = cfg.ventDemanda || 'Últimos 12 meses';
         if (w === 'YTD 2026') return YTD0;
@@ -112,7 +118,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         } }
     ).toArray();
 
-    type Item = { pid: ObjectId; nb: string | null; nbid: string | null; op: string | null;
+    type Item = { pid: ObjectId; code: string | null; nb: string | null; nbid: string | null; op: string | null;
         val: number; sp: number | null; ppm2: number | null; q3: number | null; tour: boolean; tier: string | null };
     const items: Item[] = pub.map((p) => {
         const nb = (gv(p, 'address', 'neighborhood') || {}) as Record<string, unknown>;
@@ -120,7 +126,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const acm = num(gv(p, 'acm', 'price', 'value'));
         const m2 = num(gv(p, 'attributes', 'totalSurface')) || num(gv(p, 'attributes', 'roofedSurface'));
         return {
-            pid: p._id as ObjectId,
+            pid: p._id as ObjectId, code: (p.internalId as string) || null,
             nb: (nb.name as string) || null, nbid: (nb.id as string) || null,
             op: (gv(p, 'listing', 'operation') as string) || null,
             val, sp: val && acm ? val / acm : null,
@@ -262,18 +268,22 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     // ===================== FUNNEL (venta vs renta) + RECOMENDACIONES =====================
     // El funnel usa TODO el inventario del año (incl. vendido/dado de baja), no solo lo publicado hoy.
-    const allprops = await db.collection('properties').find({ 'company._id': CID }, { projection: { 'listing.operation': 1 } }).toArray();
+    const allprops = await db.collection('properties').find({ 'company._id': CID },
+        { projection: { 'listing.operation': 1, qualityScore: 1, publishedAt: 1, 'status.last': 1, 'status.history': 1 } }).toArray();
     const pid2op = new Map(allprops.map((p) => [String(p._id), gv(p, 'listing', 'operation') as string]));
     const allpids = allprops.map((p) => p._id as ObjectId);
     const zero = () => ({ sale: 0, rent: 0 } as Record<string, number>);
 
     const leadsByOp = zero(), contByOp = zero();
-    let ytdLeadsAll = 0, ytdVis = 0;
-    const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: YTD0 } }, { projection: { 'property._id': 1, answeredAt: 1 } });
+    let ytdLeadsAll = 0, ytdVis = 0, h1Leads25 = 0, h1Leads26 = 0;
+    const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: H1_25[0] } },
+        { projection: { 'property._id': 1, answeredAt: 1, createdAt: 1 } });
     for await (const l of lc) {
+        const d = asDt(l.createdAt); if (!d) continue;
         const op = pid2op.get(String(gv(l, 'property', '_id')));
-        ytdLeadsAll++;
-        if (op === 'sale' || op === 'rent') { leadsByOp[op]++; if (l.answeredAt) contByOp[op]++; }
+        if (d >= YTD0) { ytdLeadsAll++; if (op === 'sale' || op === 'rent') { leadsByOp[op]++; if (l.answeredAt) contByOp[op]++; } }
+        if (d >= H1_25[0] && d < H1_25[1]) h1Leads25++;
+        if (d >= H1_26[0] && d < H1_26[1]) h1Leads26++;
     }
     const visByOp = zero();
     const vc = db.collection('visits').find({ 'steps.property._id': { $in: allpids }, 'status.last': { $ne: 'cancelled' }, createdAt: { $gte: YTD0 } }, { projection: { 'steps.property._id': 1 } });
@@ -283,7 +293,8 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         if (mine) { ytdVis++; const op = pid2op.get(mine); if (op === 'sale' || op === 'rent') visByOp[op]++; }
     }
     const offersByOp = zero(), closesByOp = zero();
-    const opsAll = await db.collection('operations').find({ 'property._id': { $in: allpids } }, { projection: { 'status.last': 1, closedAt: 1, createdAt: 1, 'property._id': 1 } }).toArray();
+    const opsAll = await db.collection('operations').find({ 'property._id': { $in: allpids } },
+        { projection: { 'status.last': 1, closedAt: 1, createdAt: 1, 'property._id': 1, 'closeValue.value': 1, 'comission.value': 1 } }).toArray();
     for (const o of opsAll) {
         const t = pid2op.get(String(gv(o, 'property', '_id')));
         if (t !== 'sale' && t !== 'rent') continue;
@@ -320,6 +331,68 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     recos.push({ enfoque: 'Visibilidad', sev: 2, title: 'Enfoca la inversión en visibilidad donde rinde',
         body: `Destacar solo rinde cuando la propiedad ya está bien puesta (precio óptimo + ficha completa). Concentra el impulso en tus ${joyas} propiedades listas — no en las que están fuera de mercado.` });
 
+    // ===================== YoY (H1 2025 vs H1 2026) =====================
+    const money = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
+    const monthEnd = (y: number, m: number) => new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1));
+    const terminal = (p: Document): Date | null => {
+        if (gv(p, 'status', 'last') === 'published') return null;
+        const hist = (gv(p, 'status', 'history') || []) as Document[];
+        const ts = hist.map((h) => asDt(h.date || h.timestamp || h.createdAt)).filter(Boolean) as Date[];
+        return ts.length ? new Date(Math.max(...ts.map((d) => d.getTime()))) : null;
+    };
+    const propMeta = allprops.map((p) => ({ pub: asDt(p.publishedAt), term: terminal(p), q3: num(p.qualityScore) }));
+    const activeAt = (end: Date) => propMeta.filter((p) => p.pub && p.pub < end && (p.term === null || p.term > end));
+    const h1Avg = (year: number, alta: boolean) => {
+        let s = 0;
+        for (let m = 1; m <= 6; m++) { const act = activeAt(monthEnd(year, m)); s += alta ? act.filter((p) => p.q3 === 3).length : act.length; }
+        return s / 6;
+    };
+    const inv25 = h1Avg(2025, false), inv26 = h1Avg(2026, false);
+    const alta25 = h1Avg(2025, true) / (inv25 || 1), alta26 = h1Avg(2026, true) / (inv26 || 1);
+    const closeWindow = (a: Date, b: Date) => {
+        const r = { n: 0, sale: 0, rent: 0, com: 0, gmv: 0 };
+        for (const o of opsAll) {
+            const last = gv(o, 'status', 'last'); const xd = asDt(gv(o, 'closedAt'));
+            if (!(last === 'closed' || last === 'paying') || !xd || xd < a || xd >= b) continue;
+            const t = pid2op.get(String(gv(o, 'property', '_id')));
+            r.n++; if (t === 'sale') r.sale++; else r.rent++;
+            r.com += num(gv(o, 'comission', 'value')) || 0;
+            if (t === 'sale') r.gmv += num(gv(o, 'closeValue', 'value')) || 0;
+        }
+        return r;
+    };
+    const cl25 = closeWindow(H1_25[0], H1_25[1]), cl26 = closeWindow(H1_26[0], H1_26[1]);
+    const tc25 = cl25.n / (h1Leads25 || 1), tc26 = cl26.n / (h1Leads26 || 1);
+    const yoy: AnalisisData['yoy'] = [
+        { label: 'Inventario activo (prom.)', a: inv25, b: inv26, fmt: 'int', goodUp: true },
+        { label: 'Leads / mes (prom.)', a: h1Leads25 / 6, b: h1Leads26 / 6, fmt: 'int', goodUp: true },
+        { label: 'Leads por propiedad', a: (h1Leads25 / 6) / (inv25 || 1), b: (h1Leads26 / 6) / (inv26 || 1), fmt: 'dec', goodUp: true },
+        { label: 'Calidad Alta', a: alta25, b: alta26, fmt: 'pct', goodUp: true },
+        { label: 'Cierres (6 meses)', a: cl25.n, b: cl26.n, fmt: 'int', goodUp: true },
+        { label: 'Comisión total', a: cl25.com, b: cl26.com, fmt: 'money', goodUp: true },
+        { label: 'Tasa de cierre (leads→cierre)', a: tc25, b: tc26, fmt: 'pct2', goodUp: true },
+    ];
+    const yoyMix = [{ year: 2025, sale: cl25.sale, rent: cl25.rent, com: cl25.com }, { year: 2026, sale: cl26.sale, rent: cl26.rent, com: cl26.com }];
+    const comDelta = (cl26.com - cl25.com) / (cl25.com || 1);
+    const yoyReading = `Comisión total ${money(cl25.com)} → ${money(cl26.com)} (${comDelta >= 0 ? '+' : ''}${Math.round(comDelta * 100)}%). El motor son las ventas: en 2026 se cerraron ${cl26.sale}.`;
+
+    // ===================== Top 10 críticas =====================
+    const cand10 = [];
+    for (const it of items) {
+        if (it.op !== 'sale') continue;
+        const leads = leadsByPid[String(it.pid)] || 0;
+        const dz = (it.nbid && demandByNb[it.nbid]) || 0;
+        const spV = it.sp != null && it.sp > 0.2 && it.sp < 3 ? it.sp : null;
+        const lev: string[] = [];
+        if (spV && spV > 1.15) lev.push('Bajar precio');
+        if (it.tier === null || it.tier === 'Simple' || it.tier === 'Offline') lev.push('Destacar');
+        if ((it.q3 || 2) <= 2 || !it.tour) lev.push('Mejorar ficha');
+        if (!lev.length || dz <= 0) continue;
+        cand10.push({ code: it.code || '—', nb: it.nb || '—', val: it.val, sp: spV, leads, dz, lev, score: dz / (1 + leads) });
+    }
+    const top10 = cand10.sort((a, b) => b.score - a.score).slice(0, 10)
+        .map(({ code, nb, val, sp, leads, dz, lev }) => ({ code, nb, val, sp, leads, dz, lev }));
+
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: ytdLeads / (N || 1), ofertaLabel,
@@ -327,5 +400,6 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
         insightInv, insightPrecio,
         funnel, funnelReading, recos,
+        yoy, yoyMix, yoyReading, top10,
     };
 }

@@ -11,8 +11,13 @@ import type { AnalisisData } from '@/lib/analisis';
  * YoY / Top 10 / destacados / funnel: pendientes de portar.
  * ------------------------------------------------------------------ */
 
-const SEA = '#529999', SOFT = '#212322', YEL = '#F6BE00', GRAY = '#B7B7B7', RED = '#A52003';
+const SEA = '#529999', SEA_D = '#2f6b6b', SOFT = '#212322', YEL = '#F6BE00', GRAY = '#B7B7B7', RED = '#A52003';
 const f0 = (n: number) => Math.round(n).toLocaleString('es-MX');
+const money = (n?: number | null) =>
+    n == null ? '—' : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
+const fmtYoy = (v: number, fmt: string) =>
+    fmt === 'money' ? money(v) : fmt === 'pct' ? `${Math.round(v * 100)}%` : fmt === 'pct2' ? `${(v * 100).toFixed(2)}%` : fmt === 'dec' ? v.toFixed(1) : f0(v);
+const LEVCOL: Record<string, string> = { 'Bajar precio': RED, 'Destacar': SEA, 'Mejorar ficha': SOFT };
 
 // Secciones del documento (el "hasta qué sí / qué no incluir").
 const SECCIONES = [
@@ -363,13 +368,15 @@ export default function AnalisisGeneral() {
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-[13px]" style={{ fontFamily: 'var(--font-serif)', color: SEA }}>{String(i + 1).padStart(2, '0')}</span>
                                         <h3 className="text-[15px]" style={{ fontFamily: 'var(--font-serif)' }}>{s.label}</h3>
-                                        {data && !['inventario', 'precio', 'funnel', 'reco'].includes(s.id) && (
+                                        {data && s.id === 'destacados' && (
                                             <span className="ml-1 rounded-[2px] bg-[#F3F3F3] px-1.5 py-0.5 text-[8px] uppercase tracking-wide" style={{ color: GRAY }}>pendiente de conectar</span>
                                         )}
                                     </div>
                                     {data && s.id === 'inventario' ? <InventarioView d={data} />
                                         : data && s.id === 'precio' ? <PrecioView d={data} />
                                         : data && s.id === 'funnel' ? <FunnelView d={data} />
+                                        : data && s.id === 'yoy' ? <YoyView d={data} />
+                                        : data && s.id === 'top10' ? <Top10View d={data} />
                                         : data && s.id === 'reco' ? <RecoView d={data} enfoque={recoEnfoque} tono={recoTono} cantidad={recoCantidad} />
                                         : <p className="mt-1 pl-6 text-[11px] leading-relaxed text-neutral-500">
                                             {previewLine(s.id, { referencias, cortes, portalMode, portales, recoEnfoque, recoTono, recoCantidad })}
@@ -567,6 +574,87 @@ function RecoView({ d, enfoque, tono, cantidad }: { d: AnalisisData; enfoque: st
                 </div>
             ))}
             {!list.length && <p className="py-4 text-[11px]" style={{ color: GRAY }}>Sin recomendaciones para el enfoque elegido.</p>}
+        </div>
+    );
+}
+
+function YoyView({ d }: { d: AnalisisData }) {
+    return (
+        <div className="mt-2 pl-6">
+            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Enero–junio 2025 vs. enero–junio 2026.</p>
+            <table className="w-full border-collapse text-[11px]">
+                <thead>
+                    <tr className="border-b" style={{ borderColor: SOFT }}>
+                        {['Métrica', '2025', '2026', 'Variación'].map((h, i) => (
+                            <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i ? 'text-right' : 'text-left'}`}>{h}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {d.yoy.map((r) => {
+                        const dv = r.a ? (r.b - r.a) / r.a : 0;
+                        const col = (dv >= 0) === r.goodUp ? SEA : RED;
+                        return (
+                            <tr key={r.label} className="border-b border-neutral-100">
+                                <td className="py-1">{r.label}</td>
+                                <td className="py-1 text-right">{fmtYoy(r.a, r.fmt)}</td>
+                                <td className="py-1 text-right">{fmtYoy(r.b, r.fmt)}</td>
+                                <td className="py-1 text-right font-semibold" style={{ color: col }}>{dv >= 0 ? '▲' : '▼'} {dv >= 0 ? '+' : ''}{Math.round(dv * 100)}%</td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+            <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Mix de cierres <span style={{ color: GRAY }}>(<b style={{ color: SEA_D }}>venta</b> · <b style={{ color: SEA }}>renta</b>)</span></p>
+            {d.yoyMix.map((m) => {
+                const tot = m.sale + m.rent || 1;
+                return (
+                    <div key={m.year} className="flex items-center gap-2 py-0.5 text-[10px]">
+                        <span className="w-8" style={{ color: GRAY }}>{m.year}</span>
+                        <span className="flex h-[12px] flex-1 overflow-hidden bg-[#F3F3F3]">
+                            <span className="block h-full" style={{ width: `${100 * m.sale / tot}%`, background: SEA_D }} />
+                            <span className="block h-full" style={{ width: `${100 * m.rent / tot}%`, background: SEA }} />
+                        </span>
+                        <span className="w-28 text-right font-bold">{m.sale} venta · {m.rent} renta</span>
+                    </div>
+                );
+            })}
+            {d.yoyReading && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{d.yoyReading}</p>}
+        </div>
+    );
+}
+
+function Top10View({ d }: { d: AnalisisData }) {
+    if (!d.top10.length) return <p className="mt-2 pl-6 text-[11px]" style={{ color: GRAY }}>Sin propiedades críticas con palanca accionable en zonas con demanda.</p>;
+    return (
+        <div className="mt-2 pl-6">
+            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Alta demanda en su zona pero pocos o cero leads, con un freno claro y fácil de arreglar. Prioriza estas.</p>
+            <table className="w-full border-collapse text-[11px]">
+                <thead>
+                    <tr className="border-b" style={{ borderColor: SOFT }}>
+                        {['#', 'Código', 'Zona', 'Precio', 'vs. mercado', 'Leads', 'Demanda', 'Qué cambiar'].map((h, i) => (
+                            <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i === 1 || i === 2 || i === 7 ? 'text-left' : 'text-right'}`}>{h}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {d.top10.map((t, i) => (
+                        <tr key={i} className="border-b border-neutral-100">
+                            <td className="py-1 text-right">{i + 1}</td>
+                            <td className="py-1 font-semibold">{t.code}</td>
+                            <td className="py-1">{t.nb}</td>
+                            <td className="py-1 text-right">{money(t.val)}</td>
+                            <td className="py-1 text-right" style={{ color: t.sp && t.sp > 1.2 ? RED : SOFT }}>{t.sp ? `+${Math.round((t.sp - 1) * 100)}%` : '—'}</td>
+                            <td className="py-1 text-right">{t.leads}</td>
+                            <td className="py-1 text-right">{f0(t.dz)}</td>
+                            <td className="py-1">{t.lev.map((l, j) => (
+                                <span key={l} style={{ color: LEVCOL[l] || SOFT, fontWeight: 700 }}>{j ? ' · ' : ''}{l}</span>
+                            ))}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            <p className="mt-2 text-[9px]" style={{ color: GRAY }}>Demanda = búsquedas de la colonia en la ventana elegida. Vs. mercado = precio ÷ ACM.</p>
         </div>
     );
 }
