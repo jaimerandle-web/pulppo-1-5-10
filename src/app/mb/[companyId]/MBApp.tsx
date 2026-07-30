@@ -145,7 +145,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                     <tbody>
                         {rows.map((p) => (
                             <tr key={p.id}>
-                                <td style={td}><Link href={`/ficha/${p.id}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                <td style={td}><Link href={`/ficha/${p.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
                                 <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td><td style={{ ...td, color: GRY }}>{p.colonia}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{money(p.precio)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
@@ -158,7 +158,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.leads)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
-                                <td style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
+                                <td style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}?v=simple`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
                             </tr>
                         ))}
                     </tbody>
@@ -270,7 +270,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                 <tbody>
                                     {topOpp.map((p) => (
                                         <tr key={p.id}>
-                                            <td style={ttd}><Link href={`/ficha/${p.id}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                            <td style={ttd}><Link href={`/ficha/${p.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
                                             <td style={{ ...ttd, color: GRY }}>{p.colonia}</td><td style={ttd}>{p.op}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{money(p.precio)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>

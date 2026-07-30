@@ -7,10 +7,11 @@ import ShareButton from './ShareButton';
 // Ficha de desempeño imprimible por propiedad. Datos en vivo (no cache).
 export const dynamic = 'force-dynamic';
 
-export default async function FichaPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FichaPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ v?: string }> }) {
     const { id } = await params;
+    const { v } = await searchParams;
     const token = await fichaToken(id);
-    const ficha = await renderFicha(id, { token });
+    const ficha = await renderFicha(id, { token, simple: v === 'simple' });
     if (!ficha) notFound();
     return (
         <>

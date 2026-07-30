@@ -288,7 +288,8 @@ const findPropertyDoc = async (db: Awaited<ReturnType<typeof getDb>>, id: string
     return db.collection('properties').findOne({ internalId: id.trim().toUpperCase() });
 };
 
-export async function renderFicha(id: string, opts?: { token?: string }): Promise<{ code: string; html: string } | null> {
+export async function renderFicha(id: string, opts?: { token?: string; simple?: boolean }): Promise<{ code: string; html: string } | null> {
+    const simple = !!opts?.simple;   // versión simplificada (Master Brokers): sin Difusión/promoción ni Referencia $/m²
     const moreHref = `/ficha/${encodeURIComponent(id)}/comparables${opts?.token ? `?token=${encodeURIComponent(opts.token)}` : ''}`;
     const db = await getDb();
     const P = await findPropertyDoc(db, id);
@@ -418,6 +419,7 @@ export async function renderFicha(id: string, opts?: { token?: string }): Promis
     ]).toArray();
     const viewsByMonth = new Map<string, number>();
     for (const r of viewAgg) if (r._id) viewsByMonth.set(r._id as string, r.n as number);
+    const totalVistas = [...viewsByMonth.values()].reduce((a, b) => a + b, 0);
     const leadsByMonth = new Map<string, number>();
     for (const l of leads) {
         const d = l.createdAt instanceof Date ? (l.createdAt as Date) : null;
@@ -560,8 +562,11 @@ export async function renderFicha(id: string, opts?: { token?: string }): Promis
     const convInline = `<span class="fconvinline"><b style="color:${vcolor}">${(tv * 100).toFixed(0)}%</b> · ${vtxt}</span>`;
     // Etapa de Visitas: visitantes únicos confirmados, con las pendientes diferenciadas (aún no ocurren).
     const pendSuffix = visPend ? `<span style="color:${GRY};font-weight:400;font-size:10px"> +${visPend} pend.</span>` : '';
-    const visStage = `<div class="fstage"><span class="fslbl">Visitas</span><span class="fstrack"><span class="fsbar" style="width:${Math.max((100 * vis) / Math.max(leads.length, 1), 0.6)}%"></span>${convInline}</span><span class="fsn">${vis}${pendSuffix}</span></div>`;
-    const funnel = fstage('Leads', leads.length, 100) + visStage + fstage('Ofertas', ofertas, (100 * ofertas) / Math.max(leads.length, 1));
+    // Funnel Vistas → Leads → Visitas → Ofertas (anchos reescalados a las vistas, la etapa más ancha).
+    const fbase = Math.max(totalVistas, leads.length, 1);
+    const wOf = (n: number) => (100 * n) / fbase;
+    const visStage = `<div class="fstage"><span class="fslbl">Visitas</span><span class="fstrack"><span class="fsbar" style="width:${Math.max(wOf(vis), 0.6)}%"></span>${convInline}</span><span class="fsn">${vis}${pendSuffix}</span></div>`;
+    const funnel = fstage('Vistas', totalVistas, wOf(totalVistas)) + fstage('Leads', leads.length, wOf(leads.length)) + visStage + fstage('Ofertas', ofertas, wOf(ofertas));
     const maxF = Math.max(1, ...fuenteRows.map(([, v]) => v));
     const fuenteHtml = fuenteRows.map(([k, v]) => {
         const sp = fuenteSplit.get(k) || { cli: 0, ase: 0 };
@@ -701,7 +706,7 @@ export async function renderFicha(id: string, opts?: { token?: string }): Promis
   <img class="plogo" src="/pulppo-blanco.png" alt="Pulppo"></div>
 
   <div class="sec"><div class="eyebrow">Salud del anuncio</div><div class="accent"></div>${health}</div>
-${promoHtml}
+${simple ? '' : promoHtml}
 ${comportHtml}
 
   <div class="sec"><div class="eyebrow">Demanda y funnel</div><div class="accent"></div>
@@ -734,9 +739,9 @@ ${comportHtml}
       ${amenCompareHtml(alcTop, subj, knownCols)}
       ${alcInsights.length ? `<div class="box" style="margin-top:16px"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : ''}
     </div>
-    <div style="margin-top:20px;opacity:.7"><div class="eyebrow" style="color:${GRY};margin-bottom:4px">Referencia · qué te alcanza por $/m² similar</div>
+    ${simple ? '' : `<div style="margin-top:20px;opacity:.7"><div class="eyebrow" style="color:${GRY};margin-bottom:4px">Referencia · qué te alcanza por $/m² similar</div>
       <div style="font-size:10px;color:${GRY};margin-bottom:4px">Menos relevante: mismo $/m² (±15%), como referencia de mercado.</div>
-      <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>
+      <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>`}
   </div>
 
   ${zonaLbl ? `<div class="sec"><div class="eyebrow">Insights de la zona · ${esc(zonaLbl)}</div><div class="accent"></div>
