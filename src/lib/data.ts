@@ -174,6 +174,7 @@ export async function fetchRows(): Promise<CarteraRow[]> {
             ciudad: addr.city?.name ?? null,
             estado: addr.state?.name ?? null,
             dias_activa: daysSince(p.contract?.exclusive?.pulppo),
+            dur_meses: p.contract?.exclusive?.durationMonths || 6,
             op_status: opMap[pid] ?? null,
             leads_total: Object.values(lm).reduce((a, b) => a + b, 0),
             visitas: visMap[pid] || 0,

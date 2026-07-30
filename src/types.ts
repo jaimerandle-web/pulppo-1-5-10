@@ -17,6 +17,7 @@ export interface CarteraRow {
     ciudad: string | null;
     estado: string | null;
     dias_activa: number | null;
+    dur_meses: number;         // duración de la exclusiva (contract.exclusive.durationMonths, default 6)
     op_status: string | null;
     leads_total: number;
     visitas: number;

@@ -36,13 +36,21 @@ function downgradeReason(r: CarteraRow): string {
     return p.join(' · ') || 'menor impacto relativo';
 }
 
+// Vigencia de la exclusiva: alta 1·5·10 (contract.exclusive.pulppo → dias_activa) + duración contratada.
+// OJO: contract.status es el flujo de firma (pending/approved/contract_sent/completed/rejected), NO el vencimiento.
+const contratoVidaDias = (r: CarteraRow): number => (r.dur_meses || 6) * 30;
+const diasVencido = (r: CarteraRow): number | null =>
+    r.dias_activa != null ? r.dias_activa - contratoVidaDias(r) : null;
+const estaVencido = (r: CarteraRow): boolean => (diasVencido(r) ?? -1) > 0;
+
 function alertas(r: CarteraRow): string {
     const a: string[] = [];
     if (r.op_status === 'offer') a.push('🟢 EN OFERTA');
     if (!r.superdestacada) a.push(`🟠 No superdestacada (${i24Label(r.i24_type)})`);
     if ((r.leads_total || 0) === 0) a.push('🔴 Sin leads');
     if (!r.material_ok) a.push('🟡 Material incompleto');
-    if ((r.dias_activa || 0) >= 150) a.push('🟡 Contrato por vencer');
+    if (estaVencido(r)) a.push(`🔴 Contrato vencido (hace ${diasVencido(r)} d)`);
+    else if (diasVencido(r) != null && diasVencido(r)! >= -30) a.push('🟡 Contrato por vencer');
     if ((r.leads_total || 0) > 0 && (r.visitas || 0) === 0) a.push('🟡 Leads sin visitas');
     return a.join(' · ');
 }
@@ -82,6 +90,17 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
             .sort((a, b) => b.props.length - a.props.length || a.inmobiliaria.localeCompare(b.inmobiliaria));
     }, [f]);
     const noSuperTotal = noSuperPorInmo.reduce((a, g) => a + g.props.length, 0);
+
+    // Vivas con contrato vencido, agrupadas por inmobiliaria (más vencido primero) — para renovar o dar de baja.
+    const vencidasPorInmo = useMemo(() => {
+        const m: Record<string, CarteraRow[]> = {};
+        for (const r of f) if (estaVencido(r)) (m[r.inmobiliaria ?? 'Sin inmobiliaria'] ??= []).push(r);
+        for (const k in m) m[k].sort((a, b) => (diasVencido(b) ?? 0) - (diasVencido(a) ?? 0));
+        return Object.entries(m)
+            .map(([inmobiliaria, props]) => ({ inmobiliaria, props }))
+            .sort((a, b) => b.props.length - a.props.length || a.inmobiliaria.localeCompare(b.inmobiliaria));
+    }, [f]);
+    const vencidasTotal = vencidasPorInmo.reduce((a, g) => a + g.props.length, 0);
     // superdestacadas por inmobiliaria, ya ordenadas por candidato a bajar (menor impacto primero).
     const superPorInmo = useMemo(() => {
         const m: Record<string, CarteraRow[]> = {};
@@ -96,8 +115,10 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
 
     return (
         <div>
+            {(noSuperTotal > 0 || vencidasTotal > 0) && (
+            <div className="mb-6 grid items-start gap-6 lg:grid-cols-2">
             {noSuperTotal > 0 && (
-                <div className="mb-6 rounded-lg border-l-4 px-4 py-3" style={{ borderColor: RED, background: '#FBEAE7' }}>
+                <div className="rounded-lg border-l-4 px-4 py-3" style={{ borderColor: RED, background: '#FBEAE7' }}>
                     <p className="text-sm font-semibold" style={{ color: RED }}>
                         ⚠️ {noSuperTotal} de {f.length} {noSuperTotal === 1 ? 'propiedad no está superdestacada' : 'propiedades no están superdestacadas'} en Inmuebles24
                     </p>
@@ -142,6 +163,38 @@ export default function CarteraTab({ f, fp }: { f: CarteraRow[]; fp: ProgramRow[
                         })}
                     </div>
                 </div>
+            )}
+            {vencidasTotal > 0 && (
+                <div className="rounded-lg border-l-4 px-4 py-3" style={{ borderColor: YELLOW, background: '#FDF3DA' }}>
+                    <p className="text-sm font-semibold" style={{ color: SOFT }}>
+                        ⏳ {vencidasTotal} de {f.length} {vencidasTotal === 1 ? 'propiedad viva con contrato vencido' : 'propiedades vivas con contrato vencido'}
+                    </p>
+                    <p className="mt-0.5 text-xs text-neutral-600">
+                        Siguen publicadas pero la exclusiva ya pasó su vigencia (alta 1·5·10 + duración contratada). Agrupadas por inmobiliaria para renovar o dar de baja:
+                    </p>
+                    <div className="mt-2 max-h-80 space-y-3 overflow-y-auto">
+                        {vencidasPorInmo.map((g) => (
+                            <div key={g.inmobiliaria}>
+                                <p className="text-xs font-semibold" style={{ color: SOFT }}>
+                                    {g.inmobiliaria} <span className="font-normal text-neutral-500">({g.props.length})</span>
+                                </p>
+                                <ul className="mt-0.5 space-y-1 pl-3 text-xs">
+                                    {g.props.map((r) => (
+                                        <li key={r.id} className="flex flex-wrap items-center gap-x-2">
+                                            <span className="text-neutral-500">{r.colonia ?? '—'}</span>
+                                            <span className="text-neutral-500">· {r.internalId ?? '—'}</span>
+                                            <span className="text-neutral-500">· {r.dur_meses}m</span>
+                                            <span className="rounded px-1.5 py-0.5" style={{ background: '#fff', color: RED, border: `1px solid ${RED}` }}>vencido hace {diasVencido(r)} d</span>
+                                            <a href={r.url} target="_blank" rel="noreferrer" className="underline" style={{ color: SEA }}>ver</a>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+            </div>
             )}
 
             <Section title="Avanzando · oferta y venta">
