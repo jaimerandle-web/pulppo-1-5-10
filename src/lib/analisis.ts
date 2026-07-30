@@ -341,7 +341,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         if ((last === 'closed' || last === 'paying') && xd && xd >= YTD0) closesByOp[t]++;
     }
     const buildFunnel = (title: string, op: string) => {
-        const raw: [string, number][] = [['Leads únicos', leadsByOp[op]], ['Leads limpios', cleanByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
+        const raw: [string, number][] = [['Únicos', leadsByOp[op]], ['Limpios', cleanByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
         let prev: number | null = null;
         return { title, steps: raw.map(([label, value]) => { const rate = prev && prev > 0 ? value / prev : null; prev = value; return { label, value, rate }; }) };
     };

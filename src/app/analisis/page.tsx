@@ -540,14 +540,14 @@ function FunnelView({ d }: { d: AnalisisData }) {
     const mx = Math.max(...d.funnel.flatMap((c) => c.steps.map((s) => s.value)), 1);
     return (
         <div className="mt-2 pl-6">
-            <p className="mb-2 text-[11px]" style={{ color: SOFT }}>Actividad 2026 sobre tu inventario. La tasa es el % que pasa del paso anterior.</p>
+            <p className="mb-2 text-[11px]" style={{ color: SOFT }}>Actividad 2026 sobre tu inventario. La tasa es el % que pasa del paso anterior. <span style={{ color: GRAY }}>Únicos = sin duplicados · Limpios = contactables.</span></p>
             <div className="flex gap-6">
                 {d.funnel.map((col) => (
                     <div key={col.title} className="flex-1">
                         <p className="mb-1.5 text-[12px] font-bold" style={{ color: '#2f6b6b' }}>{col.title}</p>
                         {col.steps.map((s) => (
                             <div key={s.label} className="flex items-center gap-1.5 py-0.5 text-[10px]">
-                                <span className="w-14" style={{ color: GRAY }}>{s.label}</span>
+                                <span className="w-16 whitespace-nowrap" style={{ color: GRAY }}>{s.label}</span>
                                 <span className="w-8 text-right text-[9px] font-bold" style={{ color: SEA }}>{s.rate == null ? '' : `${Math.round(s.rate * 100)}%`}</span>
                                 <span className="h-[13px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(100 * s.value / mx)}%`, background: '#2f6b6b' }} /></span>
                                 <span className="w-10 text-right font-bold">{f0(s.value)}</span>
