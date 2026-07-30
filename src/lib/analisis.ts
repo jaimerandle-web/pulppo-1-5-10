@@ -28,8 +28,12 @@ const bandOf = (v: number | null, bands: Band[]): string => {
     for (const [lab, lo, hi] of bands) if (lo <= x && x < hi) return lab;
     return bands[bands.length - 1][0];
 };
+// Taxonomía del ACM (óptimo / no competitivo / fuera de mercado). Guardrail: ratios
+// precio/ACM absurdos (>3× o <0.2×) = ACM roto → "Sin referencia", no distorsionan.
 const priceCls = (sp: number | null): string =>
-    sp == null ? 'Sin ref.' : sp <= 1.05 ? 'Competitivo' : sp <= 1.20 ? 'En línea' : 'Caro';
+    sp == null || sp > 3 || sp < 0.2 ? 'Sin referencia'
+        : sp <= 1.05 ? 'Óptimo' : sp <= 1.20 ? 'No competitivo' : 'Fuera de mercado';
+const PL_ORDER = ['Óptimo', 'No competitivo', 'Fuera de mercado'];
 const tierName = (t: unknown): string | null => {
     if (!t) return null;
     const s = String(t).toUpperCase();
@@ -41,7 +45,7 @@ const tierName = (t: unknown): string | null => {
 };
 const CAL: Record<number, string> = { 3: 'Alta', 2: 'Media', 1: 'Baja' };
 const QROWS = ['Alta', 'Media', 'Baja'];
-const PCOLS = ['Competitivo', 'En línea', 'Caro', 'Sin ref.'];
+const PCOLS = ['Óptimo', 'No competitivo', 'Fuera de mercado', 'Sin referencia'];
 
 // ---------- config de entrada ----------
 export interface AnalisisConfig {
@@ -56,13 +60,14 @@ export interface AnalisisData {
     N: number;
     opSplit: { sale: number; rent: number };
     llProp: number;               // leads YTD / N
-    zones: { nb: string; n: number; precio: number | null; dem: number; leads: number; cal: string }[];
+    zones: { nb: string; n: number; oferta: number; precio: number | null; dem: number; leads: number; cal: string }[];
     invVsDemand: { band: string; invPct: number; demPct: number; inv: number; dem: number }[];
     matrix: { q: string; cells: { p: string; n: number; ll: number }[] }[];
     priceLead: { cls: string; props: number; leads: number; ll: number }[];
     joyas: number; joyasAlta: number; caras: number;
     nSale: number; nCaro: number; pctCaro: number;
-    hip: string;
+    insightInv: string;           // lectura auto de Inventario
+    insightPrecio: string;        // lectura auto de Precio × calidad
 }
 
 async function resolveCompany(db: Db, name: string): Promise<{ id: ObjectId; name: string }> {
@@ -166,11 +171,24 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     // --- zonas (top 7 por # de props) ---
     const byNb = new Map<string, Item[]>();
     for (const it of items) if (it.nb) { const a = byNb.get(it.nb) || []; a.push(it); byNb.set(it.nb, a); }
-    const zones = [...byNb.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 7).map(([nb, its]) => {
+    const topZones = [...byNb.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 7);
+    // "oferta" = total de propiedades publicadas en esa colonia (TODAS las inmobiliarias)
+    const zoneNbids = [...new Set(topZones.map(([, its]) => its[0].nbid).filter(Boolean) as string[])];
+    const ofertaByNbid: Record<string, number> = {};
+    if (zoneNbids.length) {
+        const agg = db.collection('properties').aggregate([
+            { $match: { 'status.last': 'published', 'address.neighborhood.id': { $in: zoneNbids } } },
+            { $group: { _id: '$address.neighborhood.id', n: { $sum: 1 } } },
+        ]);
+        for await (const r of agg) ofertaByNbid[r._id as string] = r.n as number;
+    }
+    const zones = topZones.map(([nb, its]) => {
         const nbid = its[0].nbid;
         const precio = median(its.filter((i) => i.op === 'sale').map((i) => i.val)) ?? median(its.map((i) => i.val));
         const cal = median(its.map((i) => i.q3));
-        return { nb, n: its.length, precio, dem: (nbid && demandByNb[nbid]) || 0, leads: leadsByNb[nb] || 0, cal: cal != null ? (CAL[Math.round(cal)] || '—') : '—' };
+        return { nb, n: its.length, oferta: (nbid && ofertaByNbid[nbid]) || 0,
+            precio, dem: (nbid && demandByNb[nbid]) || 0, leads: leadsByNb[nb] || 0,
+            cal: cal != null ? (CAL[Math.round(cal)] || '—') : '—' };
     });
 
     // --- inventario vs demanda por ticket ---
@@ -196,25 +214,39 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
             return { p, n, ll: n ? lp / n : 0 };
         }),
     }));
-    const priceLead = ['Competitivo', 'En línea', 'Caro'].map((pcl) => {
+    const priceLead = PL_ORDER.map((pcl) => {
         const grp = venta.filter((it) => priceCls(it.sp) === pcl);
         const leads = grp.reduce((a, it) => a + (leadsByPid[String(it.pid)] || 0), 0);
         return { cls: pcl, props: grp.length, leads, ll: grp.length ? leads / grp.length : 0 };
     });
-    const joyas = (seg[key('Alta', 'Competitivo')] || 0) + (seg[key('Media', 'Competitivo')] || 0);
-    const joyasAlta = seg[key('Alta', 'Competitivo')] || 0;
-    const caras = (seg[key('Alta', 'Caro')] || 0) + (seg[key('Media', 'Caro')] || 0) + (seg[key('Baja', 'Caro')] || 0);
+    const joyas = (seg[key('Alta', 'Óptimo')] || 0) + (seg[key('Media', 'Óptimo')] || 0);
+    const joyasAlta = seg[key('Alta', 'Óptimo')] || 0;
+    const caras = QROWS.reduce((a, q) => a + (seg[key(q, 'Fuera de mercado')] || 0), 0);
     const nSale = venta.length;
-    const nRef = venta.filter((it) => it.sp != null).length;
-    const nCaro = venta.filter((it) => it.sp != null && (it.sp as number) > 1.20).length;
+    const nRef = venta.filter((it) => priceCls(it.sp) !== 'Sin referencia').length;
+    const nCaro = venta.filter((it) => priceCls(it.sp) === 'Fuera de mercado').length;
     const pctCaro = nCaro / (nRef || 1);
-    const pl = Object.fromEntries(priceLead.map((d) => [d.cls, d.ll]));
-    const hip = (pl['Competitivo'] >= pl['En línea'] && pl['En línea'] >= pl['Caro']) ? 'SÍ se cumple' : 'se cumple parcialmente';
+
+    // --- lecturas auto por sección ---
+    const gap = [...invVsDemand].sort((a, b) => (b.invPct - b.demPct) - (a.invPct - a.demPct))[0];
+    const topZone = zones[0];
+    const insightInv = topZone
+        ? `Tu mayor concentración está en ${topZone.nb} (${topZone.n} de ${topZone.oferta} propiedades de la zona). `
+          + (gap && gap.invPct - gap.demPct > 8
+              ? `En el rango ${gap.band} tienes ${Math.round(gap.invPct)}% de tu inventario pero la demanda ahí es ${Math.round(gap.demPct)}% — hay sobreoferta.`
+              : `Tu mezcla por rango de precio va en línea con la demanda del mercado.`)
+        : '';
+    const pOpt = priceLead.find((x) => x.cls === 'Óptimo'), pCaro = priceLead.find((x) => x.cls === 'Fuera de mercado');
+    const insightPrecio = `${Math.round(pctCaro * 100)}% de tu venta con referencia está fuera de mercado (${nCaro} props). `
+        + (pOpt && pCaro
+            ? `Las de precio óptimo reciben ${pOpt.ll.toFixed(1)} leads por propiedad vs ${pCaro.ll.toFixed(1)} las que están fuera de mercado.`
+            : '');
 
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: ytdLeads / (N || 1),
         zones, invVsDemand, matrix, priceLead,
-        joyas, joyasAlta, caras, nSale, nCaro, pctCaro, hip,
+        joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
+        insightInv, insightPrecio,
     };
 }

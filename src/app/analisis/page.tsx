@@ -340,7 +340,7 @@ export default function AnalisisGeneral() {
                         <div className="mt-5 flex gap-2">
                             {(data
                                 ? [[String(data.N), 'propiedades publicadas', `${data.opSplit.sale} venta · ${data.opSplit.rent} renta`],
-                                   [`${Math.round(data.pctCaro * 100)}%`, 'de tu venta, caro vs. mercado', `${data.nCaro} props +20% sobre estimado`],
+                                   [`${Math.round(data.pctCaro * 100)}%`, 'de tu venta, fuera de mercado', `${data.nCaro} props +20% sobre ACM`],
                                    [data.llProp.toFixed(1), 'leads por propiedad (2026)', ''],
                                    [String(data.joyas), 'listas para vender', `${data.joyasAlta} con calidad Alta`]]
                                 : [['—', 'propiedades', ''], ['—', 'sobre mercado', ''], ['—', 'leads / prop', ''], ['—', 'listas para vender', '']]
@@ -418,11 +418,11 @@ const CAL_COL: Record<string, string> = { Alta: '#2f6b6b', Media: '#9CC4C4', Baj
 function InventarioView({ d }: { d: AnalisisData }) {
     return (
         <div className="mt-2 pl-6">
-            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: dónde tienes más inventario, la demanda de esa zona y los leads que te trae.</p>
+            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, cuánta oferta hay en total y la demanda de la zona.</p>
             <table className="w-full border-collapse text-[11px]">
                 <thead>
                     <tr className="border-b" style={{ borderColor: SOFT }}>
-                        {['Colonia', 'Props', 'Precio mediano', 'Demanda', 'Leads 2026', 'Calidad'].map((h, i) => (
+                        {['Colonia', 'Tus props', 'Oferta zona', 'Tu precio mediano', 'Demanda', 'Leads 2026', 'Calidad ficha'].map((h, i) => (
                             <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i ? 'text-right' : 'text-left'}`}>{h}</th>
                         ))}
                     </tr>
@@ -432,6 +432,7 @@ function InventarioView({ d }: { d: AnalisisData }) {
                         <tr key={z.nb} className="border-b border-neutral-100">
                             <td className="py-1 font-semibold">{z.nb}</td>
                             <td className="py-1 text-right">{z.n}</td>
+                            <td className="py-1 text-right" style={{ color: GRAY }}>{f0(z.oferta)}</td>
                             <td className="py-1 text-right">{money(z.precio)}</td>
                             <td className="py-1 text-right">{f0(z.dem)}</td>
                             <td className="py-1 text-right">{f0(z.leads)}</td>
@@ -440,6 +441,9 @@ function InventarioView({ d }: { d: AnalisisData }) {
                     ))}
                 </tbody>
             </table>
+            <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
+                Oferta zona = propiedades publicadas en esa colonia por todas las inmobiliarias. Precio mediano = de tu inventario. Calidad ficha = mediana de tus fichas (Alta/Media/Baja, score de Pulppo).
+            </p>
             <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>
                 Tu inventario en venta vs. la demanda del mercado, por rango de precio.
                 <span style={{ color: GRAY }}> Barra <b style={{ color: SEA }}>azul</b> = tu inventario · <b style={{ color: '#b8901a' }}>amarilla</b> = lo que busca la gente.</span>
@@ -453,19 +457,20 @@ function InventarioView({ d }: { d: AnalisisData }) {
                     <span className="w-14 text-right font-bold">{Math.round(r.demPct)}% dem.</span>
                 </div>
             ))}
+            {d.insightInv && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{d.insightInv}</p>}
         </div>
     );
 }
 
 function PrecioView({ d }: { d: AnalisisData }) {
     const cellBg = (q: string, p: string) =>
-        (q === 'Alta' || q === 'Media') && p === 'Competitivo' ? '#DCEBEB' : q === 'Baja' && p === 'Caro' ? '#F4DED8' : '#F3F3F3';
-    const cols = ['Competitivo', 'En línea', 'Caro', 'Sin ref.'];
+        (q === 'Alta' || q === 'Media') && p === 'Óptimo' ? '#DCEBEB' : q === 'Baja' && p === 'Fuera de mercado' ? '#F4DED8' : '#F3F3F3';
+    const cols = ['Óptimo', 'No competitivo', 'Fuera de mercado', 'Sin referencia'];
     const mx = Math.max(...d.priceLead.map((x) => x.ll), 0.0001);
     return (
         <div className="mt-2 pl-6">
             <p className="mb-2 text-[11px]" style={{ color: SOFT }}>
-                Solo inventario en venta ({d.nSale} props), por precio vs. mercado (ACM) y calidad de ficha. En cada celda: # de propiedades y su <b>L/L</b> (leads por listing).
+                Solo inventario en venta ({d.nSale} props), por precio vs. mercado (ACM) y calidad de ficha. En cada celda: # de propiedades y su <b>L/L</b> (leads por propiedad).
             </p>
             <table className="w-full border-collapse text-[11px]">
                 <thead>
@@ -490,10 +495,13 @@ function PrecioView({ d }: { d: AnalisisData }) {
                     ))}
                 </tbody>
             </table>
+            <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
+                Taxonomía del ACM: óptimo (≤+5%) · no competitivo (+5% a +20%) · fuera de mercado (&gt;+20%). Sin referencia = sin ACM confiable (sin estimación o ACM atípico).
+            </p>
             <div className="mt-3 flex gap-2">
-                {[[String(d.joyas), 'listas para destacar', SEA, `precio competitivo · ${d.joyasAlta} calidad Alta`],
-                  [String(d.caras), 'caras vs. mercado', RED, 'ajustar precio antes de invertir'],
-                  [`${Math.round(d.pctCaro * 100)}%`, 'del inventario está caro', SOFT, 'freno principal de conversión']].map(([n, l, col, sub], i) => (
+                {[[String(d.joyas), 'listas para destacar', SEA, `precio óptimo · ${d.joyasAlta} calidad Alta`],
+                  [String(d.caras), 'fuera de mercado', RED, 'ajustar precio antes de invertir'],
+                  [`${Math.round(d.pctCaro * 100)}%`, 'de tu venta fuera de mercado', SOFT, 'freno principal de conversión']].map(([n, l, col, sub], i) => (
                     <div key={i} className="flex-1 bg-[#F9F9F9] p-2.5">
                         <p className="text-[20px] leading-none" style={{ fontFamily: 'var(--font-serif)', color: col as string }}>{n}</p>
                         <p className="mt-1 text-[9px] leading-tight">{l}</p>
@@ -501,14 +509,15 @@ function PrecioView({ d }: { d: AnalisisData }) {
                     </div>
                 ))}
             </div>
-            <p className="mb-1 mt-4 text-[11px]" style={{ color: SOFT }}>¿Mejor precio = más leads? La hipótesis <b>{d.hip}</b> con tus datos.</p>
+            <p className="mb-1 mt-4 text-[11px] font-semibold" style={{ color: SOFT }}>Leads por precio de la propiedad.</p>
             {d.priceLead.map((r) => (
                 <div key={r.cls} className="flex items-center gap-2 py-0.5 text-[10px]">
-                    <span className="w-20 font-bold">{r.cls}</span>
+                    <span className="w-28 font-bold">{r.cls}</span>
                     <span className="h-[12px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(100 * r.ll / mx)}%`, background: SEA }} /></span>
                     <span className="w-24 text-right font-bold">{r.ll.toFixed(1)} <span style={{ color: GRAY }}>L/L · {r.props} props</span></span>
                 </div>
             ))}
+            {d.insightPrecio && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{d.insightPrecio}</p>}
         </div>
     );
 }
