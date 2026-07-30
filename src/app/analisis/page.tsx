@@ -17,7 +17,6 @@ const money = (n?: number | null) =>
     n == null ? '—' : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
 const fmtYoy = (v: number, fmt: string) =>
     fmt === 'money' ? money(v) : fmt === 'pct' ? `${Math.round(v * 100)}%` : fmt === 'pct2' ? `${(v * 100).toFixed(2)}%` : fmt === 'dec' ? v.toFixed(1) : f0(v);
-const LEVCOL: Record<string, string> = { 'Bajar precio': RED, 'Destacar': SEA, 'Mejorar ficha': SOFT };
 
 // Secciones del documento (el "hasta qué sí / qué no incluir").
 const SECCIONES = [
@@ -103,6 +102,7 @@ export default function AnalisisGeneral() {
     const [operacion, setOperacion] = useState('Ambas');
     const [ventCierres, setVentCierres] = useState('Últimos 24 meses');
     const [ventDemanda, setVentDemanda] = useState('Últimos 12 meses');
+    const [ventLeads, setVentLeads] = useState('YTD 2026');
     const [zombie, setZombie] = useState('Últimos 90 días');
     const [referencias, setReferencias] = useState<string[]>(['ACM (valor estimado)', 'Oferta de zona', 'Cierres reales', 'Qué te alcanza por el mismo precio']);
     const [destacados, setDestacados] = useState(false);
@@ -165,7 +165,7 @@ export default function AnalisisGeneral() {
         try {
             const res = await fetch('/api/analisis', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inmo, operacion, ventDemanda, mlsGeneral }),
+                body: JSON.stringify({ inmo, operacion, ventDemanda, ventLeads, mlsGeneral }),
             });
             if (res.status === 401) { router.push('/login'); return; }
             const d = await res.json();
@@ -176,7 +176,7 @@ export default function AnalisisGeneral() {
         } finally { setLoading(false); }
     }
     // La config cambió → el preview actual queda obsoleto.
-    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, mlsGeneral]);
+    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventLeads, mlsGeneral]);
 
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
@@ -230,6 +230,10 @@ export default function AnalisisGeneral() {
                             </Field>
                             <Field label="Demanda de zona (búsquedas)">
                                 <Select value={ventDemanda} onChange={setVentDemanda} options={['Últimos 6 meses', 'Últimos 12 meses', 'YTD 2026']} />
+                            </Field>
+                            <Field label="Desempeño de leads (inventario)"
+                                hint="Ventana de los leads por propiedad (zonas, matriz, Top 10). Alíneala con la demanda para leer las dos comparables.">
+                                <Select value={ventLeads} onChange={setVentLeads} options={['Últimos 30 días', 'Últimos 90 días', 'Últimos 6 meses', 'YTD 2026', 'Últimos 12 meses']} />
                             </Field>
                             <Field label="Zombie · sin leads en">
                                 <Select value={zombie} onChange={setZombie} options={['Últimos 30 días', 'Últimos 90 días', 'Últimos 6 meses', 'Totales']} />
@@ -429,7 +433,7 @@ function InventarioView({ d }: { d: AnalisisData }) {
             <table className="w-full border-collapse text-[11px]">
                 <thead>
                     <tr className="border-b" style={{ borderColor: SOFT }}>
-                        {['Colonia', 'Tus props', 'Oferta zona', 'Precio vs. zona', 'Demanda', 'Leads 2026'].map((h, i) => (
+                        {['Colonia', 'Tus props', 'Oferta zona', 'Precio vs. zona', 'Demanda', `Leads · ${d.leadsLabel}`].map((h, i) => (
                             <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i ? 'text-right' : 'text-left'}`}>{h}</th>
                         ))}
                     </tr>
@@ -478,7 +482,7 @@ function PrecioView({ d }: { d: AnalisisData }) {
     return (
         <div className="mt-2 pl-6">
             <p className="mb-2 text-[11px]" style={{ color: SOFT }}>
-                Solo inventario en venta ({d.nSale} props), por precio vs. mercado (ACM) y calidad de ficha. En cada celda: # de propiedades y su <b>L/L</b> (leads por propiedad).
+                Solo inventario en <b>venta</b> ({d.nSale} props), por precio vs. mercado (ACM) y calidad de ficha. En cada celda: # de propiedades y su <b>L/L</b> (leads por propiedad).
             </p>
             <table className="w-full border-collapse text-[11px]">
                 <thead>
@@ -496,7 +500,9 @@ function PrecioView({ d }: { d: AnalisisData }) {
                             {row.cells.map((c) => (
                                 <td key={c.p} className="border-2 border-white p-1.5 text-center align-middle" style={{ background: cellBg(row.q, c.p) }}>
                                     <span className="text-[13px] font-bold">{c.n}</span>
-                                    <span className="block text-[8px]" style={{ color: GRAY }}>{c.ll.toFixed(1)} L/L</span>
+                                    {c.p === 'Sin referencia'
+                                        ? <span className="block text-[8px]" style={{ color: '#CFCFCF' }}>—</span>
+                                        : <span className="block text-[8px]" style={{ color: GRAY }}>{c.ll.toFixed(1)} L/L</span>}
                                 </td>
                             ))}
                         </tr>
@@ -504,7 +510,7 @@ function PrecioView({ d }: { d: AnalisisData }) {
                 </tbody>
             </table>
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
-                Taxonomía del ACM: óptimo (≤+5%) · no competitivo (+5% a +20%) · fuera de mercado (&gt;+20%). Sin referencia = sin ACM confiable (sin estimación o ACM atípico).
+                Taxonomía del ACM: óptimo (≤+5%) · no competitivo (+5% a +20%) · fuera de mercado (&gt;+20%). Sin referencia = sin ACM confiable (sin estimación o ACM atípico); su L/L no se muestra porque no es comparable.
             </p>
             <div className="mt-3 flex gap-2">
                 {[[String(d.joyas), 'listas para destacar', SEA, `precio óptimo · ${d.joyasAlta} calidad Alta`],
@@ -550,6 +556,17 @@ function FunnelView({ d }: { d: AnalisisData }) {
                     </div>
                 ))}
             </div>
+            <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Composición de tus leads 2026</p>
+            <div className="flex gap-2">
+                {[['Cliente', d.leadsComp.cliente, SEA_D], ['Broker', d.leadsComp.broker, GRAY], ['Sin contacto', d.leadsComp.incontactables, RED],
+                  ['Venta', d.leadsComp.totalOp.sale, SEA], ['Renta', d.leadsComp.totalOp.rent, '#9CC4C4']].map(([l, n, col]) => (
+                    <div key={l as string} className="flex-1 bg-[#F3F3F3] p-2">
+                        <p className="text-[16px] leading-none" style={{ fontFamily: 'var(--font-serif)', color: col as string }}>{f0(n as number)}</p>
+                        <p className="mt-1 text-[8px] leading-tight text-neutral-500">{l as string}</p>
+                    </div>
+                ))}
+            </div>
+            <p className="mt-1 text-[9px]" style={{ color: GRAY }}>Broker = el contacto pertenece a una inmobiliaria (no comprador final). Sin contacto = sin teléfono ni correo (incontactable).</p>
             {d.funnelReading && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{d.funnelReading}</p>}
         </div>
     );
@@ -647,9 +664,10 @@ function Top10View({ d }: { d: AnalisisData }) {
                             <td className="py-1 text-right" style={{ color: t.sp && t.sp > 1.2 ? RED : SOFT }}>{t.sp ? `+${Math.round((t.sp - 1) * 100)}%` : '—'}</td>
                             <td className="py-1 text-right">{t.leads}</td>
                             <td className="py-1 text-right">{f0(t.dz)}</td>
-                            <td className="py-1">{t.lev.map((l, j) => (
-                                <span key={l} style={{ color: LEVCOL[l] || SOFT, fontWeight: 700 }}>{j ? ' · ' : ''}{l}</span>
-                            ))}</td>
+                            <td className="py-1">{t.lev.map((l, j) => {
+                                const col = l.startsWith('Bajar') ? RED : l.startsWith('Destacar') ? SEA : SOFT;
+                                return <span key={l} style={{ color: col, fontWeight: 700 }}>{j ? ' · ' : ''}{l}</span>;
+                            })}</td>
                         </tr>
                     ))}
                 </tbody>

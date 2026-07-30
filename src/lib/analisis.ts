@@ -52,6 +52,7 @@ export interface AnalisisConfig {
     inmo: string;                 // nombre (regex case-insensitive)
     operacion?: string;           // 'Ambas' | 'Venta' | 'Renta'
     ventDemanda?: string;         // 'Últimos 6 meses' | 'Últimos 12 meses' | 'YTD 2026'
+    ventLeads?: string;           // ventana de leads: 'Últimos 30 días' | '90 días' | '6 meses' | 'YTD 2026' | '12 meses'
     mlsGeneral?: boolean;         // oferta/zona contra el MLS i24 completo en vez de la red Pulppo
 }
 
@@ -60,8 +61,10 @@ export interface AnalisisData {
     corte: string;                // ISO de la fecha de corte
     N: number;
     opSplit: { sale: number; rent: number };
-    llProp: number;               // leads YTD / N
+    llProp: number;               // leads (ventana) / N
+    leadsLabel: string;           // etiqueta de la ventana de leads
     ofertaLabel: string;          // "red Pulppo" | "MLS i24"
+    leadsComp: { cliente: number; broker: number; incontactables: number; totalOp: { sale: number; rent: number } };
     zones: { nb: string; n: number; oferta: number; vsZona: number | null; dem: number; leads: number }[];
     invVsDemand: { band: string; invPct: number; demPct: number; inv: number; dem: number }[];
     matrix: { q: string; cells: { p: string; n: number; ll: number }[] }[];
@@ -100,26 +103,34 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const YTD0 = new Date(Date.UTC(NOW.getUTCFullYear(), 0, 1));
     const H1_25: [Date, Date] = [new Date(Date.UTC(2025, 0, 1)), new Date(Date.UTC(2025, 6, 1))];
     const H1_26: [Date, Date] = [new Date(Date.UTC(2026, 0, 1)), new Date(Date.UTC(2026, 6, 1))];
-    const demandStart = (() => {
-        const w = cfg.ventDemanda || 'Últimos 12 meses';
+    const windowStart = (w: string, fallbackMonths: number): Date => {
         if (w === 'YTD 2026') return YTD0;
         const d = new Date(NOW);
-        d.setUTCMonth(d.getUTCMonth() - (w === 'Últimos 6 meses' ? 6 : 12));
+        if (w === 'Últimos 30 días') d.setUTCDate(d.getUTCDate() - 30);
+        else if (w === 'Últimos 90 días') d.setUTCDate(d.getUTCDate() - 90);
+        else if (w === 'Últimos 6 meses') d.setUTCMonth(d.getUTCMonth() - 6);
+        else if (w === 'Últimos 12 meses') d.setUTCMonth(d.getUTCMonth() - 12);
+        else d.setUTCMonth(d.getUTCMonth() - fallbackMonths);
         return d;
-    })();
+    };
+    const demandStart = windowStart(cfg.ventDemanda || 'Últimos 12 meses', 12);
+    const leadsWindow = cfg.ventLeads || 'YTD 2026';
+    const leadsStart = windowStart(leadsWindow, 12);
+    const leadsLabel = leadsWindow.toLowerCase();
 
     // --- propiedades publicadas ---
     const pub = await db.collection('properties').find(
         { 'company._id': CID, 'status.last': 'published' },
         { projection: {
-            listing: 1, type: 1, 'acm.price.value': 1, qualityScore: 1, pictures: 1,
+            listing: 1, type: 1, 'acm.price.value': 1, qualityScore: 1, pictures: 1, videos: 1,
             virtualTour: 1, 'address.neighborhood': 1, internalId: 1, publishedAt: 1,
             'portals.inmuebles24.type': 1, 'attributes.totalSurface': 1, 'attributes.roofedSurface': 1,
         } }
     ).toArray();
 
     type Item = { pid: ObjectId; code: string | null; nb: string | null; nbid: string | null; op: string | null;
-        val: number; sp: number | null; ppm2: number | null; q3: number | null; tour: boolean; tier: string | null };
+        val: number; sp: number | null; ppm2: number | null; q3: number | null; tour: boolean; tier: string | null;
+        fotos: number; video: boolean; descLen: number };
     const items: Item[] = pub.map((p) => {
         const nb = (gv(p, 'address', 'neighborhood') || {}) as Record<string, unknown>;
         const val = (num(gv(p, 'listing', 'value')) || 0);
@@ -133,6 +144,9 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
             ppm2: val && m2 ? val / m2 : null,
             q3: num(p.qualityScore), tour: !!p.virtualTour,
             tier: tierName(gv(p, 'portals', 'inmuebles24', 'type')),
+            fotos: (p.pictures as unknown[] | undefined)?.length || 0,
+            video: !!((p.videos as unknown[] | undefined)?.length),
+            descLen: ((gv(p, 'listing', 'description') as string) || '').length,
         };
     });
     const N = items.length;
@@ -162,15 +176,15 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     // --- leads YTD por propiedad y por zona ---
     const leadsByPid: Record<string, number> = {};
     const leadsByNb: Record<string, number> = {};
-    let ytdLeads = 0;
+    let leadsWinTotal = 0;
     const leadCur = db.collection('leads').find(
-        { 'property._id': { $in: pubIds }, createdAt: { $gte: YTD0 } },
+        { 'property._id': { $in: pubIds }, createdAt: { $gte: leadsStart } },
         { projection: { 'property._id': 1, createdAt: 1 } }
     );
     for await (const l of leadCur) {
         const pid = String(gv(l, 'property', '_id'));
         leadsByPid[pid] = (leadsByPid[pid] || 0) + 1;
-        ytdLeads++;
+        leadsWinTotal++;
         const nb = pid2nb.get(pid);
         if (nb) leadsByNb[nb] = (leadsByNb[nb] || 0) + 1;
     }
@@ -274,14 +288,25 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const allpids = allprops.map((p) => p._id as ObjectId);
     const zero = () => ({ sale: 0, rent: 0 } as Record<string, number>);
 
-    const leadsByOp = zero(), contByOp = zero();
+    const leadsByOp = zero(), contByOp = zero(), cleanByOp = zero();
     let ytdLeadsAll = 0, ytdVis = 0, h1Leads25 = 0, h1Leads26 = 0;
+    let compCliente = 0, compBroker = 0, compIncont = 0;
     const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: H1_25[0] } },
-        { projection: { 'property._id': 1, answeredAt: 1, createdAt: 1 } });
+        { projection: { 'property._id': 1, answeredAt: 1, createdAt: 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1 } });
     for await (const l of lc) {
         const d = asDt(l.createdAt); if (!d) continue;
         const op = pid2op.get(String(gv(l, 'property', '_id')));
-        if (d >= YTD0) { ytdLeadsAll++; if (op === 'sale' || op === 'rent') { leadsByOp[op]++; if (l.answeredAt) contByOp[op]++; } }
+        if (d >= YTD0) {
+            ytdLeadsAll++;
+            if (op === 'sale' || op === 'rent') {
+                leadsByOp[op]++;
+                const contactable = !!(gv(l, 'contact', 'phone') || gv(l, 'contact', 'email'));
+                const broker = !!gv(l, 'contact', 'company', '_id');   // el contacto pertenece a una inmobiliaria
+                if (contactable) cleanByOp[op]++; else compIncont++;
+                if (broker) compBroker++; else compCliente++;
+                if (l.answeredAt) contByOp[op]++;
+            }
+        }
         if (d >= H1_25[0] && d < H1_25[1]) h1Leads25++;
         if (d >= H1_26[0] && d < H1_26[1]) h1Leads26++;
     }
@@ -304,7 +329,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         if ((last === 'closed' || last === 'paying') && xd && xd >= YTD0) closesByOp[t]++;
     }
     const buildFunnel = (title: string, op: string) => {
-        const raw: [string, number][] = [['Leads', leadsByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
+        const raw: [string, number][] = [['Leads', leadsByOp[op]], ['Leads limpios', cleanByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
         let prev: number | null = null;
         return { title, steps: raw.map(([label, value]) => { const rate = prev && prev > 0 ? value / prev : null; prev = value; return { label, value, rate }; }) };
     };
@@ -383,10 +408,18 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const leads = leadsByPid[String(it.pid)] || 0;
         const dz = (it.nbid && demandByNb[it.nbid]) || 0;
         const spV = it.sp != null && it.sp > 0.2 && it.sp < 3 ? it.sp : null;
+        const fueraMercado = spV != null && spV > 1.20;
         const lev: string[] = [];
         if (spV && spV > 1.15) lev.push('Bajar precio');
-        if (it.tier === null || it.tier === 'Simple' || it.tier === 'Offline') lev.push('Destacar');
-        if ((it.q3 || 2) <= 2 || !it.tour) lev.push('Mejorar ficha');
+        // Destacar solo si el precio NO está fuera de mercado (la visibilidad no arregla el sobreprecio).
+        if ((it.tier === null || it.tier === 'Simple' || it.tier === 'Offline') && !fueraMercado) lev.push('Destacar');
+        // Mejorar ficha: detallar qué falta en vez de decirlo genérico.
+        const falta: string[] = [];
+        if (it.fotos < 8) falta.push('fotos');
+        if (!it.tour) falta.push('tour');
+        if (it.descLen < 400) falta.push('descripción');
+        if (!it.video) falta.push('video');
+        if (((it.q3 || 2) <= 2 || !it.tour || it.fotos < 8) && falta.length) lev.push(`Mejorar ficha: ${falta.join(', ')}`);
         if (!lev.length || dz <= 0) continue;
         cand10.push({ code: it.code || '—', nb: it.nb || '—', val: it.val, sp: spV, leads, dz, lev, score: dz / (1 + leads) });
     }
@@ -395,7 +428,8 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
-        llProp: ytdLeads / (N || 1), ofertaLabel,
+        llProp: leadsWinTotal / (N || 1), leadsLabel, ofertaLabel,
+        leadsComp: { cliente: compCliente, broker: compBroker, incontactables: compIncont, totalOp: { sale: leadsByOp.sale, rent: leadsByOp.rent } },
         zones, invVsDemand, matrix, priceLead,
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
         insightInv, insightPrecio,
