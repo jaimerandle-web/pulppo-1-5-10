@@ -1,6 +1,6 @@
 // Herramienta Master Brokers (borrador): datos a nivel INMOBILIARIA (una company de Mongo).
-// Overview + listado con el cruce de mercado (demanda, precio vs. oferta MLS y vs. cierres Pulppo,
-// competencia, salud de ficha) + funnel comercial. Cada propiedad linkea a su ficha. Datos en vivo.
+// Overview (atención + KPIs + red flags + prioridades) + listado con el cruce de mercado (demanda,
+// precio vs. oferta MLS y vs. cierres Pulppo, competencia, calidad) + funnel comercial. Datos en vivo.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 
@@ -17,16 +17,24 @@ const estadoPrecio = (sp: number | null): string => (sp == null ? 'Haz ACM' : sp
 const CAL: Record<number, string> = { 3: 'Alta', 2: 'Media', 1: 'Baja' };
 const YTD0 = new Date('2026-01-01T00:00:00Z');
 const D24 = new Date(Date.now() - 730 * 864e5);
+const D30 = new Date(Date.now() - 30 * 864e5);
+const D60 = new Date(Date.now() - 60 * 864e5);
+// Rangos de velocidad de 1ª respuesta (minutos): flash ≤5 · rápida ≤1h · media ≤24h · lento >24h.
+export type RespKey = 'flash' | 'rapida' | 'media' | 'lento' | 'sin';
+const respBucket = (min: number | null): RespKey => (min == null ? 'sin' : min <= 5 ? 'flash' : min <= 60 ? 'rapida' : min <= 1440 ? 'media' : 'lento');
 
 export interface MBProp {
     id: string; code: string; type: string; op: string; colonia: string; asesor: string;
     precio: number | null; estado: string; demanda: number; vsOferta: number | null; vsCierres: number | null;
-    compite: number | null; calidad: string; dias: number | null;
-    vistas: number; leads: number; visitas: number; ofertas: number;
+    compite: number | null; calidad: string; dias: number | null; mesesPub: number | null;
+    vistas: number; leads: number; visitas: number; ofertas: number; cierres: number;
+    respMedMin: number | null; oppScore: number; diag: string[];
 }
 export interface MBData {
     companyId: string; name: string; nProps: number; nVenta: number; nRenta: number; captaciones90: number;
-    vistas: number; leads: number; visitas: number; ofertas: number; sinLeads: number; props: MBProp[];
+    vistas: number; leads: number; visitas: number; ofertas: number; sinLeads: number;
+    leads30: number; leads30prev: number; resp: Record<RespKey, number>; respMedMin: number | null;
+    calAltaPct: number; benchAltaPct: number; props: MBProp[];
 }
 
 const countBy = async (coll: string, field: string, match: Document): Promise<Map<string, number>> => {
@@ -34,12 +42,28 @@ const countBy = async (coll: string, field: string, match: Document): Promise<Ma
     const rows = await db.collection(coll).aggregate([{ $match: match }, { $group: { _id: `$${field}`, n: { $sum: 1 } } }]).toArray();
     return new Map(rows.map((r) => [String(r._id), r.n as number]));
 };
-// Referencia de zona: mediana con ≥3 muestras en colonia, si no en ciudad, si no null.
 const zref = (nb: string | null, ci: string | null, byNb: Map<string, number[]>, byCi: Map<string, number[]>): number | null => {
     if (nb && (byNb.get(nb)?.length ?? 0) >= 3) return median(byNb.get(nb)!);
     if (ci && (byCi.get(ci)?.length ?? 0) >= 3) return median(byCi.get(ci)!);
     return null;
 };
+
+// Benchmark de comunidad: % de fichas en calidad Alta de las MEJORES inmobiliarias (top 20% con ≥10 props).
+// Cacheado 10 min por instancia (cambia lento y es un escaneo global).
+let _bench: { pct: number; at: number } | null = null;
+async function communityAltaPct(db: Awaited<ReturnType<typeof getDb>>): Promise<number> {
+    if (_bench && Date.now() - _bench.at < 600000) return _bench.pct;
+    const rows = await db.collection('properties').aggregate([
+        { $match: { 'status.last': 'published' } },
+        { $group: { _id: '$company._id', total: { $sum: 1 }, alta: { $sum: { $cond: [{ $eq: ['$qualityScore', 3] }, 1, 0] } } } },
+        { $match: { total: { $gte: 10 } } }
+    ], { allowDiskUse: true }).toArray();
+    const pcts = rows.map((r) => (r.alta as number) / (r.total as number)).sort((a, b) => b - a);
+    const top = pcts.slice(0, Math.max(1, Math.ceil(pcts.length * 0.2)));
+    const pct = Math.round((median(top) ?? 0) * 100);
+    _bench = { pct, at: Date.now() };
+    return pct;
+}
 
 export async function fetchInmobiliaria(companyId: string): Promise<MBData | null> {
     let cid: ObjectId;
@@ -53,10 +77,25 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const name = (dig(props[0], 'company', 'name') as string) ?? 'Inmobiliaria';
     const ids = props.map((p) => p._id as ObjectId);
     const nbids = [...new Set(props.map((p) => dig(p, 'address', 'neighborhood', 'id')).filter(Boolean))] as string[];
-    const ciids = [...new Set(props.map((p) => dig(p, 'address', 'city', 'id')).filter(Boolean))] as string[];
+
+    // --- leads: conteo, 30d vs previos, y tiempo de 1ª respuesta (answeredAt - createdAt) ---
+    const leadDocs = await db.collection('leads').find({ 'property._id': { $in: ids } }, { projection: { 'property._id': 1, createdAt: 1, answeredAt: 1 } }).toArray();
+    const leadsMap = new Map<string, number>();
+    const respByProp = new Map<string, number[]>();
+    const resp: Record<RespKey, number> = { flash: 0, rapida: 0, media: 0, lento: 0, sin: 0 };
+    const allResp: number[] = [];
+    let leads30 = 0, leads30prev = 0;
+    for (const l of leadDocs) {
+        const pid = String(dig(l, 'property', '_id'));
+        leadsMap.set(pid, (leadsMap.get(pid) ?? 0) + 1);
+        const ca = dig(l, 'createdAt'), aa = dig(l, 'answeredAt');
+        const mins = ca instanceof Date && aa instanceof Date ? Math.max(0, (aa.getTime() - ca.getTime()) / 60000) : null;
+        resp[respBucket(mins)]++;
+        if (mins != null) { pushMap(respByProp, pid, mins); allResp.push(mins); }
+        if (ca instanceof Date) { if (ca >= D30) leads30++; else if (ca >= D60) leads30prev++; }
+    }
 
     // --- desempeño por propiedad ---
-    const leadsMap = await countBy('leads', 'property._id', { 'property._id': { $in: ids } });
     const visRows = await db.collection('visits').aggregate([
         { $match: { 'steps.property._id': { $in: ids }, 'status.last': 'confirmed' } },
         { $unwind: '$steps' }, { $match: { 'steps.property._id': { $in: ids } } },
@@ -66,6 +105,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const visMap = new Map(visRows.map((r) => [String(r._id), r.n as number]));
     const viewMap = await countBy('metrics', 'property', { property: { $in: ids }, type: 'view' });
     const ofMap = await countBy('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': { $in: [...ADVANCED] } });
+    const cloMap = await countBy('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': 'closed' });
 
     // --- mercado por zona ---
     const demandNb = new Map<string, number>();
@@ -77,7 +117,6 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         ], { allowDiskUse: true }).toArray();
         for (const r of dr) demandNb.set(String(r._id), r.n as number);
     }
-    // oferta $/m² (venta publicada, todas las cías) → mediana + conteo (competencia)
     const offNb = new Map<string, number[]>(), offCi = new Map<string, number[]>(), supplyNb = new Map<string, number>();
     if (nbids.length) {
         const ls = await db.collection('properties').find(
@@ -91,7 +130,6 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             if (v && s && s > 0) { const ppm = v / s; if (nb) pushMap(offNb, nb, ppm); if (ci) pushMap(offCi, ci, ppm); }
         }
     }
-    // cierres $/m² (ops closed/paying venta, 24m) — se une a properties para colonia + superficie
     const cloNb = new Map<string, number[]>(), cloCi = new Map<string, number[]>();
     const ops = await db.collection('operations').find(
         { 'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: D24 }, 'property.listing.operation': 'sale' },
@@ -109,9 +147,10 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             if (s && s > 0 && v) { const ppm = v / s; const nb = dig(p, 'address', 'neighborhood', 'id') as string, ci = dig(p, 'address', 'city', 'id') as string; if (nb) pushMap(cloNb, nb, ppm); if (ci) pushMap(cloCi, ci, ppm); }
         }
     }
+    const benchAltaPct = await communityAltaPct(db);
 
     const now = Date.now();
-    let nVenta = 0, nRenta = 0, captaciones90 = 0, tVistas = 0, tLeads = 0, tVisitas = 0, tOfertas = 0, sinLeads = 0;
+    let nVenta = 0, nRenta = 0, captaciones90 = 0, tVistas = 0, tLeads = 0, tVisitas = 0, tOfertas = 0, sinLeads = 0, nAlta = 0;
     const rows: MBProp[] = props.map((p) => {
         const hex = String(p._id);
         const op = dig(p, 'listing', 'operation') as string;
@@ -123,28 +162,40 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const ppm = val && surf && surf > 0 && op === 'sale' ? val / surf : null;
         const offRef = op === 'sale' ? zref(nb, ci, offNb, offCi) : null;
         const cloRef = op === 'sale' ? zref(nb, ci, cloNb, cloCi) : null;
+        const vsOferta = ppm && offRef ? (ppm / offRef - 1) * 100 : null;
         const pub = dig(p, 'publishedAt');
         const dias = pub instanceof Date ? Math.max(0, Math.round((now - pub.getTime()) / 864e5)) : null;
-        const leads = leadsMap.get(hex) ?? 0, vis = visMap.get(hex) ?? 0, vistas = viewMap.get(hex) ?? 0, ofertas = ofMap.get(hex) ?? 0;
+        const leads = leadsMap.get(hex) ?? 0, vis = visMap.get(hex) ?? 0, vistas = viewMap.get(hex) ?? 0, ofertas = ofMap.get(hex) ?? 0, cierres = cloMap.get(hex) ?? 0;
+        const demanda = nb ? (demandNb.get(nb) ?? 0) : 0;
+        const calidad = CAL[num(dig(p, 'qualityScore')) ?? 2] ?? 'Media';
         const ag = dig(p, 'agent') as Document | undefined;
         const asesor = [dig(ag, 'firstName'), dig(ag, 'lastName')].filter(Boolean).join(' ').trim() || '—';
+        const diag: string[] = [];
+        if (op === 'sale' && (sp && sp > 1.15 || (vsOferta != null && vsOferta > 15))) diag.push('Bajar precio');
+        if (calidad !== 'Alta') diag.push('Mejorar ficha');
         if (op === 'sale') nVenta++; else if (op === 'rent') nRenta++;
         if (dias != null && dias <= 90) captaciones90++;
+        if (calidad === 'Alta') nAlta++;
         tVistas += vistas; tLeads += leads; tVisitas += vis; tOfertas += ofertas;
         if (leads === 0) sinLeads++;
         return {
             id: hex, code: (p.internalId as string) ?? hex, type: (p.type as string) ?? '—',
             op: op === 'sale' ? 'Venta' : op === 'rent' ? 'Renta' : '—',
             colonia: (dig(p, 'address', 'neighborhood', 'name') as string) ?? '—', asesor,
-            precio: val, estado: estadoPrecio(sp),
-            demanda: nb ? (demandNb.get(nb) ?? 0) : 0,
-            vsOferta: ppm && offRef ? (ppm / offRef - 1) * 100 : null,
+            precio: val, estado: estadoPrecio(sp), demanda, vsOferta,
             vsCierres: ppm && cloRef ? (ppm / cloRef - 1) * 100 : null,
             compite: op === 'sale' && nb ? (supplyNb.get(nb) ?? null) : null,
-            calidad: CAL[num(dig(p, 'qualityScore')) ?? 2] ?? 'Media', dias,
-            vistas, leads, visitas: vis, ofertas
+            calidad, dias, mesesPub: dias != null ? dias / 30 : null,
+            vistas, leads, visitas: vis, ofertas, cierres,
+            respMedMin: median(respByProp.get(hex) ?? []),
+            oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag
         };
     });
     rows.sort((a, b) => b.leads - a.leads || b.vistas - a.vistas);
-    return { companyId: String(cid), name, nProps: props.length, nVenta, nRenta, captaciones90, vistas: tVistas, leads: tLeads, visitas: tVisitas, ofertas: tOfertas, sinLeads, props: rows };
+    return {
+        companyId: String(cid), name, nProps: props.length, nVenta, nRenta, captaciones90,
+        vistas: tVistas, leads: tLeads, visitas: tVisitas, ofertas: tOfertas, sinLeads,
+        leads30, leads30prev, resp, respMedMin: median(allResp),
+        calAltaPct: props.length ? Math.round((100 * nAlta) / props.length) : 0, benchAltaPct, props: rows
+    };
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import type { MBData, MBProp } from '@/lib/mb';
+import type { MBData, MBProp, RespKey } from '@/lib/mb';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2; // design system Pulppo: esquinas cuadradas
@@ -15,27 +15,33 @@ const vsCell = (v: number | null) => {
 };
 
 type Section = 'overview' | 'props' | 'analisis';
-type Seg = '' | 'sinleads' | 'visitasSinOferta';
+type Seg = '' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta';
+const CHIPS: { seg: Exclude<Seg, ''>; label: string; test: (p: MBProp) => boolean }[] = [
+    { seg: 'sinleads', label: 'Sin leads', test: (p) => p.leads === 0 },
+    { seg: 'caroSinLeads', label: 'Caro sin leads', test: (p) => p.leads === 0 && (p.estado === 'Fuera de mercado' || p.estado === 'No competitivo') },
+    { seg: 'visitasSinOferta', label: 'Visitas sin oferta', test: (p) => p.visitas > 0 && p.ofertas === 0 },
+    { seg: 'mas12', label: '+12 meses', test: (p) => (p.mesesPub ?? 0) >= 12 },
+    { seg: 'respLenta', label: 'Respuesta lenta', test: (p) => p.respMedMin != null && p.respMedMin > 1440 }
+];
+const CHIP_TEST: Record<string, (p: MBProp) => boolean> = Object.fromEntries(CHIPS.map((c) => [c.seg, c.test]));
+const RESP_LBL: Record<RespKey, string> = { flash: 'Flash', rapida: 'Rápida', media: 'Media', lento: 'Lento', sin: 'Sin responder' };
 
-function Stat({ n, l, sub, color, onClick }: { n: string; l: string; sub?: string; color?: string; onClick?: () => void }) {
+function Kpi({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
     return (
-        <div onClick={onClick} style={{ flex: 1, background: LGT, padding: '14px 16px', borderRadius: R, cursor: onClick ? 'pointer' : 'default' }}>
-            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1, color: color || BLK }}>{n}</div>
-            <div style={{ fontSize: 11, marginTop: 6, fontWeight: 600 }}>{l}</div>
-            {sub && <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{sub}</div>}
+        <div style={{ flex: 1, background: '#fff', border: `1px solid ${LGT}`, padding: '14px 16px', borderRadius: R }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>{label}</div>
+            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1.05, margin: '8px 0 3px', color: color || BLK }}>{value}</div>
+            {sub && <div style={{ fontSize: 11, color: '#777' }}>{sub}</div>}
         </div>
     );
 }
 
-// Venta vs. renta — barra apilada (cuadrada)
 function OpSplit({ venta, renta }: { venta: number; renta: number }) {
-    const tot = venta + renta || 1;
-    const pv = Math.round((100 * venta) / tot);
+    const tot = venta + renta || 1, pv = Math.round((100 * venta) / tot);
     return (
         <div>
             <div style={{ display: 'flex', height: 26, borderRadius: R, overflow: 'hidden', border: `1px solid ${LGT}` }}>
-                <div style={{ width: `${pv}%`, background: BLK }} />
-                <div style={{ width: `${100 - pv}%`, background: YEL }} />
+                <div style={{ width: `${pv}%`, background: BLK }} /><div style={{ width: `${100 - pv}%`, background: YEL }} />
             </div>
             <div style={{ display: 'flex', gap: 18, marginTop: 8, fontSize: 12 }}>
                 <span><span style={{ display: 'inline-block', width: 10, height: 10, background: BLK, marginRight: 6 }} /><b>{f(venta)}</b> venta · {pv}%</span>
@@ -54,7 +60,7 @@ function Funnel({ vistas, leads, visitas, ofertas, n }: { vistas: number; leads:
     ];
     return (
         <div>
-            <div style={{ fontSize: 11, color: GRY, marginBottom: 10 }}>Sobre las <b>{f(n)}</b> propiedades filtradas. Las tasas se miden contra el paso anterior.</div>
+            <div style={{ fontSize: 11, color: GRY, marginBottom: 10 }}>Sobre las <b>{f(n)}</b> propiedades filtradas. Tasas contra el paso anterior.</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {stages.map(([lbl, v, c, note]) => (
                     <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -98,8 +104,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
             if (estado && p.estado !== estado) return false;
             if (asesor && p.asesor !== asesor) return false;
             if (ql && !`${p.code} ${p.colonia} ${p.asesor}`.toLowerCase().includes(ql)) return false;
-            if (seg === 'sinleads' && p.leads !== 0) return false;
-            if (seg === 'visitasSinOferta' && !(p.visitas > 0 && p.ofertas === 0)) return false;
+            if (seg && !CHIP_TEST[seg](p)) return false;
             return true;
         });
     }, [d.props, q, op, estado, asesor, seg]);
@@ -111,7 +116,6 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     }), [filtered, sortKey, dir]);
 
     const fn = useMemo(() => filtered.reduce((a, p) => ({ vistas: a.vistas + p.vistas, leads: a.leads + p.leads, visitas: a.visitas + p.visitas, ofertas: a.ofertas + p.ofertas }), { vistas: 0, leads: 0, visitas: 0, ofertas: 0 }), [filtered]);
-
     const onSort = (k: keyof MBProp) => { if (k === sortKey) setDir((x) => (x === 1 ? -1 : 1)); else { setSortKey(k); setDir(k === 'code' || k === 'asesor' || k === 'colonia' || k === 'op' || k === 'calidad' ? 1 : -1); } };
     const th: CSSProperties = { textAlign: 'left', padding: '8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
     const td: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
@@ -120,13 +124,14 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
 
     return (
         <div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-                <input placeholder="Buscar código, colonia o asesor…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...sel, width: 240 }} />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+                <input placeholder="Buscar código, colonia o asesor…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...sel, width: 220 }} />
                 <select value={op} onChange={(e) => setOp(e.target.value)} style={sel}><option value="">Operación: todas</option><option>Venta</option><option>Renta</option></select>
                 <select value={estado} onChange={(e) => setEstado(e.target.value)} style={sel}><option value="">Precio: todos</option>{['Óptimo', 'No competitivo', 'Fuera de mercado', 'Haz ACM'].map((x) => <option key={x}>{x}</option>)}</select>
                 <select value={asesor} onChange={(e) => setAsesor(e.target.value)} style={sel}><option value="">Asesor: todos</option>{asesores.map((x) => <option key={x}>{x}</option>)}</select>
-                <span onClick={() => setSeg(seg === 'sinleads' ? '' : 'sinleads')} style={chip(seg === 'sinleads')}>Sin leads</span>
-                <span onClick={() => setSeg(seg === 'visitasSinOferta' ? '' : 'visitasSinOferta')} style={chip(seg === 'visitasSinOferta')}>Con visitas, sin oferta</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                {CHIPS.map((c) => <span key={c.seg} onClick={() => setSeg(seg === c.seg ? '' : c.seg)} style={chip(seg === c.seg)}>{c.label}</span>)}
             </div>
 
             <div style={{ background: LGT, padding: '14px 16px', borderRadius: R, marginBottom: 16 }}>
@@ -141,15 +146,13 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                         {rows.map((p) => (
                             <tr key={p.id}>
                                 <td style={td}><Link href={`/ficha/${p.id}`} style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
-                                <td style={td}>{p.asesor}</td>
-                                <td style={td}>{p.op}</td>
-                                <td style={{ ...td, color: GRY }}>{p.colonia}</td>
+                                <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td><td style={{ ...td, color: GRY }}>{p.colonia}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{money(p.precio)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsCierres)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{p.compite ?? '—'}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.demanda)}</td>
-                                <td style={{ ...td }}><span style={{ color: saludColor(p.calidad), fontWeight: 600 }}>{p.calidad}</span></td>
+                                <td style={td}><span style={{ color: saludColor(p.calidad), fontWeight: 600 }}>{p.calidad}</span></td>
                                 <td style={{ ...td, textAlign: 'right', color: GRY }}>{p.dias ?? '—'}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.vistas)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.leads)}</td>
@@ -174,8 +177,28 @@ export default function MBApp({ d }: { d: MBData }) {
     const eyebrow: CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: GRY };
     const accent: CSSProperties = { width: 52, height: 2, background: YEL, margin: '9px 0 12px' };
     const nav = (id: Section, label: string) => (
-        <div onClick={() => setSection(id)} style={{ padding: '9px 12px', borderRadius: R, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', marginBottom: 2, background: section === id ? BLK : 'transparent', color: section === id ? '#fff' : '#555' }}>{label}</div>
+        <div key={id} onClick={() => setSection(id)} style={{ padding: '9px 12px', borderRadius: R, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', marginBottom: 2, background: section === id ? BLK : 'transparent', color: section === id ? '#fff' : '#555' }}>{label}</div>
     );
+
+    // overview derivados
+    const cnt = (fn2: (p: MBProp) => boolean) => d.props.filter(fn2).length;
+    const atencion = cnt((p) => CHIPS.some((c) => c.test(p)));
+    const answered = d.resp.flash + d.resp.rapida + d.resp.media + d.resp.lento;
+    const buckets: RespKey[] = ['flash', 'rapida', 'media', 'lento'];
+    const domResp = buckets.reduce((a, b) => (d.resp[b] > d.resp[a] ? b : a), 'flash' as RespKey);
+    const flashPct = answered ? Math.round((100 * d.resp.flash) / answered) : 0;
+    const dl = d.leads30 - d.leads30prev;
+    const calDelta = d.calAltaPct - d.benchAltaPct;
+    const redflags: [string, number, string][] = [
+        ['Muchas visitas, 0 ofertas', cnt((p) => p.visitas >= 3 && p.ofertas === 0), 'precio, producto o expectativas'],
+        ['Alta demanda, pocos leads', cnt((p) => p.op === 'Venta' && p.demanda >= 200 && p.leads <= 1), 'precio, ficha o visibilidad'],
+        ['Ofertas sin cierre', cnt((p) => p.ofertas > 0 && p.cierres === 0), 'negociación / propietario / precio'],
+        ['Respuesta lenta', cnt((p) => p.respMedMin != null && p.respMedMin > 1440), 'gestión del funnel']
+    ];
+    const topOpp = d.props.filter((p) => p.op === 'Venta' && p.demanda > 0).sort((a, b) => b.oppScore - a.oppScore).slice(0, 10);
+    const tth: CSSProperties = { textAlign: 'left', padding: '7px 8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
+    const ttd: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
+    const heroChip: CSSProperties = { background: 'rgba(255,255,255,.09)', border: '1px solid rgba(255,255,255,.16)', borderRadius: R, padding: '9px 13px', cursor: 'pointer', minWidth: 92 };
 
     return (
         <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Nunito Sans', sans-serif", color: BLK }}>
@@ -189,43 +212,85 @@ export default function MBApp({ d }: { d: MBData }) {
                     <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{d.name}</div>
                     <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{f(d.nProps)} propiedades publicadas</div>
                 </div>
-                {nav('overview', 'Overview')}
-                {nav('props', 'Propiedades')}
-                {nav('analisis', 'Generador de análisis')}
+                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{nav('analisis', 'Generador de análisis')}
                 <div style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
 
             <main style={{ flex: 1, minWidth: 0, padding: '30px 34px 60px', maxWidth: 1220 }}>
                 {section === 'overview' && (
                     <div>
-                        <div style={eyebrow}>Overview</div>
-                        <div style={accent} />
-                        <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 32, margin: 0 }}>{d.name}</h1>
-                        <div style={sub}>Cómo está tu cartera hoy. Haz clic en un foco para ver esas propiedades.</div>
-                        <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
-                            <Stat n={f(d.nProps)} l="Propiedades publicadas" />
-                            <Stat n={f(d.captaciones90)} l="Captaciones recientes" sub="publicadas ≤ 90 días" />
-                            <Stat n={f(d.sinLeads)} l="Sin leads" sub="clic para verlas" color={d.sinLeads > d.nProps * 0.3 ? RED : BLK} onClick={() => goSeg('sinleads')} />
+                        <div style={eyebrow}>Overview</div><div style={accent} />
+                        {/* Hero + chips */}
+                        <div style={{ background: BLK, color: '#fff', borderRadius: R, padding: '26px 28px' }}>
+                            <div style={{ width: 44, height: 2, background: YEL, marginBottom: 14 }} />
+                            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1.15 }}><b style={{ color: YEL }}>{f(atencion)}</b> propiedades necesitan tu atención.</div>
+                            <div style={{ color: '#c9c9c7', fontSize: 13, marginTop: 8, maxWidth: 620 }}>De {f(d.nProps)} publicadas. Prioriza por demanda desperdiciada, precio fuera de mercado y limpieza de cartera. Haz clic en un bloque para verlas.</div>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
+                                {CHIPS.map((c) => (
+                                    <div key={c.seg} onClick={() => goSeg(c.seg)} style={heroChip}>
+                                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, lineHeight: 1 }}>{f(cnt(c.test))}</div>
+                                        <div style={{ fontSize: 11, color: '#c9c9c7', marginTop: 3 }}>{c.label}</div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
+
+                        {/* KPIs */}
+                        <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+                            <Kpi label="Inventario activo" value={f(d.nProps)} sub={`${d.nVenta} venta · ${d.nRenta} renta · vs. 2025 próximamente`} />
+                            <Kpi label="Calidad de ficha" value={`${d.calAltaPct}% Alta`} color={calDelta < 0 ? '#8a6d00' : SEA} sub={`comunidad ${d.benchAltaPct}% (top 20%) · ${calDelta >= 0 ? '+' : ''}${calDelta} pts`} />
+                            <Kpi label="Leads · 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED} sub={`${dl >= 0 ? '▲' : '▼'} vs. 30 días previos (${f(d.leads30prev)})`} />
+                            <Kpi label="Velocidad de respuesta" value={RESP_LBL[domResp]} color={domResp === 'flash' || domResp === 'rapida' ? SEA : domResp === 'lento' ? RED : '#8a6d00'} sub={`${flashPct}% Flash (≤5 min) · ${d.resp.sin} sin responder`} />
+                        </div>
+
+                        {/* Venta vs renta */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Venta vs. renta</h2>
                         <div style={sub}>Balance de tu inventario publicado por tipo de operación.</div>
                         <OpSplit venta={d.nVenta} renta={d.nRenta} />
-                        <h2 style={{ ...h2, marginTop: 30 }}>Propiedades prioridad</h2>
-                        <div style={sub}>Buena demanda pero sin cerrar — abren el listado ya filtrado.</div>
-                        <div style={{ display: 'flex', gap: 12 }}>
-                            <Stat n={f(d.sinLeads)} l="Sin leads" sub="ningún lead aún" color={RED} onClick={() => goSeg('sinleads')} />
-                            <Stat n={f(d.props.filter((p) => p.visitas > 0 && p.ofertas === 0).length)} l="Con visitas, sin oferta" sub="buen interés, cerrar seguimiento" onClick={() => goSeg('visitasSinOferta')} />
+
+                        {/* Red flags */}
+                        <h2 style={{ ...h2, marginTop: 30 }}>Red flags comerciales</h2>
+                        <div style={sub}>Patrones de funnel que no aparecen en los KPIs. Cada número son propiedades.</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                            {redflags.map((r) => (
+                                <div key={r[0]} style={{ display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${LGT}`, borderRadius: R, padding: '11px 14px' }}>
+                                    <b style={{ fontFamily: 'EB Garamond, serif', fontSize: 24, width: 40, color: r[1] > 0 ? RED : GRY }}>{f(r[1])}</b>
+                                    <div><div style={{ fontSize: 13, fontWeight: 600 }}>{r[0]}</div><div style={{ fontSize: 11, color: GRY }}>{r[2]}</div></div>
+                                </div>
+                            ))}
                         </div>
-                        <div style={{ marginTop: 26, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '12px 14px', fontSize: 12, color: '#555' }}>
-                            Próximamente: <b>swaps de destacado</b> (baja esta, pon esta), <b>inventario vs. 2025</b> y comparativa vs. otras inmobiliarias de la comunidad.
+
+                        {/* Empieza por aquí */}
+                        <h2 style={{ ...h2, marginTop: 30 }}>Empieza por aquí</h2>
+                        <div style={sub}>Mayor score de oportunidad = buena demanda de zona pero sin generar leads, con un freno claro y arreglable.</div>
+                        <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
+                                <thead><tr>{['Código', 'Zona', 'Operación', 'Precio', 'vs. oferta', 'Leads', 'Demanda', 'Diagnóstico', 'Opp.'].map((h, i) => <th key={h} style={{ ...tth, textAlign: i === 3 || i === 4 || i > 4 && i < 7 || i === 8 ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
+                                <tbody>
+                                    {topOpp.map((p) => (
+                                        <tr key={p.id}>
+                                            <td style={ttd}><Link href={`/ficha/${p.id}`} style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                            <td style={{ ...ttd, color: GRY }}>{p.colonia}</td><td style={ttd}>{p.op}</td>
+                                            <td style={{ ...ttd, textAlign: 'right' }}>{money(p.precio)}</td>
+                                            <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
+                                            <td style={{ ...ttd, textAlign: 'right' }}>{p.leads}</td>
+                                            <td style={{ ...ttd, textAlign: 'right' }}>{f(p.demanda)}</td>
+                                            <td style={ttd}>{p.diag.length ? p.diag.join(' · ') : <span style={{ color: GRY }}>revisar</span>}</td>
+                                            <td style={{ ...ttd, textAlign: 'right', fontWeight: 700 }}>{f(p.oppScore)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style={{ marginTop: 22, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '11px 14px', fontSize: 12, color: '#555' }}>
+                            Próximamente: <b>swaps de destacado</b> (baja esta, pon esta), <b>inventario vs. últimos 6 meses</b> y comparativa vs. otras inmobiliarias de la comunidad.
                         </div>
                     </div>
                 )}
 
                 {section === 'props' && (
                     <div>
-                        <div style={eyebrow}>Propiedades</div>
-                        <div style={accent} />
+                        <div style={eyebrow}>Propiedades</div><div style={accent} />
                         <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 30, margin: '0 0 3px' }}>Tu inventario</h1>
                         <div style={sub}>El funnel se recalcula con tus filtros. Ordena por cualquier columna y abre el reporte desde el código.</div>
                         <PropTable d={d} seg={seg} setSeg={setSeg} />
@@ -234,15 +299,12 @@ export default function MBApp({ d }: { d: MBData }) {
 
                 {section === 'analisis' && (
                     <div>
-                        <div style={eyebrow}>Generador de análisis</div>
-                        <div style={accent} />
+                        <div style={eyebrow}>Generador de análisis</div><div style={accent} />
                         <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 30, margin: 0 }}>Análisis de tu inmobiliaria</h1>
                         <div style={sub}>Reporte on-brand por inmobiliaria (salud, funnel, zonas, año vs. año) con desglose por asesor.</div>
                         <div style={{ marginTop: 20, background: LGT, borderRadius: R, padding: '28px 24px', textAlign: 'center' }}>
                             <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22 }}>En construcción</div>
-                            <div style={{ fontSize: 12, color: '#555', marginTop: 8, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>
-                                Aquí vivirá el generador del reporte de desempeño integrado y en vivo, con la vista partida por asesor/productor. Es el siguiente bloque grande.
-                            </div>
+                            <div style={{ fontSize: 12, color: '#555', marginTop: 8, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>Aquí vivirá el generador del reporte de desempeño integrado y en vivo, con la vista partida por asesor/productor.</div>
                         </div>
                     </div>
                 )}
