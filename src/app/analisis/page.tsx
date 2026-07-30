@@ -363,12 +363,14 @@ export default function AnalisisGeneral() {
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-[13px]" style={{ fontFamily: 'var(--font-serif)', color: SEA }}>{String(i + 1).padStart(2, '0')}</span>
                                         <h3 className="text-[15px]" style={{ fontFamily: 'var(--font-serif)' }}>{s.label}</h3>
-                                        {data && s.id !== 'inventario' && s.id !== 'precio' && (
+                                        {data && !['inventario', 'precio', 'funnel', 'reco'].includes(s.id) && (
                                             <span className="ml-1 rounded-[2px] bg-[#F3F3F3] px-1.5 py-0.5 text-[8px] uppercase tracking-wide" style={{ color: GRAY }}>pendiente de conectar</span>
                                         )}
                                     </div>
                                     {data && s.id === 'inventario' ? <InventarioView d={data} />
                                         : data && s.id === 'precio' ? <PrecioView d={data} />
+                                        : data && s.id === 'funnel' ? <FunnelView d={data} />
+                                        : data && s.id === 'reco' ? <RecoView d={data} enfoque={recoEnfoque} tono={recoTono} cantidad={recoCantidad} />
                                         : <p className="mt-1 pl-6 text-[11px] leading-relaxed text-neutral-500">
                                             {previewLine(s.id, { referencias, cortes, portalMode, portales, recoEnfoque, recoTono, recoCantidad })}
                                           </p>}
@@ -517,6 +519,54 @@ function PrecioView({ d }: { d: AnalisisData }) {
                 </div>
             ))}
             {d.insightPrecio && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{d.insightPrecio}</p>}
+        </div>
+    );
+}
+
+function FunnelView({ d }: { d: AnalisisData }) {
+    const mx = Math.max(...d.funnel.flatMap((c) => c.steps.map((s) => s.value)), 1);
+    return (
+        <div className="mt-2 pl-6">
+            <p className="mb-2 text-[11px]" style={{ color: SOFT }}>Actividad 2026 sobre tu inventario. La tasa es el % que pasa del paso anterior.</p>
+            <div className="flex gap-6">
+                {d.funnel.map((col) => (
+                    <div key={col.title} className="flex-1">
+                        <p className="mb-1.5 text-[12px] font-bold" style={{ color: '#2f6b6b' }}>{col.title}</p>
+                        {col.steps.map((s) => (
+                            <div key={s.label} className="flex items-center gap-1.5 py-0.5 text-[10px]">
+                                <span className="w-14" style={{ color: GRAY }}>{s.label}</span>
+                                <span className="w-8 text-right text-[9px] font-bold" style={{ color: SEA }}>{s.rate == null ? '' : `${Math.round(s.rate * 100)}%`}</span>
+                                <span className="h-[13px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(100 * s.value / mx)}%`, background: '#2f6b6b' }} /></span>
+                                <span className="w-10 text-right font-bold">{f0(s.value)}</span>
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
+            {d.funnelReading && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{d.funnelReading}</p>}
+        </div>
+    );
+}
+
+function RecoView({ d, enfoque, tono, cantidad }: { d: AnalisisData; enfoque: string[]; tono: string; cantidad: string }) {
+    let pool = enfoque.length ? d.recos.filter((r) => enfoque.includes(r.enfoque)) : d.recos;
+    if (!pool.length) pool = d.recos;
+    const n = cantidad === 'Top 3' ? 3 : cantidad === 'Top 6' ? 6 : 10;
+    const list = [...pool].sort((a, b) => b.sev - a.sev).slice(0, n);
+    // Tono: sugerente suaviza el imperativo del título.
+    const soften = (t: string) => tono === 'Sugerente' ? `Considera ${t.charAt(0).toLowerCase()}${t.slice(1)}` : t;
+    return (
+        <div className="mt-2 pl-6">
+            {list.map((r, i) => (
+                <div key={i} className="flex gap-3 border-b border-neutral-100 py-2.5">
+                    <span className="text-[22px] leading-none" style={{ fontFamily: 'var(--font-serif)', color: SEA, width: 26, flexShrink: 0 }}>{i + 1}</span>
+                    <div>
+                        <p className="text-[12px] font-bold">{soften(r.title)} <span className="ml-1 text-[8px] uppercase tracking-wide" style={{ color: GRAY }}>· {r.enfoque}</span></p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed" style={{ color: SOFT }}>{r.body}</p>
+                    </div>
+                </div>
+            ))}
+            {!list.length && <p className="py-4 text-[11px]" style={{ color: GRAY }}>Sin recomendaciones para el enfoque elegido.</p>}
         </div>
     );
 }

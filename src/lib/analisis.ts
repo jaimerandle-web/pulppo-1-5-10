@@ -70,6 +70,9 @@ export interface AnalisisData {
     nSale: number; nCaro: number; pctCaro: number;
     insightInv: string;           // lectura auto de Inventario
     insightPrecio: string;        // lectura auto de Precio × calidad
+    funnel: { title: string; steps: { label: string; value: number; rate: number | null }[] }[];
+    funnelReading: string;
+    recos: { enfoque: string; title: string; body: string; sev: number }[];
 }
 
 async function resolveCompany(db: Db, name: string): Promise<{ id: ObjectId; name: string }> {
@@ -257,11 +260,72 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
             ? `Las de precio óptimo reciben ${pOpt.ll.toFixed(1)} leads por propiedad vs ${pCaro.ll.toFixed(1)} las que están fuera de mercado.`
             : '');
 
+    // ===================== FUNNEL (venta vs renta) + RECOMENDACIONES =====================
+    // El funnel usa TODO el inventario del año (incl. vendido/dado de baja), no solo lo publicado hoy.
+    const allprops = await db.collection('properties').find({ 'company._id': CID }, { projection: { 'listing.operation': 1 } }).toArray();
+    const pid2op = new Map(allprops.map((p) => [String(p._id), gv(p, 'listing', 'operation') as string]));
+    const allpids = allprops.map((p) => p._id as ObjectId);
+    const zero = () => ({ sale: 0, rent: 0 } as Record<string, number>);
+
+    const leadsByOp = zero(), contByOp = zero();
+    let ytdLeadsAll = 0, ytdVis = 0;
+    const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: YTD0 } }, { projection: { 'property._id': 1, answeredAt: 1 } });
+    for await (const l of lc) {
+        const op = pid2op.get(String(gv(l, 'property', '_id')));
+        ytdLeadsAll++;
+        if (op === 'sale' || op === 'rent') { leadsByOp[op]++; if (l.answeredAt) contByOp[op]++; }
+    }
+    const visByOp = zero();
+    const vc = db.collection('visits').find({ 'steps.property._id': { $in: allpids }, 'status.last': { $ne: 'cancelled' }, createdAt: { $gte: YTD0 } }, { projection: { 'steps.property._id': 1 } });
+    for await (const v of vc) {
+        const steps = (v.steps || []) as Document[];
+        const mine = steps.map((s) => String(gv(s, 'property', '_id'))).find((id) => pid2op.has(id));
+        if (mine) { ytdVis++; const op = pid2op.get(mine); if (op === 'sale' || op === 'rent') visByOp[op]++; }
+    }
+    const offersByOp = zero(), closesByOp = zero();
+    const opsAll = await db.collection('operations').find({ 'property._id': { $in: allpids } }, { projection: { 'status.last': 1, closedAt: 1, createdAt: 1, 'property._id': 1 } }).toArray();
+    for (const o of opsAll) {
+        const t = pid2op.get(String(gv(o, 'property', '_id')));
+        if (t !== 'sale' && t !== 'rent') continue;
+        const cd = asDt(o.createdAt), xd = asDt(gv(o, 'closedAt'));
+        if ((cd && cd >= YTD0 && cd < NOW) || (xd && xd >= YTD0 && xd < NOW)) offersByOp[t]++;
+        const last = gv(o, 'status', 'last');
+        if ((last === 'closed' || last === 'paying') && xd && xd >= YTD0) closesByOp[t]++;
+    }
+    const buildFunnel = (title: string, op: string) => {
+        const raw: [string, number][] = [['Leads', leadsByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
+        let prev: number | null = null;
+        return { title, steps: raw.map(([label, value]) => { const rate = prev && prev > 0 ? value / prev : null; prev = value; return { label, value, rate }; }) };
+    };
+    const funnel = [buildFunnel('Venta', 'sale'), buildFunnel('Renta', 'rent')];
+    const pct = (x: number) => `${Math.round(100 * x)}%`;
+    const visRateV = leadsByOp.sale ? visByOp.sale / leadsByOp.sale : 0;
+    const closeV = leadsByOp.sale ? closesByOp.sale / leadsByOp.sale : 0;
+    const closeR = leadsByOp.rent ? closesByOp.rent / leadsByOp.rent : 0;
+    const funnelReading = `Tu tasa de visita en venta es ${pct(visRateV)} (benchmark Pulppo 14%). `
+        + `Cierre: ${(100 * closeV).toFixed(1)}% en venta (meta 1.6%) y ${(100 * closeR).toFixed(1)}% en renta (meta 6%). `
+        + `La tasa se lee por operación, nunca mezclando venta y renta.`;
+
+    // --- recomendaciones a nivel cartera (nunca priorizan renta sobre venta) ---
+    const altaNow = items.filter((it) => it.q3 === 3).length / (N || 1);
+    const nNoTour = items.filter((it) => !it.tour).length;
+    const visRate = ytdLeadsAll ? ytdVis / ytdLeadsAll : 0;
+    const recos: { enfoque: string; title: string; body: string; sev: number }[] = [];
+    if (pctCaro >= 0.30) recos.push({ enfoque: 'Precio', sev: 5, title: 'Ajusta el precio de tu inventario en venta',
+        body: `${pct(pctCaro)} de tu venta con referencia (${nCaro} props) está fuera de mercado (+20% sobre ACM). Las de precio óptimo reciben ${pOpt ? pOpt.ll.toFixed(1) : '—'} leads por propiedad vs ${pCaro ? pCaro.ll.toFixed(1) : '—'} las que están fuera de mercado. Empieza por los rangos de mayor ticket.` });
+    if (visRate < 0.14) recos.push({ enfoque: 'Ficha', sev: 4, title: 'Sube tu tasa de visita',
+        body: `Solo el ${pct(visRate)} de tus leads llega a visita (benchmark Pulppo 14%). Mejora las primeras 3 fotos, el orden de la galería y la descripción — ahí se decide si el interesado agenda.` });
+    if (altaNow < 0.25) recos.push({ enfoque: 'Ficha', sev: 3, title: 'Sube la calidad de tus fichas',
+        body: `Solo ${pct(altaNow)} de tus fichas son calidad Alta. Fotos profesionales, video y tour virtual (hoy ${nNoTour} sin tour) elevan la exposición y la conversión sin cambiar el precio.` });
+    recos.push({ enfoque: 'Visibilidad', sev: 2, title: 'Enfoca la inversión en visibilidad donde rinde',
+        body: `Destacar solo rinde cuando la propiedad ya está bien puesta (precio óptimo + ficha completa). Concentra el impulso en tus ${joyas} propiedades listas — no en las que están fuera de mercado.` });
+
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: ytdLeads / (N || 1), ofertaLabel,
         zones, invVsDemand, matrix, priceLead,
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
         insightInv, insightPrecio,
+        funnel, funnelReading, recos,
     };
 }
