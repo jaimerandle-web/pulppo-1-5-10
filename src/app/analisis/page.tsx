@@ -3,14 +3,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Combobox, Dropdown, Select } from '@/components/inputs';
+import type { AnalisisData } from '@/lib/analisis';
 
 /* ------------------------------------------------------------------ *
  * /analisis — "Análisis general" (configurador del reporte ampliado)
- * Mock: todos los selectores funcionan y el preview refleja la config.
- * Aún NO conecta el motor de datos (gen_reporte_plus.py → endpoint TS).
+ * Inventario + Precio×calidad ya leen datos reales (/api/analisis).
+ * YoY / Top 10 / destacados / funnel: pendientes de portar.
  * ------------------------------------------------------------------ */
 
-const SEA = '#529999', SOFT = '#212322', YEL = '#F6BE00', GRAY = '#B7B7B7';
+const SEA = '#529999', SOFT = '#212322', YEL = '#F6BE00', GRAY = '#B7B7B7', RED = '#A52003';
+const money = (n?: number | null) =>
+    n == null ? '—' : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
+const f0 = (n: number) => Math.round(n).toLocaleString('es-MX');
 
 // Secciones del documento (el "hasta qué sí / qué no incluir").
 const SECCIONES = [
@@ -148,9 +152,28 @@ export default function AnalisisGeneral() {
 
     const seccionesElegidas = SECCIONES.filter((s) => secciones.includes(s.id) && (!s.needs || destacados));
 
-    function generar() {
-        alert('Preview mock. Conectar /api/analisis (puerto de gen_reporte_plus.py) para datos reales.');
+    const [data, setData] = useState<AnalisisData | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    async function generar() {
+        if (inmo === '(todas)') { setError('Elige una inmobiliaria.'); return; }
+        setLoading(true); setError('');
+        try {
+            const res = await fetch('/api/analisis', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ inmo, operacion, ventDemanda }),
+            });
+            if (res.status === 401) { router.push('/login'); return; }
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Error generando el análisis');
+            setData(d as AnalisisData);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Error generando el análisis');
+        } finally { setLoading(false); }
     }
+    // La config cambió → el preview actual queda obsoleto.
+    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda]);
 
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
@@ -293,10 +316,11 @@ export default function AnalisisGeneral() {
                 {/* ---------------- PREVIEW ---------------- */}
                 <div>
                     <div className="mb-3 flex items-center justify-between">
-                        <p className="text-sm text-neutral-500">{seccionesElegidas.length} secciones · {inmo === '(todas)' ? 'sin inmobiliaria' : inmo}</p>
-                        <div className="flex gap-2">
-                            <button onClick={() => window.print()} className="rounded-[2px] border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50">PDF</button>
-                            <button onClick={generar} className="rounded-[2px] bg-[#212322] px-4 py-1.5 text-sm font-semibold text-white hover:bg-black">Generar</button>
+                        <p className="text-sm text-neutral-500">{seccionesElegidas.length} secciones · {inmo === '(todas)' ? 'sin inmobiliaria' : (data?.company || inmo)}</p>
+                        <div className="flex items-center gap-2">
+                            {error && <span className="text-xs" style={{ color: RED }}>{error}</span>}
+                            <button onClick={() => window.print()} disabled={!data} className="rounded-[2px] border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 disabled:opacity-40">PDF</button>
+                            <button onClick={generar} disabled={loading} className="rounded-[2px] bg-[#212322] px-4 py-1.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60">{loading ? 'Generando…' : 'Generar'}</button>
                         </div>
                     </div>
 
@@ -306,39 +330,59 @@ export default function AnalisisGeneral() {
                         </p>
                         <div className="my-2.5 h-px w-16" style={{ background: YEL }} />
                         <h2 className="text-[26px] leading-tight" style={{ fontFamily: 'var(--font-serif)' }}>
-                            {inmo === '(todas)' ? 'Nombre de la inmobiliaria' : inmo}
+                            {data?.company || (inmo === '(todas)' ? 'Nombre de la inmobiliaria' : inmo)}
                         </h2>
                         <p className="mt-1 text-xs" style={{ color: GRAY }}>
-                            {operacion} · publicadas hoy · cierres {ventCierres.toLowerCase()} · demanda {ventDemanda.toLowerCase()} · zombie {zombie.toLowerCase()}
+                            {operacion} · publicadas hoy · demanda {ventDemanda.toLowerCase()}
                             {benchmark !== 'Ninguno' && ` · ${benchmark}`}
                         </p>
 
                         <div className="mt-5 flex gap-2">
-                            {[['114', 'propiedades'], ['53%', 'sobre mercado'], ['0.8', 'leads / prop'], ['23', 'listas para vender']].map(([n, l]) => (
-                                <div key={l} className="flex-1 bg-[#F3F3F3] p-3">
-                                    <p className="text-[26px] leading-none" style={{ fontFamily: 'var(--font-serif)' }}>{n}</p>
+                            {(data
+                                ? [[String(data.N), 'propiedades publicadas', `${data.opSplit.sale} venta · ${data.opSplit.rent} renta`],
+                                   [`${Math.round(data.pctCaro * 100)}%`, 'de tu venta, caro vs. mercado', `${data.nCaro} props +20% sobre estimado`],
+                                   [data.llProp.toFixed(1), 'leads por propiedad (2026)', ''],
+                                   [String(data.joyas), 'listas para vender', `${data.joyasAlta} con calidad Alta`]]
+                                : [['—', 'propiedades', ''], ['—', 'sobre mercado', ''], ['—', 'leads / prop', ''], ['—', 'listas para vender', '']]
+                            ).map(([n, l, cmp], idx) => (
+                                <div key={idx} className="flex-1 bg-[#F3F3F3] p-3">
+                                    <p className="text-[26px] leading-none" style={{ fontFamily: 'var(--font-serif)', color: idx === 1 && data && data.pctCaro > 0.4 ? RED : SOFT }}>{n}</p>
                                     <p className="mt-1.5 text-[9px] leading-tight text-neutral-500">{l}</p>
+                                    {cmp && <p className="text-[8px] leading-tight" style={{ color: GRAY }}>{cmp}</p>}
                                 </div>
                             ))}
                         </div>
 
-                        <div className="mt-6 space-y-3">
+                        {!data && !loading && (
+                            <p className="mt-6 rounded-[2px] bg-[#F6BE00]/15 px-3 py-2.5 text-[11px]" style={{ color: SOFT }}>
+                                Elige una inmobiliaria y presiona <b>Generar</b> para traer los datos en vivo de Mongo.
+                            </p>
+                        )}
+
+                        <div className="mt-6 space-y-4">
                             {seccionesElegidas.map((s, i) => (
-                                <div key={s.id} className="border-b border-neutral-100 pb-3">
+                                <div key={s.id} className="border-b border-neutral-100 pb-4">
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-[13px]" style={{ fontFamily: 'var(--font-serif)', color: SEA }}>{String(i + 1).padStart(2, '0')}</span>
                                         <h3 className="text-[15px]" style={{ fontFamily: 'var(--font-serif)' }}>{s.label}</h3>
+                                        {data && s.id !== 'inventario' && s.id !== 'precio' && (
+                                            <span className="ml-1 rounded-[2px] bg-[#F3F3F3] px-1.5 py-0.5 text-[8px] uppercase tracking-wide" style={{ color: GRAY }}>pendiente de conectar</span>
+                                        )}
                                     </div>
-                                    <p className="mt-1 pl-6 text-[11px] leading-relaxed text-neutral-500">
-                                        {previewLine(s.id, { referencias, cortes, portalMode, portales, recoEnfoque, recoTono, recoCantidad })}
-                                    </p>
+                                    {data && s.id === 'inventario' ? <InventarioView d={data} />
+                                        : data && s.id === 'precio' ? <PrecioView d={data} />
+                                        : <p className="mt-1 pl-6 text-[11px] leading-relaxed text-neutral-500">
+                                            {previewLine(s.id, { referencias, cortes, portalMode, portales, recoEnfoque, recoTono, recoCantidad })}
+                                          </p>}
                                 </div>
                             ))}
                             {!seccionesElegidas.length && <p className="py-10 text-center text-sm text-neutral-400">Elige al menos una sección.</p>}
                         </div>
 
                         <p className="mt-6 border-t border-neutral-100 pt-3 text-[9px] text-neutral-400">
-                            Vista previa con datos de ejemplo · el generador conectará a Mongo al aprobar el diseño · corte de datos: julio 2026.
+                            {data
+                                ? `Datos en vivo de Mongo · corte ${new Date(data.corte).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })} · demanda = búsquedas de compradores en tus zonas (${ventDemanda.toLowerCase()}).`
+                                : 'Inventario y Precio×calidad ya leen datos reales; el resto de secciones se conectan por fases.'}
                         </p>
                     </div>
                 </div>
@@ -366,4 +410,105 @@ function previewLine(id: string, c: {
         case 'glosario': return 'Señales de precio y glosario de términos para leer el reporte.';
         default: return '';
     }
+}
+
+// ---------- render de secciones con datos reales ----------
+const CAL_COL: Record<string, string> = { Alta: '#2f6b6b', Media: '#9CC4C4', Baja: '#E0CFC0' };
+
+function InventarioView({ d }: { d: AnalisisData }) {
+    return (
+        <div className="mt-2 pl-6">
+            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: dónde tienes más inventario, la demanda de esa zona y los leads que te trae.</p>
+            <table className="w-full border-collapse text-[11px]">
+                <thead>
+                    <tr className="border-b" style={{ borderColor: SOFT }}>
+                        {['Colonia', 'Props', 'Precio mediano', 'Demanda', 'Leads 2026', 'Calidad'].map((h, i) => (
+                            <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i ? 'text-right' : 'text-left'}`}>{h}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {d.zones.map((z) => (
+                        <tr key={z.nb} className="border-b border-neutral-100">
+                            <td className="py-1 font-semibold">{z.nb}</td>
+                            <td className="py-1 text-right">{z.n}</td>
+                            <td className="py-1 text-right">{money(z.precio)}</td>
+                            <td className="py-1 text-right">{f0(z.dem)}</td>
+                            <td className="py-1 text-right">{f0(z.leads)}</td>
+                            <td className="py-1 text-right">{z.cal}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>
+                Tu inventario en venta vs. la demanda del mercado, por rango de precio.
+                <span style={{ color: GRAY }}> Barra <b style={{ color: SEA }}>azul</b> = tu inventario · <b style={{ color: '#b8901a' }}>amarilla</b> = lo que busca la gente.</span>
+            </p>
+            {d.invVsDemand.map((r) => (
+                <div key={r.band} className="flex items-center gap-2 py-0.5 text-[10px]">
+                    <span className="w-12" style={{ color: GRAY }}>{r.band}</span>
+                    <span className="h-[11px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(r.invPct)}%`, background: SEA }} /></span>
+                    <span className="w-14 text-right font-bold">{Math.round(r.invPct)}% inv.</span>
+                    <span className="h-[11px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(r.demPct)}%`, background: YEL }} /></span>
+                    <span className="w-14 text-right font-bold">{Math.round(r.demPct)}% dem.</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function PrecioView({ d }: { d: AnalisisData }) {
+    const cellBg = (q: string, p: string) =>
+        (q === 'Alta' || q === 'Media') && p === 'Competitivo' ? '#DCEBEB' : q === 'Baja' && p === 'Caro' ? '#F4DED8' : '#F3F3F3';
+    const cols = ['Competitivo', 'En línea', 'Caro', 'Sin ref.'];
+    const mx = Math.max(...d.priceLead.map((x) => x.ll), 0.0001);
+    return (
+        <div className="mt-2 pl-6">
+            <p className="mb-2 text-[11px]" style={{ color: SOFT }}>
+                Solo inventario en venta ({d.nSale} props), por precio vs. mercado (ACM) y calidad de ficha. En cada celda: # de propiedades y su <b>L/L</b> (leads por listing).
+            </p>
+            <table className="w-full border-collapse text-[11px]">
+                <thead>
+                    <tr>
+                        <th></th>
+                        {cols.map((p) => <th key={p} className="pb-1 text-right text-[8px] font-bold uppercase tracking-wide">{p}</th>)}
+                    </tr>
+                </thead>
+                <tbody>
+                    {d.matrix.map((row) => (
+                        <tr key={row.q}>
+                            <td className="py-1 pr-2 text-[11px] font-bold">
+                                <span className="mr-1 inline-block h-2 w-2 align-middle" style={{ background: CAL_COL[row.q] }} />{row.q}
+                            </td>
+                            {row.cells.map((c) => (
+                                <td key={c.p} className="border-2 border-white p-1.5 text-center align-middle" style={{ background: cellBg(row.q, c.p) }}>
+                                    <span className="text-[13px] font-bold">{c.n}</span>
+                                    <span className="block text-[8px]" style={{ color: GRAY }}>{c.ll.toFixed(1)} L/L</span>
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            <div className="mt-3 flex gap-2">
+                {[[String(d.joyas), 'listas para destacar', SEA, `precio competitivo · ${d.joyasAlta} calidad Alta`],
+                  [String(d.caras), 'caras vs. mercado', RED, 'ajustar precio antes de invertir'],
+                  [`${Math.round(d.pctCaro * 100)}%`, 'del inventario está caro', SOFT, 'freno principal de conversión']].map(([n, l, col, sub], i) => (
+                    <div key={i} className="flex-1 bg-[#F9F9F9] p-2.5">
+                        <p className="text-[20px] leading-none" style={{ fontFamily: 'var(--font-serif)', color: col as string }}>{n}</p>
+                        <p className="mt-1 text-[9px] leading-tight">{l}</p>
+                        <p className="text-[8px] leading-tight" style={{ color: GRAY }}>{sub}</p>
+                    </div>
+                ))}
+            </div>
+            <p className="mb-1 mt-4 text-[11px]" style={{ color: SOFT }}>¿Mejor precio = más leads? La hipótesis <b>{d.hip}</b> con tus datos.</p>
+            {d.priceLead.map((r) => (
+                <div key={r.cls} className="flex items-center gap-2 py-0.5 text-[10px]">
+                    <span className="w-20 font-bold">{r.cls}</span>
+                    <span className="h-[12px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(100 * r.ll / mx)}%`, background: SEA }} /></span>
+                    <span className="w-24 text-right font-bold">{r.ll.toFixed(1)} <span style={{ color: GRAY }}>L/L · {r.props} props</span></span>
+                </div>
+            ))}
+        </div>
+    );
 }
