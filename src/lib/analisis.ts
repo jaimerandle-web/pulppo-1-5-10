@@ -89,6 +89,8 @@ export interface AnalisisData {
     leadsComp: { cliente: number; broker: number; incontactables: number; duplicados: number; total: number; totalOp: { sale: number; rent: number } };
     cierresLabel: string;         // etiqueta de la ventana de cierres
     zones: { nb: string; n: number; oferta: number; herPpm2: number | null; ofertaPpm2: number | null; cierresPpm2: number | null; vsOferta: number | null; vsCierres: number | null; nCierres: number; dem: number; leads: number }[];
+    segTipo: { tipo: string; n: number; leads: number }[];
+    segOp: { op: string; n: number; leads: number }[];
     invVsDemand: { band: string; invPct: number; demPct: number; inv: number; dem: number }[];
     matrix: { q: string; cells: { p: string; n: number; ll: number }[] }[];
     priceLead: { cls: string; props: number; leads: number; ll: number }[];
@@ -160,14 +162,16 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     type Item = { pid: ObjectId; code: string | null; nb: string | null; nbid: string | null; op: string | null;
         val: number; sp: number | null; ppm2: number | null; q3: number | null; tour: boolean; tier: string | null;
-        fotos: number; video: boolean; descLen: number };
+        fotos: number; video: boolean; descLen: number; tipo: string | null };
     const items: Item[] = pub.map((p) => {
         const nb = (gv(p, 'address', 'neighborhood') || {}) as Record<string, unknown>;
         const val = (num(gv(p, 'listing', 'value')) || 0);
         const acm = num(gv(p, 'acm', 'price', 'value'));
         const m2 = num(gv(p, 'attributes', 'totalSurface')) || num(gv(p, 'attributes', 'roofedSurface'));
+        const rawType = p.type;
+        const tipo = rawType && typeof rawType === 'object' ? ((rawType as { name?: string }).name || null) : (rawType as string) || null;
         return {
-            pid: p._id as ObjectId, code: (p.internalId as string) || null,
+            pid: p._id as ObjectId, code: (p.internalId as string) || null, tipo,
             nb: (nb.name as string) || null, nbid: (nb.id as string) || null,
             op: (gv(p, 'listing', 'operation') as string) || null,
             val, sp: val && acm ? val / acm : null,
@@ -294,6 +298,19 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         return { nb, n: its.length, oferta: (nbid && ofertaByNbid[nbid]) || 0,
             herPpm2, ofertaPpm2, cierresPpm2, vsOferta, vsCierres, nCierres,
             dem: (nbid && demandByNb[nbid]) || 0, leads };
+    });
+
+    // --- cortes por tipo y por operación (para los "cortes de segmentación") ---
+    const segUniverse = opFilter ? items.filter((it) => it.op === opFilter) : items;
+    const typeMap = new Map<string, { n: number; leads: number }>();
+    for (const it of segUniverse) {
+        const t = it.tipo || 'Otro'; const e = typeMap.get(t) || { n: 0, leads: 0 };
+        e.n++; e.leads += leadsByPid[String(it.pid)] || 0; typeMap.set(t, e);
+    }
+    const segTipo = [...typeMap.entries()].map(([tipo, e]) => ({ tipo, n: e.n, leads: e.leads })).sort((a, b) => b.n - a.n).slice(0, 6);
+    const segOp = (['sale', 'rent'] as const).map((op) => {
+        const its = items.filter((i) => i.op === op);
+        return { op: op === 'sale' ? 'Venta' : 'Renta', n: its.length, leads: its.reduce((a, i) => a + (leadsByPid[String(i.pid)] || 0), 0) };
     });
 
     // --- inventario vs demanda por ticket ---
@@ -608,7 +625,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: leadsWinTotal / (N || 1), leadsLabel, ofertaLabel,
-        operacion: cfg.operacion || 'Ambas', zombie, leadsBySource, cierresLabel,
+        operacion: cfg.operacion || 'Ambas', zombie, leadsBySource, cierresLabel, segTipo, segOp,
         leadsComp: { cliente: compCliente, broker: compBroker, incontactables: compIncont, duplicados: compDup, total: leadsByOp.sale + leadsByOp.rent, totalOp: { sale: leadsByOp.sale, rent: leadsByOp.rent } },
         zones, invVsDemand, matrix, priceLead,
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,

@@ -373,7 +373,7 @@ export default function AnalisisGeneral() {
                                         <span className="text-[13px]" style={{ fontFamily: 'var(--font-serif)', color: SEA }}>{String(i + 1).padStart(2, '0')}</span>
                                         <h3 className="text-[15px]" style={{ fontFamily: 'var(--font-serif)' }}>{s.label}</h3>
                                     </div>
-                                    {data && s.id === 'inventario' ? <InventarioView d={data} referencias={referencias} />
+                                    {data && s.id === 'inventario' ? <InventarioView d={data} referencias={referencias} cortes={cortes} />
                                         : data && s.id === 'precio' ? <PrecioView d={data} />
                                         : data && s.id === 'destacados' ? <DestacadosView d={data} />
                                         : data && s.id === 'funnel' ? <FunnelView d={data} portalMode={portalMode} portales={portales} />
@@ -424,59 +424,92 @@ function previewLine(id: string, c: {
 // ---------- render de secciones con datos reales ----------
 const CAL_COL: Record<string, string> = { Alta: '#2f6b6b', Media: '#9CC4C4', Baja: '#E0CFC0' };
 
-function InventarioView({ d, referencias }: { d: AnalisisData; referencias: string[] }) {
+function InventarioView({ d, referencias, cortes }: { d: AnalisisData; referencias: string[]; cortes: string[] }) {
     const showOferta = referencias.includes('Oferta de zona');
     const showCierres = referencias.includes('Cierres reales');
+    const has = (c: string) => cortes.includes(c);
     const delta = (v: number | null) => (
         <span style={{ color: v == null ? GRAY : v > 3 ? RED : v < -3 ? SEA : SOFT, fontWeight: 600 }}>
             {v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`}
         </span>
     );
     const cols = ['Colonia', 'Tus props', 'Oferta zona', ...(showOferta ? ['vs. oferta'] : []), ...(showCierres ? ['vs. cierres'] : []), 'Demanda', `Leads · ${d.leadsLabel}`];
+    // barra simple reutilizable (# de props + leads) para los cortes por tipo/operación
+    const maxTipo = Math.max(...d.segTipo.map((t) => t.n), 1);
+    const maxOp = Math.max(...d.segOp.map((o) => o.n), 1);
     return (
         <div className="mt-2 pl-6">
-            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, la oferta total de la zona y qué tan competitivo es tu precio vs. lo que se pide y lo que se vende.</p>
-            <table className="w-full border-collapse text-[11px]">
-                <thead>
-                    <tr className="border-b" style={{ borderColor: SOFT }}>
-                        {cols.map((h, i) => (
-                            <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i ? 'text-right' : 'text-left'}`}>{h}</th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {d.zones.map((z) => (
-                        <tr key={z.nb} className="border-b border-neutral-100">
-                            <td className="py-1 font-semibold">{z.nb}</td>
-                            <td className="py-1 text-right">{z.n}</td>
-                            <td className="py-1 text-right" style={{ color: GRAY }}>{f0(z.oferta)}</td>
-                            {showOferta && <td className="py-1 text-right">{delta(z.vsOferta)}</td>}
-                            {showCierres && <td className="py-1 text-right">{delta(z.vsCierres)} <span className="text-[8px]" style={{ color: GRAY }}>({z.nCierres})</span></td>}
-                            <td className="py-1 text-right">{f0(z.dem)}</td>
-                            <td className="py-1 text-right">{f0(z.leads)}</td>
+            {has('Por zona') && <>
+                <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, la oferta total de la zona y qué tan competitivo es tu precio vs. lo que se pide y lo que se vende.</p>
+                <table className="w-full border-collapse text-[11px]">
+                    <thead>
+                        <tr className="border-b" style={{ borderColor: SOFT }}>
+                            {cols.map((h, i) => (
+                                <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i ? 'text-right' : 'text-left'}`}>{h}</th>
+                            ))}
                         </tr>
-                    ))}
-                </tbody>
-            </table>
-            <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
-                Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>vs. oferta</b> = tu $/m² vs. la mediana de lo que se <b>pide</b> (mls + red Pulppo). <b>vs. cierres</b> = vs. la mediana de lo que se <b>vende</b> en la colonia ({d.cierresLabel}); el número entre paréntesis es cuántos cierres se consideraron. <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = menos de 5 cierres en la colonia (no hay muestra confiable).
-            </p>
+                    </thead>
+                    <tbody>
+                        {d.zones.map((z) => (
+                            <tr key={z.nb} className="border-b border-neutral-100">
+                                <td className="py-1 font-semibold">{z.nb}</td>
+                                <td className="py-1 text-right">{z.n}</td>
+                                <td className="py-1 text-right" style={{ color: GRAY }}>{f0(z.oferta)}</td>
+                                {showOferta && <td className="py-1 text-right">{delta(z.vsOferta)}</td>}
+                                {showCierres && <td className="py-1 text-right">{delta(z.vsCierres)} <span className="text-[8px]" style={{ color: GRAY }}>({z.nCierres})</span></td>}
+                                <td className="py-1 text-right">{f0(z.dem)}</td>
+                                <td className="py-1 text-right">{f0(z.leads)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
+                    Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>vs. oferta</b> = tu $/m² vs. la mediana de lo que se <b>pide</b> (mls + red Pulppo). <b>vs. cierres</b> = vs. la mediana de lo que se <b>vende</b> en la colonia ({d.cierresLabel}); el número entre paréntesis es cuántos cierres se consideraron. <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = menos de 5 cierres en la colonia (no hay muestra confiable).
+                </p>
+            </>}
+
             <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: d.zombie.pct > 0.3 ? RED : YEL, background: '#F3F3F3', color: SOFT }}>
                 <b style={{ color: d.zombie.pct > 0.3 ? RED : SOFT }}>{f0(d.zombie.n)} propiedades ({Math.round(d.zombie.pct * 100)}%)</b> no han recibido un solo lead en {d.zombie.label} <span style={{ color: GRAY }}>(“zombies”)</span>. Son las primeras candidatas a bajar precio o mejorar ficha.
             </p>
-            <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>
-                Tu inventario en venta vs. la demanda del mercado, por rango de precio.
-                <span style={{ color: GRAY }}> Barra <b style={{ color: SEA }}>azul</b> = tu inventario · <b style={{ color: '#b8901a' }}>amarilla</b> = lo que busca la gente.</span>
-            </p>
-            {d.invVsDemand.map((r) => (
-                <div key={r.band} className="flex items-center gap-2 py-0.5 text-[10px]">
-                    <span className="w-12" style={{ color: GRAY }}>{r.band}</span>
-                    <span className="h-[11px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(r.invPct)}%`, background: SEA }} /></span>
-                    <span className="w-14 text-right font-bold">{Math.round(r.invPct)}% inv.</span>
-                    <span className="h-[11px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(r.demPct)}%`, background: YEL }} /></span>
-                    <span className="w-14 text-right font-bold">{Math.round(r.demPct)}% dem.</span>
-                </div>
-            ))}
+
+            {has('Por ticket') && <>
+                <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>
+                    Tu inventario en venta vs. la demanda del mercado, por rango de precio.
+                    <span style={{ color: GRAY }}> Barra <b style={{ color: SEA }}>azul</b> = tu inventario · <b style={{ color: '#b8901a' }}>amarilla</b> = lo que busca la gente.</span>
+                </p>
+                {d.invVsDemand.map((r) => (
+                    <div key={r.band} className="flex items-center gap-2 py-0.5 text-[10px]">
+                        <span className="w-12" style={{ color: GRAY }}>{r.band}</span>
+                        <span className="h-[11px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(r.invPct)}%`, background: SEA }} /></span>
+                        <span className="w-14 text-right font-bold">{Math.round(r.invPct)}% inv.</span>
+                        <span className="h-[11px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(r.demPct)}%`, background: YEL }} /></span>
+                        <span className="w-14 text-right font-bold">{Math.round(r.demPct)}% dem.</span>
+                    </div>
+                ))}
+            </>}
+
+            {has('Por tipo') && d.segTipo.length > 0 && <>
+                <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Tu inventario por tipo de propiedad <span style={{ color: GRAY }}>(props · leads {d.leadsLabel})</span></p>
+                {d.segTipo.map((t) => (
+                    <div key={t.tipo} className="flex items-center gap-2 py-0.5 text-[10px]">
+                        <span className="w-28" style={{ color: GRAY }}>{t.tipo}</span>
+                        <span className="h-[11px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(100 * t.n / maxTipo)}%`, background: SEA }} /></span>
+                        <span className="w-24 text-right font-bold">{f0(t.n)} <span style={{ color: GRAY }}>· {f0(t.leads)} leads</span></span>
+                    </div>
+                ))}
+            </>}
+
+            {has('Por operación') && <>
+                <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Tu inventario por operación <span style={{ color: GRAY }}>(props · leads {d.leadsLabel})</span></p>
+                {d.segOp.map((o) => (
+                    <div key={o.op} className="flex items-center gap-2 py-0.5 text-[10px]">
+                        <span className="w-28" style={{ color: GRAY }}>{o.op}</span>
+                        <span className="h-[11px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(100 * o.n / maxOp)}%`, background: o.op === 'Venta' ? SEA_D : SEA }} /></span>
+                        <span className="w-24 text-right font-bold">{f0(o.n)} <span style={{ color: GRAY }}>· {f0(o.leads)} leads</span></span>
+                    </div>
+                ))}
+            </>}
+
             {d.insightInv && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{d.insightInv}</p>}
         </div>
     );
