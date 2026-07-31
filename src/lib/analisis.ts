@@ -300,7 +300,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const allpids = allprops.map((p) => p._id as ObjectId);
     const zero = () => ({ sale: 0, rent: 0 } as Record<string, number>);
 
-    const leadsByOp = zero(), contByOp = zero(), cleanByOp = zero();
+    const leadsByOp = zero(), contByOp = zero();
     let ytdLeadsAll = 0, ytdVis = 0, h1Leads25 = 0, h1Leads26 = 0;
     let compCliente = 0, compBroker = 0, compIncont = 0, compDup = 0;
     const dupSet = new Set<string>();   // clave propiedad+contacto → repetición = duplicado
@@ -319,9 +319,8 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
                 dupSet.add(dupKey);
                 ytdLeadsAll++;
                 leadsByOp[op]++;
-                const contactable = !!(phone || email);
                 const broker = !!gv(l, 'contact', 'company', '_id');   // el contacto está asociado a una empresa/inmobiliaria
-                if (contactable) cleanByOp[op]++; else compIncont++;
+                if (!(phone || email)) compIncont++;                   // sin teléfono ni correo = incontactable
                 if (broker) compBroker++; else compCliente++;
                 if (l.answeredAt) contByOp[op]++;
             }
@@ -348,7 +347,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         if ((last === 'closed' || last === 'paying') && xd && xd >= YTD0) closesByOp[t]++;
     }
     const buildFunnel = (title: string, op: string) => {
-        const raw: [string, number][] = [['Únicos', leadsByOp[op]], ['Limpios', cleanByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
+        const raw: [string, number][] = [['Únicos', leadsByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
         let prev: number | null = null;
         return { title, steps: raw.map(([label, value]) => { const rate = prev && prev > 0 ? value / prev : null; prev = value; return { label, value, rate }; }) };
     };

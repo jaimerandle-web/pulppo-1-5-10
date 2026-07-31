@@ -538,7 +538,7 @@ function FunnelView({ d }: { d: AnalisisData }) {
     const mx = Math.max(...d.funnel.flatMap((c) => c.steps.map((s) => s.value)), 1);
     return (
         <div className="mt-2 pl-6">
-            <p className="mb-2 text-[11px]" style={{ color: SOFT }}>Actividad 2026 sobre tu inventario. La tasa es el % que pasa del paso anterior. <span style={{ color: GRAY }}>Únicos = sin duplicados · Limpios = contactables.</span></p>
+            <p className="mb-2 text-[11px]" style={{ color: SOFT }}>Actividad 2026 sobre tu inventario. La tasa es el % que pasa del paso anterior. <span style={{ color: GRAY }}>Únicos = sin duplicados (los incontactables van en la composición).</span></p>
             <div className="flex gap-6">
                 {d.funnel.map((col) => (
                     <div key={col.title} className="flex-1">
