@@ -401,10 +401,8 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
         if (c == null || c < pT0) continue;
         for (const s of pspans) { if (c >= s.a && c < s.b) { catLeads.set(s.cat, (catLeads.get(s.cat) || 0) + 1); leadsMedidos++; break; } }
     }
-    // ¿en Super destacado hoy? ¿desde cuándo (racha contigua actual)?
+    // ¿en Super destacado hoy?
     const enSuper = pspans.length > 0 && pspans[pspans.length - 1].cat === 'Super';
-    let superSince: number | null = null;
-    if (enSuper) { superSince = pspans[pspans.length - 1].a; for (let i = pspans.length - 2; i >= 0 && pspans[i].cat === 'Super'; i--) superSince = pspans[i].a; }
     const pctSuper = Math.round(((catMs.get('Super') || 0) / pTotal) * 100);
 
     // Visitas por VISITANTE ÚNICO (no por cita): un mismo contacto que vino varias veces cuenta 1. Se
@@ -558,8 +556,9 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
         rowH('Descripción', `${words} palabras`, words >= 40 && words <= 200 ? 'ok' : 'warn', words >= 40 && words <= 200 ? 'longitud adecuada' : 'revisar extensión'),
         rowH('Ubicación', 'completa', 'ok', ''),
         rowH('Multimedia', mm, pics >= 12 && video ? 'ok' : 'warn'),
-        rowH('Categoría del anuncio', `${catLbl} · ${mlLbl}`, SUPER.has(cat ?? '') ? 'ok' : 'warn'),
-        rowH('Contrato exclusividad', cval, cstat, cnote)
+        // La categoría (destacado / dónde se publica) solo va en la ficha completa 1·5·10, no en la general.
+        ...(simple ? [] : [rowH('Categoría del anuncio', `${catLbl} · ${mlLbl}`, SUPER.has(cat ?? '') ? 'ok' : 'warn')]),
+        ...(simple ? [] : [rowH('Contrato exclusividad', cval, cstat, cnote)])
     ].join('');
 
     const tv = leads.length ? vis / leads.length : 0;
@@ -611,11 +610,8 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
         return `<tr><td><span class="dt" style="background:${PCOL[c]}"></span>${PROMOLBL[c]}</td><td class="nw">${Math.round(d)} días</td><td class="nw">${lc}</td><td class="nw"><b>${lm.toFixed(1)}</b></td></tr>`;
     }).join('');
     const i24Head = pspans.length
-        ? `<b>${pctSuper}%</b> de los días en Super destacado · ${enSuper && superSince ? `en Super destacado desde ${fdate(new Date(superSince))} (${Math.round((now - superSince) / dayMs)} días)` : 'hoy NO está en Super destacado'}`
+        ? `<b>${pctSuper}%</b> de los días en Super destacado · ${enSuper ? 'hoy está en Super destacado' : 'hoy NO está en Super destacado'}`
         : 'Sin historial de promoción registrado en i24.';
-    const mlPromB = dig(P, 'portals', 'mercadolibre', 'promoted') === true || String(dig(P, 'portals', 'mercadolibre', 'promoted')).toLowerCase() === 'true';
-    const mlEnd = toDate(dig(P, 'portals', 'mercadolibre', 'endTime'));
-    const mlLine = `${mlLbl}${mlStatus ? ` · ${mlStatus.toUpperCase() === 'ONLINE' ? 'en línea' : esc(mlStatus)}` : ''} · ${mlPromB ? `promovido${mlEnd ? ` hasta ${fdate(mlEnd)}` : ''}` : 'sin promoción activa'}`;
     const promoHtml = `
   <div class="sec"><div class="eyebrow">Difusión y promoción</div><div class="accent"></div>
     <div class="eyebrow" style="color:${BLK};margin-bottom:2px">Inmuebles24 — historial de categoría</div>
@@ -625,8 +621,6 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     <div style="font-size:10px;color:${BLK};margin-top:6px">${promoLegend}</div>
     <table style="margin-top:8px"><tr><th>Categoría</th><th>Tiempo</th><th>Leads i24</th><th>Leads i24/mes</th></tr>${catRows}</table>
     <div style="font-size:9px;color:${GRY};margin-top:2px">Solo leads originados en Inmuebles24 (${leadsMedidos} de ${leads.length} históricos) desde ${fdate(new Date(pT0))}; leads de redes, WhatsApp u otros portales no se atribuyen a estas categorías. Leads/mes normaliza por los días en cada categoría.</div>` : ''}
-    <div class="eyebrow" style="color:${BLK};margin:14px 0 2px">MercadoLibre — estado actual</div>
-    <div style="font-size:12px">${mlLine}</div>
   </div>`;
 
     // ---- Comportamiento en el tiempo (general): vistas + leads por mes desde la publicación ----
@@ -668,8 +662,75 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     <div style="font-size:12px;margin-bottom:8px">Vistas del anuncio y leads por mes desde que se publicó${pub ? ` (${fdate(pub)})` : ''}, para ver los momentos de más interés.</div>
     ${legend}
     ${svg}
-    <div style="font-size:9px;color:${GRY};margin-top:6px">${totalV.toLocaleString('en-US')} vistas y ${leads.length} leads en total · pico de vistas ${peakV.v ? `en ${mlabel(peakV.m)} (${peakV.v})` : '—'} · pico de leads ${peakL.l ? `en ${mlabel(peakL.m)} (${peakL.l})` : '—'}. Cada línea usa su propia escala (vistas y leads difieren mucho). Vistas = eventos de vista de todas las fuentes.</div>
+    <div style="font-size:9px;color:${GRY};margin-top:6px">${totalV.toLocaleString('en-US')} vistas y ${leads.length} leads en total · pico de vistas ${peakV.v ? `en ${mlabel(peakV.m)} (${peakV.v})` : '—'} · pico de leads ${peakL.l ? `en ${mlabel(peakL.m)} (${peakL.l})` : '—'}. Cada línea usa su propia escala (vistas y leads difieren mucho). Vistas = eventos de vista registrados por Pulppo (Inmuebles24 y sitios propios).${totalV < leads.length ? ' Aquí hay más leads que vistas porque MercadoLibre, redes y otros portales generan leads pero no reportan sus vistas a Pulppo.' : ''}</div>
   </div>` : '';
+
+    // ---- Cuerpo modular: la ficha SIMPLE (general) reordena y fusiona (menos secciones); la COMPLETA (1·5·10) va como antes ----
+    const ppmRef = ([['Tu propiedad', ppm2, BLK], ['Oferta mediana · MLS', zoneMed, GRY], ['Cierres mediana · Pulppo', soldMed, SEA]] as [string, number | null, string][]).filter((r) => (r[1] ?? 0) > 0) as [string, number, string][];
+    const maxPpm = Math.max(...ppmRef.map((r) => r[1]), 1);
+    const cvsDelta = ppm2 && soldMed ? Math.round((ppm2 / soldMed - 1) * 100) : null;
+    const cierresVisual = ppmRef.length ? `<div style="margin-top:14px"><div class="eyebrow" style="color:${BLK};margin-bottom:6px">Precio $/m²: tú vs. oferta vs. cierres</div>
+      <div class="ppmbars">${ppmRef.map((r) => `<div class="ppmrow"><span class="ppml">${r[0]}</span><span class="ppmtrack"><span class="ppmbar" style="width:${Math.max((100 * r[1]) / maxPpm, 2)}%;background:${r[2]}"></span></span><span class="ppmv">${money(r[1])}/m²</span></div>`).join('')}</div>
+      <div class="ppmnote">${czN ? `${czN} cierres reales de la comunidad (${esc(scope)}).${cvsDelta != null ? ` Tu $/m² está <b>${cvsDelta > 0 ? `${cvsDelta}% por encima` : cvsDelta < 0 ? `${Math.abs(cvsDelta)}% por debajo` : 'en línea'}</b> de la mediana a la que se cierra.` : ''}${czPrices.length ? ` Rango de cierre ${money(Math.min(...czPrices))}–${money(Math.max(...czPrices))}.` : ''}` : `Sin ventas cerradas registradas en ${esc(scope)}.`}</div></div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`;
+    const mercadoKpi = `<div class="kpi"><div><div class="n">${money(ppm2)}</div><div class="l">$/m² de esta propiedad</div></div><div><div class="n">${comps.length}</div><div class="l">comparables en zona</div></div>${soldMed ? `<div><div class="n">${money(soldMed)}</div><div class="l">$/m² mediana de cierres</div></div>` : ''}${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana en venta</div></div>` : ''}</div>`;
+    const compiteHtml = `<div style="margin-top:24px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Con qué compite en la zona</div><table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table></div>`;
+    const insightsCompBox = alcInsights.length ? `<div class="box" style="margin-top:16px"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : '';
+    const showAmen = simple ? !!devName : true;   // en simple, amenidades solo si es desarrollo
+    const alcanzaHtml = `<div style="margin-top:22px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Qué te alcanza por el mismo presupuesto</div>
+      <div style="font-size:10px;color:${GRY};margin-bottom:4px">Comparables vivos en tu mismo rango de precio (±10%) y hasta 1.5 km, ordenados de más a menos parecidos a tu inmueble.</div>
+      <table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcTop, subj, knownCols)}</table>
+      ${alcMore ? `<div style="font-size:10px;margin-top:4px"><a href="${moreHref}" style="color:${SEA};font-weight:700">Ver los ${alcRanked.length} comparables →</a></div>` : ''}
+      ${showAmen ? amenCompareHtml(alcTop, subj, knownCols) : ''}
+      ${simple ? '' : insightsCompBox}</div>`;
+    const refPpm = simple ? '' : `<div style="margin-top:20px;opacity:.7"><div class="eyebrow" style="color:${GRY};margin-bottom:4px">Referencia · qué te alcanza por $/m² similar</div>
+      <div style="font-size:10px;color:${GRY};margin-bottom:4px">Menos relevante: mismo $/m² (±15%), como referencia de mercado.</div>
+      <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>`;
+    const secSalud = `<div class="sec"><div class="eyebrow">Salud del anuncio</div><div class="accent"></div>${health}</div>`;
+    const secFunnel = `<div class="sec"><div class="eyebrow">Demanda y funnel</div><div class="accent"></div>
+    <div class="grid2">
+      <div>${funnel}
+        <div class="recap"><div><div class="n">${l30}</div><div class="l">leads · 30 días</div></div><div><div class="n">${l90}</div><div class="l">leads · 90 días</div></div><div><div class="n">${leads.length}</div><div class="l">leads · histórico</div></div></div>
+      </div>
+      <div><div class="eyebrow" style="margin-bottom:2px;color:${BLK}">Leads por fuente</div>
+        <div style="font-size:9px;color:${GRY};margin-bottom:6px"><span style="color:${SEA}">■</span> clientes · <span style="color:${BLK}">■</span> asesores</div>${fuenteHtml}</div>
+    </div>
+    <div style="margin-top:16px;color:${BLK}" class="eyebrow">Leads: clientes vs. asesores</div>
+    <div class="split"><div class="c" style="width:${Math.round((100 * cliente) / Math.max(leads.length, 1))}%">${cliente} clientes</div><div class="a" style="width:${Math.round((100 * asesor) / Math.max(leads.length, 1))}%">${asesor} asesores</div></div>
+  </div>`;
+    const zonaInner = zonaLbl ? `<div class="kpi">
+      <div><div class="n">${zdem.toLocaleString('en-US')}</div><div class="l">búsquedas · 6 meses</div></div>
+      <div><div class="n">${zofe.toLocaleString('en-US')}</div><div class="l">${esc(typ)}s en venta (mercado)</div></div>
+      <div><div class="n">${zratio >= 1 ? zratio.toFixed(1) : zratio.toFixed(2)}</div><div class="l">búsquedas por propiedad</div></div>
+      ${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana de la zona</div></div>` : ''}
+    </div>
+    <p style="margin-top:8px;font-size:12px">${zread}</p>` : '';
+    const secAnalisis = `<div class="sec"><div class="eyebrow">Análisis y oportunidades</div><div class="accent"></div>
+    <div class="two"><div class="box"><div class="eyebrow">Insights</div><ul>${insights.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></div><div class="box"><div class="eyebrow">Plan de acción</div><ul>${plan.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div></div>
+    ${simple ? insightsCompBox : ''}
+  </div>`;
+    const bodyFull = `${secSalud}
+${promoHtml}
+${comportHtml}
+${secFunnel}
+  ${zonaLbl ? `<div class="sec"><div class="eyebrow">Insights de la zona · ${esc(zonaLbl)}</div><div class="accent"></div>${zonaInner}</div>` : ''}
+  <div class="sec"><div class="eyebrow">Mercado y competencia</div><div class="accent"></div>
+    ${mercadoKpi}
+    ${cierresVisual}
+    ${compiteHtml}
+    ${alcanzaHtml}
+    ${refPpm}
+  </div>
+  ${secAnalisis}`;
+    const bodySimple = `${secSalud}
+${secFunnel}
+  <div class="sec"><div class="eyebrow">Mercado de la zona</div><div class="accent"></div>
+    ${zonaInner}
+    ${mercadoKpi}
+    ${cierresVisual}
+    ${compiteHtml}
+    ${alcanzaHtml}
+  </div>
+  ${secAnalisis}`;
 
     const html = `
 <style>
@@ -699,6 +760,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
 .ficha-root table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}.ficha-root th,.ficha-root td{text-align:left;padding:5px 6px;border-bottom:1px solid ${LGT};vertical-align:top}
 .ficha-root td.nw{white-space:nowrap}.ficha-root th{font-weight:700;color:${GRY};text-transform:uppercase;font-size:9px;letter-spacing:.06em}
 .ficha-root .kpi{display:flex;gap:24px;margin-top:4px}.ficha-root .kpi .n{font-family:'EB Garamond',serif;font-size:26px}.ficha-root .kpi .l{font-size:10px;color:${GRY};text-transform:uppercase;letter-spacing:.06em}
+.ficha-root .ppmbars{display:flex;flex-direction:column;gap:6px;margin:4px 0}.ficha-root .ppmrow{display:flex;align-items:center;font-size:11px}.ficha-root .ppml{width:160px;color:${BLK}}.ficha-root .ppmtrack{flex:1;background:${LGT};height:16px;margin:0 8px}.ficha-root .ppmbar{display:block;height:16px}.ficha-root .ppmv{width:104px;text-align:right;font-weight:700;white-space:nowrap}.ficha-root .ppmnote{font-size:11px;color:${BLK};margin-top:8px;line-height:1.5}
 .ficha-root ul{margin-left:16px;list-style:disc}.ficha-root li{margin:4px 0;list-style:disc}.ficha-root .two{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:8px}.ficha-root .box{background:${LGT};padding:16px 18px}
 .ficha-root .foot{margin-top:22px;border-top:1px solid ${LGT};padding-top:8px;font-size:9px;color:${GRY}}
 @media print{.ficha-root{margin:0;padding:24px 30px}.fx-noprint{display:none!important}@page{size:Letter;margin:0}}
@@ -709,62 +771,11 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     <h1>${esc(street || code)}</h1>
     <div class="sub">${esc(typ)} · ${esc(opTxt)} · ${esc(col)}, ${esc(city)}${devName ? ` · ${esc(devName)}` : ''}</div>
     <div class="price">${money(val)} · ${m2 ?? '—'} m² · ${money(ppm2)}/m²</div>
-    <div>${broker ? `<span class="tag">${esc(broker)}</span>` : ''}<span class="tag">${esc(dig(P, 'company', 'name'))}</span><span class="tag">${catLbl}</span><span class="tag">Publicada ${pub ? pub.toISOString().slice(0, 10) : '—'}${meses != null ? ` (${meses} meses)` : ''}</span></div>
+    <div>${broker ? `<span class="tag">${esc(broker)}</span>` : ''}<span class="tag">${esc(dig(P, 'company', 'name'))}</span>${simple ? '' : `<span class="tag">${catLbl}</span>`}<span class="tag">Publicada ${pub ? pub.toISOString().slice(0, 10) : '—'}${meses != null ? ` (${meses} meses)` : ''}</span></div>
   </div>
   <img class="plogo" src="/pulppo-blanco.png" alt="Pulppo"></div>
 
-  <div class="sec"><div class="eyebrow">Salud del anuncio</div><div class="accent"></div>${health}</div>
-${simple ? '' : promoHtml}
-${comportHtml}
-
-  <div class="sec"><div class="eyebrow">Demanda y funnel</div><div class="accent"></div>
-    <div class="grid2">
-      <div>${funnel}
-        <div class="recap"><div><div class="n">${l30}</div><div class="l">leads · 30 días</div></div><div><div class="n">${l90}</div><div class="l">leads · 90 días</div></div><div><div class="n">${leads.length}</div><div class="l">leads · histórico</div></div></div>
-      </div>
-      <div><div class="eyebrow" style="margin-bottom:2px;color:${BLK}">Leads por fuente</div>
-        <div style="font-size:9px;color:${GRY};margin-bottom:6px"><span style="color:${SEA}">■</span> clientes · <span style="color:${BLK}">■</span> asesores</div>${fuenteHtml}</div>
-    </div>
-    <div style="margin-top:16px;color:${BLK}" class="eyebrow">Leads: clientes vs. asesores</div>
-    <div class="split"><div class="c" style="width:${Math.round((100 * cliente) / Math.max(leads.length, 1))}%">${cliente} clientes</div><div class="a" style="width:${Math.round((100 * asesor) / Math.max(leads.length, 1))}%">${asesor} asesores</div></div>
-  </div>
-
-  <div class="sec"><div class="eyebrow">Mercado y competencia</div><div class="accent"></div>
-    <div class="kpi"><div><div class="n">${money(ppm2)}</div><div class="l">$/m² de esta propiedad</div></div><div><div class="n">${comps.length}</div><div class="l">comparables en zona</div></div>${soldMed ? `<div><div class="n">${money(soldMed)}</div><div class="l">$/m² mediana de cierres (vendido)</div></div>` : ''}${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana en venta (oferta)</div></div>` : ''}</div>
-    ${czN ? `<div style="margin-top:14px;font-size:11px;line-height:1.7">
-      <div style="font-weight:700;color:${BLK}">Cierres reales de la comunidad (${esc(typ)} · ${esc(scope)}):</div>
-      <div>– ${czN} operaciones — mediana ${money(median(czPrices))} · promedio ${money(czAvg)}</div>
-      <div>– Rango de operaciones — ${money(Math.min(...czPrices))}–${money(Math.max(...czPrices))}${czM2s.length ? ` | ${Math.min(...czM2s)} m² – ${Math.max(...czM2s)} m² totales` : ''}</div>
-      ${soldMed ? `<div>– $/m² de cierre — mediana ${money(soldMed)} · promedio ${money(soldAvg)}.</div>` : ''}
-      ${soldRead ? `<div style="margin-top:10px;font-size:12px;color:${BLK}">${soldRead}</div>` : ''}
-    </div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`}
-    <div style="margin-top:24px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Con qué compite en la zona</div>
-      <table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table></div>
-    <div style="margin-top:22px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Qué te alcanza por el mismo presupuesto</div>
-      <div style="font-size:10px;color:${GRY};margin-bottom:4px">Comparables vivos en tu mismo rango de precio (±10%) y hasta 1.5 km, ordenados de más a menos parecidos a tu inmueble (colonia, cercanía, tamaño, presupuesto y amenidades).</div>
-      <table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcTop, subj, knownCols)}</table>
-      ${alcMore ? `<div style="font-size:10px;margin-top:4px"><a href="${moreHref}" style="color:${SEA};font-weight:700">Ver los ${alcRanked.length} comparables →</a></div>` : ''}
-      ${amenCompareHtml(alcTop, subj, knownCols)}
-      ${alcInsights.length ? `<div class="box" style="margin-top:16px"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : ''}
-    </div>
-    ${simple ? '' : `<div style="margin-top:20px;opacity:.7"><div class="eyebrow" style="color:${GRY};margin-bottom:4px">Referencia · qué te alcanza por $/m² similar</div>
-      <div style="font-size:10px;color:${GRY};margin-bottom:4px">Menos relevante: mismo $/m² (±15%), como referencia de mercado.</div>
-      <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>`}
-  </div>
-
-  ${zonaLbl ? `<div class="sec"><div class="eyebrow">Insights de la zona · ${esc(zonaLbl)}</div><div class="accent"></div>
-    <div class="kpi">
-      <div><div class="n">${zdem.toLocaleString('en-US')}</div><div class="l">búsquedas · 6 meses</div></div>
-      <div><div class="n">${zofe.toLocaleString('en-US')}</div><div class="l">${esc(typ)}s en venta (mercado)</div></div>
-      <div><div class="n">${zratio >= 1 ? zratio.toFixed(1) : zratio.toFixed(2)}</div><div class="l">búsquedas por propiedad</div></div>
-      ${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana de la zona</div></div>` : ''}
-    </div>
-    <p style="margin-top:8px;font-size:12px">${zread}</p>
-  </div>` : ''}
-
-  <div class="sec"><div class="eyebrow">Análisis y oportunidades</div><div class="accent"></div>
-    <div class="two"><div class="box"><div class="eyebrow">Insights</div><ul>${insights.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></div><div class="box"><div class="eyebrow">Plan de acción</div><ul>${plan.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div></div>
-  </div>
+  ${simple ? bodySimple : bodyFull}
   <div class="foot">Pulppo · 1·5·10 — Ficha generada ${new Date().toISOString().slice(0, 10)}. Datos en vivo de la comunidad Pulppo. Valuación del motor ACM.</div>
 </div>`;
     return { code, html };
