@@ -53,8 +53,25 @@ export interface AnalisisConfig {
     operacion?: string;           // 'Ambas' | 'Venta' | 'Renta'
     ventDemanda?: string;         // 'Últimos 6 meses' | 'Últimos 12 meses' | 'YTD 2026'
     ventLeads?: string;           // ventana de leads: 'Últimos 30 días' | '90 días' | '6 meses' | 'YTD 2026' | '12 meses'
+    zombie?: string;              // ventana zombie: 'Últimos 30 días' | '90 días' | '6 meses' | 'Totales'
     mlsGeneral?: boolean;         // oferta/zona contra el MLS i24 completo en vez de la red Pulppo
 }
+
+// clasificador de fuente con etiquetas limpias (alineadas a los chips del form)
+const srcLabel = (s: unknown): string => {
+    const t = String(s || '').toLowerCase();
+    if (t.includes('inmueble') || t.includes('i24')) return 'Inmuebles24';
+    if (t.includes('meli') || t.includes('mercado')) return 'MercadoLibre';
+    if (t.includes('easybroker')) return 'EasyBroker';
+    if (t.includes('whats')) return 'WhatsApp';
+    if (t.includes('pulppo')) return 'Pulppo';
+    if (t.includes('propiedades.com')) return 'propiedades.com';
+    if (t.includes('face') || t.includes('insta') || t.includes('tiktok')) return 'Redes';
+    if (t.includes('tel') || t.includes('phone')) return 'Teléfono';
+    if (t.includes('lamudi')) return 'Lamudi';
+    if (t.includes('web')) return 'Website';
+    return 'Otros';
+};
 
 export interface AnalisisData {
     company: string;
@@ -64,6 +81,9 @@ export interface AnalisisData {
     llProp: number;               // leads (ventana) / N
     leadsLabel: string;           // etiqueta de la ventana de leads
     ofertaLabel: string;          // "red Pulppo" | "MLS i24"
+    operacion: string;            // 'Ambas' | 'Venta' | 'Renta' (eco del filtro aplicado)
+    zombie: { n: number; pct: number; label: string };
+    leadsBySource: { source: string; n: number }[];
     leadsComp: { cliente: number; broker: number; incontactables: number; duplicados: number; total: number; totalOp: { sale: number; rent: number } };
     zones: { nb: string; n: number; oferta: number; vsZona: number | null; dem: number; leads: number }[];
     invVsDemand: { band: string; invPct: number; demPct: number; inv: number; dem: number }[];
@@ -181,8 +201,12 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     }));
 
     // --- leads YTD por propiedad y por zona ---
+    const opFilter = cfg.operacion === 'Venta' ? 'sale' : cfg.operacion === 'Renta' ? 'rent' : null;
+    const pid2opPub = new Map(items.map((it) => [String(it.pid), it.op]));
+
     const leadsByPid: Record<string, number> = {};
     const leadsByNb: Record<string, number> = {};
+    const leadsByNbOp: Record<'sale' | 'rent', Record<string, number>> = { sale: {}, rent: {} };
     let leadsWinTotal = 0;
     const invSeen = new Set<string>();   // dedup: mismo contacto en la misma propiedad = 1 lead único
     const leadCur = db.collection('leads').find(
@@ -198,7 +222,11 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         leadsByPid[pid] = (leadsByPid[pid] || 0) + 1;
         leadsWinTotal++;
         const nb = pid2nb.get(pid);
-        if (nb) leadsByNb[nb] = (leadsByNb[nb] || 0) + 1;
+        if (nb) {
+            leadsByNb[nb] = (leadsByNb[nb] || 0) + 1;
+            const po = pid2opPub.get(pid);
+            if (po === 'sale' || po === 'rent') leadsByNbOp[po][nb] = (leadsByNbOp[po][nb] || 0) + 1;
+        }
     }
 
     // --- inventario hoy ---
@@ -207,9 +235,10 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const pbV: Record<string, number> = {};
     for (const it of venta) { const b = bandOf(it.val, VB); pbV[b] = (pbV[b] || 0) + 1; }
 
-    // --- zonas (top 7 por # de props) ---
+    // --- zonas (top 7 por # de props) — filtradas por operación si aplica ---
+    const zoneUniverse = opFilter ? items.filter((it) => it.op === opFilter) : items;
     const byNb = new Map<string, Item[]>();
-    for (const it of items) if (it.nb) { const a = byNb.get(it.nb) || []; a.push(it); byNb.set(it.nb, a); }
+    for (const it of zoneUniverse) if (it.nb) { const a = byNb.get(it.nb) || []; a.push(it); byNb.set(it.nb, a); }
     const topZones = [...byNb.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 7);
     const zoneNbids = [...new Set(topZones.map(([, its]) => its[0].nbid).filter(Boolean) as string[])];
     // Fuente de la "oferta" de la zona: red Pulppo (properties) o MLS i24 completo (mls).
@@ -237,8 +266,9 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const herPpm2 = median(its.filter((i) => i.op === 'sale').map((i) => i.ppm2));
         const zPpm2 = nbid ? zonePpm2[nbid] : null;
         const vsZona = herPpm2 && zPpm2 ? Math.round((herPpm2 / zPpm2 - 1) * 100) : null;
+        const leads = opFilter ? (leadsByNbOp[opFilter][nb] || 0) : (leadsByNb[nb] || 0);
         return { nb, n: its.length, oferta: (nbid && ofertaByNbid[nbid]) || 0, vsZona,
-            dem: (nbid && demandByNb[nbid]) || 0, leads: leadsByNb[nb] || 0 };
+            dem: (nbid && demandByNb[nbid]) || 0, leads };
     });
 
     // --- inventario vs demanda por ticket ---
@@ -304,8 +334,9 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     let ytdLeadsAll = 0, ytdVis = 0, h1Leads25 = 0, h1Leads26 = 0;
     let compCliente = 0, compBroker = 0, compIncont = 0, compDup = 0;
     const dupSet = new Set<string>();   // clave propiedad+contacto → repetición = duplicado
+    const srcCount: Record<string, number> = {};   // leads únicos por fuente (YTD)
     const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: H1_25[0] } },
-        { projection: { 'property._id': 1, answeredAt: 1, createdAt: 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1 } });
+        { projection: { 'property._id': 1, answeredAt: 1, createdAt: 1, source: 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1 } });
     for await (const l of lc) {
         const d = asDt(l.createdAt); if (!d) continue;
         const op = pid2op.get(String(gv(l, 'property', '_id')));
@@ -323,6 +354,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
                 if (!(phone || email)) compIncont++;                   // sin teléfono ni correo = incontactable
                 if (broker) compBroker++; else compCliente++;
                 if (l.answeredAt) contByOp[op]++;
+                const sl = srcLabel(l.source); srcCount[sl] = (srcCount[sl] || 0) + 1;
             }
         }
         if (d >= H1_25[0] && d < H1_25[1]) h1Leads25++;
@@ -351,7 +383,9 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         let prev: number | null = null;
         return { title, steps: raw.map(([label, value]) => { const rate = prev && prev > 0 ? value / prev : null; prev = value; return { label, value, rate }; }) };
     };
-    const funnel = [buildFunnel('Venta', 'sale'), buildFunnel('Renta', 'rent')];
+    const funnel = [buildFunnel('Venta', 'sale'), buildFunnel('Renta', 'rent')]
+        .filter((c) => !opFilter || c.title === (opFilter === 'sale' ? 'Venta' : 'Renta'));
+    const leadsBySource = Object.entries(srcCount).map(([source, n]) => ({ source, n })).sort((a, b) => b.n - a.n);
     const pct = (x: number) => `${Math.round(100 * x)}%`;
     const visRateV = leadsByOp.sale ? visByOp.sale / leadsByOp.sale : 0;
     const closeV = leadsByOp.sale ? closesByOp.sale / leadsByOp.sale : 0;
@@ -536,9 +570,20 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         llTier, reading: destReading,
     };
 
+    // ===================== ZOMBIES (props sin lead en la ventana) =====================
+    const zombieWindow = cfg.zombie || 'Últimos 90 días';
+    const zombieStart = zombieWindow === 'Totales' ? new Date(0) : windowStart(zombieWindow, 3);
+    const withLead = new Set<string>();
+    const zc = db.collection('leads').find({ 'property._id': { $in: pubIds }, createdAt: { $gte: zombieStart } }, { projection: { 'property._id': 1 } });
+    for await (const l of zc) withLead.add(String(gv(l, 'property', '_id')));
+    const zombieUniverse = opFilter ? items.filter((it) => it.op === opFilter) : items;
+    const zombieN = zombieUniverse.filter((it) => !withLead.has(String(it.pid))).length;
+    const zombie = { n: zombieN, pct: zombieN / (zombieUniverse.length || 1), label: zombieWindow.toLowerCase() };
+
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: leadsWinTotal / (N || 1), leadsLabel, ofertaLabel,
+        operacion: cfg.operacion || 'Ambas', zombie, leadsBySource,
         leadsComp: { cliente: compCliente, broker: compBroker, incontactables: compIncont, duplicados: compDup, total: leadsByOp.sale + leadsByOp.rent, totalOp: { sale: leadsByOp.sale, rent: leadsByOp.rent } },
         zones, invVsDemand, matrix, priceLead,
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,

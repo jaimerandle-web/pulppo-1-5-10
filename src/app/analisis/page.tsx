@@ -165,7 +165,7 @@ export default function AnalisisGeneral() {
         try {
             const res = await fetch('/api/analisis', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inmo, operacion, ventDemanda, ventLeads, mlsGeneral }),
+                body: JSON.stringify({ inmo, operacion, ventDemanda, ventLeads, zombie, mlsGeneral }),
             });
             if (res.status === 401) { router.push('/login'); return; }
             const d = await res.json();
@@ -176,7 +176,7 @@ export default function AnalisisGeneral() {
         } finally { setLoading(false); }
     }
     // La config cambió → el preview actual queda obsoleto.
-    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventLeads, mlsGeneral]);
+    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventLeads, zombie, mlsGeneral]);
 
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
@@ -376,7 +376,7 @@ export default function AnalisisGeneral() {
                                     {data && s.id === 'inventario' ? <InventarioView d={data} />
                                         : data && s.id === 'precio' ? <PrecioView d={data} />
                                         : data && s.id === 'destacados' ? <DestacadosView d={data} />
-                                        : data && s.id === 'funnel' ? <FunnelView d={data} />
+                                        : data && s.id === 'funnel' ? <FunnelView d={data} portalMode={portalMode} portales={portales} />
                                         : data && s.id === 'yoy' ? <YoyView d={data} />
                                         : data && s.id === 'top10' ? <Top10View d={data} />
                                         : data && s.id === 'reco' ? <RecoView d={data} enfoque={recoEnfoque} tono={recoTono} cantidad={recoCantidad} />
@@ -453,6 +453,9 @@ function InventarioView({ d }: { d: AnalisisData }) {
             </table>
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
                 Oferta zona = propiedades publicadas en esa colonia ({d.ofertaLabel}). Precio vs. zona = tu $/m² mediano vs. la mediana de la zona (<b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato).
+            </p>
+            <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: d.zombie.pct > 0.3 ? RED : YEL, background: '#F3F3F3', color: SOFT }}>
+                <b style={{ color: d.zombie.pct > 0.3 ? RED : SOFT }}>{f0(d.zombie.n)} propiedades ({Math.round(d.zombie.pct * 100)}%)</b> no han recibido un solo lead en {d.zombie.label} <span style={{ color: GRAY }}>(“zombies”)</span>. Son las primeras candidatas a bajar precio o mejorar ficha.
             </p>
             <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>
                 Tu inventario en venta vs. la demanda del mercado, por rango de precio.
@@ -534,8 +537,13 @@ function PrecioView({ d }: { d: AnalisisData }) {
     );
 }
 
-function FunnelView({ d }: { d: AnalisisData }) {
+function FunnelView({ d, portalMode, portales }: { d: AnalisisData; portalMode: string; portales: string[] }) {
     const mx = Math.max(...d.funnel.flatMap((c) => c.steps.map((s) => s.value)), 1);
+    const srcTotal = d.leadsBySource.reduce((a, s) => a + s.n, 0) || 1;
+    const srcShown = portalMode === 'Fuentes principales'
+        ? d.leadsBySource.filter((s) => portales.includes(s.source))
+        : d.leadsBySource;
+    const srcMx = Math.max(...srcShown.map((s) => s.n), 1);
     return (
         <div className="mt-2 pl-6">
             <p className="mb-2 text-[11px]" style={{ color: SOFT }}>Actividad 2026 sobre tu inventario. La tasa es el % que pasa del paso anterior. <span style={{ color: GRAY }}>Únicos = sin duplicados (los incontactables van en la composición).</span></p>
@@ -554,6 +562,18 @@ function FunnelView({ d }: { d: AnalisisData }) {
                     </div>
                 ))}
             </div>
+            {portalMode !== 'Análisis general (sin desglose)' && srcShown.length > 0 && (
+                <>
+                    <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Qué mueve tus leads · por fuente</p>
+                    {srcShown.map((s) => (
+                        <div key={s.source} className="flex items-center gap-2 py-0.5 text-[10px]">
+                            <span className="w-24" style={{ color: GRAY }}>{s.source}</span>
+                            <span className="h-[11px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(100 * s.n / srcMx)}%`, background: SEA }} /></span>
+                            <span className="w-24 text-right font-bold">{f0(s.n)} <span style={{ color: GRAY }}>· {Math.round(100 * s.n / srcTotal)}%</span></span>
+                        </div>
+                    ))}
+                </>
+            )}
             <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Composición de tus leads únicos 2026</p>
             <div className="flex gap-2">
                 {[['Cliente', d.leadsComp.cliente, SEA_D], ['Broker', d.leadsComp.broker, GRAY], ['Sin contacto', d.leadsComp.incontactables, RED],
