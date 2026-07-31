@@ -52,6 +52,8 @@ export interface AnalisisConfig {
     inmo: string;                 // nombre (regex case-insensitive)
     operacion?: string;           // 'Ambas' | 'Venta' | 'Renta'
     ventDemanda?: string;         // 'Últimos 6 meses' | 'Últimos 12 meses' | 'YTD 2026'
+    ventCierres?: string;         // ventana de comparables de cierres: 'Últimos 12/24/36 meses'
+    referencias?: string[];       // qué referencias mostrar: 'Oferta de zona' | 'Cierres reales' | ...
     ventLeads?: string;           // ventana de leads: 'Últimos 30 días' | '90 días' | '6 meses' | 'YTD 2026' | '12 meses'
     zombie?: string;              // ventana zombie: 'Últimos 30 días' | '90 días' | '6 meses' | 'Totales'
     mlsGeneral?: boolean;         // oferta/zona contra el MLS i24 completo en vez de la red Pulppo
@@ -85,7 +87,8 @@ export interface AnalisisData {
     zombie: { n: number; pct: number; label: string };
     leadsBySource: { source: string; n: number }[];
     leadsComp: { cliente: number; broker: number; incontactables: number; duplicados: number; total: number; totalOp: { sale: number; rent: number } };
-    zones: { nb: string; n: number; oferta: number; vsZona: number | null; dem: number; leads: number }[];
+    cierresLabel: string;         // etiqueta de la ventana de cierres
+    zones: { nb: string; n: number; oferta: number; herPpm2: number | null; ofertaPpm2: number | null; cierresPpm2: number | null; vsOferta: number | null; vsCierres: number | null; dem: number; leads: number }[];
     invVsDemand: { band: string; invPct: number; demPct: number; inv: number; dem: number }[];
     matrix: { q: string; cells: { p: string; n: number; ll: number }[] }[];
     priceLead: { cls: string; props: number; leads: number; ll: number }[];
@@ -132,11 +135,11 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const H1_26: [Date, Date] = [new Date(Date.UTC(2026, 0, 1)), new Date(Date.UTC(2026, 6, 1))];
     const windowStart = (w: string, fallbackMonths: number): Date => {
         if (w === 'YTD 2026') return YTD0;
+        if (w === 'Totales') return new Date(0);
         const d = new Date(NOW);
-        if (w === 'Últimos 30 días') d.setUTCDate(d.getUTCDate() - 30);
-        else if (w === 'Últimos 90 días') d.setUTCDate(d.getUTCDate() - 90);
-        else if (w === 'Últimos 6 meses') d.setUTCMonth(d.getUTCMonth() - 6);
-        else if (w === 'Últimos 12 meses') d.setUTCMonth(d.getUTCMonth() - 12);
+        const mm = w.match(/(\d+)\s*mes/), dd = w.match(/(\d+)\s*d[ií]a/);
+        if (mm) d.setUTCMonth(d.getUTCMonth() - parseInt(mm[1]));
+        else if (dd) d.setUTCDate(d.getUTCDate() - parseInt(dd[1]));
         else d.setUTCMonth(d.getUTCMonth() - fallbackMonths);
         return d;
     };
@@ -244,30 +247,51 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     // Fuente de la "oferta" de la zona: red Pulppo (properties) o MLS i24 completo (mls).
     const ofertaColl = cfg.mlsGeneral ? 'mls' : 'properties';
     const ofertaLabel = cfg.mlsGeneral ? 'MLS i24' : 'red Pulppo';
-    const ofertaByNbid: Record<string, number> = {};       // # publicadas en la colonia
-    const zonePpm2: Record<string, number | null> = {};    // mediana $/m² de venta en la colonia
+    const cierresLabel = (cfg.ventCierres || 'Últimos 24 meses').toLowerCase();
+    const cierresStart = windowStart(cfg.ventCierres || 'Últimos 24 meses', 24);
+    const ofertaByNbid: Record<string, number> = {};        // # publicadas en la colonia (red Pulppo o MLS según toggle)
+    const ofertaVals: Record<string, number[]> = {};        // $/m² publicado en venta (mls + properties) — canónico ficha
+    const cierresVals: Record<string, number[]> = {};       // $/m² de ventas cerradas en la ventana
     if (zoneNbids.length) {
-        const aggN = db.collection(ofertaColl).aggregate([
+        for await (const r of db.collection(ofertaColl).aggregate([
             { $match: { 'status.last': 'published', 'address.neighborhood.id': { $in: zoneNbids } } },
             { $group: { _id: '$address.neighborhood.id', n: { $sum: 1 } } },
-        ], { allowDiskUse: true });
-        for await (const r of aggN) ofertaByNbid[r._id as string] = r.n as number;
-        const aggP = db.collection(ofertaColl).aggregate([
-            { $match: { 'status.last': 'published', 'listing.operation': 'sale',
-                'address.neighborhood.id': { $in: zoneNbids },
-                'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } } },
-            { $project: { nbid: '$address.neighborhood.id', ppm2: { $divide: ['$listing.value', '$attributes.totalSurface'] } } },
-            { $group: { _id: '$nbid', vals: { $push: '$ppm2' } } },
-        ], { allowDiskUse: true });
-        for await (const r of aggP) zonePpm2[r._id as string] = median(r.vals as number[]);
+        ], { allowDiskUse: true })) ofertaByNbid[r._id as string] = r.n as number;
+        // oferta $/m²: mediana de lo publicado en venta (mls + properties)
+        for (const coll of ['mls', 'properties']) {
+            for await (const r of db.collection(coll).aggregate([
+                { $match: { 'status.last': 'published', 'listing.operation': 'sale', 'address.neighborhood.id': { $in: zoneNbids }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } } },
+                { $project: { nbid: '$address.neighborhood.id', ppm2: { $divide: ['$listing.value', '$attributes.totalSurface'] } } },
+            ], { allowDiskUse: true })) {
+                const k = r.nbid as string; (ofertaVals[k] || (ofertaVals[k] = [])).push(r.ppm2 as number);
+            }
+        }
+        // cierres $/m²: ventas cerradas (properties completed + operations.closeValue) dentro de la ventana
+        const comp = await db.collection('properties').aggregate([
+            { $match: { 'status.last': 'completed', 'listing.operation': 'sale', 'address.neighborhood.id': { $in: zoneNbids }, 'attributes.totalSurface': { $gt: 0 } } },
+            { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', as: 'op' } },
+            { $project: { nbid: '$address.neighborhood.id', m2: '$attributes.totalSurface', op: 1 } },
+            { $limit: 4000 },
+        ], { allowDiskUse: true }).toArray();
+        for (const p of comp) {
+            const m2 = num(p.m2); if (!m2) continue;
+            for (const o of (p.op as Document[]) || []) {
+                const v = num(gv(o, 'closeValue', 'value')); const xd = asDt(gv(o, 'closedAt'));
+                if (v && xd && xd >= cierresStart) { const k = p.nbid as string; (cierresVals[k] || (cierresVals[k] = [])).push(v / m2); }
+            }
+        }
     }
+    const medOf = (m: Record<string, number[]>, k: string | null): number | null => (k && m[k] && m[k].length >= 5) ? median(m[k]) : null;
     const zones = topZones.map(([nb, its]) => {
         const nbid = its[0].nbid;
         const herPpm2 = median(its.filter((i) => i.op === 'sale').map((i) => i.ppm2));
-        const zPpm2 = nbid ? zonePpm2[nbid] : null;
-        const vsZona = herPpm2 && zPpm2 ? Math.round((herPpm2 / zPpm2 - 1) * 100) : null;
+        const ofertaPpm2 = medOf(ofertaVals, nbid);
+        const cierresPpm2 = medOf(cierresVals, nbid);
+        const vsOferta = herPpm2 && ofertaPpm2 ? Math.round((herPpm2 / ofertaPpm2 - 1) * 100) : null;
+        const vsCierres = herPpm2 && cierresPpm2 ? Math.round((herPpm2 / cierresPpm2 - 1) * 100) : null;
         const leads = opFilter ? (leadsByNbOp[opFilter][nb] || 0) : (leadsByNb[nb] || 0);
-        return { nb, n: its.length, oferta: (nbid && ofertaByNbid[nbid]) || 0, vsZona,
+        return { nb, n: its.length, oferta: (nbid && ofertaByNbid[nbid]) || 0,
+            herPpm2, ofertaPpm2, cierresPpm2, vsOferta, vsCierres,
             dem: (nbid && demandByNb[nbid]) || 0, leads };
     });
 
@@ -583,7 +607,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: leadsWinTotal / (N || 1), leadsLabel, ofertaLabel,
-        operacion: cfg.operacion || 'Ambas', zombie, leadsBySource,
+        operacion: cfg.operacion || 'Ambas', zombie, leadsBySource, cierresLabel,
         leadsComp: { cliente: compCliente, broker: compBroker, incontactables: compIncont, duplicados: compDup, total: leadsByOp.sale + leadsByOp.rent, totalOp: { sale: leadsByOp.sale, rent: leadsByOp.rent } },
         zones, invVsDemand, matrix, priceLead,
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,

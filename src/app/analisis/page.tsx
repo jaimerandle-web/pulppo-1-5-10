@@ -165,7 +165,7 @@ export default function AnalisisGeneral() {
         try {
             const res = await fetch('/api/analisis', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inmo, operacion, ventDemanda, ventLeads, zombie, mlsGeneral }),
+                body: JSON.stringify({ inmo, operacion, ventDemanda, ventCierres, referencias, ventLeads, zombie, mlsGeneral }),
             });
             if (res.status === 401) { router.push('/login'); return; }
             const d = await res.json();
@@ -176,7 +176,7 @@ export default function AnalisisGeneral() {
         } finally { setLoading(false); }
     }
     // La config cambió → el preview actual queda obsoleto.
-    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventLeads, zombie, mlsGeneral]);
+    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventCierres, referencias, ventLeads, zombie, mlsGeneral]);
 
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
@@ -373,7 +373,7 @@ export default function AnalisisGeneral() {
                                         <span className="text-[13px]" style={{ fontFamily: 'var(--font-serif)', color: SEA }}>{String(i + 1).padStart(2, '0')}</span>
                                         <h3 className="text-[15px]" style={{ fontFamily: 'var(--font-serif)' }}>{s.label}</h3>
                                     </div>
-                                    {data && s.id === 'inventario' ? <InventarioView d={data} />
+                                    {data && s.id === 'inventario' ? <InventarioView d={data} referencias={referencias} />
                                         : data && s.id === 'precio' ? <PrecioView d={data} />
                                         : data && s.id === 'destacados' ? <DestacadosView d={data} />
                                         : data && s.id === 'funnel' ? <FunnelView d={data} portalMode={portalMode} portales={portales} />
@@ -424,14 +424,22 @@ function previewLine(id: string, c: {
 // ---------- render de secciones con datos reales ----------
 const CAL_COL: Record<string, string> = { Alta: '#2f6b6b', Media: '#9CC4C4', Baja: '#E0CFC0' };
 
-function InventarioView({ d }: { d: AnalisisData }) {
+function InventarioView({ d, referencias }: { d: AnalisisData; referencias: string[] }) {
+    const showOferta = referencias.includes('Oferta de zona');
+    const showCierres = referencias.includes('Cierres reales');
+    const delta = (v: number | null) => (
+        <span style={{ color: v == null ? GRAY : v > 3 ? RED : v < -3 ? SEA : SOFT, fontWeight: 600 }}>
+            {v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`}
+        </span>
+    );
+    const cols = ['Colonia', 'Tus props', 'Oferta zona', ...(showOferta ? ['vs. oferta'] : []), ...(showCierres ? ['vs. cierres'] : []), 'Demanda', `Leads · ${d.leadsLabel}`];
     return (
         <div className="mt-2 pl-6">
-            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, la oferta total de la zona y qué tan competitivo es tu precio.</p>
+            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, la oferta total de la zona y qué tan competitivo es tu precio vs. lo que se pide y lo que se vende.</p>
             <table className="w-full border-collapse text-[11px]">
                 <thead>
                     <tr className="border-b" style={{ borderColor: SOFT }}>
-                        {['Colonia', 'Tus props', 'Oferta zona', 'Precio vs. zona', 'Demanda', `Leads · ${d.leadsLabel}`].map((h, i) => (
+                        {cols.map((h, i) => (
                             <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i ? 'text-right' : 'text-left'}`}>{h}</th>
                         ))}
                     </tr>
@@ -442,9 +450,8 @@ function InventarioView({ d }: { d: AnalisisData }) {
                             <td className="py-1 font-semibold">{z.nb}</td>
                             <td className="py-1 text-right">{z.n}</td>
                             <td className="py-1 text-right" style={{ color: GRAY }}>{f0(z.oferta)}</td>
-                            <td className="py-1 text-right font-semibold" style={{ color: z.vsZona == null ? GRAY : z.vsZona > 3 ? RED : z.vsZona < -3 ? SEA : SOFT }}>
-                                {z.vsZona == null ? '—' : `${z.vsZona > 0 ? '+' : ''}${z.vsZona}%`}
-                            </td>
+                            {showOferta && <td className="py-1 text-right">{delta(z.vsOferta)}</td>}
+                            {showCierres && <td className="py-1 text-right">{delta(z.vsCierres)}</td>}
                             <td className="py-1 text-right">{f0(z.dem)}</td>
                             <td className="py-1 text-right">{f0(z.leads)}</td>
                         </tr>
@@ -452,7 +459,7 @@ function InventarioView({ d }: { d: AnalisisData }) {
                 </tbody>
             </table>
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
-                Oferta zona = propiedades publicadas en esa colonia ({d.ofertaLabel}). Precio vs. zona = tu $/m² mediano vs. la mediana de la zona (<b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato).
+                Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>vs. oferta</b> = tu $/m² vs. la mediana de lo que se <b>pide</b> (mls + red Pulppo). <b>vs. cierres</b> = vs. la mediana de lo que se <b>vende</b> ({d.cierresLabel}). <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = sin comparables suficientes (mín. 5).
             </p>
             <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: d.zombie.pct > 0.3 ? RED : YEL, background: '#F3F3F3', color: SOFT }}>
                 <b style={{ color: d.zombie.pct > 0.3 ? RED : SOFT }}>{f0(d.zombie.n)} propiedades ({Math.round(d.zombie.pct * 100)}%)</b> no han recibido un solo lead en {d.zombie.label} <span style={{ color: GRAY }}>(“zombies”)</span>. Son las primeras candidatas a bajar precio o mejorar ficha.
