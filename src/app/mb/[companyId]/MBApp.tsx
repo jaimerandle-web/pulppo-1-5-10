@@ -13,25 +13,34 @@ const vsCell = (v: number | null) => {
     const col = v > 10 ? RED : v < -5 ? SEA : '#555';
     return <span style={{ color: col, fontWeight: 600 }}>{v > 0 ? '+' : ''}{v.toFixed(0)}%</span>;
 };
-
-type Section = 'overview' | 'props' | 'analisis';
-type Seg = '' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta';
-const CHIPS: { seg: Exclude<Seg, ''>; label: string; test: (p: MBProp) => boolean }[] = [
-    { seg: 'sinleads', label: 'Sin leads', test: (p) => p.leads === 0 },
-    { seg: 'caroSinLeads', label: 'Caro sin leads', test: (p) => p.leads === 0 && (p.estado === 'Fuera de mercado' || p.estado === 'No competitivo') },
-    { seg: 'visitasSinOferta', label: 'Visitas sin oferta', test: (p) => p.visitas > 0 && p.ofertas === 0 },
-    { seg: 'mas12', label: '+12 meses', test: (p) => (p.mesesPub ?? 0) >= 12 },
-    { seg: 'respLenta', label: 'Respuesta lenta', test: (p) => p.respMedMin != null && p.respMedMin > 1440 }
-];
-const CHIP_TEST: Record<string, (p: MBProp) => boolean> = Object.fromEntries(CHIPS.map((c) => [c.seg, c.test]));
+const DIAG_STYLE: Record<string, { bg: string; fg: string }> = { 'Bajar precio': { bg: '#F3D9D3', fg: RED }, 'Mejorar ficha': { bg: '#FBF0CC', fg: '#8a6d00' } };
+const diagPill = (t: string) => { const s = DIAG_STYLE[t] ?? { bg: '#DCEBEB', fg: '#2f6b6b' }; return <span key={t} style={{ background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 11, marginRight: 4, whiteSpace: 'nowrap' }}>{t}</span>; };
 const RESP_LBL: Record<RespKey, string> = { flash: 'Flash', rapida: 'Rápida', media: 'Media', lento: 'Lento', sin: 'Sin responder' };
+
+type Section = 'overview' | 'props' | 'analisis' | 'comoleer';
+type Seg = '' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre';
+const SEG_TEST: Record<string, (p: MBProp) => boolean> = {
+    sinleads: (p) => p.leads === 0,
+    caroSinLeads: (p) => p.leads === 0 && (p.estado === 'Fuera de mercado' || p.estado === 'No competitivo'),
+    visitasSinOferta: (p) => p.visitas > 0 && p.ofertas === 0,
+    mas12: (p) => (p.mesesPub ?? 0) >= 12,
+    respLenta: (p) => p.respMedMin != null && p.respMedMin > 1440,
+    muchasVisitas: (p) => p.visitas >= 3 && p.ofertas === 0,
+    altaDemanda: (p) => p.op === 'Venta' && p.demanda >= 200 && p.leads <= 1,
+    ofertasSinCierre: (p) => p.ofertas > 0 && p.cierres === 0
+};
+const SEG_LABEL: Record<string, string> = {
+    sinleads: 'Sin leads', caroSinLeads: 'Caro sin leads', visitasSinOferta: 'Visitas sin oferta', mas12: '+12 meses', respLenta: 'Respuesta lenta',
+    muchasVisitas: 'Muchas visitas, 0 ofertas', altaDemanda: 'Alta demanda, sin leads', ofertasSinCierre: 'Ofertas sin cierre'
+};
+const CHIP_SEGS: Seg[] = ['sinleads', 'caroSinLeads', 'visitasSinOferta', 'mas12', 'respLenta'];
 
 function Kpi({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
     return (
-        <div style={{ flex: 1, background: '#fff', border: `1px solid ${LGT}`, padding: '14px 16px', borderRadius: R }}>
+        <div style={{ flex: 1, background: '#fff', border: `1px solid ${LGT}`, padding: '13px 15px', borderRadius: R, minWidth: 0 }}>
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>{label}</div>
-            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1.05, margin: '8px 0 3px', color: color || BLK }}>{value}</div>
-            {sub && <div style={{ fontSize: 11, color: '#777' }}>{sub}</div>}
+            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 27, lineHeight: 1.05, margin: '8px 0 3px', color: color || BLK }}>{value}</div>
+            {sub && <div style={{ fontSize: 10.5, color: '#777', lineHeight: 1.3 }}>{sub}</div>}
         </div>
     );
 }
@@ -83,7 +92,7 @@ const COLS: Col[] = [
     { key: 'colonia', label: 'Colonia' }, { key: 'precio', label: 'Precio', num: true },
     { key: 'vsOferta', label: 'vs. oferta', num: true }, { key: 'vsCierres', label: 'vs. cierres', num: true },
     { key: 'compite', label: 'Compite', num: true }, { key: 'demanda', label: 'Demanda', num: true },
-    { key: 'calidad', label: 'Calidad' }, { key: 'dias', label: 'Días', num: true },
+    { key: 'calidad', label: 'Calidad' }, { key: 'tier', label: 'Destacado' }, { key: 'dias', label: 'Días', num: true },
     { key: 'vistas', label: 'Vistas', num: true }, { key: 'leads', label: 'Leads', num: true },
     { key: 'visitas', label: 'Visitas', num: true }, { key: 'ofertas', label: 'Ofertas', num: true }
 ];
@@ -104,7 +113,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
             if (estado && p.estado !== estado) return false;
             if (asesor && p.asesor !== asesor) return false;
             if (ql && !`${p.code} ${p.colonia} ${p.asesor}`.toLowerCase().includes(ql)) return false;
-            if (seg && !CHIP_TEST[seg](p)) return false;
+            if (seg && !SEG_TEST[seg](p)) return false;
             return true;
         });
     }, [d.props, q, op, estado, asesor, seg]);
@@ -116,7 +125,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     }), [filtered, sortKey, dir]);
 
     const fn = useMemo(() => filtered.reduce((a, p) => ({ vistas: a.vistas + p.vistas, leads: a.leads + p.leads, visitas: a.visitas + p.visitas, ofertas: a.ofertas + p.ofertas }), { vistas: 0, leads: 0, visitas: 0, ofertas: 0 }), [filtered]);
-    const onSort = (k: keyof MBProp) => { if (k === sortKey) setDir((x) => (x === 1 ? -1 : 1)); else { setSortKey(k); setDir(k === 'code' || k === 'asesor' || k === 'colonia' || k === 'op' || k === 'calidad' ? 1 : -1); } };
+    const onSort = (k: keyof MBProp) => { if (k === sortKey) setDir((x) => (x === 1 ? -1 : 1)); else { setSortKey(k); setDir(k === 'code' || k === 'asesor' || k === 'colonia' || k === 'op' || k === 'calidad' || k === 'tier' ? 1 : -1); } };
     const th: CSSProperties = { textAlign: 'left', padding: '8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
     const td: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
     const sel: CSSProperties = { fontSize: 12, padding: '6px 8px', border: `1px solid ${LGT}`, borderRadius: R, background: '#fff' };
@@ -130,8 +139,9 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                 <select value={estado} onChange={(e) => setEstado(e.target.value)} style={sel}><option value="">Precio: todos</option>{['Óptimo', 'No competitivo', 'Fuera de mercado', 'Haz ACM'].map((x) => <option key={x}>{x}</option>)}</select>
                 <select value={asesor} onChange={(e) => setAsesor(e.target.value)} style={sel}><option value="">Asesor: todos</option>{asesores.map((x) => <option key={x}>{x}</option>)}</select>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                {CHIPS.map((c) => <span key={c.seg} onClick={() => setSeg(seg === c.seg ? '' : c.seg)} style={chip(seg === c.seg)}>{c.label}</span>)}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
+                {CHIP_SEGS.map((s) => <span key={s} onClick={() => setSeg(seg === s ? '' : s)} style={chip(seg === s)}>{SEG_LABEL[s]}</span>)}
+                {seg && !CHIP_SEGS.includes(seg) && <span onClick={() => setSeg('')} style={{ ...chip(true), background: SEA, borderColor: SEA }}>{SEG_LABEL[seg]} ✕</span>}
             </div>
 
             <div style={{ background: LGT, padding: '14px 16px', borderRadius: R, marginBottom: 16 }}>
@@ -153,6 +163,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                 <td style={{ ...td, textAlign: 'right' }}>{p.compite ?? '—'}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.demanda)}</td>
                                 <td style={td}><span style={{ color: calidadColor(p.calidad), fontWeight: 600 }}>{p.calidad}</span></td>
+                                <td style={{ ...td, color: p.tier === 'Super' || p.tier === 'Destacado' ? SEA : GRY }}>{p.tier}</td>
                                 <td style={{ ...td, textAlign: 'right', color: GRY }}>{p.dias ?? '—'}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.vistas)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.leads)}</td>
@@ -181,92 +192,129 @@ export default function MBApp({ d }: { d: MBData }) {
         <div key={id} onClick={() => setSection(id)} style={{ padding: '9px 12px', borderRadius: R, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', marginBottom: 2, background: section === id ? BLK : 'transparent', color: section === id ? '#fff' : '#555' }}>{label}</div>
     );
 
-    // overview derivados
     const cnt = (fn2: (p: MBProp) => boolean) => d.props.filter(fn2).length;
-    const atencion = cnt((p) => CHIPS.some((c) => c.test(p)));
     const answered = d.resp.flash + d.resp.rapida + d.resp.media + d.resp.lento;
     const buckets: RespKey[] = ['flash', 'rapida', 'media', 'lento'];
     const domResp = buckets.reduce((a, b) => (d.resp[b] > d.resp[a] ? b : a), 'flash' as RespKey);
     const flashPct = answered ? Math.round((100 * d.resp.flash) / answered) : 0;
     const dl = d.leads30 - d.leads30prev;
     const calDelta = d.calAltaPct - d.benchAltaPct;
-    const redflags: [string, number, string][] = [
-        ['Muchas visitas, 0 ofertas', cnt((p) => p.visitas >= 3 && p.ofertas === 0), 'precio, producto o expectativas'],
-        ['Alta demanda, pocos leads', cnt((p) => p.op === 'Venta' && p.demanda >= 200 && p.leads <= 1), 'precio, ficha o visibilidad'],
-        ['Ofertas sin cierre', cnt((p) => p.ofertas > 0 && p.cierres === 0), 'negociación / propietario / precio'],
-        ['Respuesta lenta', cnt((p) => p.respMedMin != null && p.respMedMin > 1440), 'gestión del funnel']
+    const REDFLAGS: { seg: Seg; tip: string }[] = [
+        { seg: 'muchasVisitas', tip: 'Revisa precio y expectativas; refuerza el cierre después de la visita.' },
+        { seg: 'altaDemanda', tip: 'Hay compradores buscando: revisa precio, ficha o visibilidad.' },
+        { seg: 'ofertasSinCierre', tip: 'Acompaña la negociación con el propietario.' },
+        { seg: 'respLenta', tip: 'Acelera la 1ª respuesta; los leads se enfrían rápido.' }
     ];
     const topOpp = d.props.filter((p) => p.op === 'Venta' && p.demanda > 0).sort((a, b) => b.oppScore - a.oppScore).slice(0, 10);
+
+    // swaps de destacado: destacado sin leads (desperdiciado) → oportunidad con demanda sin leads
+    const desperdiciados = d.props.filter((p) => (p.tier === 'Super' || p.tier === 'Destacado') && p.leads === 0).sort((a, b) => a.demanda - b.demanda);
+    const candidatos = d.props.filter((p) => p.tier === 'Simple' && p.op === 'Venta' && p.oppScore > 0 && p.leads <= 1).sort((a, b) => b.oppScore - a.oppScore);
+    const nSwap = Math.min(desperdiciados.length, candidatos.length, 6);
+    const swaps = Array.from({ length: nSwap }, (_, i) => ({ out: desperdiciados[i], in: candidatos[i] }));
+    const nDest = cnt((p) => p.tier === 'Super' || p.tier === 'Destacado');
+
     const tth: CSSProperties = { textAlign: 'left', padding: '7px 8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
     const ttd: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
     const heroChip: CSSProperties = { background: 'rgba(255,255,255,.09)', border: '1px solid rgba(255,255,255,.16)', borderRadius: R, padding: '9px 13px', cursor: 'pointer', minWidth: 92 };
+    const dfn = (t: string, dd: string) => <div key={t} style={{ padding: '5px 0', borderBottom: `1px solid ${LGT}`, fontSize: 11.5, lineHeight: 1.4 }}><b>{t}</b> — {dd}</div>;
 
     return (
         <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Nunito Sans', sans-serif", color: BLK }}>
             <aside style={{ width: 230, borderRight: `1px solid ${LGT}`, padding: '22px 14px', position: 'sticky', top: 0, height: '100vh' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 16px' }}>
+                <div style={{ padding: '0 8px 16px' }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/pulppo-icon.png" alt="Pulppo" style={{ width: 24 }} />
-                    <div><div style={{ fontFamily: 'EB Garamond, serif', fontSize: 16, lineHeight: 1 }}>Pulppo</div><div style={{ fontSize: 9, color: GRY, letterSpacing: '.5px' }}>MASTER BROKERS</div></div>
+                    <img src="/pulppo-wordmark-black.png" alt="Pulppo" style={{ height: 22, display: 'block' }} />
+                    <div style={{ fontSize: 9, color: GRY, letterSpacing: '.5px', marginTop: 6 }}>MASTER BROKERS</div>
                 </div>
                 <div style={{ margin: '0 4px 14px', padding: '11px 12px', background: LGT, borderRadius: R }}>
                     <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{d.name}</div>
                     <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{f(d.nProps)} propiedades publicadas</div>
                 </div>
-                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{nav('analisis', 'Generador de análisis')}
+                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 <div style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
 
-            <main style={{ flex: 1, minWidth: 0, padding: '30px 34px 60px', maxWidth: 1220 }}>
+            <main style={{ flex: 1, minWidth: 0, padding: '30px 34px 60px', maxWidth: 1260 }}>
                 {section === 'overview' && (
                     <div>
                         <div style={eyebrow}>Overview</div><div style={accent} />
-                        {/* Hero + chips */}
                         <div style={{ background: BLK, color: '#fff', borderRadius: R, padding: '26px 28px' }}>
                             <div style={{ width: 44, height: 2, background: YEL, marginBottom: 14 }} />
-                            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1.15 }}><b style={{ color: YEL }}>{f(atencion)}</b> propiedades necesitan tu atención.</div>
+                            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1.15 }}><b style={{ color: YEL }}>{f(cnt((p) => CHIP_SEGS.some((s) => SEG_TEST[s](p))))}</b> propiedades necesitan tu atención.</div>
                             <div style={{ color: '#c9c9c7', fontSize: 13, marginTop: 8, maxWidth: 620 }}>De {f(d.nProps)} publicadas. Prioriza por demanda desperdiciada, precio fuera de mercado y limpieza de cartera. Haz clic en un bloque para verlas.</div>
                             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
-                                {CHIPS.map((c) => (
-                                    <div key={c.seg} onClick={() => goSeg(c.seg)} style={heroChip}>
-                                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, lineHeight: 1 }}>{f(cnt(c.test))}</div>
-                                        <div style={{ fontSize: 11, color: '#c9c9c7', marginTop: 3 }}>{c.label}</div>
+                                {CHIP_SEGS.map((s) => (
+                                    <div key={s} onClick={() => goSeg(s)} style={heroChip}>
+                                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, lineHeight: 1 }}>{f(cnt(SEG_TEST[s]))}</div>
+                                        <div style={{ fontSize: 11, color: '#c9c9c7', marginTop: 3 }}>{SEG_LABEL[s]}</div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
                         {/* KPIs */}
-                        <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+                        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                             <Kpi label="Inventario activo" value={f(d.nProps)} sub={`${d.nVenta} venta · ${d.nRenta} renta · vs. 2025 próximamente`} />
-                            <Kpi label="Calidad de ficha" value={`${d.calAltaPct}% Alta`} color={calDelta < 0 ? '#8a6d00' : SEA} sub={`comunidad ${d.benchAltaPct}% (top 20%) · ${calDelta >= 0 ? '+' : ''}${calDelta} pts`} />
+                            <Kpi label="Calidad de ficha" value={`${d.calAltaPct}% Alta`} color={calDelta < 0 ? '#8a6d00' : SEA} sub={`vs. mejores inmobiliarias* · ${calDelta >= 0 ? '+' : ''}${calDelta} pts`} />
                             <Kpi label="Leads · 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED} sub={`${dl >= 0 ? '▲' : '▼'} vs. 30 días previos (${f(d.leads30prev)})`} />
-                            <Kpi label="Velocidad de respuesta" value={RESP_LBL[domResp]} color={domResp === 'flash' || domResp === 'rapida' ? SEA : domResp === 'lento' ? RED : '#8a6d00'} sub={`${flashPct}% Flash (≤5 min) · ${d.resp.sin} sin responder`} />
+                            <Kpi label="Respuesta" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub="leads sin responder" />
+                            <Kpi label="Velocidad de respuesta" value={RESP_LBL[domResp]} color={domResp === 'flash' || domResp === 'rapida' ? SEA : domResp === 'lento' ? RED : '#8a6d00'} sub={`${flashPct}% Flash (≤5 min)`} />
                         </div>
+                        <div style={{ fontSize: 10, color: GRY, marginTop: 6 }}>*media de las mejores inmobiliarias de la comunidad (top 20% por calidad).</div>
 
                         {/* Venta vs renta */}
-                        <h2 style={{ ...h2, marginTop: 30 }}>Venta vs. renta</h2>
+                        <h2 style={{ ...h2, marginTop: 28 }}>Venta vs. renta</h2>
                         <div style={sub}>Balance de tu inventario publicado por tipo de operación.</div>
                         <OpSplit venta={d.nVenta} renta={d.nRenta} />
 
-                        {/* Red flags */}
-                        <h2 style={{ ...h2, marginTop: 30 }}>Red flags comerciales</h2>
-                        <div style={sub}>Patrones de funnel que no aparecen en los KPIs. Cada número son propiedades.</div>
+                        {/* Swaps de destacado */}
+                        <h2 style={{ ...h2, marginTop: 30 }}>Swaps de destacado</h2>
+                        <div style={sub}>Tienes <b>{f(nDest)}</b> propiedades en destacado/súper. Mueve el aviso (lo cubre Pulppo) de las que no generan leads a las que tienen demanda esperando.</div>
+                        {swaps.length ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {swaps.map((s) => (
+                                    <div key={s.out.id} style={{ display: 'flex', alignItems: 'stretch', gap: 10 }}>
+                                        <div style={{ flex: 1, border: `1px solid ${LGT}`, borderLeft: `3px solid ${RED}`, borderRadius: R, padding: '9px 12px' }}>
+                                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', color: RED, textTransform: 'uppercase' }}>Baja de destacado</div>
+                                            <div style={{ marginTop: 3, fontSize: 12.5 }}><Link href={`/ficha/${s.out.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{s.out.code}</Link> · {s.out.tier} · <b>0 leads</b> · {s.out.dias ?? '—'} días · {s.out.colonia}</div>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', color: GRY, fontSize: 18 }}>→</div>
+                                        <div style={{ flex: 1, border: `1px solid ${LGT}`, borderLeft: `3px solid ${SEA}`, borderRadius: R, padding: '9px 12px' }}>
+                                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', color: SEA, textTransform: 'uppercase' }}>Sube a destacado</div>
+                                            <div style={{ marginTop: 3, fontSize: 12.5 }}><Link href={`/ficha/${s.in.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{s.in.code}</Link> · demanda <b>{f(s.in.demanda)}</b> · {s.in.leads} leads · {s.in.colonia}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{ background: LGT, borderRadius: R, padding: '12px 14px', fontSize: 12, color: '#555' }}>
+                                {nDest === 0 ? 'No tienes destacados activos hoy. ' : 'Tus destacados están generando leads 👍. '}
+                                {candidatos.length ? <>Candidatos a destacar (demanda alta, sin leads): {candidatos.slice(0, 5).map((c) => c.code).join(' · ')}.</> : 'Sin candidatos claros por ahora.'}
+                            </div>
+                        )}
+
+                        {/* Focos comerciales (red flags accionables) */}
+                        <h2 style={{ ...h2, marginTop: 30 }}>Focos comerciales</h2>
+                        <div style={sub}>Patrones accionables. Cada número son propiedades — haz clic para verlas y actuar.</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                            {redflags.map((r) => (
-                                <div key={r[0]} style={{ display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${LGT}`, borderRadius: R, padding: '11px 14px' }}>
-                                    <b style={{ fontFamily: 'EB Garamond, serif', fontSize: 24, width: 40, color: r[1] > 0 ? RED : GRY }}>{f(r[1])}</b>
-                                    <div><div style={{ fontSize: 13, fontWeight: 600 }}>{r[0]}</div><div style={{ fontSize: 11, color: GRY }}>{r[2]}</div></div>
-                                </div>
-                            ))}
+                            {REDFLAGS.map((r) => {
+                                const n = cnt(SEG_TEST[r.seg as string]);
+                                return (
+                                    <div key={r.seg} onClick={() => n && goSeg(r.seg)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, border: `1px solid ${LGT}`, borderRadius: R, padding: '12px 14px', cursor: n ? 'pointer' : 'default' }}>
+                                        <b style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, width: 44, color: n > 0 ? RED : GRY }}>{f(n)}</b>
+                                        <div><div style={{ fontSize: 13, fontWeight: 700 }}>{SEG_LABEL[r.seg as string]} <span style={{ fontWeight: 400, color: GRY }}>· {n === 1 ? 'propiedad' : 'propiedades'}</span></div><div style={{ fontSize: 11.5, color: '#666', marginTop: 2 }}>{r.tip}{n ? ' ↗' : ''}</div></div>
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         {/* Empieza por aquí */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Empieza por aquí</h2>
-                        <div style={sub}>Mayor score de oportunidad = buena demanda de zona pero sin generar leads, con un freno claro y arreglable.</div>
+                        <div style={sub}>Buena demanda de zona pero sin generar leads, con un freno claro. Demanda = búsquedas de venta de la zona (2026) · Leads = históricos · vs. oferta = tu $/m² contra el asking del <b>MLS</b> en la zona.</div>
                         <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
-                                <thead><tr>{['Código', 'Zona', 'Operación', 'Precio', 'vs. oferta', 'Leads', 'Demanda', 'Diagnóstico', 'Opp.'].map((h, i) => <th key={h} style={{ ...tth, textAlign: i === 3 || i === 4 || i > 4 && i < 7 || i === 8 ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
+                                <thead><tr>{['Código', 'Zona', 'Operación', 'Precio', 'vs. oferta', 'Leads', 'Demanda', 'Diagnóstico'].map((h, i) => <th key={h} style={{ ...tth, textAlign: i === 3 || i === 4 || i === 5 || i === 6 ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
                                 <tbody>
                                     {topOpp.map((p) => (
                                         <tr key={p.id}>
@@ -276,15 +324,14 @@ export default function MBApp({ d }: { d: MBData }) {
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{p.leads}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{f(p.demanda)}</td>
-                                            <td style={ttd}>{p.diag.length ? p.diag.join(' · ') : <span style={{ color: GRY }}>revisar</span>}</td>
-                                            <td style={{ ...ttd, textAlign: 'right', fontWeight: 700 }}>{f(p.oppScore)}</td>
+                                            <td style={ttd}>{p.diag.length ? p.diag.map(diagPill) : <span style={{ color: GRY }}>revisar</span>}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
                         <div style={{ marginTop: 22, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '11px 14px', fontSize: 12, color: '#555' }}>
-                            Próximamente: <b>swaps de destacado</b> (baja esta, pon esta), <b>inventario vs. últimos 6 meses</b> y comparativa vs. otras inmobiliarias de la comunidad.
+                            Próximamente: <b>inventario vs. últimos 6 meses</b> y comparativa ampliada vs. la comunidad.
                         </div>
                     </div>
                 )}
@@ -307,6 +354,33 @@ export default function MBApp({ d }: { d: MBData }) {
                             <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22 }}>En construcción</div>
                             <div style={{ fontSize: 12, color: '#555', marginTop: 8, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>Aquí vivirá el generador del reporte de desempeño integrado y en vivo, con la vista partida por asesor/productor.</div>
                         </div>
+                    </div>
+                )}
+
+                {section === 'comoleer' && (
+                    <div style={{ maxWidth: 780 }}>
+                        <div style={eyebrow}>Metodología</div><div style={accent} />
+                        <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 30, margin: 0 }}>¿Cómo leer esto?</h1>
+                        <div style={sub}>Todo sale de <b>datos en vivo de Pulppo</b>. Aquí de dónde viene cada número.</div>
+                        <h2 style={{ ...h2, marginTop: 20 }}>De dónde salen los datos</h2>
+                        <div>
+                            {dfn('Inventario', 'tus propiedades publicadas en Pulppo (precio, superficie, calidad de ficha, destacado).')}
+                            {dfn('Leads', 'contactos reales de todos los canales. Tiempo de 1ª respuesta = answeredAt − createdAt del lead.')}
+                            {dfn('Visitas', 'visitantes únicos confirmados (una misma persona no cuenta doble).')}
+                            {dfn('Vistas', 'eventos de vista del anuncio (todas las fuentes).')}
+                            {dfn('Demanda', 'búsquedas de compradores en tu zona (2026), partidas por operación: a cada propiedad se le asigna la demanda de su operación (venta/renta).')}
+                            {dfn('vs. oferta / vs. cierres', 'tu $/m² contra el asking mediano del MLS en la zona (oferta) y contra lo que cerró Pulppo, 24m (cierres).')}
+                            {dfn('Calidad de ficha', 'clasificación Pulppo (Alta/Media/Baja). El benchmark es la media de las mejores inmobiliarias de la comunidad (top 20%).')}
+                            {dfn('Destacado', 'nivel del aviso en Inmuebles24 (Súper / Destacado / Simple).')}
+                        </div>
+                        <h2 style={{ ...h2, marginTop: 22 }}>Cómo se leen las secciones</h2>
+                        <div>
+                            {dfn('Necesitan tu atención', 'propiedades con algún foco (sin leads, caras sin leads, visitas sin oferta, +12 meses, respuesta lenta). Clic → las abre filtradas.')}
+                            {dfn('Velocidad de respuesta', 'Flash ≤5 min · Rápida ≤1 h · Media ≤24 h · Lento >24 h. "Respuesta" muestra los leads que siguen sin responder.')}
+                            {dfn('Swaps de destacado', 'baja el aviso de un destacado sin leads y súbelo a una propiedad con demanda esperando. El aviso lo cubre Pulppo.')}
+                            {dfn('Empieza por aquí', 'ordenado por oportunidad (demanda ÷ (1+leads)). El diagnóstico dice el freno más probable (bajar precio / mejorar ficha).')}
+                        </div>
+                        <div style={{ fontSize: 10, color: GRY, marginTop: 18 }}>Corte: hoy, datos en vivo. Borrador.</div>
                     </div>
                 )}
             </main>

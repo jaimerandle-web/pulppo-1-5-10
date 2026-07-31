@@ -16,6 +16,8 @@ const median = (xs: number[]): number | null => { const s = xs.slice().sort((a, 
 const pushMap = (m: Map<string, number[]>, k: string, v: number) => { const a = m.get(k); if (a) a.push(v); else m.set(k, [v]); };
 const estadoPrecio = (sp: number | null): string => (sp == null ? 'Haz ACM' : sp <= 1.05 ? 'Óptimo' : sp <= 1.2 ? 'No competitivo' : 'Fuera de mercado');
 const CAL: Record<number, string> = { 3: 'Alta', 2: 'Media', 1: 'Baja' };
+// Tier de destacado en Inmuebles24 (portals.inmuebles24.type).
+const TIER: Record<string, string> = { HOME_COMBO: 'Super', HOME_COMBO_ZONA_DEMAND: 'Super', DESTACADO_COMBO: 'Destacado', DESTACADO_COMBO_ZONA_DEMAND: 'Destacado', SIMPLE_COMBO: 'Simple', OFFLINE: 'Offline' };
 const YTD0 = new Date('2026-01-01T00:00:00Z');
 const D24 = new Date(Date.now() - 730 * 864e5);
 const D30 = new Date(Date.now() - 30 * 864e5);
@@ -29,7 +31,7 @@ export interface MBProp {
     precio: number | null; estado: string; demanda: number; vsOferta: number | null; vsCierres: number | null;
     compite: number | null; calidad: string; dias: number | null; mesesPub: number | null;
     vistas: number; leads: number; visitas: number; ofertas: number; cierres: number;
-    respMedMin: number | null; oppScore: number; diag: string[];
+    respMedMin: number | null; oppScore: number; diag: string[]; tier: string;
 }
 export interface MBData {
     companyId: string; name: string; nProps: number; nVenta: number; nRenta: number; captaciones90: number;
@@ -72,7 +74,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const db = await getDb();
     const props = await db.collection('properties').find(
         { 'company._id': cid, 'status.last': 'published' },
-        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, address: 1, agent: 1, publishedAt: 1, company: 1 } }
+        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, address: 1, agent: 1, publishedAt: 1, company: 1, 'portals.inmuebles24.type': 1 } }
     ).toArray();
     if (!props.length) return null;
     const name = (dig(props[0], 'company', 'name') as string) ?? 'Inmobiliaria';
@@ -192,7 +194,8 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             calidad, dias, mesesPub: dias != null ? dias / 30 : null,
             vistas, leads, visitas: vis, ofertas, cierres,
             respMedMin: median(respByProp.get(hex) ?? []),
-            oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag
+            oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag,
+            tier: TIER[dig(p, 'portals', 'inmuebles24', 'type') as string] ?? 'Simple'
         };
     });
     rows.sort((a, b) => b.leads - a.leads || b.vistas - a.vistas);
