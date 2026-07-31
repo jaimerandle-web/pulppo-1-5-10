@@ -24,7 +24,7 @@ const SECCIONES = [
     { id: 'precio', label: 'Precio × calidad + leads', needs: null },
     { id: 'destacados', label: 'Cómo se ha destacado', needs: 'destacados' },
     { id: 'funnel', label: 'Funnel comercial', needs: null },
-    { id: 'yoy', label: 'Año vs año (YoY)', needs: null },
+    { id: 'yoy', label: 'Comparación de períodos', needs: null },
     { id: 'top10', label: 'Top 10 críticas', needs: null },
     { id: 'reco', label: 'Recomendaciones', needs: null },
     { id: 'glosario', label: '¿Cómo leer esta información? (glosario)', needs: null },
@@ -103,6 +103,7 @@ export default function AnalisisGeneral() {
     const [ventCierres, setVentCierres] = useState('Últimos 24 meses');
     const [ventDemanda, setVentDemanda] = useState('Últimos 12 meses');
     const [ventLeads, setVentLeads] = useState('YTD 2026');
+    const [comparacion, setComparacion] = useState('Año vs año (YTD)');
     const [zombie, setZombie] = useState('Últimos 90 días');
     const [referencias, setReferencias] = useState<string[]>(['ACM (valor estimado)', 'Oferta de zona', 'Cierres reales', 'Qué te alcanza por el mismo precio']);
     const [destacados, setDestacados] = useState(false);
@@ -165,7 +166,7 @@ export default function AnalisisGeneral() {
         try {
             const res = await fetch('/api/analisis', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inmo, operacion, ventDemanda, ventCierres, referencias, ventLeads, zombie, mlsGeneral }),
+                body: JSON.stringify({ inmo, operacion, ventDemanda, ventCierres, referencias, ventLeads, comparacion, zombie, mlsGeneral }),
             });
             if (res.status === 401) { router.push('/login'); return; }
             const d = await res.json();
@@ -176,7 +177,7 @@ export default function AnalisisGeneral() {
         } finally { setLoading(false); }
     }
     // La config cambió → el preview actual queda obsoleto.
-    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventCierres, referencias, ventLeads, zombie, mlsGeneral]);
+    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventCierres, referencias, ventLeads, comparacion, zombie, mlsGeneral]);
 
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
@@ -227,6 +228,10 @@ export default function AnalisisGeneral() {
                         <div className="flex flex-col gap-3.5">
                             <Field label="Comparables de cierres">
                                 <Select value={ventCierres} onChange={setVentCierres} options={['Últimos 12 meses', 'Últimos 24 meses', 'Últimos 36 meses']} />
+                            </Field>
+                            <Field label="Comparación de períodos" hint="Alimenta la sección “Comparación de períodos”.">
+                                <Select value={comparacion} onChange={setComparacion}
+                                    options={['Año vs año (YTD)', 'Mismo mes, año vs año', 'Mes vs mes anterior', 'Trimestre vs anterior', 'Últimos 30 días vs 30 previos', 'Últimos 90 días vs 90 previos']} />
                             </Field>
                             <Field label="Demanda de zona (búsquedas)">
                                 <Select value={ventDemanda} onChange={setVentDemanda} options={['Últimos 6 meses', 'Últimos 12 meses', 'YTD 2026']} />
@@ -733,11 +738,11 @@ function DestacadosView({ d }: { d: AnalisisData }) {
 function YoyView({ d }: { d: AnalisisData }) {
     return (
         <div className="mt-2 pl-6">
-            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Enero–junio 2025 vs. enero–junio 2026.</p>
+            <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}><b>{d.compLabels.a}</b> vs. <b>{d.compLabels.b}</b>. <span style={{ color: GRAY }}>Inventario = foto al cierre del período; leads/cierres/comisión = lo que pasó dentro del período.</span></p>
             <table className="w-full border-collapse text-[11px]">
                 <thead>
                     <tr className="border-b" style={{ borderColor: SOFT }}>
-                        {['Métrica', '2025', '2026', 'Variación'].map((h, i) => (
+                        {['Métrica', d.compLabels.a, d.compLabels.b, 'Variación'].map((h, i) => (
                             <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i ? 'text-right' : 'text-left'}`}>{h}</th>
                         ))}
                     </tr>
@@ -761,8 +766,8 @@ function YoyView({ d }: { d: AnalisisData }) {
             {d.yoyMix.map((m) => {
                 const tot = m.sale + m.rent || 1;
                 return (
-                    <div key={m.year} className="flex items-center gap-2 py-0.5 text-[10px]">
-                        <span className="w-8" style={{ color: GRAY }}>{m.year}</span>
+                    <div key={m.period} className="flex items-center gap-2 py-0.5 text-[10px]">
+                        <span className="w-20" style={{ color: GRAY }}>{m.period}</span>
                         <span className="flex h-[12px] flex-1 overflow-hidden bg-[#F3F3F3]">
                             <span className="block h-full" style={{ width: `${100 * m.sale / tot}%`, background: SEA_D }} />
                             <span className="block h-full" style={{ width: `${100 * m.rent / tot}%`, background: SEA }} />

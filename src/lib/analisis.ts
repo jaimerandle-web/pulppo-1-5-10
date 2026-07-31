@@ -55,6 +55,7 @@ export interface AnalisisConfig {
     ventCierres?: string;         // ventana de comparables de cierres: 'Últimos 12/24/36 meses'
     referencias?: string[];       // qué referencias mostrar: 'Oferta de zona' | 'Cierres reales' | ...
     ventLeads?: string;           // ventana de leads: 'Últimos 30 días' | '90 días' | '6 meses' | 'YTD 2026' | '12 meses'
+    comparacion?: string;         // tipo de comparación de períodos (ver compRanges)
     zombie?: string;              // ventana zombie: 'Últimos 30 días' | '90 días' | '6 meses' | 'Totales'
     mlsGeneral?: boolean;         // oferta/zona contra el MLS i24 completo en vez de la red Pulppo
 }
@@ -74,6 +75,41 @@ const srcLabel = (s: unknown): string => {
     if (t.includes('web')) return 'Website';
     return 'Otros';
 };
+
+// Tipos de comparación de períodos (para el selector del form).
+export const COMP_TYPES = [
+    'Año vs año (YTD)', 'Mismo mes, año vs año', 'Mes vs mes anterior',
+    'Trimestre vs anterior', 'Últimos 30 días vs 30 previos', 'Últimos 90 días vs 90 previos',
+];
+// Dado el tipo y "hoy", devuelve los dos rangos: A = base (anterior), B = actual.
+function compRanges(tipo: string, now: Date): { aStart: Date; aEnd: Date; bStart: Date; bEnd: Date; labelA: string; labelB: string } {
+    const M = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const addDays = (dt: Date, n: number) => { const x = new Date(dt); x.setUTCDate(x.getUTCDate() + n); return x; };
+    const addMonths = (dt: Date, n: number) => { const x = new Date(dt); x.setUTCMonth(x.getUTCMonth() + n); return x; };
+    const addYears = (dt: Date, n: number) => { const x = new Date(dt); x.setUTCFullYear(x.getUTCFullYear() + n); return x; };
+    const mStart = (dt: Date) => new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), 1));
+    const y = now.getUTCFullYear();
+    if (tipo === 'Últimos 30 días vs 30 previos')
+        return { bStart: addDays(now, -30), bEnd: now, aStart: addDays(now, -60), aEnd: addDays(now, -30), labelB: 'Últimos 30d', labelA: '30d previos' };
+    if (tipo === 'Últimos 90 días vs 90 previos')
+        return { bStart: addDays(now, -90), bEnd: now, aStart: addDays(now, -180), aEnd: addDays(now, -90), labelB: 'Últimos 90d', labelA: '90d previos' };
+    if (tipo === 'Mes vs mes anterior') {
+        const curM = mStart(now), bS = addMonths(curM, -1), aS = addMonths(curM, -2);
+        return { bStart: bS, bEnd: curM, aStart: aS, aEnd: addMonths(curM, -1), labelB: `${M[bS.getUTCMonth()]} ${bS.getUTCFullYear()}`, labelA: `${M[aS.getUTCMonth()]} ${aS.getUTCFullYear()}` };
+    }
+    if (tipo === 'Mismo mes, año vs año') {
+        const bS = mStart(now);
+        return { bStart: bS, bEnd: now, aStart: addYears(bS, -1), aEnd: addYears(now, -1), labelB: `${M[bS.getUTCMonth()]} ${bS.getUTCFullYear()}`, labelA: `${M[bS.getUTCMonth()]} ${bS.getUTCFullYear() - 1}` };
+    }
+    if (tipo === 'Trimestre vs anterior') {
+        const curQ = new Date(Date.UTC(y, Math.floor(now.getUTCMonth() / 3) * 3, 1));
+        const bS = addMonths(curQ, -3), aS = addMonths(curQ, -6);
+        const qn = (d: Date) => `T${Math.floor(d.getUTCMonth() / 3) + 1} ${d.getUTCFullYear()}`;
+        return { bStart: bS, bEnd: curQ, aStart: aS, aEnd: addMonths(curQ, -3), labelB: qn(bS), labelA: qn(aS) };
+    }
+    // 'Año vs año (YTD)' (default)
+    return { bStart: new Date(Date.UTC(y, 0, 1)), bEnd: now, aStart: new Date(Date.UTC(y - 1, 0, 1)), aEnd: addYears(now, -1), labelB: `${y} (YTD)`, labelA: `${y - 1} (YTD)` };
+}
 
 export interface AnalisisData {
     company: string;
@@ -101,8 +137,9 @@ export interface AnalisisData {
     funnel: { title: string; steps: { label: string; value: number; rate: number | null }[] }[];
     funnelReading: string;
     recos: { enfoque: string; title: string; body: string; sev: number }[];
+    compLabels: { a: string; b: string };
     yoy: { label: string; a: number; b: number; fmt: 'int' | 'dec' | 'pct' | 'pct2' | 'money'; goodUp: boolean }[];
-    yoyMix: { year: number; sale: number; rent: number; com: number }[];
+    yoyMix: { period: string; sale: number; rent: number; com: number }[];
     yoyReading: string;
     top10: { code: string; nb: string; val: number; sp: number | null; leads: number; dz: number; lev: string[] }[];
     destacados: {
@@ -133,8 +170,8 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     const NOW = new Date();
     const YTD0 = new Date(Date.UTC(NOW.getUTCFullYear(), 0, 1));
-    const H1_25: [Date, Date] = [new Date(Date.UTC(2025, 0, 1)), new Date(Date.UTC(2025, 6, 1))];
-    const H1_26: [Date, Date] = [new Date(Date.UTC(2026, 0, 1)), new Date(Date.UTC(2026, 6, 1))];
+    const comp = compRanges(cfg.comparacion || 'Año vs año (YTD)', NOW);
+    const leadScanStart = new Date(Math.min(comp.aStart.getTime(), YTD0.getTime()));
     const windowStart = (w: string, fallbackMonths: number): Date => {
         if (w === 'YTD 2026') return YTD0;
         if (w === 'Totales') return new Date(0);
@@ -373,23 +410,24 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const zero = () => ({ sale: 0, rent: 0 } as Record<string, number>);
 
     const leadsByOp = zero(), contByOp = zero();
-    let ytdLeadsAll = 0, ytdVis = 0, h1Leads25 = 0, h1Leads26 = 0;
+    let ytdLeadsAll = 0, ytdVis = 0, leadsA = 0, leadsB = 0;
     let compCliente = 0, compBroker = 0, compIncont = 0, compDup = 0;
     const dupSet = new Set<string>();   // clave propiedad+contacto → repetición = duplicado
+    const seenA = new Set<string>(), seenB = new Set<string>();   // dedup por período de comparación
     const srcCount: Record<string, number> = {};   // leads únicos por fuente (YTD)
-    const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: H1_25[0] } },
+    const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: leadScanStart } },
         { projection: { 'property._id': 1, answeredAt: 1, createdAt: 1, source: 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1 } });
     for await (const l of lc) {
         const d = asDt(l.createdAt); if (!d) continue;
         const op = pid2op.get(String(gv(l, 'property', '_id')));
+        const phone = gv(l, 'contact', 'phone'), email = gv(l, 'contact', 'email');
+        const who = phone || email || String(gv(l, 'contact', '_id') || l._id);
+        const kk = `${String(gv(l, 'property', '_id'))}|${who}`;
         if (d >= YTD0 && (op === 'sale' || op === 'rent')) {
-            const phone = gv(l, 'contact', 'phone'), email = gv(l, 'contact', 'email');
             // duplicado = mismo contacto en la misma propiedad → se descarta de TODO el funnel
-            const who = phone || email || String(gv(l, 'contact', '_id') || l._id);
-            const dupKey = `${String(gv(l, 'property', '_id'))}|${who}`;
-            if (dupSet.has(dupKey)) { compDup++; }
+            if (dupSet.has(kk)) { compDup++; }
             else {
-                dupSet.add(dupKey);
+                dupSet.add(kk);
                 ytdLeadsAll++;
                 leadsByOp[op]++;
                 const broker = !!gv(l, 'contact', 'company', '_id');   // el contacto está asociado a una empresa/inmobiliaria
@@ -399,8 +437,9 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
                 const sl = srcLabel(l.source); srcCount[sl] = (srcCount[sl] || 0) + 1;
             }
         }
-        if (d >= H1_25[0] && d < H1_25[1]) h1Leads25++;
-        if (d >= H1_26[0] && d < H1_26[1]) h1Leads26++;
+        // comparación de períodos (leads únicos dentro de cada rango)
+        if (d >= comp.aStart && d < comp.aEnd && !seenA.has(kk)) { seenA.add(kk); leadsA++; }
+        if (d >= comp.bStart && d < comp.bEnd && !seenB.has(kk)) { seenB.add(kk); leadsB++; }
     }
     const visByOp = zero();
     const vc = db.collection('visits').find({ 'steps.property._id': { $in: allpids }, 'status.last': { $ne: 'cancelled' }, createdAt: { $gte: YTD0 } }, { projection: { 'steps.property._id': 1 } });
@@ -461,13 +500,6 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     };
     const propMeta = allprops.map((p) => ({ pub: asDt(p.publishedAt), term: terminal(p), q3: num(p.qualityScore) }));
     const activeAt = (end: Date) => propMeta.filter((p) => p.pub && p.pub < end && (p.term === null || p.term > end));
-    const h1Avg = (year: number, alta: boolean) => {
-        let s = 0;
-        for (let m = 1; m <= 6; m++) { const act = activeAt(monthEnd(year, m)); s += alta ? act.filter((p) => p.q3 === 3).length : act.length; }
-        return s / 6;
-    };
-    const inv25 = h1Avg(2025, false), inv26 = h1Avg(2026, false);
-    const alta25 = h1Avg(2025, true) / (inv25 || 1), alta26 = h1Avg(2026, true) / (inv26 || 1);
     const closeWindow = (a: Date, b: Date) => {
         const r = { n: 0, sale: 0, rent: 0, com: 0, gmv: 0 };
         for (const o of opsAll) {
@@ -480,20 +512,24 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         }
         return r;
     };
-    const cl25 = closeWindow(H1_25[0], H1_25[1]), cl26 = closeWindow(H1_26[0], H1_26[1]);
-    const tc25 = cl25.n / (h1Leads25 || 1), tc26 = cl26.n / (h1Leads26 || 1);
+    // inventario = snapshot al cierre de cada período; leads/cierres/comisión = flujo dentro del período
+    const actA = activeAt(comp.aEnd), actB = activeAt(comp.bEnd);
+    const invA = actA.length, invB = actB.length;
+    const altaA = actA.filter((p) => p.q3 === 3).length / (invA || 1), altaB = actB.filter((p) => p.q3 === 3).length / (invB || 1);
+    const clA = closeWindow(comp.aStart, comp.aEnd), clB = closeWindow(comp.bStart, comp.bEnd);
+    const tcA = clA.n / (leadsA || 1), tcB = clB.n / (leadsB || 1);
     const yoy: AnalisisData['yoy'] = [
-        { label: 'Inventario activo (prom.)', a: inv25, b: inv26, fmt: 'int', goodUp: true },
-        { label: 'Leads / mes (prom.)', a: h1Leads25 / 6, b: h1Leads26 / 6, fmt: 'int', goodUp: true },
-        { label: 'Leads por propiedad', a: (h1Leads25 / 6) / (inv25 || 1), b: (h1Leads26 / 6) / (inv26 || 1), fmt: 'dec', goodUp: true },
-        { label: 'Calidad Alta', a: alta25, b: alta26, fmt: 'pct', goodUp: true },
-        { label: 'Cierres (6 meses)', a: cl25.n, b: cl26.n, fmt: 'int', goodUp: true },
-        { label: 'Comisión total', a: cl25.com, b: cl26.com, fmt: 'money', goodUp: true },
-        { label: 'Tasa de cierre (leads→cierre)', a: tc25, b: tc26, fmt: 'pct2', goodUp: true },
+        { label: 'Inventario activo (fin período)', a: invA, b: invB, fmt: 'int', goodUp: true },
+        { label: 'Leads del período', a: leadsA, b: leadsB, fmt: 'int', goodUp: true },
+        { label: 'Leads por propiedad', a: leadsA / (invA || 1), b: leadsB / (invB || 1), fmt: 'dec', goodUp: true },
+        { label: 'Calidad Alta', a: altaA, b: altaB, fmt: 'pct', goodUp: true },
+        { label: 'Cierres', a: clA.n, b: clB.n, fmt: 'int', goodUp: true },
+        { label: 'Comisión', a: clA.com, b: clB.com, fmt: 'money', goodUp: true },
+        { label: 'Tasa de cierre (leads→cierre)', a: tcA, b: tcB, fmt: 'pct2', goodUp: true },
     ];
-    const yoyMix = [{ year: 2025, sale: cl25.sale, rent: cl25.rent, com: cl25.com }, { year: 2026, sale: cl26.sale, rent: cl26.rent, com: cl26.com }];
-    const comDelta = (cl26.com - cl25.com) / (cl25.com || 1);
-    const yoyReading = `Comisión total ${money(cl25.com)} → ${money(cl26.com)} (${comDelta >= 0 ? '+' : ''}${Math.round(comDelta * 100)}%). El motor son las ventas: en 2026 se cerraron ${cl26.sale}.`;
+    const yoyMix = [{ period: comp.labelA, sale: clA.sale, rent: clA.rent, com: clA.com }, { period: comp.labelB, sale: clB.sale, rent: clB.rent, com: clB.com }];
+    const comDelta = (clB.com - clA.com) / (clA.com || 1);
+    const yoyReading = `Comisión ${money(clA.com)} → ${money(clB.com)} (${comDelta >= 0 ? '+' : ''}${Math.round(comDelta * 100)}%) de ${comp.labelA} a ${comp.labelB}. El motor son las ventas: en ${comp.labelB} se cerraron ${clB.sale}.`;
 
     // ===================== Top 10 críticas =====================
     const cand10 = [];
@@ -631,6 +667,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
         insightInv, insightPrecio,
         funnel, funnelReading, recos,
+        compLabels: { a: comp.labelA, b: comp.labelB },
         yoy, yoyMix, yoyReading, top10, destacados,
     };
 }
