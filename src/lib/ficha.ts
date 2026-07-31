@@ -24,6 +24,14 @@ const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
     return x;
 };
 const num = (x: unknown): number | null => (typeof x === 'number' && !isNaN(x) ? x : null);
+const asDate = (v: unknown): Date | null => (v instanceof Date ? v : typeof v === 'string' && !isNaN(Date.parse(v)) ? new Date(v) : null);
+// Primera publicación REAL (status.history), no la última republicación: publishedAt se reinicia al
+// republicar, así que una propiedad de 15 meses republicada ayer saldría con "0 meses" — engañoso.
+const firstPublished = (P: Document): Date | null => {
+    const h = (dig(P, 'status', 'history') as { status?: string; timestamp?: unknown }[] | undefined) || [];
+    const ds = h.filter((x) => x?.status === 'published').map((x) => asDate(x?.timestamp)).filter((d): d is Date => !!d);
+    return ds.length ? ds.reduce((a, b) => (a < b ? a : b)) : (asDate(P.publishedAt) ?? asDate(P.createdAt));
+};
 const strip = (s: string) => s.replace(/\b(fracc\.?|fraccionamiento|colonia|col\.?|residencial|barrio|pueblo)\b/gi, '').trim();
 const nrm = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -330,7 +338,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const pics = ((P.pictures as Document[]) || []).filter((x) => x.public !== false).length;
     const video = Boolean((P.videos as unknown[])?.length) || Boolean(dig(P, 'marketing', 'Video', 'videoUrl'));
     const tour = Boolean(P.virtualTour);
-    const pub = P.publishedAt instanceof Date ? (P.publishedAt as Date) : null;
+    const pub = firstPublished(P);
     const meses = pub ? Math.floor((now - pub.getTime()) / (30.44 * 86400000)) : null;
 
     // contrato de exclusividad: vencimiento = start + durationMonths

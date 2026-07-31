@@ -12,6 +12,13 @@ const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
     return cur;
 };
 const num = (x: unknown): number | null => (typeof x === 'number' && !isNaN(x) ? x : null);
+const asDate = (v: unknown): Date | null => (v instanceof Date ? v : typeof v === 'string' && !isNaN(Date.parse(v)) ? new Date(v) : null);
+// Primera publicación real (status.history), no la última republicación (publishedAt se reinicia al republicar).
+const firstPublished = (p: Document): Date | null => {
+    const h = (dig(p, 'status', 'history') as { status?: string; timestamp?: unknown }[] | undefined) || [];
+    const ds = h.filter((x) => x?.status === 'published').map((x) => asDate(x?.timestamp)).filter((d): d is Date => !!d);
+    return ds.length ? ds.reduce((a, b) => (a < b ? a : b)) : (asDate(dig(p, 'publishedAt')) ?? asDate(dig(p, 'createdAt')));
+};
 const median = (xs: number[]): number | null => { const s = xs.slice().sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
 const pushMap = (m: Map<string, number[]>, k: string, v: number) => { const a = m.get(k); if (a) a.push(v); else m.set(k, [v]); };
 const estadoPrecio = (sp: number | null): string => (sp == null ? 'Haz ACM' : sp <= 1.05 ? 'Óptimo' : sp <= 1.2 ? 'No competitivo' : 'Fuera de mercado');
@@ -74,7 +81,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const db = await getDb();
     const props = await db.collection('properties').find(
         { 'company._id': cid, 'status.last': 'published' },
-        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, address: 1, agent: 1, publishedAt: 1, company: 1, 'portals.inmuebles24.type': 1 } }
+        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, address: 1, agent: 1, publishedAt: 1, createdAt: 1, 'status.history': 1, company: 1, 'portals.inmuebles24.type': 1 } }
     ).toArray();
     if (!props.length) return null;
     const name = (dig(props[0], 'company', 'name') as string) ?? 'Inmobiliaria';
@@ -169,8 +176,8 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const offRef = op === 'sale' ? zref(nb, ci, offNb, offCi) : null;
         const cloRef = op === 'sale' ? zref(nb, ci, cloNb, cloCi) : null;
         const vsOferta = ppm && offRef ? (ppm / offRef - 1) * 100 : null;
-        const pub = dig(p, 'publishedAt');
-        const dias = pub instanceof Date ? Math.max(0, Math.round((now - pub.getTime()) / 864e5)) : null;
+        const pub = firstPublished(p);
+        const dias = pub ? Math.max(0, Math.round((now - pub.getTime()) / 864e5)) : null;
         const leads = leadsMap.get(hex) ?? 0, vis = visMap.get(hex) ?? 0, vistas = viewMap.get(hex) ?? 0, ofertas = ofMap.get(hex) ?? 0, cierres = cloMap.get(hex) ?? 0;
         const demanda = nb ? ((op === 'sale' ? demandSale.get(nb) : op === 'rent' ? demandRent.get(nb) : 0) ?? 0) : 0;
         const calidad = CAL[num(dig(p, 'qualityScore')) ?? 2] ?? 'Media';
