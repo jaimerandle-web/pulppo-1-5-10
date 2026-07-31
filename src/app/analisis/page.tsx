@@ -365,6 +365,26 @@ export default function AnalisisGeneral() {
                             ))}
                         </div>
 
+                        {data && benchmark !== 'Ninguno' && (() => {
+                            const bm = data.benchmarkMarket;
+                            const sg = (v: number | null) => v == null ? <span style={{ color: GRAY }}>—</span> : <b style={{ color: v > 3 ? RED : v < -3 ? SEA : SOFT }}>{v > 0 ? '+' : ''}{v}%</b>;
+                            return (
+                                <div className="mt-4 rounded-[2px] border border-neutral-200 bg-[#F9F9F9] p-3">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: SEA_D }}>Tu posición vs. el mercado</p>
+                                    {benchmark === 'vs mejores inmobiliarias' ? (
+                                        <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: GRAY }}>
+                                            “Mejores inmobiliarias” (Top por ROI) <b>no está disponible aún</b>: el ranking de ROI vive fuera de Mongo. Usa <b>“vs. promedio de mercado”</b> mientras tanto.
+                                        </p>
+                                    ) : (
+                                        <div className="mt-1.5 space-y-1 text-[11px] leading-relaxed" style={{ color: SOFT }}>
+                                            <p><b>Precio $/m²:</b> tu inventario está en promedio {sg(bm.vsOfertaAvg)} vs. lo que se <b>pide</b> y {sg(bm.vsCierresAvg)} vs. lo que se <b>vende</b> en tus zonas. Estás por encima de cierres en <b>{bm.zonasCaras} de {bm.zonasCierres}</b> zonas.</p>
+                                            <p><b>Absorción:</b> {bm.absorcion == null ? '—' : <><b>{bm.absorcion.toFixed(2)}</b> búsquedas por propiedad publicada</>} en tus zonas <span style={{ color: GRAY }}>({f0(bm.demTotal)} búsquedas · {f0(bm.ofertaTotal)} publicadas en MLS i24).</span></p>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
                         {!data && !loading && (
                             <p className="mt-6 rounded-[2px] bg-[#F6BE00]/15 px-3 py-2.5 text-[11px]" style={{ color: SOFT }}>
                                 Elige una inmobiliaria y presiona <b>Generar</b> para traer los datos en vivo de Mongo.

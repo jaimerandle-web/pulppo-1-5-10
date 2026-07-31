@@ -127,6 +127,7 @@ export interface AnalisisData {
     zones: { nb: string; n: number; oferta: number; herPpm2: number | null; ofertaPpm2: number | null; cierresPpm2: number | null; vsOferta: number | null; vsCierres: number | null; nCierres: number; dem: number; leads: number }[];
     segTipo: { tipo: string; n: number; leads: number }[];
     segOp: { op: string; n: number; leads: number }[];
+    benchmarkMarket: { vsOfertaAvg: number | null; vsCierresAvg: number | null; zonasCaras: number; zonasCierres: number; absorcion: number | null; demTotal: number; ofertaTotal: number };
     invVsDemand: { band: string; invPct: number; demPct: number; inv: number; dem: number }[];
     matrix: { q: string; cells: { p: string; n: number; ll: number }[] }[];
     priceLead: { cls: string; props: number; leads: number; ll: number }[];
@@ -286,18 +287,19 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const topZones = [...byNb.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 7);
     const zoneNbids = [...new Set(topZones.map(([, its]) => its[0].nbid).filter(Boolean) as string[])];
     // Fuente de la "oferta" de la zona: red Pulppo (properties) o MLS i24 completo (mls).
-    const ofertaColl = cfg.mlsGeneral ? 'mls' : 'properties';
     const ofertaLabel = cfg.mlsGeneral ? 'MLS i24' : 'red Pulppo';
     const cierresLabel = (cfg.ventCierres || 'Últimos 24 meses').toLowerCase();
     const cierresStart = windowStart(cfg.ventCierres || 'Últimos 24 meses', 24);
-    const ofertaByNbid: Record<string, number> = {};        // # publicadas en la colonia (red Pulppo o MLS según toggle)
+    const mlsCount: Record<string, number> = {}, propCount: Record<string, number> = {};   // # publicadas por colonia
     const ofertaVals: Record<string, number[]> = {};        // $/m² publicado en venta (mls + properties) — canónico ficha
     const cierresVals: Record<string, number[]> = {};       // $/m² de ventas cerradas en la ventana
     if (zoneNbids.length) {
-        for await (const r of db.collection(ofertaColl).aggregate([
-            { $match: { 'status.last': 'published', 'address.neighborhood.id': { $in: zoneNbids } } },
-            { $group: { _id: '$address.neighborhood.id', n: { $sum: 1 } } },
-        ], { allowDiskUse: true })) ofertaByNbid[r._id as string] = r.n as number;
+        for (const [coll, dest] of [['mls', mlsCount], ['properties', propCount]] as [string, Record<string, number>][]) {
+            for await (const r of db.collection(coll).aggregate([
+                { $match: { 'status.last': 'published', 'address.neighborhood.id': { $in: zoneNbids } } },
+                { $group: { _id: '$address.neighborhood.id', n: { $sum: 1 } } },
+            ], { allowDiskUse: true })) dest[r._id as string] = r.n as number;
+        }
         // oferta $/m²: mediana de lo publicado en venta (mls + properties)
         for (const coll of ['mls', 'properties']) {
             for await (const r of db.collection(coll).aggregate([
@@ -332,7 +334,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const vsCierres = herPpm2 && cierresPpm2 ? Math.round((herPpm2 / cierresPpm2 - 1) * 100) : null;
         const nCierres = (nbid && cierresVals[nbid]?.length) || 0;
         const leads = opFilter ? (leadsByNbOp[opFilter][nb] || 0) : (leadsByNb[nb] || 0);
-        return { nb, n: its.length, oferta: (nbid && ofertaByNbid[nbid]) || 0,
+        return { nb, n: its.length, oferta: (nbid && (cfg.mlsGeneral ? mlsCount : propCount)[nbid]) || 0,
             herPpm2, ofertaPpm2, cierresPpm2, vsOferta, vsCierres, nCierres,
             dem: (nbid && demandByNb[nbid]) || 0, leads };
     });
@@ -349,6 +351,20 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const its = items.filter((i) => i.op === op);
         return { op: op === 'sale' ? 'Venta' : 'Renta', n: its.length, leads: its.reduce((a, i) => a + (leadsByPid[String(i.pid)] || 0), 0) };
     });
+
+    // --- benchmark "vs. promedio de mercado" (rollup de las zonas, ponderado por inventario) ---
+    const zOf = zones.filter((z) => z.vsOferta != null), zCi = zones.filter((z) => z.vsCierres != null);
+    const wOf = zOf.reduce((a, z) => a + z.n, 0), wCi = zCi.reduce((a, z) => a + z.n, 0);
+    // absorción = mercado real → oferta SIEMPRE del MLS i24 (no depende del toggle)
+    const demTotal = zones.reduce((a, z) => a + z.dem, 0), ofertaTotal = zoneNbids.reduce((a, nid) => a + (mlsCount[nid] || 0), 0);
+    const benchmarkMarket = {
+        vsOfertaAvg: wOf ? Math.round(zOf.reduce((a, z) => a + (z.vsOferta || 0) * z.n, 0) / wOf) : null,
+        vsCierresAvg: wCi ? Math.round(zCi.reduce((a, z) => a + (z.vsCierres || 0) * z.n, 0) / wCi) : null,
+        zonasCaras: zCi.filter((z) => (z.vsCierres || 0) > 3).length,
+        zonasCierres: zCi.length,
+        absorcion: ofertaTotal ? demTotal / ofertaTotal : null,
+        demTotal, ofertaTotal,
+    };
 
     // --- inventario vs demanda por ticket ---
     const svTot = venta.length || 1;
@@ -661,7 +677,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: leadsWinTotal / (N || 1), leadsLabel, ofertaLabel,
-        operacion: cfg.operacion || 'Ambas', zombie, leadsBySource, cierresLabel, segTipo, segOp,
+        operacion: cfg.operacion || 'Ambas', zombie, leadsBySource, cierresLabel, segTipo, segOp, benchmarkMarket,
         leadsComp: { cliente: compCliente, broker: compBroker, incontactables: compIncont, duplicados: compDup, total: leadsByOp.sale + leadsByOp.rent, totalOp: { sale: leadsByOp.sale, rent: leadsByOp.rent } },
         zones, invVsDemand, matrix, priceLead,
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
