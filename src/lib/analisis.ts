@@ -88,7 +88,7 @@ export interface AnalisisData {
     leadsBySource: { source: string; n: number }[];
     leadsComp: { cliente: number; broker: number; incontactables: number; duplicados: number; total: number; totalOp: { sale: number; rent: number } };
     cierresLabel: string;         // etiqueta de la ventana de cierres
-    zones: { nb: string; n: number; oferta: number; herPpm2: number | null; ofertaPpm2: number | null; cierresPpm2: number | null; vsOferta: number | null; vsCierres: number | null; dem: number; leads: number }[];
+    zones: { nb: string; n: number; oferta: number; herPpm2: number | null; ofertaPpm2: number | null; cierresPpm2: number | null; vsOferta: number | null; vsCierres: number | null; nCierres: number; dem: number; leads: number }[];
     invVsDemand: { band: string; invPct: number; demPct: number; inv: number; dem: number }[];
     matrix: { q: string; cells: { p: string; n: number; ll: number }[] }[];
     priceLead: { cls: string; props: number; leads: number; ll: number }[];
@@ -289,9 +289,10 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const cierresPpm2 = medOf(cierresVals, nbid);
         const vsOferta = herPpm2 && ofertaPpm2 ? Math.round((herPpm2 / ofertaPpm2 - 1) * 100) : null;
         const vsCierres = herPpm2 && cierresPpm2 ? Math.round((herPpm2 / cierresPpm2 - 1) * 100) : null;
+        const nCierres = (nbid && cierresVals[nbid]?.length) || 0;
         const leads = opFilter ? (leadsByNbOp[opFilter][nb] || 0) : (leadsByNb[nb] || 0);
         return { nb, n: its.length, oferta: (nbid && ofertaByNbid[nbid]) || 0,
-            herPpm2, ofertaPpm2, cierresPpm2, vsOferta, vsCierres,
+            herPpm2, ofertaPpm2, cierresPpm2, vsOferta, vsCierres, nCierres,
             dem: (nbid && demandByNb[nbid]) || 0, leads };
     });
 

@@ -451,7 +451,7 @@ function InventarioView({ d, referencias }: { d: AnalisisData; referencias: stri
                             <td className="py-1 text-right">{z.n}</td>
                             <td className="py-1 text-right" style={{ color: GRAY }}>{f0(z.oferta)}</td>
                             {showOferta && <td className="py-1 text-right">{delta(z.vsOferta)}</td>}
-                            {showCierres && <td className="py-1 text-right">{delta(z.vsCierres)}</td>}
+                            {showCierres && <td className="py-1 text-right">{delta(z.vsCierres)} <span className="text-[8px]" style={{ color: GRAY }}>({z.nCierres})</span></td>}
                             <td className="py-1 text-right">{f0(z.dem)}</td>
                             <td className="py-1 text-right">{f0(z.leads)}</td>
                         </tr>
@@ -459,7 +459,7 @@ function InventarioView({ d, referencias }: { d: AnalisisData; referencias: stri
                 </tbody>
             </table>
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
-                Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>vs. oferta</b> = tu $/m² vs. la mediana de lo que se <b>pide</b> (mls + red Pulppo). <b>vs. cierres</b> = vs. la mediana de lo que se <b>vende</b> ({d.cierresLabel}). <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = sin comparables suficientes (mín. 5).
+                Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>vs. oferta</b> = tu $/m² vs. la mediana de lo que se <b>pide</b> (mls + red Pulppo). <b>vs. cierres</b> = vs. la mediana de lo que se <b>vende</b> en la colonia ({d.cierresLabel}); el número entre paréntesis es cuántos cierres se consideraron. <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = menos de 5 cierres en la colonia (no hay muestra confiable).
             </p>
             <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: d.zombie.pct > 0.3 ? RED : YEL, background: '#F3F3F3', color: SOFT }}>
                 <b style={{ color: d.zombie.pct > 0.3 ? RED : SOFT }}>{f0(d.zombie.n)} propiedades ({Math.round(d.zombie.pct * 100)}%)</b> no han recibido un solo lead en {d.zombie.label} <span style={{ color: GRAY }}>(“zombies”)</span>. Son las primeras candidatas a bajar precio o mejorar ficha.
