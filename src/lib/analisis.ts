@@ -49,7 +49,9 @@ const PCOLS = ['Óptimo', 'No competitivo', 'Fuera de mercado', 'Sin referencia'
 
 // ---------- config de entrada ----------
 export interface AnalisisConfig {
-    inmo: string;                 // nombre (regex case-insensitive)
+    inmo?: string;                // nombre (regex case-insensitive) — o usa companyId directo
+    companyId?: string;           // ObjectId directo (para /mb, scoped por la liga): salta resolveCompany
+    audiencia?: 'kam' | 'mb';     // 'kam' (default) = interno; 'mb' = hacia afuera (sin destacados/OKR internos)
     operacion?: string;           // 'Ambas' | 'Venta' | 'Renta'
     ventDemanda?: string;         // 'Últimos 6 meses' | 'Últimos 12 meses' | 'YTD 2026'
     ventCierres?: string;         // ventana de comparables de cierres: 'Últimos 12/24/36 meses'
@@ -167,7 +169,16 @@ async function resolveCompany(db: Db, name: string): Promise<{ id: ObjectId; nam
 
 export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> {
     const db = await getDb();
-    const { id: CID, name: CNAME } = await resolveCompany(db, cfg.inmo);
+    const mb = cfg.audiencia === 'mb';   // versión hacia afuera (MB): sin destacados ni metas OKR internas
+    let CID: ObjectId, CNAME: string;
+    if (cfg.companyId) {
+        CID = new ObjectId(cfg.companyId);
+        const c = await db.collection('companies').findOne({ _id: CID }, { projection: { name: 1 } });
+        CNAME = (c?.name as string) ?? 'Inmobiliaria';
+    } else {
+        if (!cfg.inmo) throw new Error('Falta inmo o companyId');
+        const r = await resolveCompany(db, cfg.inmo); CID = r.id; CNAME = r.name;
+    }
 
     const NOW = new Date();
     const YTD0 = new Date(Date.UTC(NOW.getUTCFullYear(), 0, 1));
@@ -487,9 +498,13 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const visRateV = leadsByOp.sale ? visByOp.sale / leadsByOp.sale : 0;
     const closeV = leadsByOp.sale ? closesByOp.sale / leadsByOp.sale : 0;
     const closeR = leadsByOp.rent ? closesByOp.rent / leadsByOp.rent : 0;
-    const funnelReading = `Tu tasa de visita en venta es ${pct(visRateV)} (benchmark Pulppo 14%). `
-        + `Cierre: ${(100 * closeV).toFixed(1)}% en venta (meta 1.6%) y ${(100 * closeR).toFixed(1)}% en renta (meta 6%). `
-        + `La tasa se lee por operación, nunca mezclando venta y renta.`;
+    const funnelReading = mb
+        ? `Tu tasa de visita en venta es ${pct(visRateV)}, una referencia sana de mercado. `
+            + `Cierre: ${(100 * closeV).toFixed(1)}% en venta y ${(100 * closeR).toFixed(1)}% en renta. `
+            + `La tasa se lee por operación, nunca mezclando venta y renta.`
+        : `Tu tasa de visita en venta es ${pct(visRateV)} (benchmark Pulppo 14%). `
+            + `Cierre: ${(100 * closeV).toFixed(1)}% en venta (meta 1.6%) y ${(100 * closeR).toFixed(1)}% en renta (meta 6%). `
+            + `La tasa se lee por operación, nunca mezclando venta y renta.`;
 
     // --- recomendaciones a nivel cartera (nunca priorizan renta sobre venta) ---
     const altaNow = items.filter((it) => it.q3 === 3).length / (N || 1);
@@ -499,11 +514,13 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     if (pctCaro >= 0.30) recos.push({ enfoque: 'Precio', sev: 5, title: 'Ajusta el precio de tu inventario en venta',
         body: `${pct(pctCaro)} de tu venta con referencia (${nCaro} props) está fuera de mercado (+20% sobre ACM). Las de precio óptimo reciben ${pOpt ? pOpt.ll.toFixed(1) : '—'} leads por propiedad vs ${pCaro ? pCaro.ll.toFixed(1) : '—'} las que están fuera de mercado. Empieza por los rangos de mayor ticket.` });
     if (visRate < 0.14) recos.push({ enfoque: 'Ficha', sev: 4, title: 'Sube tu tasa de visita',
-        body: `Solo el ${pct(visRate)} de tus leads llega a visita (benchmark Pulppo 14%). Mejora las primeras 3 fotos, el orden de la galería y la descripción — ahí se decide si el interesado agenda.` });
+        body: `Solo el ${pct(visRate)} de tus leads llega a visita${mb ? ', por debajo de una referencia sana de mercado' : ' (benchmark Pulppo 14%)'}. Mejora las primeras 3 fotos, el orden de la galería y la descripción — ahí se decide si el interesado agenda.` });
     if (altaNow < 0.25) recos.push({ enfoque: 'Ficha', sev: 3, title: 'Sube la calidad de tus fichas',
         body: `Solo ${pct(altaNow)} de tus fichas son calidad Alta. Fotos profesionales, video y tour virtual (hoy ${nNoTour} sin tour) elevan la exposición y la conversión sin cambiar el precio.` });
-    recos.push({ enfoque: 'Visibilidad', sev: 2, title: 'Enfoca la inversión en visibilidad donde rinde',
+    if (!mb) recos.push({ enfoque: 'Visibilidad', sev: 2, title: 'Enfoca la inversión en visibilidad donde rinde',
         body: `Destacar solo rinde cuando la propiedad ya está bien puesta (precio óptimo + ficha completa). Concentra el impulso en tus ${joyas} propiedades listas — no en las que están fuera de mercado.` });
+    if (mb) recos.push({ enfoque: 'Canales', sev: 2, title: 'Diversifica tus canales de captación de leads',
+        body: `No dependas de un solo portal. Revisa el mix de fuentes de tus leads y refuerza los canales que mejor te convierten a visita.` });
 
     // ===================== YoY (H1 2025 vs H1 2026) =====================
     const money = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
@@ -557,8 +574,8 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const fueraMercado = spV != null && spV > 1.20;
         const lev: string[] = [];
         if (spV && spV > 1.15) lev.push('Bajar precio');
-        // Destacar solo si el precio NO está fuera de mercado (la visibilidad no arregla el sobreprecio).
-        if ((it.tier === null || it.tier === 'Simple' || it.tier === 'Offline') && !fueraMercado) lev.push('Destacar');
+        // Destacar solo si el precio NO está fuera de mercado (la visibilidad no arregla el sobreprecio). No en MB.
+        if (!mb && (it.tier === null || it.tier === 'Simple' || it.tier === 'Offline') && !fueraMercado) lev.push('Destacar');
         // Mejorar ficha: detallar qué falta en vez de decirlo genérico.
         const falta: string[] = [];
         if (it.fotos < 8) falta.push('fotos');
