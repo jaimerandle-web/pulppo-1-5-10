@@ -310,13 +310,13 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
             }
         }
         // cierres $/m²: ventas cerradas (properties completed + operations.closeValue) dentro de la ventana
-        const comp = await db.collection('properties').aggregate([
+        const closedProps = await db.collection('properties').aggregate([
             { $match: { 'status.last': 'completed', 'listing.operation': 'sale', 'address.neighborhood.id': { $in: zoneNbids }, 'attributes.totalSurface': { $gt: 0 } } },
             { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', as: 'op' } },
             { $project: { nbid: '$address.neighborhood.id', m2: '$attributes.totalSurface', op: 1 } },
             { $limit: 4000 },
         ], { allowDiskUse: true }).toArray();
-        for (const p of comp) {
+        for (const p of closedProps) {
             const m2 = num(p.m2); if (!m2) continue;
             for (const o of (p.op as Document[]) || []) {
                 const v = num(gv(o, 'closeValue', 'value')); const xd = asDt(gv(o, 'closedAt'));
