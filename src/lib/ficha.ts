@@ -707,6 +707,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const secFunnel = `<div class="sec"><div class="eyebrow">Demanda y funnel</div><div class="accent"></div>
     <div class="grid2">
       <div>${funnel}
+        ${totalVistas < leads.length ? `<div style="font-size:9px;color:${GRY};margin-top:6px">Hay más leads que vistas porque MercadoLibre, redes y otros portales generan leads pero no reportan sus vistas a Pulppo (las vistas son solo de Inmuebles24 y sitios propios).</div>` : ''}
         <div class="recap"><div><div class="n">${l30}</div><div class="l">leads · 30 días</div></div><div><div class="n">${l90}</div><div class="l">leads · 90 días</div></div><div><div class="n">${leads.length}</div><div class="l">leads · histórico</div></div></div>
       </div>
       <div><div class="eyebrow" style="margin-bottom:2px;color:${BLK}">Leads por fuente</div>
