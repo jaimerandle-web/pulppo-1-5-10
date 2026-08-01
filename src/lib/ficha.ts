@@ -525,7 +525,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
         if (zratio >= 1) zread = 'Alta demanda y oferta limitada: buen momento para vender, debería moverse rápido.';
         else if (zratio >= 0.3) zread = 'Demanda y oferta equilibradas: cuida precio y calidad del anuncio para destacar.';
         else zread = 'Oferta amplia frente a la demanda: diferénciate en precio o multimedia para acelerar la venta.';
-        if (zoneMed && ppm2) zread += ` Tu $/m² (${money(ppm2)}) está ${Math.abs(Math.round((ppm2 / zoneMed - 1) * 100))}% ${ppm2 >= zoneMed ? 'arriba' : 'abajo'} de la mediana de la zona.`;
+        // La comparación de tu $/m² vs. oferta/cierres vive en las barras de "Precio $/m²", no aquí (evitar duplicado).
     }
 
     // insights + plan de acción
@@ -682,16 +682,28 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     <div style="font-size:9px;color:${GRY};margin-top:6px">${totalV.toLocaleString('en-US')} vistas y ${leads.length} leads en total · pico de vistas ${peakV.v ? `en ${mlabel(peakV.m)} (${peakV.v})` : '—'} · pico de leads ${peakL.l ? `en ${mlabel(peakL.m)} (${peakL.l})` : '—'}. Cada línea usa su propia escala (vistas y leads difieren mucho). Vistas = eventos de vista registrados por Pulppo (Inmuebles24 y sitios propios).${totalV < leads.length ? ' Aquí hay más leads que vistas porque MercadoLibre, redes y otros portales generan leads pero no reportan sus vistas a Pulppo.' : ''}</div>
   </div>` : '';
 
-    // ---- Cuerpo modular: la ficha SIMPLE (general) reordena y fusiona (menos secciones); la COMPLETA (1·5·10) va como antes ----
+    // ============================================================================================
+    //  CUERPO MODULAR — misma lógica/datos para ambas fichas; solo cambia el ARMADO (bodyFull/bodySimple).
+    //  Diferencias de la ficha GENERAL (simple, ?v=simple, Master Brokers) vs. la COMPLETA (1·5·10):
+    //    • Salud: sin "Categoría del anuncio" (destacado) ni "Contrato exclusividad" (solo en 1·5·10).
+    //    • Header: sin el tag de categoría/destacado.
+    //    • NO incluye "Difusión y promoción" ni "Comportamiento en el tiempo".
+    //    • Fusiona "Insights de la zona" + "Mercado y competencia" en una sola sección "Mercado de la zona".
+    //    • Amenidades vs. comparables: solo si la propiedad está en un desarrollo (devName).
+    //    • "Insights de comparables" se fusiona dentro de "Análisis y oportunidades".
+    //    • NO incluye la "Referencia · qué te alcanza por $/m² similar".
+    //  Al tocar helpers/datos de arriba, cambia para AMBAS (a propósito). Solo bodyFull/bodySimple son exclusivos.
+    // ============================================================================================
     const ppmRef = ([['Tu propiedad', ppm2, BLK], ['Oferta mediana · MLS', zoneMed, GRY], ['Cierres mediana · Pulppo', soldMed, SEA]] as [string, number | null, string][]).filter((r) => (r[1] ?? 0) > 0) as [string, number, string][];
     const maxPpm = Math.max(...ppmRef.map((r) => r[1]), 1);
-    const cvsDelta = ppm2 && soldMed ? Math.round((ppm2 / soldMed - 1) * 100) : null;
-    const cierresVisual = ppmRef.length ? `<div style="margin-top:14px"><div class="eyebrow" style="color:${BLK};margin-bottom:6px">Precio $/m²: tú vs. oferta vs. cierres</div>
+    const posTxt = (d: number | null) => (d == null ? '' : d > 2 ? `<b>${d}% arriba</b>` : d < -2 ? `<b>${Math.abs(d)}% abajo</b>` : '<b>en línea</b>');
+    const cvsDelta = ppm2 && soldMed ? Math.round((ppm2 / soldMed - 1) * 100) : null;   // vs. cierres (Pulppo)
+    const cvoDelta = ppm2 && zoneMed ? Math.round((ppm2 / zoneMed - 1) * 100) : null;    // vs. oferta (MLS)
+    const cierresVisual = ppmRef.length ? `<div style="margin-top:16px"><div class="eyebrow" style="color:${BLK};margin-bottom:8px">Precio $/m²: tú vs. oferta vs. cierres</div>
       <div class="ppmbars">${ppmRef.map((r) => `<div class="ppmrow"><span class="ppml">${r[0]}</span><span class="ppmtrack"><span class="ppmbar" style="width:${Math.max((100 * r[1]) / maxPpm, 2)}%;background:${r[2]}"></span></span><span class="ppmv">${money(r[1])}/m²</span></div>`).join('')}</div>
-      <div class="ppmnote">${czN ? `${czN} cierres reales de la comunidad (${esc(scope)}).${cvsDelta != null ? ` Tu $/m² está <b>${cvsDelta > 0 ? `${cvsDelta}% por encima` : cvsDelta < 0 ? `${Math.abs(cvsDelta)}% por debajo` : 'en línea'}</b> de la mediana a la que se cierra.` : ''}${czPrices.length ? ` Rango de cierre ${money(Math.min(...czPrices))}–${money(Math.max(...czPrices))}.` : ''}` : `Sin ventas cerradas registradas en ${esc(scope)}.`}</div></div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`;
-    const mercadoKpi = `<div class="kpi"><div><div class="n">${money(ppm2)}</div><div class="l">$/m² de esta propiedad</div></div><div><div class="n">${compsAll.length}</div><div class="l">comparables en zona</div></div>${soldMed ? `<div><div class="n">${money(soldMed)}</div><div class="l">$/m² mediana de cierres</div></div>` : ''}${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana en venta</div></div>` : ''}</div>`;
+      <div class="ppmnote">Tu $/m² está ${cvoDelta != null ? `${posTxt(cvoDelta)} de la oferta (MLS)` : 'sin referencia de oferta'}${cvsDelta != null ? ` y ${posTxt(cvsDelta)} de los cierres reales${czN ? ` (${czN} en ${esc(scope)})` : ''}` : ''}.</div></div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`;
     const compiteHref = `/ficha/${encodeURIComponent(id)}/comparables?tipo=zona${opts?.token ? `&token=${encodeURIComponent(opts.token)}` : ''}`;
-    const compiteHtml = `<div style="margin-top:24px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Con qué compite en la zona</div><table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table>${compsAll.length > comps.length ? `<div style="font-size:10px;margin-top:4px"><a href="${compiteHref}" style="color:${SEA};font-weight:700">Ver los ${compsAll.length} comparables →</a></div>` : ''}</div>`;
+    const compiteHtml = `<div style="margin-top:24px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Con qué compite en la zona · ${compsAll.length} comparable${compsAll.length === 1 ? '' : 's'}</div><table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table>${compsAll.length > comps.length ? `<div style="font-size:10px;margin-top:4px"><a href="${compiteHref}" style="color:${SEA};font-weight:700">Ver los ${compsAll.length} comparables →</a></div>` : ''}</div>`;
     const insightsCompBox = alcInsights.length ? `<div class="box" style="margin-top:16px"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : '';
     const showAmen = simple ? !!devName : true;   // en simple, amenidades solo si es desarrollo
     const alcanzaHtml = `<div style="margin-top:22px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Qué te alcanza por el mismo presupuesto</div>
@@ -720,7 +732,6 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
       <div><div class="n">${zdem.toLocaleString('en-US')}</div><div class="l">búsquedas · 6 meses</div></div>
       <div><div class="n">${zofe.toLocaleString('en-US')}</div><div class="l">${esc(typ)}s en venta (mercado)</div></div>
       <div><div class="n">${zratio >= 1 ? zratio.toFixed(1) : zratio.toFixed(2)}</div><div class="l">búsquedas por propiedad</div></div>
-      ${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana de la zona</div></div>` : ''}
     </div>
     <p style="margin-top:8px;font-size:12px">${zread}</p>` : '';
     const secAnalisis = `<div class="sec"><div class="eyebrow">Análisis y oportunidades</div><div class="accent"></div>
@@ -733,7 +744,6 @@ ${comportHtml}
 ${secFunnel}
   ${zonaLbl ? `<div class="sec"><div class="eyebrow">Insights de la zona · ${esc(zonaLbl)}</div><div class="accent"></div>${zonaInner}</div>` : ''}
   <div class="sec"><div class="eyebrow">Mercado y competencia</div><div class="accent"></div>
-    ${mercadoKpi}
     ${cierresVisual}
     ${compiteHtml}
     ${alcanzaHtml}
@@ -744,7 +754,6 @@ ${secFunnel}
 ${secFunnel}
   <div class="sec"><div class="eyebrow">Mercado de la zona</div><div class="accent"></div>
     ${zonaInner}
-    ${mercadoKpi}
     ${cierresVisual}
     ${compiteHtml}
     ${alcanzaHtml}
