@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Combobox, Dropdown, Select } from '@/components/inputs';
 import type { AnalisisData } from '@/lib/analisis';
@@ -405,6 +405,7 @@ export default function AnalisisGeneral() {
                                         : data && s.id === 'yoy' ? <YoyView d={data} />
                                         : data && s.id === 'top10' ? <Top10View d={data} />
                                         : data && s.id === 'reco' ? <RecoView d={data} enfoque={recoEnfoque} tono={recoTono} cantidad={recoCantidad} />
+                                        : data && s.id === 'glosario' ? <GlosarioView d={data} />
                                         : <p className="mt-1 pl-6 text-[11px] leading-relaxed text-neutral-500">
                                             {previewLine(s.id, { referencias, cortes, portalMode, portales, recoEnfoque, recoTono, recoCantidad })}
                                           </p>}
@@ -444,6 +445,50 @@ function previewLine(id: string, c: {
         case 'glosario': return 'Señales de precio y glosario de términos para leer el reporte.';
         default: return '';
     }
+}
+
+function GlosarioView({ d }: { d: AnalisisData }) {
+    const terms: [string, ReactNode][] = [
+        ['Lead único', <>Un interesado que contacta por la propiedad. Se descartan los <b>duplicados</b> (mismo contacto en la misma propiedad).</>],
+        ['L/L · leads por propiedad', <>Promedio de leads que recibe cada propiedad; mide cuánto interés genera tu inventario.</>],
+        ['ACM · valor estimado', <>Estimación automática de Pulppo del valor de mercado, a partir de comparables de la zona.</>],
+        ['Oferta ($/m²)', <>Mediana de lo que se <b>pide</b> en venta en la colonia (mls + red Pulppo).</>],
+        ['Cierres ($/m²)', <>Mediana de lo que realmente se <b>vende</b> en la colonia ({d.cierresLabel}); mín. 5 comparables.</>],
+        ['Demanda de zona', <>Búsquedas de compradores en la colonia. Alta demanda + pocos leads = oportunidad.</>],
+        ['Absorción', <>Búsquedas ÷ propiedades publicadas en tus zonas (MLS): qué tan caliente está el mercado.</>],
+        ['Zombie', <>Propiedad sin un solo lead en la ventana ({d.zombie.label}). Primeras a bajar precio o mejorar ficha.</>],
+        ['Calidad de ficha', <>Qué tan completa está la publicación (fotos, descripción, video, tour): Alta / Media / Baja.</>],
+        ['Destacado · L/L por nivel', <>Inversión en visibilidad. El L/L por nivel dice si destacar rinde más que el aviso simple.</>],
+        ['Cliente vs. broker', <>Broker = el contacto está asociado a una inmobiliaria (no comprador final).</>],
+        ['Comparación de períodos', <>Dos rangos de fecha comparados (año vs año, mes vs mes, últimos 30d vs previos…).</>],
+    ];
+    return (
+        <div className="mt-2 pl-6">
+            <p className="mb-1.5 text-[11px] font-semibold" style={{ color: SOFT }}>Señales de precio <span style={{ color: GRAY }}>(taxonomía del ACM: precio ÷ valor estimado)</span></p>
+            <div className="mb-4 flex gap-2">
+                {[['Óptimo', '≤ +5%: en línea o por debajo del estimado. El que más interesados atrae.', SEA_D, SEA],
+                  ['No competitivo', '+5% a +20% sobre el estimado. Con margen para ajustarse.', SOFT, GRAY],
+                  ['Fuera de mercado', '> +20% sobre el estimado. El freno #1 de leads.', RED, RED]].map(([t, desc, txtCol, barCol]) => (
+                    <div key={t as string} className="flex-1 bg-[#F3F3F3] p-2.5" style={{ borderTop: `3px solid ${barCol as string}` }}>
+                        <p className="text-[11px] font-bold" style={{ color: txtCol as string }}>{t as string}</p>
+                        <p className="mt-1 text-[9px] leading-tight" style={{ color: GRAY }}>{desc as string}</p>
+                    </div>
+                ))}
+            </div>
+            <p className="mb-1.5 text-[11px] font-semibold" style={{ color: SOFT }}>Glosario de términos</p>
+            <div className="grid grid-cols-2 gap-x-6">
+                {terms.map(([term, def]) => (
+                    <div key={term} className="border-b border-neutral-100 py-1.5">
+                        <p className="text-[11px] font-bold">{term}</p>
+                        <p className="mt-0.5 text-[10px] leading-relaxed" style={{ color: SOFT }}>{def}</p>
+                    </div>
+                ))}
+            </div>
+            <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>
+                La lógica del reporte: separar un problema de <b>propiedad</b> (precio o ficha, que tú controlas) de uno de <b>mercado</b> (poca demanda en la zona). Donde hay demanda pero no hay leads, casi siempre el freno es precio o ficha.
+            </p>
+        </div>
+    );
 }
 
 // ---------- render de secciones con datos reales ----------
