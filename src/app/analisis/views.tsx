@@ -11,7 +11,7 @@ const money = (n?: number | null) =>
 const fmtYoy = (v: number, fmt: string) =>
     fmt === 'money' ? money(v) : fmt === 'pct' ? `${Math.round(v * 100)}%` : fmt === 'pct2' ? `${(v * 100).toFixed(2)}%` : fmt === 'dec' ? v.toFixed(1) : f0(v);
 
-export function GlosarioView({ d }: { d: AnalisisData }) {
+export function GlosarioView({ d, mb = false }: { d: AnalisisData; mb?: boolean }) {
     const terms: [string, ReactNode][] = [
         ['Lead único', <>Un interesado que contacta por la propiedad. Se descartan los <b>duplicados</b> (mismo contacto en la misma propiedad).</>],
         ['L/L · leads por propiedad', <>Promedio de leads que recibe cada propiedad; mide cuánto interés genera tu inventario.</>],
@@ -20,7 +20,7 @@ export function GlosarioView({ d }: { d: AnalisisData }) {
         ['Cierres ($/m²)', <>Mediana de lo que realmente se <b>vende</b> en la colonia ({d.cierresLabel}); mín. 5 comparables.</>],
         ['Demanda de zona', <>Búsquedas de compradores en la colonia. Alta demanda + pocos leads = oportunidad.</>],
         ['Absorción', <>Búsquedas ÷ propiedades publicadas en tus zonas (MLS): qué tan caliente está el mercado.</>],
-        ['Zombie', <>Propiedad sin un solo lead en la ventana ({d.zombie.label}). Primeras a bajar precio o mejorar ficha.</>],
+        [mb ? 'Sin actividad reciente' : 'Zombie', <>Propiedad sin un solo lead en la ventana ({d.zombie.label}). Primeras a bajar precio o mejorar ficha.</>],
         ['Calidad de ficha', <>Qué tan completa está la publicación (fotos, descripción, video, tour): Alta / Media / Baja.</>],
         ['Destacado · L/L por nivel', <>Inversión en visibilidad. El L/L por nivel dice si destacar rinde más que el aviso simple.</>],
         ['Cliente vs. broker', <>Broker = el contacto está asociado a una inmobiliaria (no comprador final).</>],
@@ -41,7 +41,7 @@ export function GlosarioView({ d }: { d: AnalisisData }) {
             </div>
             <p className="mb-1.5 text-[11px] font-semibold" style={{ color: SOFT }}>Glosario de términos</p>
             <div className="grid grid-cols-2 gap-x-6">
-                {terms.map(([term, def]) => (
+                {terms.filter(([term]) => !mb || !term.includes('Destacado')).map(([term, def]) => (
                     <div key={term} className="border-b border-neutral-100 py-1.5">
                         <p className="text-[11px] font-bold">{term}</p>
                         <p className="mt-0.5 text-[10px] leading-relaxed" style={{ color: SOFT }}>{def}</p>
@@ -58,7 +58,7 @@ export function GlosarioView({ d }: { d: AnalisisData }) {
 // ---------- render de secciones con datos reales ----------
 const CAL_COL: Record<string, string> = { Alta: '#2f6b6b', Media: '#9CC4C4', Baja: '#E0CFC0' };
 
-export function InventarioView({ d, referencias, cortes }: { d: AnalisisData; referencias: string[]; cortes: string[] }) {
+export function InventarioView({ d, referencias, cortes, mb = false }: { d: AnalisisData; referencias: string[]; cortes: string[]; mb?: boolean }) {
     const showOferta = referencias.includes('Oferta de zona');
     const showCierres = referencias.includes('Cierres reales');
     const has = (c: string) => cortes.includes(c);
@@ -103,7 +103,7 @@ export function InventarioView({ d, referencias, cortes }: { d: AnalisisData; re
             </>}
 
             <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: d.zombie.pct > 0.3 ? RED : YEL, background: '#F3F3F3', color: SOFT }}>
-                <b style={{ color: d.zombie.pct > 0.3 ? RED : SOFT }}>{f0(d.zombie.n)} propiedades ({Math.round(d.zombie.pct * 100)}%)</b> no han recibido un solo lead en {d.zombie.label} <span style={{ color: GRAY }}>(“zombies”)</span>. Son las primeras candidatas a bajar precio o mejorar ficha.
+                <b style={{ color: d.zombie.pct > 0.3 ? RED : SOFT }}>{f0(d.zombie.n)} propiedades ({Math.round(d.zombie.pct * 100)}%)</b> no han recibido un solo lead en {d.zombie.label} <span style={{ color: GRAY }}>({mb ? 'sin actividad reciente' : '“zombies”'})</span>. Son las primeras candidatas a bajar precio o mejorar ficha.
             </p>
 
             {has('Por ticket') && <>

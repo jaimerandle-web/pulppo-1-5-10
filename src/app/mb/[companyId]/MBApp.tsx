@@ -2,6 +2,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import type { MBData, MBProp, RespKey } from '@/lib/mb';
+import MBAnalisis from './MBAnalisis';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2; // design system Pulppo: esquinas cuadradas
@@ -345,17 +346,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     </div>
                 )}
 
-                {section === 'analisis' && (
-                    <div>
-                        <div style={eyebrow}>Generador de análisis</div><div style={accent} />
-                        <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 30, margin: 0 }}>Análisis de tu inmobiliaria</h1>
-                        <div style={sub}>Reporte on-brand por inmobiliaria (calidad, funnel, zonas, año vs. año) con desglose por asesor.</div>
-                        <div style={{ marginTop: 20, background: LGT, borderRadius: R, padding: '28px 24px', textAlign: 'center' }}>
-                            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22 }}>En construcción</div>
-                            <div style={{ fontSize: 12, color: '#555', marginTop: 8, maxWidth: 520, marginLeft: 'auto', marginRight: 'auto' }}>Aquí vivirá el generador del reporte de desempeño integrado y en vivo, con la vista partida por asesor/productor.</div>
-                        </div>
-                    </div>
-                )}
+                {section === 'analisis' && <MBAnalisis companyId={d.companyId} name={d.name} />}
 
                 {section === 'comoleer' && (
                     <div style={{ maxWidth: 780 }}>
