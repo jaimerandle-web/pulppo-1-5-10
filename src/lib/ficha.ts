@@ -289,6 +289,29 @@ const amenCompareHtml = (top: Comp[], s: Subj, knownCols: ColMap): string => {
       <table>${head}${body}${totals}</table></div>`;
 };
 
+// Tabla compacta de comparables (Ubicación · Precio · Sup. · $/m² · Rec/Baños). Compartida por la ficha
+// ("Con qué compite en la zona") y la página "ver más" de competencia. MLS marcado con etiqueta.
+const compTbl = (rows: Comp[]): string => {
+    if (!rows.length) return '<tr><td colspan="5" style="color:#B7B7B7">Sin resultados en el rango.</td></tr>';
+    const zc = (r: Comp) => {
+        const z = esc(String(r.zona ?? '—').slice(0, 24));
+        const tag = r.src === 'MLS' ? ` <span style="color:${GRY};font-size:8px">MLS</span>` : '';
+        return (r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noreferrer" style="color:${SEA}">${z}</a>` : z) + tag;
+    };
+    return rows.map((r) => `<tr><td>${zc(r)}</td><td class="nw">${money(r.precio)}</td><td class="nw">${r.m2 ?? '—'} m²</td><td class="nw">${r.ppm2 ? money(r.ppm2) + '/m²' : '—'}</td><td class="nw">${r.rec ?? '—'} rec<br>${r.ban ?? '—'} baños</td></tr>`).join('');
+};
+
+// "Con qué compite en la zona": propiedades Pulppo del mismo tipo VIVAS en la MISMA colonia (la zona real
+// para un broker, no el municipio). Conteo real sin tope; el orden por cercanía lo pone quien la llama.
+const fetchZoneComps = async (db: Awaited<ReturnType<typeof getDb>>, oid: ObjectId, typ: string | null, col: string | null): Promise<Comp[]> => {
+    if (!col || !typ) return [];
+    const docs = await db.collection('properties').find(
+        { 'status.last': 'published', 'listing.operation': 'sale', type: typ, 'address.neighborhood.name': col, _id: { $ne: oid }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
+        { projection: COMP_PROJ, limit: 500 }
+    ).toArray();
+    return docs.map((e) => toComp(e, 'Pulppo'));
+};
+
 // Resuelve una propiedad por ObjectId o por internalId (código tipo "DMJ-523"), para que la ficha sirva
 // tanto para exclusivas 1·5·10 como para cualquier propiedad aislada por su código.
 const findPropertyDoc = async (db: Awaited<ReturnType<typeof getDb>>, id: string): Promise<Document | null> => {
@@ -464,8 +487,11 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const subj: Subj = { oid, typ, city, state, val, m2, ppm2, col, rec, lat: myLat, lng: myLng, myAmen, street };
     const alcPool = await buildAlcPool(db, subj);
     const knownCols = knownColsOf(alcPool, subj);
-    const dist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
-    const comps = alcPool.filter((c) => c.src === 'Pulppo').sort((a, b) => dist(a) - dist(b)).slice(0, 6);
+    // Comparables Pulppo del mismo tipo en la MISMA colonia, ordenados por cercanía en precio+tamaño. En la
+    // ficha se muestran los 6 más parecidos; el conteo REAL (compsAll) alimenta el KPI y el enlace "ver más".
+    const compDist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
+    const compsAll = (await fetchZoneComps(db, oid, typ, col)).sort((a, b) => compDist(a) - compDist(b));
+    const comps = compsAll.slice(0, 6);
     // "Qué te alcanza por el mismo presupuesto": ranking por qué tan ad-hoc es, con los "solo colonia" al final → top 10 en la ficha, resto en /comparables.
     const alcRanked = orderNamedFirst(rankAlcance(alcPool, subj), knownCols);
     const alcTop = alcRanked.slice(0, 10);
@@ -580,15 +606,6 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
         const totW = Math.round((100 * v) / maxF), cliW = v ? Math.round((100 * sp.cli) / v) : 0;
         return `<div class="frow"><span>${k}</span><span class="fbarwrap"><span class="fcomp" style="width:${totW}%"><span class="fcli" style="width:${cliW}%">${sp.cli || ''}</span><span class="fase" style="width:${100 - cliW}%">${sp.ase || ''}</span></span></span><span class="fn">${v}</span></div>`;
     }).join('');
-    const compTbl = (rows: Comp[]) => {
-        if (!rows.length) return '<tr><td colspan="5" style="color:#B7B7B7">Sin resultados en el rango.</td></tr>';
-        const zc = (r: Comp) => {
-            const z = esc(String(r.zona ?? '—').slice(0, 24));
-            const tag = r.src === 'MLS' ? ` <span style="color:${GRY};font-size:8px">MLS</span>` : '';
-            return (r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noreferrer" style="color:${SEA}">${z}</a>` : z) + tag;
-        };
-        return rows.map((r) => `<tr><td>${zc(r)}</td><td class="nw">${money(r.precio)}</td><td class="nw">${r.m2 ?? '—'} m²</td><td class="nw">${r.ppm2 ? money(r.ppm2) + '/m²' : '—'}</td><td class="nw">${r.rec ?? '—'} rec<br>${r.ban ?? '—'} baños</td></tr>`).join('');
-    };
     const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
     const czPrices = cz.map((c) => c.price);
     const czN = czPrices.length;
@@ -672,8 +689,9 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const cierresVisual = ppmRef.length ? `<div style="margin-top:14px"><div class="eyebrow" style="color:${BLK};margin-bottom:6px">Precio $/m²: tú vs. oferta vs. cierres</div>
       <div class="ppmbars">${ppmRef.map((r) => `<div class="ppmrow"><span class="ppml">${r[0]}</span><span class="ppmtrack"><span class="ppmbar" style="width:${Math.max((100 * r[1]) / maxPpm, 2)}%;background:${r[2]}"></span></span><span class="ppmv">${money(r[1])}/m²</span></div>`).join('')}</div>
       <div class="ppmnote">${czN ? `${czN} cierres reales de la comunidad (${esc(scope)}).${cvsDelta != null ? ` Tu $/m² está <b>${cvsDelta > 0 ? `${cvsDelta}% por encima` : cvsDelta < 0 ? `${Math.abs(cvsDelta)}% por debajo` : 'en línea'}</b> de la mediana a la que se cierra.` : ''}${czPrices.length ? ` Rango de cierre ${money(Math.min(...czPrices))}–${money(Math.max(...czPrices))}.` : ''}` : `Sin ventas cerradas registradas en ${esc(scope)}.`}</div></div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`;
-    const mercadoKpi = `<div class="kpi"><div><div class="n">${money(ppm2)}</div><div class="l">$/m² de esta propiedad</div></div><div><div class="n">${comps.length}</div><div class="l">comparables en zona</div></div>${soldMed ? `<div><div class="n">${money(soldMed)}</div><div class="l">$/m² mediana de cierres</div></div>` : ''}${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana en venta</div></div>` : ''}</div>`;
-    const compiteHtml = `<div style="margin-top:24px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Con qué compite en la zona</div><table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table></div>`;
+    const mercadoKpi = `<div class="kpi"><div><div class="n">${money(ppm2)}</div><div class="l">$/m² de esta propiedad</div></div><div><div class="n">${compsAll.length}</div><div class="l">comparables en zona</div></div>${soldMed ? `<div><div class="n">${money(soldMed)}</div><div class="l">$/m² mediana de cierres</div></div>` : ''}${zoneMed ? `<div><div class="n">${money(zoneMed)}</div><div class="l">$/m² mediana en venta</div></div>` : ''}</div>`;
+    const compiteHref = `/ficha/${encodeURIComponent(id)}/comparables?tipo=zona${opts?.token ? `&token=${encodeURIComponent(opts.token)}` : ''}`;
+    const compiteHtml = `<div style="margin-top:24px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Con qué compite en la zona</div><table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table>${compsAll.length > comps.length ? `<div style="font-size:10px;margin-top:4px"><a href="${compiteHref}" style="color:${SEA};font-weight:700">Ver los ${compsAll.length} comparables →</a></div>` : ''}</div>`;
     const insightsCompBox = alcInsights.length ? `<div class="box" style="margin-top:16px"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : '';
     const showAmen = simple ? !!devName : true;   // en simple, amenidades solo si es desarrollo
     const alcanzaHtml = `<div style="margin-top:22px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Qué te alcanza por el mismo presupuesto</div>
@@ -781,8 +799,9 @@ ${secFunnel}
     return { code, html };
 }
 
-// "Ver más": lista COMPLETA de comparables por el mismo presupuesto (ranking ad-hoc), página propia.
-export async function renderComparables(id: string, opts?: { token?: string }): Promise<{ code: string; html: string } | null> {
+// "Ver más": página propia con la lista COMPLETA. mode 'alcance' = por el mismo presupuesto (ranking
+// ad-hoc, default); mode 'zona' = con qué compite en la zona (Pulppo mismo tipo, por cercanía).
+export async function renderComparables(id: string, opts?: { token?: string; mode?: 'alcance' | 'zona' }): Promise<{ code: string; html: string } | null> {
     const db = await getDb();
     const P = await findPropertyDoc(db, id);
     if (!P) return null;
@@ -805,9 +824,24 @@ export async function renderComparables(id: string, opts?: { token?: string }): 
     };
     const alcPool = await buildAlcPool(db, subj);
     const knownCols = knownColsOf(alcPool, subj);
-    const alcRanked = orderNamedFirst(rankAlcance(alcPool, subj), knownCols);
-    const alcInsights = alcGeneralInsights(alcRanked, subj);
     const backHref = `/ficha/${encodeURIComponent(id)}${opts?.token ? `?token=${encodeURIComponent(opts.token)}` : ''}`;
+    let eyebrow: string, intro: string, inner: string;
+    if (opts?.mode === 'zona') {
+        // Con qué compite en la zona: TODAS las Pulppo del mismo tipo en la MISMA colonia, por cercanía.
+        const compDist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
+        const compsAll = (await fetchZoneComps(db, oid, typ, col)).sort((a, b) => compDist(a) - compDist(b));
+        eyebrow = 'Con qué compite en la zona';
+        intro = `${compsAll.length} propiedades del mismo tipo publicadas en ${esc(col)} (tu colonia), ordenadas de más a menos parecidas a tu inmueble.`;
+        inner = `<table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(compsAll)}</table>`;
+    } else {
+        const alcRanked = orderNamedFirst(rankAlcance(alcPool, subj), knownCols);
+        const alcInsights = alcGeneralInsights(alcRanked, subj);
+        eyebrow = 'Qué te alcanza por el mismo presupuesto';
+        intro = `${alcRanked.length} comparables vivos en tu mismo rango de precio (±10%) y hasta 1.5 km, ordenados de más a menos parecidos a tu inmueble.`;
+        inner = `<table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcRanked, subj, knownCols)}</table>
+  ${amenCompareHtml(alcRanked, subj, knownCols)}
+  ${alcInsights.length ? `<div class="box"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : ''}`;
+    }
     const html = `
 <style>
 .ficha-root{width:816px;margin:0 auto;background:#fff;padding:40px 44px;color:${BLK};font-family:'Nunito Sans',sans-serif;font-size:12px;line-height:1.45;print-color-adjust:exact;-webkit-print-color-adjust:exact}
@@ -820,15 +854,13 @@ export async function renderComparables(id: string, opts?: { token?: string }): 
 @media print{.ficha-root{margin:0;padding:24px 30px}.fx-noprint{display:none!important}@page{size:Letter;margin:0}}
 </style>
 <div class="ficha-root">
-  <div class="eyebrow" style="color:${SEA}">Qué te alcanza por el mismo presupuesto · ${esc(code)}</div>
+  <div class="eyebrow" style="color:${SEA}">${eyebrow} · ${esc(code)}</div>
   <h1>${esc(street || code)}</h1>
   <div style="font-size:12px;color:${GRY};margin-top:6px">${esc(typ)} · ${esc(col)}, ${esc(city)} · ${money(val)} · ${m2 ?? '—'} m² · ${money(ppm2)}/m²</div>
   <div class="fx-noprint" style="margin-top:8px"><a href="${backHref}" style="color:${SEA};font-weight:700;font-size:11px">← Volver a la ficha</a></div>
   <div class="accent" style="margin-top:14px"></div>
-  <div style="font-size:11px;color:${GRY};margin-bottom:4px">${alcRanked.length} comparables vivos en tu mismo rango de precio (±10%) y hasta 1.5 km, ordenados de más a menos parecidos a tu inmueble.</div>
-  <table><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcRanked, subj, knownCols)}</table>
-  ${amenCompareHtml(alcRanked, subj, knownCols)}
-  ${alcInsights.length ? `<div class="box"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : ''}
+  <div style="font-size:11px;color:${GRY};margin-bottom:4px">${intro}</div>
+  ${inner}
 </div>`;
     return { code, html };
 }
