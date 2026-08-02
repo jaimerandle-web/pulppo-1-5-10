@@ -34,7 +34,7 @@ export type RespKey = 'flash' | 'rapida' | 'media' | 'lento' | 'sin';
 const respBucket = (min: number | null): RespKey => (min == null ? 'sin' : min <= 5 ? 'flash' : min <= 60 ? 'rapida' : min <= 1440 ? 'media' : 'lento');
 
 export interface MBProp {
-    id: string; code: string; type: string; op: string; colonia: string; asesor: string;
+    id: string; code: string; type: string; op: string; colonia: string; calle: string; asesor: string;
     precio: number | null; estado: string; demanda: number; vsOferta: number | null; vsCierres: number | null;
     compite: number | null; calidad: string; dias: number | null; mesesPub: number | null;
     vistas: number; leads: number; visitas: number; ofertas: number; cierres: number;
@@ -45,6 +45,10 @@ export interface MBData {
     vistas: number; leads: number; visitas: number; ofertas: number; sinLeads: number;
     leads30: number; leads30prev: number; resp: Record<RespKey, number>; respMedMin: number | null;
     calAltaPct: number; benchAltaPct: number; props: MBProp[];
+    // split venta/renta para los KPIs del overview
+    calAltaVenta: number; calAltaRenta: number;
+    leads30V: number; leads30R: number; leads30prevV: number; leads30prevR: number;
+    respV: Record<RespKey, number>; respR: Record<RespKey, number>;
 }
 
 const countBy = async (coll: string, field: string, match: Document): Promise<Map<string, number>> => {
@@ -90,19 +94,26 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
 
     // --- leads: conteo, 30d vs previos, y tiempo de 1ª respuesta (answeredAt - createdAt) ---
     const leadDocs = await db.collection('leads').find({ 'property._id': { $in: ids } }, { projection: { 'property._id': 1, createdAt: 1, answeredAt: 1 } }).toArray();
+    const pidOp = new Map(props.map((p) => [String(p._id), dig(p, 'listing', 'operation') as string]));
     const leadsMap = new Map<string, number>();
     const respByProp = new Map<string, number[]>();
-    const resp: Record<RespKey, number> = { flash: 0, rapida: 0, media: 0, lento: 0, sin: 0 };
+    const zero = (): Record<RespKey, number> => ({ flash: 0, rapida: 0, media: 0, lento: 0, sin: 0 });
+    const resp = zero(), respV = zero(), respR = zero();
     const allResp: number[] = [];
-    let leads30 = 0, leads30prev = 0;
+    let leads30 = 0, leads30prev = 0, leads30V = 0, leads30R = 0, leads30prevV = 0, leads30prevR = 0;
     for (const l of leadDocs) {
         const pid = String(dig(l, 'property', '_id'));
         leadsMap.set(pid, (leadsMap.get(pid) ?? 0) + 1);
+        const lop = pidOp.get(pid);
         const ca = dig(l, 'createdAt'), aa = dig(l, 'answeredAt');
         const mins = ca instanceof Date && aa instanceof Date ? Math.max(0, (aa.getTime() - ca.getTime()) / 60000) : null;
-        resp[respBucket(mins)]++;
+        const b = respBucket(mins);
+        resp[b]++; if (lop === 'sale') respV[b]++; else if (lop === 'rent') respR[b]++;
         if (mins != null) { pushMap(respByProp, pid, mins); allResp.push(mins); }
-        if (ca instanceof Date) { if (ca >= D30) leads30++; else if (ca >= D60) leads30prev++; }
+        if (ca instanceof Date) {
+            if (ca >= D30) { leads30++; if (lop === 'sale') leads30V++; else if (lop === 'rent') leads30R++; }
+            else if (ca >= D60) { leads30prev++; if (lop === 'sale') leads30prevV++; else if (lop === 'rent') leads30prevR++; }
+        }
     }
 
     // --- desempeño por propiedad ---
@@ -163,7 +174,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const benchAltaPct = await communityAltaPct(db);
 
     const now = Date.now();
-    let nVenta = 0, nRenta = 0, captaciones90 = 0, tVistas = 0, tLeads = 0, tVisitas = 0, tOfertas = 0, sinLeads = 0, nAlta = 0;
+    let nVenta = 0, nRenta = 0, captaciones90 = 0, tVistas = 0, tLeads = 0, tVisitas = 0, tOfertas = 0, sinLeads = 0, nAlta = 0, nAltaV = 0, nAltaR = 0;
     const rows: MBProp[] = props.map((p) => {
         const hex = String(p._id);
         const op = dig(p, 'listing', 'operation') as string;
@@ -188,13 +199,14 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         if (calidad !== 'Alta') diag.push('Mejorar ficha');
         if (op === 'sale') nVenta++; else if (op === 'rent') nRenta++;
         if (dias != null && dias <= 90) captaciones90++;
-        if (calidad === 'Alta') nAlta++;
+        if (calidad === 'Alta') { nAlta++; if (op === 'sale') nAltaV++; else if (op === 'rent') nAltaR++; }
+        const calle = (dig(p, 'address', 'street') as string)?.trim() || (dig(p, 'address', 'neighborhood', 'name') as string) || '—';
         tVistas += vistas; tLeads += leads; tVisitas += vis; tOfertas += ofertas;
         if (leads === 0) sinLeads++;
         return {
             id: hex, code: (p.internalId as string) ?? hex, type: (p.type as string) ?? '—',
             op: op === 'sale' ? 'Venta' : op === 'rent' ? 'Renta' : '—',
-            colonia: (dig(p, 'address', 'neighborhood', 'name') as string) ?? '—', asesor,
+            colonia: (dig(p, 'address', 'neighborhood', 'name') as string) ?? '—', calle, asesor,
             precio: val, estado: estadoPrecio(sp), demanda, vsOferta,
             vsCierres: ppm && cloRef ? (ppm / cloRef - 1) * 100 : null,
             compite: op === 'sale' && nb ? (supplyNb.get(nb) ?? null) : null,
@@ -210,7 +222,9 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         companyId: String(cid), name, nProps: props.length, nVenta, nRenta, captaciones90,
         vistas: tVistas, leads: tLeads, visitas: tVisitas, ofertas: tOfertas, sinLeads,
         leads30, leads30prev, resp, respMedMin: median(allResp),
-        calAltaPct: props.length ? Math.round((100 * nAlta) / props.length) : 0, benchAltaPct, props: rows
+        calAltaPct: props.length ? Math.round((100 * nAlta) / props.length) : 0, benchAltaPct, props: rows,
+        calAltaVenta: nVenta ? Math.round((100 * nAltaV) / nVenta) : 0, calAltaRenta: nRenta ? Math.round((100 * nAltaR) / nRenta) : 0,
+        leads30V, leads30R, leads30prevV, leads30prevR, respV, respR
     };
 }
 

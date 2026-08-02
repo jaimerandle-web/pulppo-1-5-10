@@ -196,7 +196,8 @@ export default function MBApp({ d }: { d: MBData }) {
     const cnt = (fn2: (p: MBProp) => boolean) => d.props.filter(fn2).length;
     const answered = d.resp.flash + d.resp.rapida + d.resp.media + d.resp.lento;
     const buckets: RespKey[] = ['flash', 'rapida', 'media', 'lento'];
-    const domResp = buckets.reduce((a, b) => (d.resp[b] > d.resp[a] ? b : a), 'flash' as RespKey);
+    const domOf = (r: Record<RespKey, number>) => buckets.reduce((a, b) => (r[b] > r[a] ? b : a), 'flash' as RespKey);
+    const domResp = domOf(d.resp), domV = domOf(d.respV), domR = domOf(d.respR);
     const flashPct = answered ? Math.round((100 * d.resp.flash) / answered) : 0;
     const dl = d.leads30 - d.leads30prev;
     const calDelta = d.calAltaPct - d.benchAltaPct;
@@ -256,11 +257,11 @@ export default function MBApp({ d }: { d: MBData }) {
 
                         {/* KPIs */}
                         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                            <Kpi label="Inventario activo" value={f(d.nProps)} sub={`${d.nVenta} venta · ${d.nRenta} renta · vs. 2025 próximamente`} />
-                            <Kpi label="Calidad de ficha" value={`${d.calAltaPct}% Alta`} color={calDelta < 0 ? '#8a6d00' : SEA} sub={`vs. mejores inmobiliarias* · ${calDelta >= 0 ? '+' : ''}${calDelta} pts`} />
-                            <Kpi label="Leads · 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED} sub={`${dl >= 0 ? '▲' : '▼'} vs. 30 días previos (${f(d.leads30prev)})`} />
-                            <Kpi label="Respuesta" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub="leads sin responder" />
-                            <Kpi label="Velocidad de respuesta" value={RESP_LBL[domResp]} color={domResp === 'flash' || domResp === 'rapida' ? SEA : domResp === 'lento' ? RED : '#8a6d00'} sub={`${flashPct}% Flash (≤5 min)`} />
+                            <Kpi label="Inventario activo" value={f(d.nProps)} sub={`${d.nVenta} venta · ${d.nRenta} renta`} />
+                            <Kpi label="Calidad de ficha" value={`${d.calAltaPct}% Alta`} color={calDelta < 0 ? '#8a6d00' : SEA} sub={`venta ${d.calAltaVenta}% · renta ${d.calAltaRenta}% · mejores* ${d.benchAltaPct}%`} />
+                            <Kpi label="Leads · 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED} sub={`venta ${f(d.leads30V)} · renta ${f(d.leads30R)} · ${dl >= 0 ? '▲' : '▼'} vs. previos`} />
+                            <Kpi label="Respuesta" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`sin responder · venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`} />
+                            <Kpi label="Velocidad de respuesta" value={RESP_LBL[domResp]} color={domResp === 'flash' || domResp === 'rapida' ? SEA : domResp === 'lento' ? RED : '#8a6d00'} sub={`venta ${RESP_LBL[domV]} · renta ${RESP_LBL[domR]}`} />
                         </div>
                         <div style={{ fontSize: 10, color: GRY, marginTop: 6 }}>*media de las mejores inmobiliarias de la comunidad (top 20% por calidad).</div>
 
@@ -268,32 +269,6 @@ export default function MBApp({ d }: { d: MBData }) {
                         <h2 style={{ ...h2, marginTop: 28 }}>Venta vs. renta</h2>
                         <div style={sub}>Balance de tu inventario publicado por tipo de operación.</div>
                         <OpSplit venta={d.nVenta} renta={d.nRenta} />
-
-                        {/* Swaps de destacado */}
-                        <h2 style={{ ...h2, marginTop: 30 }}>Swaps de destacado</h2>
-                        <div style={sub}>Tienes <b>{f(nDest)}</b> propiedades en destacado/súper. Mueve el aviso (lo cubre Pulppo) de las que no generan leads a las que tienen demanda esperando.</div>
-                        {swaps.length ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {swaps.map((s) => (
-                                    <div key={s.out.id} style={{ display: 'flex', alignItems: 'stretch', gap: 10 }}>
-                                        <div style={{ flex: 1, border: `1px solid ${LGT}`, borderLeft: `3px solid ${RED}`, borderRadius: R, padding: '9px 12px' }}>
-                                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', color: RED, textTransform: 'uppercase' }}>Baja de destacado</div>
-                                            <div style={{ marginTop: 3, fontSize: 12.5 }}><Link href={`/ficha/${s.out.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{s.out.code}</Link> · {s.out.tier} · <b>0 leads</b> · {s.out.dias ?? '—'} días · {s.out.colonia}</div>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', color: GRY, fontSize: 18 }}>→</div>
-                                        <div style={{ flex: 1, border: `1px solid ${LGT}`, borderLeft: `3px solid ${SEA}`, borderRadius: R, padding: '9px 12px' }}>
-                                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', color: SEA, textTransform: 'uppercase' }}>Sube a destacado</div>
-                                            <div style={{ marginTop: 3, fontSize: 12.5 }}><Link href={`/ficha/${s.in.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{s.in.code}</Link> · demanda <b>{f(s.in.demanda)}</b> · {s.in.leads} leads · {s.in.colonia}</div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div style={{ background: LGT, borderRadius: R, padding: '12px 14px', fontSize: 12, color: '#555' }}>
-                                {nDest === 0 ? 'No tienes destacados activos hoy. ' : 'Tus destacados están generando leads 👍. '}
-                                {candidatos.length ? <>Candidatos a destacar (demanda alta, sin leads): {candidatos.slice(0, 5).map((c) => c.code).join(' · ')}.</> : 'Sin candidatos claros por ahora.'}
-                            </div>
-                        )}
 
                         {/* Focos comerciales (red flags accionables) */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Focos comerciales</h2>
@@ -331,6 +306,34 @@ export default function MBApp({ d }: { d: MBData }) {
                                 </tbody>
                             </table>
                         </div>
+                        {/* Swaps de destacado (al final de la sección) */}
+                        <h2 style={{ ...h2, marginTop: 30 }}>Swaps de destacado</h2>
+                        <div style={sub}>Tienes <b>{f(nDest)}</b> propiedades en destacado/súper. Mueve el aviso (lo cubre Pulppo) de las que no generan leads a las que tienen demanda esperando.</div>
+                        {swaps.length ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {swaps.map((s) => (
+                                    <div key={s.out.id} style={{ display: 'flex', alignItems: 'stretch', gap: 10 }}>
+                                        <div style={{ flex: 1, border: `1px solid ${LGT}`, borderLeft: `3px solid ${RED}`, borderRadius: R, padding: '9px 12px' }}>
+                                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', color: RED, textTransform: 'uppercase' }}>Baja de destacado</div>
+                                            <div style={{ marginTop: 3, fontSize: 12.5 }}><Link href={`/ficha/${s.out.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{s.out.code}</Link> · {s.out.tier} · <b>0 leads</b> · {s.out.dias ?? '—'} días</div>
+                                            <div style={{ fontSize: 11, color: GRY, marginTop: 2 }}>{s.out.calle}{s.out.compite != null ? ` · oferta en zona ${f(s.out.compite)}` : ''}</div>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', color: GRY, fontSize: 18 }}>→</div>
+                                        <div style={{ flex: 1, border: `1px solid ${LGT}`, borderLeft: `3px solid ${SEA}`, borderRadius: R, padding: '9px 12px' }}>
+                                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', color: SEA, textTransform: 'uppercase' }}>Sube a destacado</div>
+                                            <div style={{ marginTop: 3, fontSize: 12.5 }}><Link href={`/ficha/${s.in.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{s.in.code}</Link> · demanda <b>{f(s.in.demanda)}</b> · {s.in.leads} leads</div>
+                                            <div style={{ fontSize: 11, color: GRY, marginTop: 2 }}>{s.in.calle}{s.in.compite != null ? ` · oferta en zona ${f(s.in.compite)}` : ''}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{ background: LGT, borderRadius: R, padding: '12px 14px', fontSize: 12, color: '#555' }}>
+                                {nDest === 0 ? 'No tienes destacados activos hoy. ' : 'Tus destacados están generando leads 👍. '}
+                                {candidatos.length ? <>Candidatos a destacar (demanda alta, sin leads): {candidatos.slice(0, 5).map((c) => c.code).join(' · ')}.</> : 'Sin candidatos claros por ahora.'}
+                            </div>
+                        )}
+
                         <div style={{ marginTop: 22, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '11px 14px', fontSize: 12, color: '#555' }}>
                             Próximamente: <b>inventario vs. últimos 6 meses</b> y comparativa ampliada vs. la comunidad.
                         </div>
