@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import type { MBData, MBProp, RespKey } from '@/lib/mb';
 import MBAnalisis from './MBAnalisis';
@@ -107,9 +107,38 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     const [asesor, setAsesor] = useState('');
     const asesores = useMemo(() => [...new Set(d.props.map((p) => p.asesor))].sort(), [d.props]);
 
+    // filtro de fechas: recalcula vistas/leads/visitas/ofertas del rango (endpoint /api/mb-metrics)
+    const [rango, setRango] = useState('Todo (histórico)');
+    const [cfrom, setCfrom] = useState('');
+    const [cto, setCto] = useState('');
+    type Ovr = Record<string, { vistas: number; leads: number; visitas: number; ofertas: number }>;
+    const [ovr, setOvr] = useState<Ovr | null>(null);
+    const [rloading, setRloading] = useState(false);
+    useEffect(() => {
+        const now = new Date();
+        let from: Date | null = null; let to: Date = now;
+        if (rango === 'Últimos 30 días') from = new Date(Date.now() - 30 * 864e5);
+        else if (rango === 'Últimos 90 días') from = new Date(Date.now() - 90 * 864e5);
+        else if (rango === 'Este año') from = new Date(now.getFullYear(), 0, 1);
+        else if (rango === 'Personalizado' && cfrom && cto) { from = new Date(cfrom); to = new Date(`${cto}T23:59:59`); }
+        if (!from) { setOvr(null); return; }
+        let cancel = false; setRloading(true);
+        fetch('/api/mb-metrics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId: d.companyId, from: from.toISOString(), to: to.toISOString() }) })
+            .then((r) => r.json())
+            .then((m: { error?: string; leads?: Record<string, number>; vistas?: Record<string, number>; visitas?: Record<string, number>; ofertas?: Record<string, number> }) => {
+                if (cancel || m.error) return;
+                const o: Ovr = {}; const ids = new Set([...Object.keys(m.leads || {}), ...Object.keys(m.vistas || {}), ...Object.keys(m.visitas || {}), ...Object.keys(m.ofertas || {})]);
+                ids.forEach((id) => { o[id] = { vistas: m.vistas?.[id] ?? 0, leads: m.leads?.[id] ?? 0, visitas: m.visitas?.[id] ?? 0, ofertas: m.ofertas?.[id] ?? 0 }; });
+                setOvr(o);
+            }).finally(() => { if (!cancel) setRloading(false); });
+        return () => { cancel = true; };
+    }, [rango, cfrom, cto, d.companyId]);
+    // props con las métricas del rango (si hay rango); si no, históricas
+    const dprops = useMemo(() => ovr ? d.props.map((p) => ({ ...p, vistas: ovr[p.id]?.vistas ?? 0, leads: ovr[p.id]?.leads ?? 0, visitas: ovr[p.id]?.visitas ?? 0, ofertas: ovr[p.id]?.ofertas ?? 0 })) : d.props, [d.props, ovr]);
+
     const filtered = useMemo(() => {
         const ql = q.trim().toLowerCase();
-        return d.props.filter((p) => {
+        return dprops.filter((p) => {
             if (op && p.op !== op) return false;
             if (estado && p.estado !== estado) return false;
             if (asesor && p.asesor !== asesor) return false;
@@ -117,7 +146,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
             if (seg && !SEG_TEST[seg](p)) return false;
             return true;
         });
-    }, [d.props, q, op, estado, asesor, seg]);
+    }, [dprops, q, op, estado, asesor, seg]);
 
     const rows = useMemo(() => [...filtered].sort((a, b) => {
         const va = a[sortKey], vb = b[sortKey];
@@ -139,6 +168,9 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                 <select value={op} onChange={(e) => setOp(e.target.value)} style={sel}><option value="">Operación: todas</option><option>Venta</option><option>Renta</option></select>
                 <select value={estado} onChange={(e) => setEstado(e.target.value)} style={sel}><option value="">Precio: todos</option>{['Óptimo', 'No competitivo', 'Fuera de mercado', 'Haz ACM'].map((x) => <option key={x}>{x}</option>)}</select>
                 <select value={asesor} onChange={(e) => setAsesor(e.target.value)} style={sel}><option value="">Asesor: todos</option>{asesores.map((x) => <option key={x}>{x}</option>)}</select>
+                <select value={rango} onChange={(e) => setRango(e.target.value)} style={sel} title="Ventana de fechas para vistas/leads/visitas/ofertas">{['Todo (histórico)', 'Últimos 30 días', 'Últimos 90 días', 'Este año', 'Personalizado'].map((x) => <option key={x}>{x}</option>)}</select>
+                {rango === 'Personalizado' && <><input type="date" value={cfrom} onChange={(e) => setCfrom(e.target.value)} style={sel} /><span style={{ color: GRY, fontSize: 12 }}>→</span><input type="date" value={cto} onChange={(e) => setCto(e.target.value)} style={sel} /></>}
+                {rloading && <span style={{ fontSize: 11, color: GRY }}>calculando…</span>}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
                 {CHIP_SEGS.map((s) => <span key={s} onClick={() => setSeg(seg === s ? '' : s)} style={chip(seg === s)}>{SEG_LABEL[s]}</span>)}
@@ -146,7 +178,8 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
             </div>
 
             <div style={{ background: LGT, padding: '14px 16px', borderRadius: R, marginBottom: 16 }}>
-                <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 17, marginBottom: 6 }}>Funnel comercial</div>
+                <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 17, marginBottom: 2 }}>Funnel comercial</div>
+                <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>Vistas/leads/visitas/ofertas: <b>{ovr ? rango.toLowerCase() : 'histórico'}</b>.</div>
                 <Funnel vistas={fn.vistas} leads={fn.leads} visitas={fn.visitas} ofertas={fn.ofertas} n={filtered.length} />
             </div>
 
