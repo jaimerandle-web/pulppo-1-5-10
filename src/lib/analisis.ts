@@ -3,6 +3,7 @@
 // Las secciones YoY / Top 10 / destacados / funnel se irán agregando después.
 import { ObjectId, type Db, type Document } from 'mongodb';
 import { getDb } from './data';
+import { refComps, idxPool, type PoolItem, type Subj } from './comparables';
 
 // ---------- helpers (equivalentes a los del script Python) ----------
 const gv = (o: Document | null | undefined, ...path: string[]): unknown => {
@@ -204,13 +205,13 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         { 'company._id': CID, 'status.last': 'published' },
         { projection: {
             listing: 1, type: 1, 'acm.price.value': 1, qualityScore: 1, pictures: 1, videos: 1,
-            virtualTour: 1, 'address.neighborhood': 1, internalId: 1, publishedAt: 1,
-            'portals.inmuebles24.type': 1, 'attributes.totalSurface': 1, 'attributes.roofedSurface': 1,
+            virtualTour: 1, 'address.neighborhood': 1, 'address.city': 1, internalId: 1, publishedAt: 1,
+            'portals.inmuebles24.type': 1, 'attributes.totalSurface': 1, 'attributes.roofedSurface': 1, 'attributes.suites': 1,
         } }
     ).toArray();
 
-    type Item = { pid: ObjectId; code: string | null; nb: string | null; nbid: string | null; op: string | null;
-        val: number; sp: number | null; ppm2: number | null; q3: number | null; tour: boolean; tier: string | null;
+    type Item = { pid: ObjectId; code: string | null; nb: string | null; nbid: string | null; ci: string | null; op: string | null;
+        val: number; sp: number | null; ppm2: number | null; m2: number | null; suites: number | null; q3: number | null; tour: boolean; tier: string | null;
         fotos: number; video: boolean; descLen: number; tipo: string | null };
     const items: Item[] = pub.map((p) => {
         const nb = (gv(p, 'address', 'neighborhood') || {}) as Record<string, unknown>;
@@ -222,9 +223,10 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         return {
             pid: p._id as ObjectId, code: (p.internalId as string) || null, tipo,
             nb: (nb.name as string) || null, nbid: (nb.id as string) || null,
+            ci: (gv(p, 'address', 'city', 'id') as string) || null,
             op: (gv(p, 'listing', 'operation') as string) || null,
             val, sp: val && acm ? val / acm : null,
-            ppm2: val && m2 ? val / m2 : null,
+            ppm2: val && m2 ? val / m2 : null, m2, suites: num(gv(p, 'attributes', 'suites')),
             q3: num(p.qualityScore), tour: !!p.virtualTour,
             tier: tierName(gv(p, 'portals', 'inmuebles24', 'type')),
             fotos: (p.pictures as unknown[] | undefined)?.length || 0,
@@ -302,8 +304,10 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const cierresLabel = (cfg.ventCierres || 'Últimos 24 meses').toLowerCase();
     const cierresStart = windowStart(cfg.ventCierres || 'Últimos 24 meses', 24);
     const mlsCount: Record<string, number> = {}, propCount: Record<string, number> = {};   // # publicadas por colonia
-    const ofertaVals: Record<string, number[]> = {};        // $/m² publicado en venta (mls + properties) — canónico ficha
-    const cierresVals: Record<string, number[]> = {};       // $/m² de ventas cerradas en la ventana
+    // Pools de COMPARABLES (mismo motor que mb.ts): oferta (mls + red Pulppo) y cierres, con atributos
+    // por listing, para comparar cada propiedad contra comparables reales en vez de contra toda la colonia.
+    const offByNb = new Map<string, PoolItem[]>(), offByCi = new Map<string, PoolItem[]>();
+    const cloByNb = new Map<string, PoolItem[]>(), cloByCi = new Map<string, PoolItem[]>();
     if (zoneNbids.length) {
         for (const [coll, dest] of [['mls', mlsCount], ['properties', propCount]] as [string, Record<string, number>][]) {
             for await (const r of db.collection(coll).aggregate([
@@ -311,42 +315,49 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
                 { $group: { _id: '$address.neighborhood.id', n: { $sum: 1 } } },
             ], { allowDiskUse: true })) dest[r._id as string] = r.n as number;
         }
-        // oferta $/m²: mediana de lo publicado en venta (mls + properties)
+        // oferta: cada anuncio de venta con precio y m² (mls + properties) entra al pool de comparables.
         for (const coll of ['mls', 'properties']) {
             for await (const r of db.collection(coll).aggregate([
                 { $match: { 'status.last': 'published', 'listing.operation': 'sale', 'address.neighborhood.id': { $in: zoneNbids }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } } },
-                { $project: { nbid: '$address.neighborhood.id', ppm2: { $divide: ['$listing.value', '$attributes.totalSurface'] } } },
+                { $project: { type: 1, nbid: '$address.neighborhood.id', ci: '$address.city.id', suites: '$attributes.suites', surf: '$attributes.totalSurface', ppm: { $divide: ['$listing.value', '$attributes.totalSurface'] } } },
             ], { allowDiskUse: true })) {
-                const k = r.nbid as string; (ofertaVals[k] || (ofertaVals[k] = [])).push(r.ppm2 as number);
+                idxPool(offByNb, offByCi, { id: String(r._id), nb: (r.nbid as string) ?? null, ci: (r.ci as string) ?? null, type: (r.type as string) ?? '—', surf: num(r.surf), suites: num(r.suites), ppm: r.ppm as number });
             }
         }
-        // cierres $/m²: ventas cerradas (properties completed + operations.closeValue) dentro de la ventana
+        // cierres: ventas cerradas (properties completed + operations.closeValue) en la ventana, como comparables.
         const closedProps = await db.collection('properties').aggregate([
             { $match: { 'status.last': 'completed', 'listing.operation': 'sale', 'address.neighborhood.id': { $in: zoneNbids }, 'attributes.totalSurface': { $gt: 0 } } },
             { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', as: 'op' } },
-            { $project: { nbid: '$address.neighborhood.id', m2: '$attributes.totalSurface', op: 1 } },
+            { $project: { type: 1, nbid: '$address.neighborhood.id', ci: '$address.city.id', suites: '$attributes.suites', m2: '$attributes.totalSurface', op: 1 } },
             { $limit: 4000 },
         ], { allowDiskUse: true }).toArray();
         for (const p of closedProps) {
             const m2 = num(p.m2); if (!m2) continue;
             for (const o of (p.op as Document[]) || []) {
                 const v = num(gv(o, 'closeValue', 'value')); const xd = asDt(gv(o, 'closedAt'));
-                if (v && xd && xd >= cierresStart) { const k = p.nbid as string; (cierresVals[k] || (cierresVals[k] = [])).push(v / m2); }
+                if (v && xd && xd >= cierresStart) { idxPool(cloByNb, cloByCi, { id: String(p._id), nb: (p.nbid as string) ?? null, ci: (p.ci as string) ?? null, type: (p.type as string) ?? '—', surf: m2, suites: num(p.suites), ppm: v / m2 }); break; }
             }
         }
     }
-    const medOf = (m: Record<string, number[]>, k: string | null): number | null => (k && m[k] && m[k].length >= 5) ? median(m[k]) : null;
+    // vs. oferta / vs. cierres se calculan POR PROPIEDAD contra comparables y se agregan por zona (mediana).
+    // nCierres = cuántas de tus propiedades encontraron cierres comparables.
     const zones = topZones.map(([nb, its]) => {
         const nbid = its[0].nbid;
-        const herPpm2 = median(its.filter((i) => i.op === 'sale').map((i) => i.ppm2));
-        const ofertaPpm2 = medOf(ofertaVals, nbid);
-        const cierresPpm2 = medOf(cierresVals, nbid);
-        const vsOferta = herPpm2 && ofertaPpm2 ? Math.round((herPpm2 / ofertaPpm2 - 1) * 100) : null;
-        const vsCierres = herPpm2 && cierresPpm2 ? Math.round((herPpm2 / cierresPpm2 - 1) * 100) : null;
-        const nCierres = (nbid && cierresVals[nbid]?.length) || 0;
+        const saleIts = its.filter((i) => i.op === 'sale');
+        const herPpm2 = median(saleIts.map((i) => i.ppm2));
+        const vsOfVals: number[] = [], vsCiVals: number[] = []; let nCierres = 0;
+        for (const it of saleIts) {
+            const ppm = it.ppm2; if (!ppm) continue;
+            const subj: Subj = { id: String(it.pid), nb: it.nbid, ci: it.ci, type: it.tipo ?? '—', surf: it.m2, suites: it.suites };
+            const oR = refComps(offByNb, offByCi, subj), cR = refComps(cloByNb, cloByCi, subj);
+            if (oR.med) vsOfVals.push((ppm / oR.med - 1) * 100);
+            if (cR.med) { vsCiVals.push((ppm / cR.med - 1) * 100); nCierres++; }
+        }
+        const vsOferta = vsOfVals.length ? Math.round(median(vsOfVals) as number) : null;
+        const vsCierres = vsCiVals.length ? Math.round(median(vsCiVals) as number) : null;
         const leads = opFilter ? (leadsByNbOp[opFilter][nb] || 0) : (leadsByNb[nb] || 0);
         return { nb, n: its.length, oferta: (nbid && (cfg.mlsGeneral ? mlsCount : propCount)[nbid]) || 0,
-            herPpm2, ofertaPpm2, cierresPpm2, vsOferta, vsCierres, nCierres,
+            herPpm2, ofertaPpm2: null, cierresPpm2: null, vsOferta, vsCierres, nCierres,
             dem: (nbid && demandByNb[nbid]) || 0, leads };
     });
 

@@ -16,8 +16,8 @@ export function GlosarioView({ d, mb = false }: { d: AnalisisData; mb?: boolean 
         ['Lead único', <>Un interesado que contacta por la propiedad. Se descartan los <b>duplicados</b> (mismo contacto en la misma propiedad).</>],
         ['L/L · leads por propiedad', <>Promedio de leads que recibe cada propiedad; mide cuánto interés genera tu inventario.</>],
         ['ACM · valor estimado', <>Estimación automática de Pulppo del valor de mercado, a partir de comparables de la zona.</>],
-        ['Oferta ($/m²)', <>Mediana de lo que se <b>pide</b> en venta en la colonia (mls + red Pulppo).</>],
-        ['Cierres ($/m²)', <>Mediana de lo que realmente se <b>vende</b> en la colonia ({d.cierresLabel}); mín. 5 comparables.</>],
+        ['Oferta ($/m²)', <>$/m² de lo que se <b>pide</b> en venta en <b>propiedades comparables</b> (misma colonia, tipo, tamaño ±30% y recámaras — mls + red Pulppo).</>],
+        ['Cierres ($/m²)', <>$/m² de lo que realmente se <b>vende</b> en comparables ({d.cierresLabel}). Si no hay ≥3 comparables, se amplía el criterio; si aún no, no se muestra.</>],
         ['Demanda de zona', <>Búsquedas de compradores en la colonia. Alta demanda + pocos leads = oportunidad.</>],
         ['Absorción', <>Búsquedas ÷ propiedades publicadas en tus zonas (MLS): qué tan caliente está el mercado.</>],
         [mb ? 'Sin actividad reciente' : 'Zombie', <>Propiedad sin un solo lead en la ventana ({d.zombie.label}). Primeras a bajar precio o mejorar ficha.</>],
@@ -98,7 +98,7 @@ export function InventarioView({ d, referencias, cortes, mb = false }: { d: Anal
                     </tbody>
                 </table>
                 <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
-                    Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>vs. oferta</b> = tu $/m² vs. la mediana de lo que se <b>pide</b> (mls + red Pulppo). <b>vs. cierres</b> = vs. la mediana de lo que se <b>vende</b> en la colonia ({d.cierresLabel}); el número entre paréntesis es cuántos cierres se consideraron. <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = menos de 5 cierres en la colonia (no hay muestra confiable).
+                    Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>vs. oferta</b> y <b>vs. cierres</b> se calculan <b>por propiedad</b> contra <b>comparables</b> (misma colonia, tipo, tamaño ±30% y recámaras) y se muestra la <b>mediana</b> de la zona: vs. lo que se <b>pide</b> (mls + red Pulppo) y vs. lo que se <b>vende</b> ({d.cierresLabel}). El número entre paréntesis es cuántas de tus propiedades encontraron cierres comparables. <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = sin comparables suficientes.
                 </p>
             </>}
 

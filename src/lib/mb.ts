@@ -4,6 +4,7 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { getKam } from './kam';
+import { refComps, idxPool, type PoolItem, type Subj } from './comparables';
 
 const ADVANCED = new Set(['offer', 'offer_blocked', 'contract', 'paying', 'closed']);
 const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
@@ -56,29 +57,7 @@ const countBy = async (coll: string, field: string, match: Document): Promise<Ma
     const rows = await db.collection(coll).aggregate([{ $match: match }, { $group: { _id: `$${field}`, n: { $sum: 1 } } }]).toArray();
     return new Map(rows.map((r) => [String(r._id), r.n as number]));
 };
-// Comparables: en vez de comparar contra TODA la colonia, se compara contra propiedades comparables
-// (misma colonia, mismo tipo, tamaño ±30% y mismas recámaras) con fallback graduado si hay pocas.
-type PoolItem = { id: string; nb: string | null; ci: string | null; type: string; surf: number | null; suites: number | null; ppm: number };
-type Subj = { id: string; nb: string | null; ci: string | null; type: string; surf: number | null; suites: number | null };
-const SURF_TOL = 0.30, MIN_COMPS = 3;
-const idxPool = (m: Map<string, PoolItem[]>, k: string | null, it: PoolItem) => { if (!k) return; const a = m.get(k); if (a) a.push(it); else m.set(k, [it]); };
-// $/m² mediano de los comparables + cuántos comparan (n). Baja de nivel hasta juntar MIN_COMPS.
-function refComps(byNb: Map<string, PoolItem[]>, byCi: Map<string, PoolItem[]>, s: Subj): { med: number | null; n: number } {
-    const nbArr = s.nb ? byNb.get(s.nb) ?? [] : [];
-    const notSelf = (x: PoolItem) => x.id !== s.id;
-    const band = (x: PoolItem) => (s.surf && x.surf ? Math.abs(x.surf / s.surf - 1) <= SURF_TOL : false);
-    const nbType = nbArr.filter((x) => notSelf(x) && x.type === s.type);
-    let sel: PoolItem[];
-    const l1 = s.suites != null ? nbType.filter((x) => band(x) && x.suites === s.suites) : [];
-    if (l1.length >= MIN_COMPS) sel = l1;                                    // colonia + tipo + m²±30% + recámaras
-    else { const l2 = nbType.filter(band);
-        if (l2.length >= MIN_COMPS) sel = l2;                               // …sin recámaras
-        else if (nbType.length >= MIN_COMPS) sel = nbType;                  // …sin banda de m²
-        else { const ciType = (s.ci ? byCi.get(s.ci) ?? [] : []).filter((x) => notSelf(x) && x.type === s.type);
-            if (ciType.length >= MIN_COMPS) sel = ciType;                   // ciudad + tipo
-            else { const nbAny = nbArr.filter(notSelf); sel = nbAny.length >= MIN_COMPS ? nbAny : []; } } } // colonia (cualquier tipo) o nada
-    return { med: median(sel.map((x) => x.ppm)), n: sel.length };
-}
+// Comparables ($/m² vs oferta y vs cierres, competencia) → src/lib/comparables.ts (compartido con analisis.ts).
 
 // Benchmark de comunidad: % de fichas en calidad Alta de las MEJORES inmobiliarias (top 20% con ≥10 props).
 // Cacheado 10 min por instancia (cambia lento y es un escaneo global).
@@ -169,7 +148,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             const v = num(dig(p, 'listing', 'value')), s = num(dig(p, 'attributes', 'totalSurface'));
             if (!v || !s || s <= 0) continue;
             const it: PoolItem = { id: String(p._id), nb: (dig(p, 'address', 'neighborhood', 'id') as string) ?? null, ci: (dig(p, 'address', 'city', 'id') as string) ?? null, type: (p.type as string) ?? '—', surf: s, suites: num(dig(p, 'attributes', 'suites')), ppm: v / s };
-            idxPool(offByNb, it.nb, it); idxPool(offByCi, it.ci, it);
+            idxPool(offByNb, offByCi, it);
         }
     }
     const cloByNb = new Map<string, PoolItem[]>(), cloByCi = new Map<string, PoolItem[]>();
@@ -188,7 +167,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             const s = num(dig(p, 'attributes', 'totalSurface')); const v = opVal.get(String(p._id));
             if (!s || s <= 0 || !v) continue;
             const it: PoolItem = { id: String(p._id), nb: (dig(p, 'address', 'neighborhood', 'id') as string) ?? null, ci: (dig(p, 'address', 'city', 'id') as string) ?? null, type: (p.type as string) ?? '—', surf: s, suites: num(dig(p, 'attributes', 'suites')), ppm: v / s };
-            idxPool(cloByNb, it.nb, it); idxPool(cloByCi, it.ci, it);
+            idxPool(cloByNb, cloByCi, it);
         }
     }
     const benchAltaPct = await communityAltaPct(db);
