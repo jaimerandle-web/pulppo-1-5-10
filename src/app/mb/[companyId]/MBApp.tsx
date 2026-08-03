@@ -8,7 +8,7 @@ const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = 
 const R = 2; // design system Pulppo: esquinas cuadradas
 const money = (n?: number | null) => (n == null || isNaN(n) ? '—' : `$${Math.round(n).toLocaleString('en-US')}`);
 const f = (n: number) => n.toLocaleString('es-MX');
-const calidadColor = (c: string) => (c === 'Alta' ? SEA : c === 'Baja' ? RED : '#666');
+const calidadColor = (c: string) => (c === 'Alta' ? SEA : c === 'Baja' ? RED : '#8a6d00'); // Media = ámbar
 const vsCell = (v: number | null) => {
     if (v == null) return <span style={{ color: GRY }}>—</span>;
     const col = v > 10 ? RED : v < -5 ? SEA : '#555';
@@ -105,6 +105,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     const [op, setOp] = useState('');
     const [estado, setEstado] = useState('');
     const [asesor, setAsesor] = useState('');
+    const [colf, setColf] = useState<Record<string, string>>({}); // filtro por columna (texto = contiene · número = ≥)
     const asesores = useMemo(() => [...new Set(d.props.map((p) => p.asesor))].sort(), [d.props]);
 
     // filtro de fechas: recalcula vistas/leads/visitas/ofertas del rango (endpoint /api/mb-metrics)
@@ -144,9 +145,16 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
             if (asesor && p.asesor !== asesor) return false;
             if (ql && !`${p.code} ${p.colonia} ${p.asesor}`.toLowerCase().includes(ql)) return false;
             if (seg && !SEG_TEST[seg](p)) return false;
+            for (const c of COLS) {
+                const fv = (colf[c.key] ?? '').trim();
+                if (!fv) continue;
+                const cell = p[c.key];
+                if (c.num) { const n = parseFloat(fv.replace(/[^0-9.\-]/g, '')); if (isNaN(n)) continue; if (!(typeof cell === 'number' && cell >= n)) return false; }
+                else if (!String(cell ?? '').toLowerCase().includes(fv.toLowerCase())) return false;
+            }
             return true;
         });
-    }, [dprops, q, op, estado, asesor, seg]);
+    }, [dprops, q, op, estado, asesor, seg, colf]);
 
     const rows = useMemo(() => [...filtered].sort((a, b) => {
         const va = a[sortKey], vb = b[sortKey];
@@ -185,7 +193,10 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
 
             <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
-                    <thead><tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)}>{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}<th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Reporte</th></tr></thead>
+                    <thead>
+                        <tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)}>{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}<th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Reporte</th></tr>
+                        <tr>{COLS.map((c) => <th key={c.key} style={{ padding: '3px 6px', borderBottom: `1px solid ${LGT}`, background: '#fff' }}><input value={colf[c.key] ?? ''} onChange={(e) => setColf((s) => ({ ...s, [c.key]: e.target.value }))} placeholder={c.num ? '≥' : 'filtrar'} style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, padding: '3px 5px', border: `1px solid ${LGT}`, borderRadius: R, textAlign: c.num ? 'right' : 'left', color: BLK }} /></th>)}<th style={{ borderBottom: `1px solid ${LGT}`, background: '#fff' }} /></tr>
+                    </thead>
                     <tbody>
                         {rows.map((p) => (
                             <tr key={p.id}>
@@ -241,12 +252,6 @@ export default function MBApp({ d }: { d: MBData }) {
         { seg: 'respLenta', tip: 'Acelera la 1ª respuesta; los leads se enfrían rápido.' }
     ];
     const topOpp = d.props.filter((p) => p.op === 'Venta' && p.demanda > 0).sort((a, b) => b.oppScore - a.oppScore).slice(0, 10);
-
-    // swaps de destacado: destacado sin leads (desperdiciado) → oportunidad con demanda sin leads
-    const desperdiciados = d.props.filter((p) => (p.tier === 'Super' || p.tier === 'Destacado') && p.leads === 0).sort((a, b) => a.demanda - b.demanda);
-    const candidatos = d.props.filter((p) => p.tier === 'Simple' && p.op === 'Venta' && p.oppScore > 0 && p.leads <= 1).sort((a, b) => b.oppScore - a.oppScore);
-    const nSwap = Math.min(desperdiciados.length, candidatos.length, 6);
-    const swaps = Array.from({ length: nSwap }, (_, i) => ({ out: desperdiciados[i], in: candidatos[i] }));
     const nDest = cnt((p) => p.tier === 'Super' || p.tier === 'Destacado');
 
     const tth: CSSProperties = { textAlign: 'left', padding: '7px 8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
@@ -320,7 +325,7 @@ export default function MBApp({ d }: { d: MBData }) {
 
                         {/* Empieza por aquí */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Empieza por aquí</h2>
-                        <div style={sub}>Buena demanda de zona pero sin generar leads, con un freno claro. Demanda = búsquedas de venta de la zona (2026) · Leads = históricos · vs. oferta = tu $/m² contra el asking del <b>MLS</b> en la zona.</div>
+                        <div style={sub}>Buena demanda de zona pero sin generar leads, con un freno claro. Demanda = búsquedas de venta de la zona (2026) · Leads = históricos · vs. oferta = tu $/m² contra el asking del <b>MLS</b> en <b>propiedades comparables</b> (mismo tipo, tamaño ±30% y recámaras).</div>
                         <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
                                 <thead><tr>{['Código', 'Zona', 'Operación', 'Precio', 'vs. oferta', 'Leads', 'Demanda', 'Diagnóstico'].map((h, i) => <th key={h} style={{ ...tth, textAlign: i === 3 || i === 4 || i === 5 || i === 6 ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
@@ -339,36 +344,10 @@ export default function MBApp({ d }: { d: MBData }) {
                                 </tbody>
                             </table>
                         </div>
-                        {/* Swaps de destacado (al final de la sección) */}
-                        <h2 style={{ ...h2, marginTop: 30 }}>Swaps de destacado</h2>
-                        <div style={sub}>Tienes <b>{f(nDest)}</b> propiedades en destacado/súper. Mueve el aviso (lo cubre Pulppo) de las que no generan leads a las que tienen demanda esperando.</div>
-                        {swaps.length ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {swaps.map((s) => (
-                                    <div key={s.out.id} style={{ display: 'flex', alignItems: 'stretch', gap: 10 }}>
-                                        <div style={{ flex: 1, border: `1px solid ${LGT}`, borderLeft: `3px solid ${RED}`, borderRadius: R, padding: '9px 12px' }}>
-                                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', color: RED, textTransform: 'uppercase' }}>Baja de destacado</div>
-                                            <div style={{ marginTop: 3, fontSize: 12.5 }}><Link href={`/ficha/${s.out.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{s.out.code}</Link> · {s.out.tier} · <b>0 leads</b> · {s.out.dias ?? '—'} días</div>
-                                            <div style={{ fontSize: 11, color: GRY, marginTop: 2 }}>{s.out.calle}{s.out.compite != null ? ` · oferta en zona ${f(s.out.compite)}` : ''}</div>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', color: GRY, fontSize: 18 }}>→</div>
-                                        <div style={{ flex: 1, border: `1px solid ${LGT}`, borderLeft: `3px solid ${SEA}`, borderRadius: R, padding: '9px 12px' }}>
-                                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', color: SEA, textTransform: 'uppercase' }}>Sube a destacado</div>
-                                            <div style={{ marginTop: 3, fontSize: 12.5 }}><Link href={`/ficha/${s.in.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{s.in.code}</Link> · demanda <b>{f(s.in.demanda)}</b> · {s.in.leads} leads</div>
-                                            <div style={{ fontSize: 11, color: GRY, marginTop: 2 }}>{s.in.calle}{s.in.compite != null ? ` · oferta en zona ${f(s.in.compite)}` : ''}</div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div style={{ background: LGT, borderRadius: R, padding: '12px 14px', fontSize: 12, color: '#555' }}>
-                                {nDest === 0 ? 'No tienes destacados activos hoy. ' : 'Tus destacados están generando leads 👍. '}
-                                {candidatos.length ? <>Candidatos a destacar (demanda alta, sin leads): {candidatos.slice(0, 5).map((c) => c.code).join(' · ')}.</> : 'Sin candidatos claros por ahora.'}
-                            </div>
-                        )}
-
-                        <div style={{ marginTop: 22, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '11px 14px', fontSize: 12, color: '#555' }}>
-                            Próximamente: <b>inventario vs. últimos 6 meses</b> y comparativa ampliada vs. la comunidad.
+                        <div style={{ marginTop: 30, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '13px 16px', fontSize: 12, color: '#555' }}>
+                            Tienes <b>{f(nDest)}</b> propiedades en destacado/súper. Estamos afinando el criterio de <b>swaps de destacado</b>
+                            {' '}(qué aviso conviene mover según precio, oferta, demanda y calidad — no solo si recibe leads) y estará aquí pronto,
+                            {' '}junto con <b>inventario vs. últimos 6 meses</b> y la comparativa ampliada vs. la comunidad.
                         </div>
                     </div>
                 )}
@@ -377,7 +356,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <div>
                         <div style={eyebrow}>Propiedades</div><div style={accent} />
                         <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 30, margin: '0 0 3px' }}>Tu inventario</h1>
-                        <div style={sub}>El funnel se recalcula con tus filtros. Ordena por cualquier columna y abre el reporte desde el código.</div>
+                        <div style={sub}>El funnel se recalcula con tus filtros. Ordena o <b>filtra por cualquier columna</b> (texto = contiene · números = ≥) y abre el reporte desde el código. Vistas = sitios de Pulppo + Inmuebles24.</div>
                         <PropTable d={d} seg={seg} setSeg={setSeg} />
                     </div>
                 )}
@@ -394,17 +373,17 @@ export default function MBApp({ d }: { d: MBData }) {
                             {dfn('Inventario', 'tus propiedades publicadas en Pulppo (precio, superficie, calidad de ficha, destacado).')}
                             {dfn('Leads', 'contactos reales de todos los canales. Tiempo de 1ª respuesta = answeredAt − createdAt del lead.')}
                             {dfn('Visitas', 'visitantes únicos confirmados (una misma persona no cuenta doble).')}
-                            {dfn('Vistas', 'eventos de vista del anuncio (todas las fuentes).')}
+                            {dfn('Vistas', 'vistas del anuncio en los sitios de Pulppo (pulppo.com y broker.pulppo.com) y en Inmuebles24. NO incluye otros portales (Mercado Libre, propiedades.com, etc.): es lo único que hoy nos reporta vistas.')}
                             {dfn('Demanda', 'búsquedas de compradores en tu zona (2026), partidas por operación: a cada propiedad se le asigna la demanda de su operación (venta/renta).')}
-                            {dfn('vs. oferta / vs. cierres', 'tu $/m² contra el asking mediano del MLS en la zona (oferta) y contra lo que cerró Pulppo, 24m (cierres).')}
+                            {dfn('vs. oferta / vs. cierres', 'tu $/m² contra propiedades COMPARABLES: misma colonia, mismo tipo, tamaño ±30% y mismas recámaras. "Oferta" = asking mediano del MLS de esos comparables; "cierres" = lo que cerró Pulppo (24m) en comparables. Si no hay suficientes comparables, ampliamos el criterio (quitamos recámaras, luego tamaño, luego tipo) hasta juntar al menos 3.')}
+                            {dfn('Compite', 'cuántos anuncios COMPARABLES (mismos filtros de arriba) hay hoy en el MLS de la zona. Es tu competencia directa, no todo el inventario de la colonia.')}
                             {dfn('Calidad de ficha', 'clasificación Pulppo (Alta/Media/Baja). El benchmark es la media de las mejores inmobiliarias de la comunidad (top 20%).')}
-                            {dfn('Destacado', 'nivel del aviso en Inmuebles24 (Súper / Destacado / Simple).')}
+                            {dfn('Destacado', 'nivel informativo del aviso en Inmuebles24 (Súper / Destacado / Simple / Offline). Solo referencia; aquí no recomendamos aún qué destacar.')}
                         </div>
                         <h2 style={{ ...h2, marginTop: 22 }}>Cómo se leen las secciones</h2>
                         <div>
                             {dfn('Necesitan tu atención', 'propiedades con algún foco (sin leads, caras sin leads, visitas sin oferta, +12 meses, respuesta lenta). Clic → las abre filtradas.')}
                             {dfn('Velocidad de respuesta', 'Flash ≤5 min · Rápida ≤1 h · Media ≤24 h · Lento >24 h. "Respuesta" muestra los leads que siguen sin responder.')}
-                            {dfn('Swaps de destacado', 'baja el aviso de un destacado sin leads y súbelo a una propiedad con demanda esperando. El aviso lo cubre Pulppo.')}
                             {dfn('Empieza por aquí', 'ordenado por oportunidad (demanda ÷ (1+leads)). El diagnóstico dice el freno más probable (bajar precio / mejorar ficha).')}
                         </div>
                         <div style={{ fontSize: 10, color: GRY, marginTop: 18 }}>Corte: hoy, datos en vivo. Borrador.</div>

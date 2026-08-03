@@ -56,11 +56,29 @@ const countBy = async (coll: string, field: string, match: Document): Promise<Ma
     const rows = await db.collection(coll).aggregate([{ $match: match }, { $group: { _id: `$${field}`, n: { $sum: 1 } } }]).toArray();
     return new Map(rows.map((r) => [String(r._id), r.n as number]));
 };
-const zref = (nb: string | null, ci: string | null, byNb: Map<string, number[]>, byCi: Map<string, number[]>): number | null => {
-    if (nb && (byNb.get(nb)?.length ?? 0) >= 3) return median(byNb.get(nb)!);
-    if (ci && (byCi.get(ci)?.length ?? 0) >= 3) return median(byCi.get(ci)!);
-    return null;
-};
+// Comparables: en vez de comparar contra TODA la colonia, se compara contra propiedades comparables
+// (misma colonia, mismo tipo, tamaño ±30% y mismas recámaras) con fallback graduado si hay pocas.
+type PoolItem = { id: string; nb: string | null; ci: string | null; type: string; surf: number | null; suites: number | null; ppm: number };
+type Subj = { id: string; nb: string | null; ci: string | null; type: string; surf: number | null; suites: number | null };
+const SURF_TOL = 0.30, MIN_COMPS = 3;
+const idxPool = (m: Map<string, PoolItem[]>, k: string | null, it: PoolItem) => { if (!k) return; const a = m.get(k); if (a) a.push(it); else m.set(k, [it]); };
+// $/m² mediano de los comparables + cuántos comparan (n). Baja de nivel hasta juntar MIN_COMPS.
+function refComps(byNb: Map<string, PoolItem[]>, byCi: Map<string, PoolItem[]>, s: Subj): { med: number | null; n: number } {
+    const nbArr = s.nb ? byNb.get(s.nb) ?? [] : [];
+    const notSelf = (x: PoolItem) => x.id !== s.id;
+    const band = (x: PoolItem) => (s.surf && x.surf ? Math.abs(x.surf / s.surf - 1) <= SURF_TOL : false);
+    const nbType = nbArr.filter((x) => notSelf(x) && x.type === s.type);
+    let sel: PoolItem[];
+    const l1 = s.suites != null ? nbType.filter((x) => band(x) && x.suites === s.suites) : [];
+    if (l1.length >= MIN_COMPS) sel = l1;                                    // colonia + tipo + m²±30% + recámaras
+    else { const l2 = nbType.filter(band);
+        if (l2.length >= MIN_COMPS) sel = l2;                               // …sin recámaras
+        else if (nbType.length >= MIN_COMPS) sel = nbType;                  // …sin banda de m²
+        else { const ciType = (s.ci ? byCi.get(s.ci) ?? [] : []).filter((x) => notSelf(x) && x.type === s.type);
+            if (ciType.length >= MIN_COMPS) sel = ciType;                   // ciudad + tipo
+            else { const nbAny = nbArr.filter(notSelf); sel = nbAny.length >= MIN_COMPS ? nbAny : []; } } } // colonia (cualquier tipo) o nada
+    return { med: median(sel.map((x) => x.ppm)), n: sel.length };
+}
 
 // Benchmark de comunidad: % de fichas en calidad Alta de las MEJORES inmobiliarias (top 20% con ≥10 props).
 // Cacheado 10 min por instancia (cambia lento y es un escaneo global).
@@ -85,7 +103,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const db = await getDb();
     const props = await db.collection('properties').find(
         { 'company._id': cid, 'status.last': 'published' },
-        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, address: 1, agent: 1, publishedAt: 1, createdAt: 1, 'status.history': 1, company: 1, 'portals.inmuebles24.type': 1 } }
+        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, 'attributes.suites': 1, address: 1, agent: 1, publishedAt: 1, createdAt: 1, 'status.history': 1, company: 1, 'portals.inmuebles24.type': 1 } }
     ).toArray();
     if (!props.length) return null;
     const name = (dig(props[0], 'company', 'name') as string) ?? 'Inmobiliaria';
@@ -141,20 +159,20 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         ], { allowDiskUse: true }).toArray();
         for (const r of dr) { demandSale.set(String(r._id), r.sale as number); demandRent.set(String(r._id), r.rent as number); }
     }
-    const offNb = new Map<string, number[]>(), offCi = new Map<string, number[]>(), supplyNb = new Map<string, number>();
+    const offByNb = new Map<string, PoolItem[]>(), offByCi = new Map<string, PoolItem[]>();
     if (nbids.length) {
         const ls = await db.collection('properties').find(
             { 'address.neighborhood.id': { $in: nbids }, 'status.last': 'published', 'listing.operation': 'sale', 'attributes.totalSurface': { $gt: 0 } },
-            { projection: { 'address.neighborhood.id': 1, 'address.city.id': 1, 'listing.value': 1, 'attributes.totalSurface': 1 } }
+            { projection: { type: 1, 'address.neighborhood.id': 1, 'address.city.id': 1, 'listing.value': 1, 'attributes.totalSurface': 1, 'attributes.suites': 1 } }
         ).toArray();
         for (const p of ls) {
             const v = num(dig(p, 'listing', 'value')), s = num(dig(p, 'attributes', 'totalSurface'));
-            const nb = dig(p, 'address', 'neighborhood', 'id') as string, ci = dig(p, 'address', 'city', 'id') as string;
-            if (nb) supplyNb.set(nb, (supplyNb.get(nb) ?? 0) + 1);
-            if (v && s && s > 0) { const ppm = v / s; if (nb) pushMap(offNb, nb, ppm); if (ci) pushMap(offCi, ci, ppm); }
+            if (!v || !s || s <= 0) continue;
+            const it: PoolItem = { id: String(p._id), nb: (dig(p, 'address', 'neighborhood', 'id') as string) ?? null, ci: (dig(p, 'address', 'city', 'id') as string) ?? null, type: (p.type as string) ?? '—', surf: s, suites: num(dig(p, 'attributes', 'suites')), ppm: v / s };
+            idxPool(offByNb, it.nb, it); idxPool(offByCi, it.ci, it);
         }
     }
-    const cloNb = new Map<string, number[]>(), cloCi = new Map<string, number[]>();
+    const cloByNb = new Map<string, PoolItem[]>(), cloByCi = new Map<string, PoolItem[]>();
     const ops = await db.collection('operations').find(
         { 'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: D24 }, 'property.listing.operation': 'sale' },
         { projection: { 'property._id': 1, 'closeValue.value': 1 } }
@@ -164,11 +182,13 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     if (opVal.size) {
         const opProps = await db.collection('properties').find(
             { _id: { $in: [...opVal.keys()].map((h) => new ObjectId(h)) } },
-            { projection: { 'address.neighborhood.id': 1, 'address.city.id': 1, 'attributes.totalSurface': 1 } }
+            { projection: { type: 1, 'address.neighborhood.id': 1, 'address.city.id': 1, 'attributes.totalSurface': 1, 'attributes.suites': 1 } }
         ).toArray();
         for (const p of opProps) {
             const s = num(dig(p, 'attributes', 'totalSurface')); const v = opVal.get(String(p._id));
-            if (s && s > 0 && v) { const ppm = v / s; const nb = dig(p, 'address', 'neighborhood', 'id') as string, ci = dig(p, 'address', 'city', 'id') as string; if (nb) pushMap(cloNb, nb, ppm); if (ci) pushMap(cloCi, ci, ppm); }
+            if (!s || s <= 0 || !v) continue;
+            const it: PoolItem = { id: String(p._id), nb: (dig(p, 'address', 'neighborhood', 'id') as string) ?? null, ci: (dig(p, 'address', 'city', 'id') as string) ?? null, type: (p.type as string) ?? '—', surf: s, suites: num(dig(p, 'attributes', 'suites')), ppm: v / s };
+            idxPool(cloByNb, it.nb, it); idxPool(cloByCi, it.ci, it);
         }
     }
     const benchAltaPct = await communityAltaPct(db);
@@ -184,9 +204,10 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const nb = (dig(p, 'address', 'neighborhood', 'id') as string) ?? null, ci = (dig(p, 'address', 'city', 'id') as string) ?? null;
         const sp = val && acm ? val / acm : null;
         const ppm = val && surf && surf > 0 && op === 'sale' ? val / surf : null;
-        const offRef = op === 'sale' ? zref(nb, ci, offNb, offCi) : null;
-        const cloRef = op === 'sale' ? zref(nb, ci, cloNb, cloCi) : null;
-        const vsOferta = ppm && offRef ? (ppm / offRef - 1) * 100 : null;
+        const subj: Subj = { id: hex, nb, ci, type: (p.type as string) ?? '—', surf, suites: num(dig(p, 'attributes', 'suites')) };
+        const offR = op === 'sale' ? refComps(offByNb, offByCi, subj) : { med: null, n: 0 };
+        const cloR = op === 'sale' ? refComps(cloByNb, cloByCi, subj) : { med: null, n: 0 };
+        const vsOferta = ppm && offR.med ? (ppm / offR.med - 1) * 100 : null;
         const pub = firstPublished(p);
         const dias = pub ? Math.max(0, Math.round((now - pub.getTime()) / 864e5)) : null;
         const leads = leadsMap.get(hex) ?? 0, vis = visMap.get(hex) ?? 0, vistas = viewMap.get(hex) ?? 0, ofertas = ofMap.get(hex) ?? 0, cierres = cloMap.get(hex) ?? 0;
@@ -208,8 +229,8 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             op: op === 'sale' ? 'Venta' : op === 'rent' ? 'Renta' : '—',
             colonia: (dig(p, 'address', 'neighborhood', 'name') as string) ?? '—', calle, asesor,
             precio: val, estado: estadoPrecio(sp), demanda, vsOferta,
-            vsCierres: ppm && cloRef ? (ppm / cloRef - 1) * 100 : null,
-            compite: op === 'sale' && nb ? (supplyNb.get(nb) ?? null) : null,
+            vsCierres: ppm && cloR.med ? (ppm / cloR.med - 1) * 100 : null,
+            compite: op === 'sale' ? (offR.n || null) : null,
             calidad, dias, mesesPub: dias != null ? dias / 30 : null,
             vistas, leads, visitas: vis, ofertas, cierres,
             respMedMin: median(respByProp.get(hex) ?? []),
