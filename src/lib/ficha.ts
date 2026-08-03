@@ -704,6 +704,22 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const posTxt = (d: number | null) => (d == null ? '' : d > 2 ? `<b>${d}% arriba</b>` : d < -2 ? `<b>${Math.abs(d)}% abajo</b>` : '<b>en línea</b>');
     const cvsDelta = ppm2 && soldMed ? Math.round((ppm2 / soldMed - 1) * 100) : null;   // vs. cierres (Pulppo)
     const cvoDelta = ppm2 && zoneMed ? Math.round((ppm2 / zoneMed - 1) * 100) : null;    // vs. oferta (MLS)
+
+    // Principal freno: feedback puntual del motivo #1 por el que la propiedad podría estar estancada.
+    const priceHigh = (dval != null && dval > 12) || (cvoDelta != null && cvoDelta > 12);
+    const priceSoft = (dval != null && dval > 5) || (cvoDelta != null && cvoDelta > 8);
+    const stale = meses != null && meses >= 6 && ofertas === 0;
+    let freno: string;
+    if (priceHigh) freno = `Precio arriba de mercado (${cvoDelta != null ? `+${cvoDelta}% vs. la oferta de la zona` : `+${dval!.toFixed(0)}% vs. el estimado`}): es el freno más probable. Ajusta el precio para reactivar contactos y visitas.`;
+    else if (q != null && q < 70) freno = `Ficha incompleta (${q.toFixed(0)}/100): mejora fotos, descripción y video — los anuncios pobres rankean más abajo y reciben menos contactos.`;
+    else if (stale) freno = `Lleva ${meses} meses publicada sin ofertas: refresca el aviso y haz un ajuste de precio para que se vuelva a mover${priceSoft ? ' (tu precio ya está algo arriba del mercado)' : ''}.`;
+    else if (vis >= 3 && ofertas === 0) freno = `Recibe visitas pero no ofertas: el freno está en el cierre — refuerza el seguimiento post-visita y alinea expectativas de precio con el propietario.`;
+    else if (leads.length === 0) freno = `Todavía no genera leads: revisa precio, calidad del aviso y visibilidad para empezar a atraer interesados.`;
+    else if (vis === 0) freno = `Recibe leads pero no se agendan visitas: acelera la 1ª respuesta y el seguimiento para convertirlos en visita.`;
+    else if (meses != null && meses < 3) freno = `Publicación reciente (${meses < 1 ? 'menos de 1 mes' : `${meses} mes${meses === 1 ? '' : 'es'}`}) sin frenos evidentes: mantén seguimiento cercano de leads y visitas.`;
+    else freno = 'Sin un freno claro en los datos: mantén el seguimiento de leads y visitas, y cuida precio y calidad del aviso.';
+    const frenoRed = priceHigh || stale || leads.length === 0;
+    const frenoHtml = `<div class="box" style="border-left:3px solid ${frenoRed ? RED : YEL};margin-bottom:14px"><div class="eyebrow" style="color:${BLK}">Principal freno</div><div style="font-size:12px;margin-top:5px;line-height:1.5">${esc(freno)}</div></div>`;
     const cierresVisual = ppmRef.length ? `<div style="margin-top:16px"><div class="eyebrow" style="color:${BLK};margin-bottom:8px">Precio $/m²: tú vs. oferta vs. cierres</div>
       <div class="ppmbars">${ppmRef.map((r) => `<div class="ppmrow"><span class="ppml">${r[0]}</span><span class="ppmtrack"><span class="ppmbar" style="width:${Math.max((100 * r[1]) / maxPpm, 2)}%;background:${r[2]}"></span></span><span class="ppmv">${money(r[1])}/m²</span></div>`).join('')}</div>
       <div class="ppmnote">Tu $/m² está ${cvoDelta != null ? `${posTxt(cvoDelta)} de la oferta (MLS)` : 'sin referencia de oferta'}${cvsDelta != null ? ` y ${posTxt(cvsDelta)} de los cierres reales${czN ? ` (${czN} en ${esc(scope)})` : ''}` : ''}.</div></div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`;
@@ -740,8 +756,8 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     </div>
     <p style="margin-top:8px;font-size:12px">${zread}</p>` : '';
     const secAnalisis = `<div class="sec"><div class="eyebrow">Análisis y oportunidades</div><div class="accent"></div>
+    ${frenoHtml}
     <div class="two"><div class="box"><div class="eyebrow">Insights</div><ul>${insights.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></div><div class="box"><div class="eyebrow">Plan de acción</div><ul>${plan.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div></div>
-    ${simple ? insightsCompBox : ''}
   </div>`;
     const bodyFull = `${secSalud}
 ${promoHtml}
@@ -760,6 +776,7 @@ ${secFunnel}
   <div class="sec"><div class="eyebrow">Mercado de la zona</div><div class="accent"></div>
     ${zonaInner}
     ${cierresVisual}
+    ${insightsCompBox}
     ${compiteHtml}
     ${alcanzaHtml}
   </div>
