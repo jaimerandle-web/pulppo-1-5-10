@@ -98,7 +98,7 @@ export function InventarioView({ d, referencias, cortes, mb = false }: { d: Anal
                     </tbody>
                 </table>
                 <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
-                    Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>vs. oferta</b> y <b>vs. cierres</b> se calculan <b>por propiedad</b> contra <b>comparables</b> (misma colonia, tipo, tamaño ±30% y recámaras) y se muestra la <b>mediana</b> de la zona: vs. lo que se <b>pide</b> (mls + red Pulppo) y vs. lo que se <b>vende</b> ({d.cierresLabel}). El número entre paréntesis es cuántas de tus propiedades encontraron cierres comparables. <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = sin comparables suficientes.
+                    Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>vs. oferta</b> y <b>vs. cierres</b> se calculan <b>por propiedad</b> contra <b>comparables</b> (misma colonia, tipo, tamaño ±30% y recámaras) y se muestra la <b>mediana</b> de la zona: vs. lo que se <b>pide</b> (MLS completo + red Pulppo, con filtro de extremos) y vs. lo que se <b>vende</b> ({d.cierresLabel}, solo cierres Pulppo). El número entre paréntesis es cuántas de tus propiedades encontraron cierres comparables. <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = sin comparables suficientes.
                 </p>
             </>}
 

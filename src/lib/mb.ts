@@ -138,17 +138,21 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         ], { allowDiskUse: true }).toArray();
         for (const r of dr) { demandSale.set(String(r._id), r.sale as number); demandRent.set(String(r._id), r.rent as number); }
     }
+    // Oferta = MLS completo (todas las fuentes) + red Pulppo. La guarda de extremos (comparables.ts)
+    // neutraliza la basura de portales; los comparables se filtran por tipo/tamaño/recámaras.
     const offByNb = new Map<string, PoolItem[]>(), offByCi = new Map<string, PoolItem[]>();
     if (nbids.length) {
-        const ls = await db.collection('properties').find(
-            { 'address.neighborhood.id': { $in: nbids }, 'status.last': 'published', 'listing.operation': 'sale', 'attributes.totalSurface': { $gt: 0 } },
-            { projection: { type: 1, 'address.neighborhood.id': 1, 'address.city.id': 1, 'listing.value': 1, 'attributes.totalSurface': 1, 'attributes.suites': 1 } }
-        ).toArray();
-        for (const p of ls) {
-            const v = num(dig(p, 'listing', 'value')), s = num(dig(p, 'attributes', 'totalSurface'));
-            if (!v || !s || s <= 0) continue;
-            const it: PoolItem = { id: String(p._id), nb: (dig(p, 'address', 'neighborhood', 'id') as string) ?? null, ci: (dig(p, 'address', 'city', 'id') as string) ?? null, type: (p.type as string) ?? '—', surf: s, suites: num(dig(p, 'attributes', 'suites')), ppm: v / s };
-            idxPool(offByNb, offByCi, it);
+        for (const coll of ['mls', 'properties']) {
+            const cur = db.collection(coll).find(
+                { 'address.neighborhood.id': { $in: nbids }, 'status.last': 'published', 'listing.operation': 'sale', 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
+                { projection: { type: 1, 'address.neighborhood.id': 1, 'address.city.id': 1, 'listing.value': 1, 'attributes.totalSurface': 1, 'attributes.suites': 1 } }
+            );
+            for await (const p of cur) {
+                const v = num(dig(p, 'listing', 'value')), s = num(dig(p, 'attributes', 'totalSurface'));
+                if (!v || !s || s <= 0) continue;
+                const it: PoolItem = { id: String(p._id), nb: (dig(p, 'address', 'neighborhood', 'id') as string) ?? null, ci: (dig(p, 'address', 'city', 'id') as string) ?? null, type: (p.type as string) ?? '—', surf: s, suites: num(dig(p, 'attributes', 'suites')), ppm: v / s };
+                idxPool(offByNb, offByCi, it);
+            }
         }
     }
     const cloByNb = new Map<string, PoolItem[]>(), cloByCi = new Map<string, PoolItem[]>();

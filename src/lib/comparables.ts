@@ -12,8 +12,16 @@ export const SURF_TOL = 0.30, MIN_COMPS = 3;
 
 const median = (xs: number[]): number | null => { const s = xs.slice().sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
 
-// Indexa un item del pool por colonia y por ciudad (para el fallback).
+// Guarda de EXTREMOS: descarta $/m² físicamente imposibles antes de comparar. Portales externos
+// (p. ej. propiedadesDotCom) meten anuncios basura que llegan a promediar cientos de millones/m².
+// $1.5M MXN/m² es ~10× lo más caro real de México, así que esta banda no descarta ninguna propiedad
+// legítima — solo neutraliza outliers absurdos (clave en buckets chicos, donde uno solo movería la mediana).
+export const PPM_MIN = 1_000, PPM_MAX = 1_500_000;
+export const sanePpm = (p: number) => p >= PPM_MIN && p <= PPM_MAX;
+
+// Indexa un item del pool por colonia y por ciudad (para el fallback). Aplica la guarda de extremos.
 export const idxPool = (byNb: Map<string, PoolItem[]>, byCi: Map<string, PoolItem[]>, it: PoolItem) => {
+    if (!sanePpm(it.ppm)) return;
     if (it.nb) { const a = byNb.get(it.nb); if (a) a.push(it); else byNb.set(it.nb, [it]); }
     if (it.ci) { const a = byCi.get(it.ci); if (a) a.push(it); else byCi.set(it.ci, [it]); }
 };
