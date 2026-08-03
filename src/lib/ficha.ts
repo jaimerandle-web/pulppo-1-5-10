@@ -85,18 +85,18 @@ const COMP_PROJ = { 'listing.value': 1, 'listing.description': 1, attributes: 1,
 
 // Datos del inmueble analizado que necesita la sección "Qué te alcanza" (comparte renderFicha y la
 // página de "ver más"). Se deriva del documento de la propiedad.
-interface Subj { oid: ObjectId; typ: string | null; city: string | null; state: string | null; val: number | null; m2: number | null; ppm2: number | null; col: string | null; rec: number | null; lat: number | null; lng: number | null; myAmen: string[]; street: string | null }
+interface Subj { oid: ObjectId; typ: string | null; op: string; city: string | null; state: string | null; val: number | null; m2: number | null; ppm2: number | null; col: string | null; rec: number | null; lat: number | null; lng: number | null; myAmen: string[]; street: string | null }
 
 // Pool de comparables vivos (Pulppo + mercado MLS), con fallback colonia/ciudad→estado y sin la propia.
 const buildAlcPool = async (db: Awaited<ReturnType<typeof getDb>>, s: Subj): Promise<Comp[]> => {
     const live = async (geo: Document): Promise<Comp[]> =>
         (await db.collection('properties').find(
-            { 'status.last': 'published', 'listing.operation': 'sale', type: s.typ, ...geo, _id: { $ne: s.oid }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
+            { 'status.last': 'published', 'listing.operation': s.op, type: s.typ, ...geo, _id: { $ne: s.oid }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
             { projection: COMP_PROJ, limit: 200 }
         ).toArray()).map((e) => toComp(e, 'Pulppo'));
     const market = async (geo: Document): Promise<Comp[]> =>
         (await db.collection('mls').find(
-            { 'listing.operation': 'sale', type: s.typ, 'status.last': 'published', ...geo, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
+            { 'listing.operation': s.op, type: s.typ, 'status.last': 'published', ...geo, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
             { projection: { ...COMP_PROJ, 'import.url': 1 }, limit: 250 }
         ).toArray()).map((e) => toComp(e, 'MLS'));
     let poolC = s.city ? await live({ 'address.city.name': s.city }) : [];
@@ -303,10 +303,10 @@ const compTbl = (rows: Comp[]): string => {
 
 // "Con qué compite en la zona": propiedades Pulppo del mismo tipo VIVAS en la MISMA colonia (la zona real
 // para un broker, no el municipio). Conteo real sin tope; el orden por cercanía lo pone quien la llama.
-const fetchZoneComps = async (db: Awaited<ReturnType<typeof getDb>>, oid: ObjectId, typ: string | null, col: string | null): Promise<Comp[]> => {
+const fetchZoneComps = async (db: Awaited<ReturnType<typeof getDb>>, oid: ObjectId, typ: string | null, col: string | null, op: string): Promise<Comp[]> => {
     if (!col || !typ) return [];
     const docs = await db.collection('properties').find(
-        { 'status.last': 'published', 'listing.operation': 'sale', type: typ, 'address.neighborhood.name': col, _id: { $ne: oid }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
+        { 'status.last': 'published', 'listing.operation': op, type: typ, 'address.neighborhood.name': col, _id: { $ne: oid }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
         { projection: COMP_PROJ, limit: 500 }
     ).toArray();
     return docs.map((e) => toComp(e, 'Pulppo'));
@@ -336,6 +336,9 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const city = (dig(P, 'address', 'city', 'name') as string) ?? null;
     const state = (dig(P, 'address', 'state', 'name') as string) ?? null;
     const typ = (P.type as string) ?? null;
+    const op = (dig(P, 'listing', 'operation') as string) ?? 'sale';   // venta/renta: TODO se compara contra la misma operación
+    const isRent = op === 'rent';
+    const opVerb = isRent ? 'rentar' : 'vender';
     const ppm2 = val && m2 ? val / m2 : null;
     const code = (P.internalId as string) ?? id;
     const rec = num(dig(P, 'attributes', 'suites'));
@@ -468,7 +471,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     // cierres reales de la comunidad (mismo tipo), ampliando colonia→ciudad→estado hasta n>=5
     const cierres = async (geo: Document): Promise<{ price: number; ppm2: number | null; m2: number | null }[]> => {
         const ps = await db.collection('properties').aggregate([
-            { $match: { 'status.last': 'completed', 'listing.operation': 'sale', type: typ, ...geo } },
+            { $match: { 'status.last': 'completed', 'listing.operation': op, type: typ, ...geo } },
             { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', as: 'op' } },
             { $limit: 400 }
         ]).toArray();
@@ -484,13 +487,13 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     if (cz.length < 5 && state) { scope = state; cz = await cierres({ 'address.state.name': state }); }
 
     // comparables vivos (Pulppo + mercado MLS) + "qué te alcanza"
-    const subj: Subj = { oid, typ, city, state, val, m2, ppm2, col, rec, lat: myLat, lng: myLng, myAmen, street };
+    const subj: Subj = { oid, typ, op, city, state, val, m2, ppm2, col, rec, lat: myLat, lng: myLng, myAmen, street };
     const alcPool = await buildAlcPool(db, subj);
     const knownCols = knownColsOf(alcPool, subj);
     // Comparables Pulppo del mismo tipo en la MISMA colonia, ordenados por cercanía en precio+tamaño. En la
     // ficha se muestran los 6 más parecidos; el conteo REAL (compsAll) alimenta el KPI y el enlace "ver más".
     const compDist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
-    const compsAll = (await fetchZoneComps(db, oid, typ, col)).sort((a, b) => compDist(a) - compDist(b));
+    const compsAll = (await fetchZoneComps(db, oid, typ, col, op)).sort((a, b) => compDist(a) - compDist(b));
     const comps = compsAll.slice(0, 6);
     // "Qué te alcanza por el mismo presupuesto": ranking por qué tan ad-hoc es, con los "solo colonia" al final → top 10 en la ficha, resto en /comparables.
     const alcRanked = orderNamedFirst(rankAlcance(alcPool, subj), knownCols);
@@ -501,7 +504,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const alcPpm2 = ppm2 ? alcPool.filter((c) => c.ppm2 && c.ppm2 >= 0.85 * ppm2 && c.ppm2 <= 1.15 * ppm2).sort((a, b) => Math.abs((a.ppm2 as number) - ppm2) - Math.abs((b.ppm2 as number) - ppm2)).slice(0, 6) : [];
     const compPpm = comps.map((c) => c.ppm2).filter((x): x is number => x != null);
     const avgPpm = compPpm.length ? compPpm.reduce((a, b) => a + b, 0) / compPpm.length : null;
-    const zonaComp = col ? await db.collection('properties').countDocuments({ 'status.last': 'published', 'listing.operation': 'sale', type: typ, 'address.neighborhood.name': col, _id: { $ne: oid } }) : 0;
+    const zonaComp = col ? await db.collection('properties').countDocuments({ 'status.last': 'published', 'listing.operation': op, type: typ, 'address.neighborhood.name': col, _id: { $ne: oid } }) : 0;
 
     // ---- Insights de la zona: demanda (búsquedas 6m) vs oferta (mercado MLS). Colonia→ciudad; se oculta si es flaca. ----
     const SIX = new Date(now - 182 * 86400000);
@@ -510,7 +513,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const zoneStats = async (demField: string, demVal: string, ofeField: string, ofeVal: string) => {
         const [dem, ofe] = await Promise.all([
             db.collection('searches').countDocuments({ [demField]: demVal, createdAt: { $gte: SIX } }),
-            db.collection('mls').countDocuments({ 'listing.operation': 'sale', type: typ, 'status.last': 'published', [ofeField]: ofeVal })
+            db.collection('mls').countDocuments({ 'listing.operation': op, type: typ, 'status.last': 'published', [ofeField]: ofeVal })
         ]);
         return { dem, ofe };
     };
@@ -522,9 +525,9 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const zoneMed = zppms.length ? median(zppms) : null;
     let zread = '';
     if (zonaLbl) {
-        if (zratio >= 1) zread = 'Alta demanda y oferta limitada: buen momento para vender, debería moverse rápido.';
+        if (zratio >= 1) zread = `Alta demanda y oferta limitada: buen momento para ${opVerb}, debería moverse rápido.`;
         else if (zratio >= 0.3) zread = 'Demanda y oferta equilibradas: cuida precio y calidad del anuncio para destacar.';
-        else zread = 'Oferta amplia frente a la demanda: diferénciate en precio o multimedia para acelerar la venta.';
+        else zread = `Oferta amplia frente a la demanda: diferénciate en precio o multimedia para acelerar la ${isRent ? 'renta' : 'venta'}.`;
         // La comparación de tu $/m² vs. oferta/cierres vive en las barras de "Precio $/m²", no aquí (evitar duplicado).
     }
 
@@ -615,7 +618,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const soldMed = soldPpms.length ? median(soldPpms) : null;
     const soldAvg = avg(soldPpms);
     const soldRead = soldMed && ppm2 ? `Tu $/m² (${money(ppm2)}) está ${Math.abs(Math.round((ppm2 / soldMed - 1) * 100))}% ${ppm2 >= soldMed ? 'arriba' : 'abajo'} de la mediana de cierre de la zona.` : '';
-    const opTxt = dig(P, 'listing', 'operation') === 'sale' ? 'Venta' : (dig(P, 'listing', 'operation') as string) ?? '';
+    const opTxt = op === 'sale' ? 'Venta' : op === 'rent' ? 'Renta' : op;
 
     // ---- Difusión y promoción: timeline i24 + leads por categoría + estado ML ----
     const PCOL: Record<PromoCat, string> = { Super: YEL, Destacado: SEA, Simple: GRY, Offline: RED, Otro: '#E3E3E3' };
@@ -823,11 +826,12 @@ export async function renderComparables(id: string, opts?: { token?: string; mod
     const city = (dig(P, 'address', 'city', 'name') as string) ?? null;
     const state = (dig(P, 'address', 'state', 'name') as string) ?? null;
     const typ = (P.type as string) ?? null;
+    const op = (dig(P, 'listing', 'operation') as string) ?? 'sale';
     const ppm2 = val && m2 ? val / m2 : null;
     const code = (P.internalId as string) ?? id;
     const myLoc = (dig(P, 'address', 'location', 'coordinates') as number[]) || [];
     const subj: Subj = {
-        oid, typ, city, state, val, m2, ppm2, col,
+        oid, typ, op, city, state, val, m2, ppm2, col,
         rec: num(dig(P, 'attributes', 'suites')),
         lat: typeof myLoc[1] === 'number' ? myLoc[1] : null, lng: typeof myLoc[0] === 'number' ? myLoc[0] : null,
         myAmen: svcAmen(P), street
@@ -839,7 +843,7 @@ export async function renderComparables(id: string, opts?: { token?: string; mod
     if (opts?.mode === 'zona') {
         // Con qué compite en la zona: TODAS las Pulppo del mismo tipo en la MISMA colonia, por cercanía.
         const compDist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
-        const compsAll = (await fetchZoneComps(db, oid, typ, col)).sort((a, b) => compDist(a) - compDist(b));
+        const compsAll = (await fetchZoneComps(db, oid, typ, col, op)).sort((a, b) => compDist(a) - compDist(b));
         eyebrow = 'Con qué compite en la zona';
         intro = `${compsAll.length} propiedades del mismo tipo publicadas en ${esc(col)} (tu colonia), ordenadas de más a menos parecidas a tu inmueble.`;
         inner = `<table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(compsAll)}</table>`;
