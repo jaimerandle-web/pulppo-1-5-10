@@ -553,12 +553,14 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
         else cand.push([4, `${meses} meses publicada sin ofertas: probable precio fuera de mercado. Usar ACM y cierres de la zona como palanca con el propietario.`]);
     }
     if (vis >= 3 && ofertas === 0) cand.push([5, 'Visitas sin ofertas: reforzar seguimiento post-visita y manejo de objeciones; acordar precio con el propietario antes de mostrar.']);
-    if (!SUPER.has(cat ?? '')) cand.push([6, 'Subir el anuncio a Super destacado para más exposición.']);
-    if (q != null && q < 85) cand.push([7, `Mejorar la calidad del anuncio (${q.toFixed(0)}/100): i24 penaliza en ranking los anuncios incompletos.`]);
+    // Destacar (aviso pagado) SOLO en la ficha completa 1·5·10; en los reportes generales no se habla de destacados.
+    if (!simple && !SUPER.has(cat ?? '')) cand.push([6, 'Subir el anuncio a Super destacado para más exposición.']);
+    if (q != null && q < 85) cand.push([7, `Mejorar la calidad del anuncio (${q.toFixed(0)}/100): ${simple ? 'los anuncios incompletos rankean más abajo y reciben menos contactos' : 'i24 penaliza en ranking los anuncios incompletos'}.`]);
     if (words > 200) cand.push([8, 'Descripción muy larga: simplificar para no confundir al comprador.']);
     if (pics < 12) cand.push([9, `Subir más fotos: hay ${pics}, se recomiendan 12+.`]);
     if (!video) cand.push([9, 'Agregar video de la propiedad.']);
-    if ((i24Status && i24Status !== 'ONLINE') || (mlStatus && mlStatus.toUpperCase() !== 'ONLINE')) cand.push([10, `Verificar difusión: i24 ${i24Status || '—'} · ML ${mlStatus || '—'}. Reactivar portales apagados.`]);
+    // Estado de portales (i24/ML) solo en la ficha completa 1·5·10; en la general no se detallan portales.
+    if (!simple && ((i24Status && i24Status !== 'ONLINE') || (mlStatus && mlStatus.toUpperCase() !== 'ONLINE'))) cand.push([10, `Verificar difusión: i24 ${i24Status || '—'} · ML ${mlStatus || '—'}. Reactivar portales apagados.`]);
     if (zonaComp >= 20) cand.push([11, `Alta competencia en la zona (${zonaComp} publicadas del mismo tipo): diferenciar con mejor multimedia o precio.`]);
     const plan = cand.sort((a, b) => a[0] - b[0]).slice(0, 6).map(([, t]) => t);
     if (!plan.length) plan.push('Anuncio saludable. Mantener seguimiento de leads y visitas.');
@@ -794,7 +796,7 @@ ${secFunnel}
 .ficha-root .ppmbars{display:flex;flex-direction:column;gap:6px;margin:4px 0}.ficha-root .ppmrow{display:flex;align-items:center;font-size:11px}.ficha-root .ppml{width:160px;color:${BLK}}.ficha-root .ppmtrack{flex:1;background:${LGT};height:16px;margin:0 8px}.ficha-root .ppmbar{display:block;height:16px}.ficha-root .ppmv{width:104px;text-align:right;font-weight:700;white-space:nowrap}.ficha-root .ppmnote{font-size:11px;color:${BLK};margin-top:8px;line-height:1.5}
 .ficha-root ul{margin-left:16px;list-style:disc}.ficha-root li{margin:4px 0;list-style:disc}.ficha-root .two{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:8px}.ficha-root .box{background:${LGT};padding:16px 18px}
 .ficha-root .foot{margin-top:22px;border-top:1px solid ${LGT};padding-top:8px;font-size:9px;color:${GRY}}
-@media print{.ficha-root{margin:0;padding:24px 30px}.fx-noprint{display:none!important}@page{size:Letter;margin:0}}
+@media print{.ficha-root{margin:0;padding:22px 34px}.fx-noprint{display:none!important}.ficha-root .sec,.ficha-root .box,.ficha-root table,.ficha-root .ppmbars,.ficha-root .grid2>*{break-inside:avoid;page-break-inside:avoid}.ficha-root .eyebrow,.ficha-root h1,.ficha-root h2{break-after:avoid;page-break-after:avoid}.ficha-root tr,.ficha-root .srow,.ficha-root .fstage,.ficha-root .ppmrow{break-inside:avoid;page-break-inside:avoid}@page{size:Letter;margin:10mm 0}}
 </style>
 <div class="ficha-root">
   <div class="header"><div>
@@ -865,7 +867,7 @@ export async function renderComparables(id: string, opts?: { token?: string; mod
 .ficha-root table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}.ficha-root th,.ficha-root td{text-align:left;padding:5px 6px;border-bottom:1px solid ${LGT};vertical-align:top}
 .ficha-root td.nw{white-space:nowrap}.ficha-root th{font-weight:700;color:${GRY};text-transform:uppercase;font-size:9px;letter-spacing:.06em}
 .ficha-root .box{background:${LGT};padding:16px 18px;margin-top:16px}.ficha-root ul{margin-left:16px}.ficha-root li{margin:4px 0;list-style:disc}
-@media print{.ficha-root{margin:0;padding:24px 30px}.fx-noprint{display:none!important}@page{size:Letter;margin:0}}
+@media print{.ficha-root{margin:0;padding:22px 34px}.fx-noprint{display:none!important}.ficha-root .sec,.ficha-root .box,.ficha-root table,.ficha-root .ppmbars,.ficha-root .grid2>*{break-inside:avoid;page-break-inside:avoid}.ficha-root .eyebrow,.ficha-root h1,.ficha-root h2{break-after:avoid;page-break-after:avoid}.ficha-root tr,.ficha-root .srow,.ficha-root .fstage,.ficha-root .ppmrow{break-inside:avoid;page-break-inside:avoid}@page{size:Letter;margin:10mm 0}}
 </style>
 <div class="ficha-root">
   <div class="eyebrow" style="color:${SEA}">${eyebrow} · ${esc(code)}</div>
