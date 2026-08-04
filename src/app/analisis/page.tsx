@@ -4,12 +4,15 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Combobox, Dropdown, Select } from '@/components/inputs';
 import type { AnalisisData } from '@/lib/analisis';
-import { GlosarioView, InventarioView, PrecioView, FunnelView, RecoView, DestacadosView, YoyView, Top10View } from './views';
+import { CIERRES_WIN, DEMANDA_WIN, DESEMPENO_WIN, COMPARAR_OPTS, mesesOpts } from '@/lib/ventanas';
+import { GlosarioView, InventarioView, PrecioView, FunnelView, RecoView, DestacadosView, YoyView, Top10View, AsesoresView } from './views';
 
 /* ------------------------------------------------------------------ *
  * /analisis — "Análisis general" (configurador del reporte ampliado)
- * Inventario + Precio×calidad ya leen datos reales (/api/analisis).
- * YoY / Top 10 / destacados / funnel: pendientes de portar.
+ * Todas las secciones leen datos en vivo de Mongo vía /api/analisis.
+ * Las fechas van en DOS bloques estandarizados (ver src/lib/ventanas.ts):
+ *   · Desempeño  = tu operación (funnel, asesores, leads, sin actividad)
+ *   · Comparables = el mercado  (cierres, demanda; la oferta es de hoy)
  * ------------------------------------------------------------------ */
 
 const SEA = '#529999', SEA_D = '#2f6b6b', SOFT = '#212322', YEL = '#F6BE00', GRAY = '#B7B7B7', RED = '#A52003';
@@ -25,6 +28,7 @@ const SECCIONES = [
     { id: 'precio', label: 'Precio × calidad + leads', needs: null },
     { id: 'destacados', label: 'Cómo se ha destacado', needs: 'destacados' },
     { id: 'funnel', label: 'Funnel comercial', needs: null },
+    { id: 'asesores', label: 'Desempeño por asesor', needs: null },
     { id: 'yoy', label: 'Comparación de períodos', needs: null },
     { id: 'top10', label: 'Top 10 críticas', needs: null },
     { id: 'reco', label: 'Recomendaciones', needs: null },
@@ -91,6 +95,8 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 
 type Row = { kam?: string; inmobiliaria?: string | null };
 
+const MESES_OPTS = mesesOpts();
+
 export default function AnalisisGeneral() {
     const router = useRouter();
     const [allInmos, setAllInmos] = useState<string[]>([]);
@@ -101,11 +107,14 @@ export default function AnalisisGeneral() {
     const [kam, setKam] = useState('(todos)');
     const [inmo, setInmo] = useState('(todas)');
     const [operacion, setOperacion] = useState('Ambas');
+    // COMPARABLES (mercado): cierres + demanda. La oferta es foto de hoy, no se configura.
     const [ventCierres, setVentCierres] = useState('Últimos 24 meses');
-    const [ventDemanda, setVentDemanda] = useState('Últimos 12 meses');
-    const [ventLeads, setVentLeads] = useState('YTD 2026');
-    const [comparacion, setComparacion] = useState('Año vs año (YTD)');
-    const [zombie, setZombie] = useState('Últimos 90 días');
+    const [ventDemanda, setVentDemanda] = useState('Últimos 3 meses');
+    // DESEMPEÑO (tu operación): una ventana + una base de comparación. Manda el funnel, los
+    // asesores, los leads por propiedad y el "sin actividad" (antes eran 3 controles sueltos).
+    const [desempeno, setDesempeno] = useState('Año en curso (YTD)');
+    const [desempenoMes, setDesempenoMes] = useState(MESES_OPTS[1].v);
+    const [comparar, setComparar] = useState('Mismo período del año pasado');
     const [referencias, setReferencias] = useState<string[]>(['ACM (valor estimado)', 'Oferta de zona', 'Cierres reales', 'Qué te alcanza por el mismo precio']);
     const [destacados, setDestacados] = useState(false);
     const [secciones, setSecciones] = useState<string[]>(
@@ -167,7 +176,7 @@ export default function AnalisisGeneral() {
         try {
             const res = await fetch('/api/analisis', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inmo, operacion, ventDemanda, ventCierres, referencias, ventLeads, comparacion, zombie, mlsGeneral }),
+                body: JSON.stringify({ inmo, operacion, ventDemanda, ventCierres, referencias, desempeno, desempenoMes, comparar, mlsGeneral }),
             });
             if (res.status === 401) { router.push('/login'); return; }
             const d = await res.json();
@@ -178,7 +187,7 @@ export default function AnalisisGeneral() {
         } finally { setLoading(false); }
     }
     // La config cambió → el preview actual queda obsoleto.
-    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventCierres, referencias, ventLeads, comparacion, zombie, mlsGeneral]);
+    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventCierres, referencias, desempeno, desempenoMes, comparar, mlsGeneral]);
 
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
@@ -194,7 +203,7 @@ export default function AnalisisGeneral() {
                     </div>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-500">
-                    <span className="rounded-[2px] bg-[#F6BE00]/20 px-2.5 py-1 font-semibold text-[#8a6d00]">Vista previa · datos de ejemplo</span>
+                    <span className="rounded-[2px] bg-[#F6BE00]/20 px-2.5 py-1 font-semibold text-[#8a6d00]">Vista previa · datos en vivo</span>
                     <a href="/" className="rounded-[2px] border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">← Inicio</a>
                 </div>
             </header>
@@ -225,24 +234,31 @@ export default function AnalisisGeneral() {
                         </div>
                     </Card>
 
-                    <Card title="2 · Rangos de comparables (fechas)">
+                    <Card title="2 · Desempeño (tu operación)"
+                        hint="Manda el funnel comercial, el desempeño por asesor, los leads por propiedad y el “sin actividad”. Es la única ventana que se compara contra otro período.">
                         <div className="flex flex-col gap-3.5">
-                            <Field label="Comparables de cierres">
-                                <Select value={ventCierres} onChange={setVentCierres} options={['Últimos 12 meses', 'Últimos 24 meses', 'Últimos 36 meses']} />
+                            <Field label="Período">
+                                <Select value={desempeno} onChange={setDesempeno} options={DESEMPENO_WIN} />
                             </Field>
-                            <Field label="Comparación de períodos" hint="Alimenta la sección “Comparación de períodos”.">
-                                <Select value={comparacion} onChange={setComparacion}
-                                    options={['Año vs año (YTD)', 'Mismo mes, año vs año', 'Mes vs mes anterior', 'Trimestre vs anterior', 'Últimos 30 días vs 30 previos', 'Últimos 90 días vs 90 previos']} />
+                            {desempeno === 'Mes específico' && (
+                                <Field label="Mes">
+                                    <Select value={desempenoMes} onChange={setDesempenoMes} options={MESES_OPTS.map((m) => ({ value: m.v, label: m.l }))} />
+                                </Field>
+                            )}
+                            <Field label="Comparar contra" hint="Alimenta la sección “Comparación de períodos”.">
+                                <Select value={comparar} onChange={setComparar} options={COMPARAR_OPTS} />
                             </Field>
-                            <Field label="Demanda de zona (búsquedas)">
-                                <Select value={ventDemanda} onChange={setVentDemanda} options={['Últimos 6 meses', 'Últimos 12 meses', 'YTD 2026']} />
+                        </div>
+                    </Card>
+
+                    <Card title="3 · Comparables (el mercado)"
+                        hint="Para comparar precio, competencia y demanda. La oferta (lo que se pide) es siempre una foto de hoy: no se guarda su historia.">
+                        <div className="flex flex-col gap-3.5">
+                            <Field label="Cierres comparables" hint="Mínimo 6 meses: los cierres son pocos y una ventana corta no junta comparables suficientes.">
+                                <Select value={ventCierres} onChange={setVentCierres} options={CIERRES_WIN} />
                             </Field>
-                            <Field label="Desempeño de leads (inventario)"
-                                hint="Ventana de los leads por propiedad (zonas, matriz, Top 10). Alíneala con la demanda para leer las dos comparables.">
-                                <Select value={ventLeads} onChange={setVentLeads} options={['Últimos 30 días', 'Últimos 90 días', 'Últimos 6 meses', 'YTD 2026', 'Últimos 12 meses']} />
-                            </Field>
-                            <Field label="Zombie · sin leads en">
-                                <Select value={zombie} onChange={setZombie} options={['Últimos 30 días', 'Últimos 90 días', 'Últimos 6 meses', 'Totales']} />
+                            <Field label="Demanda de zona (búsquedas)" hint="Mínimo 1 mes.">
+                                <Select value={ventDemanda} onChange={setVentDemanda} options={DEMANDA_WIN} />
                             </Field>
                         </div>
                     </Card>
@@ -264,7 +280,7 @@ export default function AnalisisGeneral() {
                         </div>
                     </Card>
 
-                    <Card title="3 · Secciones a incluir" hint="Marca qué páginas entran al documento.">
+                    <Card title="4 · Secciones a incluir" hint="Marca qué páginas entran al documento.">
                         <div className="flex flex-col gap-2.5">
                             <div className="pb-1"><Toggle on={destacados} onChange={setDestacados} label="Incluir capa de destacados (ampliado vs. desempeño)" /></div>
                             {SECCIONES.map((s) => {
@@ -293,7 +309,7 @@ export default function AnalisisGeneral() {
                         </div>
                     </Card>
 
-                    <Card title="4 · Recomendaciones">
+                    <Card title="5 · Recomendaciones">
                         <div className="flex flex-col gap-3.5">
                             <Field label="Enfoque">
                                 <Chips options={['Precio', 'Ficha', 'Diversificar canales', 'Visibilidad']} value={recoEnfoque} onChange={setRecoEnfoque} />
@@ -346,9 +362,17 @@ export default function AnalisisGeneral() {
                             {data?.company || (inmo === '(todas)' ? 'Nombre de la inmobiliaria' : inmo)}
                         </h2>
                         <p className="mt-1 text-xs" style={{ color: GRAY }}>
-                            {operacion} · publicadas hoy · demanda {ventDemanda.toLowerCase()}
+                            {operacion} · publicadas hoy
                             {benchmark !== 'Ninguno' && ` · ${benchmark}`}
                         </p>
+                        {/* El reporte declara qué está comparando, sin que haya que adivinarlo. */}
+                        {data && (
+                            <p className="mt-2 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>
+                                <b>Desempeño:</b> {data.leadsLabel}
+                                {data.hasComp ? <> · comparado contra <b>{data.compLabels.a}</b></> : <> · <b>sin comparación</b></>}
+                                {' · '}<b>Comparables:</b> cierres {data.cierresLabel} · demanda {data.demandaLabel} · oferta hoy
+                            </p>
+                        )}
 
                         <div className="mt-5 flex gap-2">
                             {(data
@@ -403,6 +427,7 @@ export default function AnalisisGeneral() {
                                         : data && s.id === 'precio' ? <PrecioView d={data} />
                                         : data && s.id === 'destacados' ? <DestacadosView d={data} />
                                         : data && s.id === 'funnel' ? <FunnelView d={data} portalMode={portalMode} portales={portales} />
+                                        : data && s.id === 'asesores' ? <AsesoresView d={data} />
                                         : data && s.id === 'yoy' ? <YoyView d={data} />
                                         : data && s.id === 'top10' ? <Top10View d={data} />
                                         : data && s.id === 'reco' ? <RecoView d={data} enfoque={recoEnfoque} tono={recoTono} cantidad={recoCantidad} />
@@ -418,7 +443,7 @@ export default function AnalisisGeneral() {
                         <p className="mt-6 border-t border-neutral-100 pt-3 text-[9px] text-neutral-400">
                             {data
                                 ? `Datos en vivo de Mongo · corte ${new Date(data.corte).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })} · demanda = búsquedas de compradores en tus zonas (${ventDemanda.toLowerCase()}).`
-                                : 'Inventario y Precio×calidad ya leen datos reales; el resto de secciones se conectan por fases.'}
+                                : 'Elige una inmobiliaria y presiona Generar: todas las secciones leen datos en vivo de Mongo.'}
                         </p>
                     </div>
                 </div>
@@ -440,7 +465,8 @@ function previewLine(id: string, c: {
         case 'precio': return `Matriz precio × calidad × leads usando ${c.referencias.join(', ') || 'referencias de precio'}. Estado de precio del ACM.`;
         case 'destacados': return 'Cómo se ha destacado el inventario y el lift de leads (L/L con vs. sin destacado).';
         case 'funnel': return `Embudo lead → visita → cierre; leads por fuente: ${fuentes}.`;
-        case 'yoy': return 'Comparación año contra año (2025 vs 2026) de inventario, leads y comisión.';
+        case 'asesores': return 'Funnel por asesor: leads, respuesta, visitas, ofertas, cierres, comisión y ticket (venta y renta por separado).';
+        case 'yoy': return 'La ventana de desempeño contra su base: inventario, leads, cierres y comisión.';
         case 'top10': return 'Propiedades con alta demanda y pocos leads, con la palanca accionable de cada una.';
         case 'reco': return `${c.recoCantidad} recomendaciones (${c.recoEnfoque.join(', ').toLowerCase() || 'sin enfoque'}), tono ${c.recoTono.toLowerCase()}.`;
         case 'glosario': return 'Señales de precio y glosario de términos para leer el reporte.';

@@ -68,6 +68,15 @@ src/lib/audience.ts    Generador de base en vivo: buildAudience(id) cruza coloni
                        contra la DEMANDA (leads.contact.email; contacts.email está vacío). Cascadeo
                        hasta MIN=300 correos, dedup por email, excluye internos. zona_map.json = mapa
                        ciudad→zona (extraído del trabajo de junio) para el nivel más amplio.
+src/lib/analisis.ts    Motor del análisis de inventario, COMPARTIDO por /analisis (KAM) y /mb (Master
+                       Brokers): inventario por zona/ticket/tipo, precio×calidad, funnel comercial,
+                       desempeño por asesor, comparación de períodos, Top 10, recomendaciones.
+                       Las fechas están estandarizadas en DOS ventanas — comparables (mercado) y
+                       desempeño (tu operación). Ver ANALISIS.md: es el doc canónico, léelo antes
+                       de tocar fechas, atribución de asesores o secciones.
+src/lib/ventanas.ts    Opciones de las ventanas de fecha. Vive aparte de analisis.ts porque los
+                       formularios son 'use client' y no pueden importar valores de un módulo que
+                       importa mongodb (se lo llevarían al bundle del navegador).
 src/lib/kam.ts         Lookup estático inmobiliaria → KAM (generado del Sheet TARGETS).
 src/lib/access.ts      Allowlist cerrado de emails (hardcodeado; env ALLOWED_EMAILS lo pisa si está seteada).
 src/lib/firebase.ts    Firebase Auth de Pulppo (config JSON en NEXT_PUBLIC_FIREBASE).
@@ -124,7 +133,13 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
 
 **Fase 2 requiere** que el `SENDGRID_API_KEY` tenga scope de **Marketing Campaigns** y un **Sender verificado**.
 
-## Pendientes conocidos (julio 2026)
+## Pendientes conocidos (agosto 2026)
 
 - El auto-deploy por push de Git puede quedar bloqueado si el autor del commit no matchea un miembro
   del team de Vercel; el deploy manual por CLI (`npx vercel deploy --prod --yes`) siempre funciona.
+- **La mac de Ale no tiene Node**: aquí no corre `npm run build`, `npm run dev` ni `npx vercel`.
+  El build real lo hace Vercel al pushear → **revisar ahí el resultado**. Para verificar sin Node:
+  lógica de datos con réplicas en Python (`~/Documents/Pulppo/.venv-mongo/bin/python` + `pymongo`,
+  Mongo read-only) y JS puro con `osascript -l JavaScript`. Ver ANALISIS.md §4.
+- `/analisis` tiene controles que aún no afectan el output (referencias ACM y "qué te alcanza",
+  audiencia, benchmark vs mejores inmobiliarias). Lista en ANALISIS.md §5.

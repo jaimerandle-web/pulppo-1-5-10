@@ -246,7 +246,8 @@ const alcGeneralInsights = (ranked: Comp[], s: Subj): string[] => {
     if (!ranked.length) return [];
     const out: string[] = [];
     const sc = ranked.filter((c) => sameCol(s, c)).length;
-    out.push(`${ranked.length} opción${ranked.length === 1 ? '' : 'es'} en tu mismo rango de presupuesto (±10%)${sc ? `, ${sc} en tu misma colonia` : ''}.`);
+    // "opciones" pierde el acento en plural (opción → opciones): no se puede pluralizar con sufijo.
+    out.push(`${ranked.length} ${ranked.length === 1 ? 'opción' : 'opciones'} en tu mismo rango de presupuesto (±10%)${sc ? `, ${sc} en tu misma colonia` : ''}.`);
     if (s.m2) {
         const big = ranked.filter((c) => c.m2 && c.m2 > s.m2! * 1.05).length, small = ranked.filter((c) => c.m2 && c.m2 < s.m2! * 0.95).length;
         out.push(`Por tu presupuesto: ${big} son más grandes y ${small} más chicas que tus ${s.m2} m².`);

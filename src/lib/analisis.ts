@@ -49,19 +49,44 @@ const QROWS = ['Alta', 'Media', 'Baja'];
 const PCOLS = ['Óptimo', 'No competitivo', 'Fuera de mercado', 'Sin referencia'];
 
 // ---------- config de entrada ----------
+// DOS conceptos de fecha, separados a propósito (estandarización pedida por Ale, ago-2026):
+//
+//   1) COMPARABLES = el MERCADO. Sirve para comparar precio, cuánta competencia tienes y cuánta
+//      gente está buscando. Cada pieza tiene su propia naturaleza temporal:
+//        · Oferta (lo que se pide)  → FOTO DE HOY, no configurable: no guardamos la historia
+//                                     del asking, solo lo que está publicado hoy.
+//        · Cierres (lo que se vende)→ mínimo 6 meses: los cierres son pocos y una ventana corta
+//                                     no junta comparables suficientes.
+//        · Demanda (búsquedas)      → mínimo 1 mes.
+//
+//   2) DESEMPEÑO = TU OPERACIÓN. Alimenta el funnel comercial, los asesores, los leads por
+//      propiedad y el "sin actividad". Es UNA ventana (mes actual, mes anterior, un mes
+//      específico, últimos 3/6/12 meses, año en curso) + UNA base contra la cual compararla.
+//
+// Antes esto vivía en 4 controles sueltos ("ventana de análisis", "comparación de períodos",
+// "desempeño de leads", "zombie") que se pisaban entre sí. Ahora es: comparables + desempeño.
 export interface AnalisisConfig {
     inmo?: string;                // nombre (regex case-insensitive) — o usa companyId directo
     companyId?: string;           // ObjectId directo (para /mb, scoped por la liga): salta resolveCompany
     audiencia?: 'kam' | 'mb';     // 'kam' (default) = interno; 'mb' = hacia afuera (sin destacados/OKR internos)
     operacion?: string;           // 'Ambas' | 'Venta' | 'Renta'
-    ventDemanda?: string;         // 'Últimos 6 meses' | 'Últimos 12 meses' | 'YTD 2026'
-    ventCierres?: string;         // ventana de comparables de cierres: 'Últimos 12/24/36 meses'
+    // --- COMPARABLES (mercado) ---
+    ventCierres?: string;         // ver CIERRES_WIN (mín. 6 meses)
+    ventDemanda?: string;         // ver DEMANDA_WIN (mín. 1 mes)
     referencias?: string[];       // qué referencias mostrar: 'Oferta de zona' | 'Cierres reales' | ...
-    ventLeads?: string;           // ventana de leads: 'Últimos 30 días' | '90 días' | '6 meses' | 'YTD 2026' | '12 meses'
-    comparacion?: string;         // tipo de comparación de períodos (ver compRanges)
-    zombie?: string;              // ventana zombie: 'Últimos 30 días' | '90 días' | '6 meses' | 'Totales'
     mlsGeneral?: boolean;         // oferta/zona contra el MLS i24 completo en vez de la red Pulppo
+    // --- DESEMPEÑO (tu operación) ---
+    desempeno?: string;           // ver DESEMPENO_WIN
+    desempenoMes?: string;        // 'YYYY-MM' cuando desempeno === 'Mes específico'
+    comparar?: string;            // ver COMPARAR_OPTS
+    // --- legacy (formularios anteriores): se mapean a desempeno/comparar ---
+    ventLeads?: string;
+    comparacion?: string;
+    zombie?: string;
 }
+
+// Las opciones de los selectores viven en src/lib/ventanas.ts (sin dependencias, para que los
+// formularios 'use client' las puedan importar sin arrastrar el driver de mongodb al navegador).
 
 // clasificador de fuente con etiquetas limpias (alineadas a los chips del form)
 const srcLabel = (s: unknown): string => {
@@ -79,39 +104,97 @@ const srcLabel = (s: unknown): string => {
     return 'Otros';
 };
 
-// Tipos de comparación de períodos (para el selector del form).
-export const COMP_TYPES = [
-    'Año vs año (YTD)', 'Mismo mes, año vs año', 'Mes vs mes anterior',
-    'Trimestre vs anterior', 'Últimos 30 días vs 30 previos', 'Últimos 90 días vs 90 previos',
-];
-// Dado el tipo y "hoy", devuelve los dos rangos: A = base (anterior), B = actual.
-function compRanges(tipo: string, now: Date): { aStart: Date; aEnd: Date; bStart: Date; bEnd: Date; labelA: string; labelB: string } {
-    const M = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const addDays = (dt: Date, n: number) => { const x = new Date(dt); x.setUTCDate(x.getUTCDate() + n); return x; };
-    const addMonths = (dt: Date, n: number) => { const x = new Date(dt); x.setUTCMonth(x.getUTCMonth() + n); return x; };
-    const addYears = (dt: Date, n: number) => { const x = new Date(dt); x.setUTCFullYear(x.getUTCFullYear() + n); return x; };
-    const mStart = (dt: Date) => new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), 1));
-    const y = now.getUTCFullYear();
-    if (tipo === 'Últimos 30 días vs 30 previos')
-        return { bStart: addDays(now, -30), bEnd: now, aStart: addDays(now, -60), aEnd: addDays(now, -30), labelB: 'Últimos 30d', labelA: '30d previos' };
-    if (tipo === 'Últimos 90 días vs 90 previos')
-        return { bStart: addDays(now, -90), bEnd: now, aStart: addDays(now, -180), aEnd: addDays(now, -90), labelB: 'Últimos 90d', labelA: '90d previos' };
-    if (tipo === 'Mes vs mes anterior') {
-        const curM = mStart(now), bS = addMonths(curM, -1), aS = addMonths(curM, -2);
-        return { bStart: bS, bEnd: curM, aStart: aS, aEnd: addMonths(curM, -1), labelB: `${M[bS.getUTCMonth()]} ${bS.getUTCFullYear()}`, labelA: `${M[aS.getUTCMonth()]} ${aS.getUTCFullYear()}` };
+// ---------- ventana de DESEMPEÑO + su base de comparación ----------
+const MES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+type Rng = { start: Date; end: Date; label: string };
+// 'month' = la ventana es un mes de calendario (su comparación natural es el mes anterior);
+// 'span'  = la ventana es un tramo de N días/meses (su comparación natural es el tramo previo).
+type RngKind = 'month' | 'span';
+const mStartUTC = (y: number, m: number) => new Date(Date.UTC(y, m, 1));
+const addMonthsUTC = (d: Date, n: number) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()));
+const addYearsUTC = (d: Date, n: number) => new Date(Date.UTC(d.getUTCFullYear() + n, d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()));
+const mesLabel = (d: Date) => `${MES_L[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+
+// La ventana de desempeño elegida. `end` es exclusivo.
+// `meses` = largo en meses de calendario (para que "el período anterior" no se desalinee por
+// los días de cada mes). `ytd` = el año en curso, donde "período anterior" no tiene sentido
+// como tramo previo y se lee siempre contra el año pasado a la misma fecha.
+type Perf = Rng & { kind: RngKind; meses?: number; ytd?: boolean };
+function perfRange(win: string, mes: string | undefined, now: Date): Perf {
+    const y = now.getUTCFullYear(), m = now.getUTCMonth();
+    if (win === 'Mes específico' && mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) {
+        const yy = parseInt(mes.slice(0, 4)), mm = parseInt(mes.slice(5, 7)) - 1;
+        const s = mStartUTC(yy, mm);
+        // si es el mes en curso, corta hoy (no proyecta el mes completo)
+        const e = yy === y && mm === m ? now : mStartUTC(yy, mm + 1);
+        return { start: s, end: e, label: mesLabel(s), kind: 'month' };
     }
-    if (tipo === 'Mismo mes, año vs año') {
-        const bS = mStart(now);
-        return { bStart: bS, bEnd: now, aStart: addYears(bS, -1), aEnd: addYears(now, -1), labelB: `${M[bS.getUTCMonth()]} ${bS.getUTCFullYear()}`, labelA: `${M[bS.getUTCMonth()]} ${bS.getUTCFullYear() - 1}` };
+    if (win === 'Mes actual') {
+        const s = mStartUTC(y, m);
+        return { start: s, end: now, label: `${mesLabel(s)} (al día ${now.getUTCDate()})`, kind: 'month' };
     }
-    if (tipo === 'Trimestre vs anterior') {
-        const curQ = new Date(Date.UTC(y, Math.floor(now.getUTCMonth() / 3) * 3, 1));
-        const bS = addMonths(curQ, -3), aS = addMonths(curQ, -6);
-        const qn = (d: Date) => `T${Math.floor(d.getUTCMonth() / 3) + 1} ${d.getUTCFullYear()}`;
-        return { bStart: bS, bEnd: curQ, aStart: aS, aEnd: addMonths(curQ, -3), labelB: qn(bS), labelA: qn(aS) };
+    if (win === 'Mes anterior') {
+        const s = mStartUTC(y, m - 1);
+        return { start: s, end: mStartUTC(y, m), label: mesLabel(s), kind: 'month' };
     }
-    // 'Año vs año (YTD)' (default)
-    return { bStart: new Date(Date.UTC(y, 0, 1)), bEnd: now, aStart: new Date(Date.UTC(y - 1, 0, 1)), aEnd: addYears(now, -1), labelB: `${y} (YTD)`, labelA: `${y - 1} (YTD)` };
+    for (const n of [3, 6, 12]) {
+        if (win === `Últimos ${n} meses`) return { start: addMonthsUTC(now, -n), end: now, label: `últimos ${n} meses`, kind: 'span', meses: n };
+    }
+    // 'Año en curso (YTD)' (default)
+    return { start: mStartUTC(y, 0), end: now, label: `${y} a la fecha`, kind: 'span', ytd: true };
+}
+
+// La base contra la cual se compara la ventana de desempeño. null = sin comparación.
+function compareRange(p: Perf, modo: string): Rng | null {
+    if (modo === 'Sin comparación') return null;
+    const mismoAnioPasado = (): Rng => {
+        const s = addYearsUTC(p.start, -1), e = addYearsUTC(p.end, -1);
+        return { start: s, end: e, label: p.kind === 'month' ? mesLabel(s) : p.ytd ? `${s.getUTCFullYear()} a la misma fecha` : `mismo tramo de ${s.getUTCFullYear()}` };
+    };
+    if (modo === 'Mismo período del año pasado') return mismoAnioPasado();
+    // 'Período anterior' (default)
+    if (p.kind === 'month') {
+        const s = mStartUTC(p.start.getUTCFullYear(), p.start.getUTCMonth() - 1);
+        const dias = Math.round((p.end.getTime() - p.start.getTime()) / 864e5);
+        const largoMes = Math.round((p.start.getTime() - s.getTime()) / 864e5);
+        // mes en curso (parcial) → compara los MISMOS días del mes anterior, para que sea justo
+        const parcial = dias < largoMes;
+        const e = parcial ? new Date(s.getTime() + dias * 864e5) : p.start;
+        return { start: s, end: e, label: parcial ? `${mesLabel(s)} (mismos ${dias} días)` : mesLabel(s) };
+    }
+    // el año en curso no tiene "tramo previo" con sentido comercial → se lee contra el año pasado
+    if (p.ytd || !p.meses) return mismoAnioPasado();
+    return { start: addMonthsUTC(p.start, -p.meses), end: p.start, label: `${p.meses} meses previos` };
+}
+
+// Mapeo de los selectores viejos (por si un cliente cacheado manda el body anterior).
+const legacyDesempeno = (cfg: AnalisisConfig): { win: string; comparar: string } => {
+    const c = cfg.comparacion || '';
+    if (c.startsWith('Mes vs mes')) return { win: 'Mes anterior', comparar: 'Período anterior' };
+    if (c.startsWith('Mismo mes')) return { win: 'Mes actual', comparar: 'Mismo período del año pasado' };
+    if (c.startsWith('Últimos 30')) return { win: 'Mes actual', comparar: 'Período anterior' };
+    if (c.startsWith('Últimos 90')) return { win: 'Últimos 3 meses', comparar: 'Período anterior' };
+    if (c.startsWith('Trimestre')) return { win: 'Últimos 3 meses', comparar: 'Período anterior' };
+    const vl = cfg.ventLeads || '';
+    if (/30\s*d/.test(vl)) return { win: 'Mes actual', comparar: 'Período anterior' };
+    if (/90\s*d|3\s*mes/.test(vl)) return { win: 'Últimos 3 meses', comparar: 'Período anterior' };
+    if (/6\s*mes/.test(vl)) return { win: 'Últimos 6 meses', comparar: 'Período anterior' };
+    if (/12\s*mes/.test(vl)) return { win: 'Últimos 12 meses', comparar: 'Período anterior' };
+    return { win: 'Año en curso (YTD)', comparar: 'Mismo período del año pasado' };
+};
+
+// Métricas de un asesor dentro de la ventana de desempeño, siempre partidas venta/renta
+// (los tickets y los % de comisión de renta y venta no son comparables entre sí).
+export type PorOp = { sale: number; rent: number };
+export interface AsesorRow {
+    id: string; name: string;
+    leads: PorOp;                 // leads únicos que le tocaron
+    resp: PorOp;                  // de esos, los que respondió
+    respMinAvg: { sale: number | null; rent: number | null };   // minutos a la 1ª respuesta (promedio)
+    respMinMed: { sale: number | null; rent: number | null };   // ídem (mediana: el promedio lo rompen los outliers)
+    visitas: PorOp; ofertas: PorOp; cierres: PorOp;
+    comision: PorOp;              // comisión de las operaciones cerradas
+    gmv: PorOp;                   // valor de cierre (para ticket promedio y % de comisión)
 }
 
 export interface AnalisisData {
@@ -119,9 +202,11 @@ export interface AnalisisData {
     corte: string;                // ISO de la fecha de corte
     N: number;
     opSplit: { sale: number; rent: number };
-    llProp: number;               // leads (ventana) / N
-    leadsLabel: string;           // etiqueta de la ventana de leads
+    llProp: number;               // leads (ventana de desempeño) / N
+    leadsLabel: string;           // etiqueta de la ventana de DESEMPEÑO
+    demandaLabel: string;         // etiqueta de la ventana de demanda (comparables)
     ofertaLabel: string;          // "red Pulppo" | "MLS i24"
+    asesores: AsesorRow[];        // desempeño por asesor (ventana de desempeño)
     operacion: string;            // 'Ambas' | 'Venta' | 'Renta' (eco del filtro aplicado)
     zombie: { n: number; pct: number; label: string };
     leadsBySource: { source: string; n: number }[];
@@ -142,6 +227,7 @@ export interface AnalisisData {
     funnelReading: string;
     recos: { enfoque: string; title: string; body: string; sev: number }[];
     compLabels: { a: string; b: string };
+    hasComp: boolean;             // false = "Sin comparación" (la sección lo dice en vez de inventar números)
     yoy: { label: string; a: number; b: number; fmt: 'int' | 'dec' | 'pct' | 'pct2' | 'money'; goodUp: boolean }[];
     yoyMix: { period: string; sale: number; rent: number; com: number }[];
     yoyReading: string;
@@ -183,22 +269,29 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     const NOW = new Date();
     const YTD0 = new Date(Date.UTC(NOW.getUTCFullYear(), 0, 1));
-    const comp = compRanges(cfg.comparacion || 'Año vs año (YTD)', NOW);
-    const leadScanStart = new Date(Math.min(comp.aStart.getTime(), YTD0.getTime()));
+    // --- ventana de DESEMPEÑO (funnel, asesores, leads por propiedad, sin actividad) ---
+    const legacy = legacyDesempeno(cfg);
+    const PERF = perfRange(cfg.desempeno || legacy.win, cfg.desempenoMes, NOW);
+    const CMP = compareRange(PERF, cfg.comparar || legacy.comparar);
+    const leadsStart = PERF.start, leadsEnd = PERF.end;
+    const leadsLabel = PERF.label;
+    // se escanean leads desde el inicio más viejo de las dos ventanas (desempeño y su comparación)
+    const leadScanStart = CMP ? new Date(Math.min(PERF.start.getTime(), CMP.start.getTime())) : PERF.start;
+    // --- ventanas de COMPARABLES (mercado) ---
     const windowStart = (w: string, fallbackMonths: number): Date => {
-        if (w === 'YTD 2026') return YTD0;
+        if (w === 'YTD 2026' || w === 'Año en curso (YTD)') return YTD0;
         if (w === 'Totales') return new Date(0);
         const d = new Date(NOW);
         const mm = w.match(/(\d+)\s*mes/), dd = w.match(/(\d+)\s*d[ií]a/);
         if (mm) d.setUTCMonth(d.getUTCMonth() - parseInt(mm[1]));
         else if (dd) d.setUTCDate(d.getUTCDate() - parseInt(dd[1]));
+        else if (/último\s+mes/i.test(w)) d.setUTCMonth(d.getUTCMonth() - 1);   // 'Último mes'
         else d.setUTCMonth(d.getUTCMonth() - fallbackMonths);
         return d;
     };
-    const demandStart = windowStart(cfg.ventDemanda || 'Últimos 12 meses', 12);
-    const leadsWindow = cfg.ventLeads || 'YTD 2026';
-    const leadsStart = windowStart(leadsWindow, 12);
-    const leadsLabel = leadsWindow.toLowerCase();
+    const demandaWindow = cfg.ventDemanda || 'Últimos 3 meses';
+    const demandStart = windowStart(demandaWindow, 3);
+    const demandaLabel = demandaWindow.toLowerCase();
 
     // --- propiedades publicadas ---
     const pub = await db.collection('properties').find(
@@ -268,7 +361,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     let leadsWinTotal = 0;
     const invSeen = new Set<string>();   // dedup: mismo contacto en la misma propiedad = 1 lead único
     const leadCur = db.collection('leads').find(
-        { 'property._id': { $in: pubIds }, createdAt: { $gte: leadsStart } },
+        { 'property._id': { $in: pubIds }, createdAt: { $gte: leadsStart, $lt: leadsEnd } },
         { projection: { 'property._id': 1, createdAt: 1, 'contact.phone': 1, 'contact.email': 1, 'contact._id': 1 } }
     );
     for await (const l of leadCur) {
@@ -439,64 +532,172 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
             ? `Las de precio óptimo reciben ${pOpt.ll.toFixed(1)} leads por propiedad vs ${pCaro.ll.toFixed(1)} las que están fuera de mercado.`
             : '');
 
-    // ===================== FUNNEL (venta vs renta) + RECOMENDACIONES =====================
-    // El funnel usa TODO el inventario del año (incl. vendido/dado de baja), no solo lo publicado hoy.
+    // ===================== FUNNEL (venta vs renta) + ASESORES + RECOMENDACIONES =====================
+    // El funnel usa TODO el inventario (incl. vendido/dado de baja), no solo lo publicado hoy, y se
+    // mide dentro de la VENTANA DE DESEMPEÑO elegida (antes estaba clavado a YTD, ignorando el filtro).
     const allprops = await db.collection('properties').find({ 'company._id': CID },
-        { projection: { 'listing.operation': 1, qualityScore: 1, publishedAt: 1, 'status.last': 1, 'status.history': 1 } }).toArray();
+        { projection: { 'listing.operation': 1, qualityScore: 1, publishedAt: 1, 'status.last': 1, 'status.history': 1, agent: 1 } }).toArray();
     const pid2op = new Map(allprops.map((p) => [String(p._id), gv(p, 'listing', 'operation') as string]));
     const allpids = allprops.map((p) => p._id as ObjectId);
     const zero = () => ({ sale: 0, rent: 0 } as Record<string, number>);
+    const inPerf = (d: Date | null) => !!d && d >= PERF.start && d < PERF.end;
+
+    // --- asesores: acumulador por persona (se agrupa por nombre normalizado: la misma persona
+    //     puede tener dos cuentas de agente y al dueño le interesa la persona, no la cuenta) ---
+    type Ac = { id: string; name: string; leads: Record<string, number>; resp: Record<string, number>;
+        mins: Record<string, number[]>; visitas: Record<string, number>; ofertas: Record<string, number>;
+        cierres: Record<string, number>; comision: Record<string, number>; gmv: Record<string, number> };
+    const ases = new Map<string, Ac>();
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    const agName = (a: Document | null | undefined): string | null => {
+        if (!a || !gv(a, '_id')) return null;
+        const n = [gv(a, 'firstName'), gv(a, 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+        return n || null;
+    };
+    // Primer candidato USABLE (con _id y nombre). No basta con `a ?? b`: en Mongo hay `agent: {}`
+    // y `agent: null`, y un objeto vacío cortaría la cadena de fallback perdiendo el evento.
+    const pickAgent = (...cands: unknown[]): Document | null => {
+        for (const c of cands) {
+            const a = c as Document | null | undefined;
+            if (a && gv(a, '_id') && agName(a)) return a;
+        }
+        return null;
+    };
+    const acc = (name: string | null, id: string): Ac | null => {
+        if (!name) return null;
+        const k = norm(name);
+        let e = ases.get(k);
+        if (!e) {
+            e = { id, name, leads: zero(), resp: zero(), mins: { sale: [], rent: [] }, visitas: zero(),
+                ofertas: zero(), cierres: zero(), comision: zero(), gmv: zero() };
+            ases.set(k, e);
+        }
+        return e;
+    };
+    // asesores de la inmobiliaria (por _id) → para atribuir operaciones al broker interno correcto
+    const agentsById = new Map<string, string>();
+    const agentsVivos = new Map<string, string>();   // solo los que tienen inventario publicado hoy
+    for (const p of allprops) {
+        const a = gv(p, 'agent') as Document | undefined;
+        const n = agName(a);
+        if (!a || !n) continue;
+        const aid = String(gv(a, '_id'));
+        agentsById.set(aid, n);
+        if (gv(p, 'status', 'last') === 'published') agentsVivos.set(aid, n);
+    }
+    const pid2agent = new Map(allprops.map((p) => [String(p._id), gv(p, 'agent') as Document | undefined]));
+    // todo asesor con inventario publicado aparece en la tabla, aunque no haya tenido actividad
+    // en la ventana (un asesor con 0 leads es información, no un hueco)
+    for (const [id, n] of agentsVivos) acc(n, id);
 
     const leadsByOp = zero(), contByOp = zero();
-    let ytdLeadsAll = 0, ytdVis = 0, leadsA = 0, leadsB = 0;
+    let perfLeadsAll = 0, perfVis = 0, leadsA = 0, leadsB = 0;
     let compCliente = 0, compBroker = 0, compIncont = 0, compDup = 0;
     const dupSet = new Set<string>();   // clave propiedad+contacto → repetición = duplicado
     const seenA = new Set<string>(), seenB = new Set<string>();   // dedup por período de comparación
-    const srcCount: Record<string, number> = {};   // leads únicos por fuente (YTD)
-    const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: leadScanStart } },
-        { projection: { 'property._id': 1, answeredAt: 1, createdAt: 1, source: 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1 } });
+    const srcCount: Record<string, number> = {};   // leads únicos por fuente (ventana de desempeño)
+    const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: leadScanStart, $lt: PERF.end } },
+        { projection: { 'property._id': 1, 'property.agent': 1, agent: 1, answeredAt: 1, createdAt: 1, source: 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1 } });
     for await (const l of lc) {
         const d = asDt(l.createdAt); if (!d) continue;
-        const op = pid2op.get(String(gv(l, 'property', '_id')));
+        const pid = String(gv(l, 'property', '_id'));
+        const op = pid2op.get(pid);
         const phone = gv(l, 'contact', 'phone'), email = gv(l, 'contact', 'email');
         const who = phone || email || String(gv(l, 'contact', '_id') || l._id);
-        const kk = `${String(gv(l, 'property', '_id'))}|${who}`;
-        if (d >= YTD0 && (op === 'sale' || op === 'rent')) {
+        const kk = `${pid}|${who}`;
+        if (inPerf(d) && (op === 'sale' || op === 'rent')) {
             // duplicado = mismo contacto en la misma propiedad → se descarta de TODO el funnel
             if (dupSet.has(kk)) { compDup++; }
             else {
                 dupSet.add(kk);
-                ytdLeadsAll++;
+                perfLeadsAll++;
                 leadsByOp[op]++;
                 const broker = !!gv(l, 'contact', 'company', '_id');   // el contacto está asociado a una empresa/inmobiliaria
                 if (!(phone || email)) compIncont++;                   // sin teléfono ni correo = incontactable
                 if (broker) compBroker++; else compCliente++;
+                const ans = asDt(l.answeredAt);
                 if (l.answeredAt) contByOp[op]++;
                 const sl = srcLabel(l.source); srcCount[sl] = (srcCount[sl] || 0) + 1;
+                // asesor RESPONSABLE del lead (agent asignado); si no hay, el de la propiedad
+                const la = pickAgent(gv(l, 'agent'), gv(l, 'property', 'agent'), pid2agent.get(pid));
+                const e = acc(agName(la), String(gv(la, '_id') || ''));
+                if (e) {
+                    e.leads[op]++;
+                    if (ans) { e.resp[op]++; e.mins[op].push(Math.max(0, (ans.getTime() - d.getTime()) / 60000)); }
+                }
             }
         }
         // comparación de períodos (leads únicos dentro de cada rango)
-        if (d >= comp.aStart && d < comp.aEnd && !seenA.has(kk)) { seenA.add(kk); leadsA++; }
-        if (d >= comp.bStart && d < comp.bEnd && !seenB.has(kk)) { seenB.add(kk); leadsB++; }
+        if (CMP && d >= CMP.start && d < CMP.end && !seenA.has(kk)) { seenA.add(kk); leadsA++; }
+        if (inPerf(d) && !seenB.has(kk)) { seenB.add(kk); leadsB++; }
     }
     const visByOp = zero();
-    const vc = db.collection('visits').find({ 'steps.property._id': { $in: allpids }, 'status.last': { $ne: 'cancelled' }, createdAt: { $gte: YTD0 } }, { projection: { 'steps.property._id': 1 } });
+    const vc = db.collection('visits').find({ 'steps.property._id': { $in: allpids }, 'status.last': { $ne: 'cancelled' }, createdAt: { $gte: PERF.start, $lt: PERF.end } },
+        { projection: { 'steps.property._id': 1, agent: 1 } });
     for await (const v of vc) {
         const steps = (v.steps || []) as Document[];
         const mine = steps.map((s) => String(gv(s, 'property', '_id'))).find((id) => pid2op.has(id));
-        if (mine) { ytdVis++; const op = pid2op.get(mine); if (op === 'sale' || op === 'rent') visByOp[op]++; }
+        if (mine) {
+            perfVis++; const op = pid2op.get(mine);
+            if (op === 'sale' || op === 'rent') {
+                visByOp[op]++;
+                // asesor que hizo la visita; si no viene, el de la propiedad visitada
+                const va = pickAgent(gv(v, 'agent'), pid2agent.get(mine));
+                const e = acc(agName(va), String(gv(va, '_id') || ''));
+                if (e) e.visitas[op]++;
+            }
+        }
     }
     const offersByOp = zero(), closesByOp = zero();
     const opsAll = await db.collection('operations').find({ 'property._id': { $in: allpids } },
-        { projection: { 'status.last': 1, closedAt: 1, createdAt: 1, 'property._id': 1, 'closeValue.value': 1, 'comission.value': 1 } }).toArray();
+        { projection: { 'status.last': 1, closedAt: 1, createdAt: 1, 'property._id': 1, 'property.agent': 1,
+            'seller.broker': 1, 'buyer.broker': 1, 'closeValue.value': 1, 'comission.value': 1 } }).toArray();
     for (const o of opsAll) {
-        const t = pid2op.get(String(gv(o, 'property', '_id')));
+        const pid = String(gv(o, 'property', '_id'));
+        const t = pid2op.get(pid);
         if (t !== 'sale' && t !== 'rent') continue;
         const cd = asDt(o.createdAt), xd = asDt(gv(o, 'closedAt'));
-        if ((cd && cd >= YTD0 && cd < NOW) || (xd && xd >= YTD0 && xd < NOW)) offersByOp[t]++;
+        const abierta = inPerf(cd) || inPerf(xd);
+        if (abierta) offersByOp[t]++;
         const last = gv(o, 'status', 'last');
-        if ((last === 'closed' || last === 'paying') && xd && xd >= YTD0) closesByOp[t]++;
+        const cerrada = (last === 'closed' || last === 'paying') && inPerf(xd);
+        if (cerrada) closesByOp[t]++;
+        if (!abierta && !cerrada) continue;
+        // la operación se atribuye al primer broker que SÍ es de la inmobiliaria (puede ser el
+        // captador o el que trajo al comprador); si ninguno lo es, al asesor de la propiedad.
+        const cands = [gv(o, 'seller', 'broker'), gv(o, 'buyer', 'broker'), gv(o, 'property', 'agent')];
+        const interno = cands.find((c) => {
+            const a = c as Document | null | undefined;
+            return a && agentsById.has(String(gv(a, '_id')));
+        });
+        const oa = pickAgent(interno, ...cands, pid2agent.get(pid));
+        const e = acc(agName(oa), String(gv(oa, '_id') || ''));
+        if (e) {
+            if (abierta) e.ofertas[t]++;
+            if (cerrada) {
+                e.cierres[t]++;
+                e.comision[t] += num(gv(o, 'comission', 'value')) || 0;
+                e.gmv[t] += num(gv(o, 'closeValue', 'value')) || 0;
+            }
+        }
     }
+    // --- asesores: cerrar promedios/medianas y ordenar por volumen de leads ---
+    const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+    const asesores: AsesorRow[] = [...ases.values()].map((e) => ({
+        id: e.id, name: e.name,
+        leads: { sale: e.leads.sale, rent: e.leads.rent },
+        resp: { sale: e.resp.sale, rent: e.resp.rent },
+        respMinAvg: { sale: avg(e.mins.sale), rent: avg(e.mins.rent) },
+        respMinMed: { sale: median(e.mins.sale), rent: median(e.mins.rent) },
+        visitas: { sale: e.visitas.sale, rent: e.visitas.rent },
+        ofertas: { sale: e.ofertas.sale, rent: e.ofertas.rent },
+        cierres: { sale: e.cierres.sale, rent: e.cierres.rent },
+        comision: { sale: e.comision.sale, rent: e.comision.rent },
+        gmv: { sale: e.gmv.sale, rent: e.gmv.rent },
+    })).sort((a, b) =>
+        (b.leads.sale + b.leads.rent) - (a.leads.sale + a.leads.rent)
+        || (b.cierres.sale + b.cierres.rent) - (a.cierres.sale + a.cierres.rent)
+        || a.name.localeCompare(b.name, 'es'));
     const buildFunnel = (title: string, op: string) => {
         const raw: [string, number][] = [['Únicos', leadsByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
         let prev: number | null = null;
@@ -520,7 +721,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     // --- recomendaciones a nivel cartera (nunca priorizan renta sobre venta) ---
     const altaNow = items.filter((it) => it.q3 === 3).length / (N || 1);
     const nNoTour = items.filter((it) => !it.tour).length;
-    const visRate = ytdLeadsAll ? ytdVis / ytdLeadsAll : 0;
+    const visRate = perfLeadsAll ? perfVis / perfLeadsAll : 0;
     const recos: { enfoque: string; title: string; body: string; sev: number }[] = [];
     if (pctCaro >= 0.30) recos.push({ enfoque: 'Precio', sev: 5, title: 'Ajusta el precio de tu inventario en venta',
         body: `${pct(pctCaro)} de tu venta con referencia (${nCaro} props) está fuera de mercado (+20% sobre ACM). Las de precio óptimo reciben ${pOpt ? pOpt.ll.toFixed(1) : '—'} leads por propiedad vs ${pCaro ? pCaro.ll.toFixed(1) : '—'} las que están fuera de mercado. Empieza por los rangos de mayor ticket.` });
@@ -533,7 +734,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     if (mb) recos.push({ enfoque: 'Canales', sev: 2, title: 'Diversifica tus canales de captación de leads',
         body: `No dependas de un solo portal. Revisa el mix de fuentes de tus leads y refuerza los canales que mejor te convierten a visita.` });
 
-    // ===================== YoY (H1 2025 vs H1 2026) =====================
+    // ===================== COMPARACIÓN DE PERÍODOS (desempeño vs su base) =====================
     const money = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
     const monthEnd = (y: number, m: number) => new Date(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1));
     const terminal = (p: Document): Date | null => {
@@ -542,7 +743,14 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const ts = hist.map((h) => asDt(h.date || h.timestamp || h.createdAt)).filter(Boolean) as Date[];
         return ts.length ? new Date(Math.max(...ts.map((d) => d.getTime()))) : null;
     };
-    const propMeta = allprops.map((p) => ({ pub: asDt(p.publishedAt), term: terminal(p), q3: num(p.qualityScore) }));
+    // 1ª publicación real: publishedAt se reinicia al republicar, así que la foto histórica de
+    // inventario se toma del status.history (igual que la antigüedad de la ficha y de /mb).
+    const firstPub = (p: Document): Date | null => {
+        const hist = (gv(p, 'status', 'history') || []) as Document[];
+        const ds = hist.filter((h) => h.status === 'published').map((h) => asDt(h.date || h.timestamp || h.createdAt)).filter(Boolean) as Date[];
+        return ds.length ? new Date(Math.min(...ds.map((d) => d.getTime()))) : asDt(p.publishedAt);
+    };
+    const propMeta = allprops.map((p) => ({ pub: firstPub(p), term: terminal(p), q3: num(p.qualityScore) }));
     const activeAt = (end: Date) => propMeta.filter((p) => p.pub && p.pub < end && (p.term === null || p.term > end));
     const closeWindow = (a: Date, b: Date) => {
         const r = { n: 0, sale: 0, rent: 0, com: 0, gmv: 0 };
@@ -556,24 +764,31 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         }
         return r;
     };
-    // inventario = snapshot al cierre de cada período; leads/cierres/comisión = flujo dentro del período
-    const actA = activeAt(comp.aEnd), actB = activeAt(comp.bEnd);
+    // inventario = foto al cierre de cada período; leads/cierres/comisión = flujo dentro del período
+    const hasComp = !!CMP;
+    const rngA = CMP ?? { start: PERF.start, end: PERF.end, label: '—' };
+    const actA = activeAt(rngA.end), actB = activeAt(PERF.end);
     const invA = actA.length, invB = actB.length;
     const altaA = actA.filter((p) => p.q3 === 3).length / (invA || 1), altaB = actB.filter((p) => p.q3 === 3).length / (invB || 1);
-    const clA = closeWindow(comp.aStart, comp.aEnd), clB = closeWindow(comp.bStart, comp.bEnd);
+    const clA = closeWindow(rngA.start, rngA.end), clB = closeWindow(PERF.start, PERF.end);
     const tcA = clA.n / (leadsA || 1), tcB = clB.n / (leadsB || 1);
-    const yoy: AnalisisData['yoy'] = [
+    const yoy: AnalisisData['yoy'] = !hasComp ? [] : [
         { label: 'Inventario activo (fin período)', a: invA, b: invB, fmt: 'int', goodUp: true },
-        { label: 'Leads del período', a: leadsA, b: leadsB, fmt: 'int', goodUp: true },
+        { label: 'Leads únicos del período', a: leadsA, b: leadsB, fmt: 'int', goodUp: true },
         { label: 'Leads por propiedad', a: leadsA / (invA || 1), b: leadsB / (invB || 1), fmt: 'dec', goodUp: true },
-        { label: 'Calidad Alta', a: altaA, b: altaB, fmt: 'pct', goodUp: true },
+        { label: 'Calidad Alta (ficha de hoy)', a: altaA, b: altaB, fmt: 'pct', goodUp: true },
         { label: 'Cierres', a: clA.n, b: clB.n, fmt: 'int', goodUp: true },
         { label: 'Comisión', a: clA.com, b: clB.com, fmt: 'money', goodUp: true },
         { label: 'Tasa de cierre (leads→cierre)', a: tcA, b: tcB, fmt: 'pct2', goodUp: true },
     ];
-    const yoyMix = [{ period: comp.labelA, sale: clA.sale, rent: clA.rent, com: clA.com }, { period: comp.labelB, sale: clB.sale, rent: clB.rent, com: clB.com }];
-    const comDelta = (clB.com - clA.com) / (clA.com || 1);
-    const yoyReading = `Comisión ${money(clA.com)} → ${money(clB.com)} (${comDelta >= 0 ? '+' : ''}${Math.round(comDelta * 100)}%) de ${comp.labelA} a ${comp.labelB}. El motor son las ventas: en ${comp.labelB} se cerraron ${clB.sale}.`;
+    const yoyMix = !hasComp ? [] : [{ period: rngA.label, sale: clA.sale, rent: clA.rent, com: clA.com }, { period: PERF.label, sale: clB.sale, rent: clB.rent, com: clB.com }];
+    // sin base (comisión 0 en el período anterior) un % sería falso: se dice en palabras
+    const deltaTxt = clA.com > 0
+        ? `${clB.com >= clA.com ? '+' : ''}${Math.round((100 * (clB.com - clA.com)) / clA.com)}%`
+        : clB.com > 0 ? 'sin base para comparar' : 'sin comisión en ninguno de los dos';
+    const yoyReading = !hasComp
+        ? `Estás viendo ${PERF.label} sin comparación. Elige una base ("período anterior" o "mismo período del año pasado") para ver la variación.`
+        : `Comisión ${money(clA.com)} → ${money(clB.com)} (${deltaTxt}) de ${rngA.label} a ${PERF.label}. El motor son las ventas: en ${PERF.label} se cerraron ${clB.sale}.`;
 
     // ===================== Top 10 críticas =====================
     const cand10 = [];
@@ -692,26 +907,26 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         llTier, reading: destReading,
     };
 
-    // ===================== ZOMBIES (props sin lead en la ventana) =====================
-    const zombieWindow = cfg.zombie || 'Últimos 90 días';
-    const zombieStart = zombieWindow === 'Totales' ? new Date(0) : windowStart(zombieWindow, 3);
+    // ===================== SIN ACTIVIDAD (props sin lead en la ventana de desempeño) =====================
+    // Ya no tiene su propio selector: "sin actividad" se lee SIEMPRE en la ventana de desempeño,
+    // que es la misma con la que se leen el funnel y los asesores.
     const withLead = new Set<string>();
-    const zc = db.collection('leads').find({ 'property._id': { $in: pubIds }, createdAt: { $gte: zombieStart } }, { projection: { 'property._id': 1 } });
+    const zc = db.collection('leads').find({ 'property._id': { $in: pubIds }, createdAt: { $gte: PERF.start, $lt: PERF.end } }, { projection: { 'property._id': 1 } });
     for await (const l of zc) withLead.add(String(gv(l, 'property', '_id')));
     const zombieUniverse = opFilter ? items.filter((it) => it.op === opFilter) : items;
     const zombieN = zombieUniverse.filter((it) => !withLead.has(String(it.pid))).length;
-    const zombie = { n: zombieN, pct: zombieN / (zombieUniverse.length || 1), label: zombieWindow.toLowerCase() };
+    const zombie = { n: zombieN, pct: zombieN / (zombieUniverse.length || 1), label: PERF.label };
 
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
-        llProp: leadsWinTotal / (N || 1), leadsLabel, ofertaLabel,
+        llProp: leadsWinTotal / (N || 1), leadsLabel, demandaLabel, ofertaLabel, asesores,
         operacion: cfg.operacion || 'Ambas', zombie, leadsBySource, cierresLabel, segTipo, segOp, benchmarkMarket,
         leadsComp: { cliente: compCliente, broker: compBroker, incontactables: compIncont, duplicados: compDup, total: leadsByOp.sale + leadsByOp.rent, totalOp: { sale: leadsByOp.sale, rent: leadsByOp.rent } },
         zones, invVsDemand, matrix, priceLead,
         joyas, joyasAlta, caras, nSale, nCaro, pctCaro,
         insightInv, insightPrecio,
         funnel, funnelReading, recos,
-        compLabels: { a: comp.labelA, b: comp.labelB },
+        compLabels: { a: rngA.label, b: PERF.label }, hasComp,
         yoy, yoyMix, yoyReading, top10, destacados,
     };
 }

@@ -89,7 +89,8 @@ function Funnel({ vistas, leads, visitas, ofertas, n }: { vistas: number; leads:
 
 type Col = { key: keyof MBProp; label: string; num?: boolean };
 const COLS: Col[] = [
-    { key: 'code', label: 'Código' }, { key: 'asesor', label: 'Asesor' }, { key: 'op', label: 'Operación' },
+    { key: 'code', label: 'Código' }, { key: 'type', label: 'Tipo' }, { key: 'asesor', label: 'Asesor' },
+    { key: 'op', label: 'Operación' },
     { key: 'colonia', label: 'Colonia' }, { key: 'precio', label: 'Precio', num: true },
     { key: 'vsOferta', label: 'vs. oferta', num: true }, { key: 'vsCierres', label: 'vs. cierres', num: true },
     { key: 'compite', label: 'Compite', num: true }, { key: 'demanda', label: 'Demanda', num: true },
@@ -97,6 +98,8 @@ const COLS: Col[] = [
     { key: 'vistas', label: 'Vistas', num: true }, { key: 'leads', label: 'Leads', num: true },
     { key: 'visitas', label: 'Visitas', num: true }, { key: 'ofertas', label: 'Ofertas', num: true }
 ];
+// Columnas que se ordenan alfabéticamente (el resto, de mayor a menor).
+const TEXT_COLS: (keyof MBProp)[] = ['code', 'type', 'asesor', 'colonia', 'op', 'calidad', 'tier'];
 
 function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) => void }) {
     const [sortKey, setSortKey] = useState<keyof MBProp>('leads');
@@ -105,8 +108,10 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     const [op, setOp] = useState('');
     const [estado, setEstado] = useState('');
     const [asesor, setAsesor] = useState('');
+    const [tipo, setTipo] = useState('');
     const [colf, setColf] = useState<Record<string, string>>({}); // filtro por columna (texto = contiene · número = ≥)
     const asesores = useMemo(() => [...new Set(d.props.map((p) => p.asesor))].sort(), [d.props]);
+    const tipos = useMemo(() => [...new Set(d.props.map((p) => p.type))].filter(Boolean).sort(), [d.props]);
 
     // filtro de fechas: recalcula vistas/leads/visitas/ofertas del rango (endpoint /api/mb-metrics)
     const [rango, setRango] = useState('Todo (histórico)');
@@ -141,6 +146,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
         const ql = q.trim().toLowerCase();
         return dprops.filter((p) => {
             if (op && p.op !== op) return false;
+            if (tipo && p.type !== tipo) return false;
             if (estado && p.estado !== estado) return false;
             if (asesor && p.asesor !== asesor) return false;
             if (ql && !`${p.code} ${p.colonia} ${p.asesor}`.toLowerCase().includes(ql)) return false;
@@ -154,7 +160,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
             }
             return true;
         });
-    }, [dprops, q, op, estado, asesor, seg, colf]);
+    }, [dprops, q, op, tipo, estado, asesor, seg, colf]);
 
     const rows = useMemo(() => [...filtered].sort((a, b) => {
         const va = a[sortKey], vb = b[sortKey];
@@ -163,17 +169,19 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     }), [filtered, sortKey, dir]);
 
     const fn = useMemo(() => filtered.reduce((a, p) => ({ vistas: a.vistas + p.vistas, leads: a.leads + p.leads, visitas: a.visitas + p.visitas, ofertas: a.ofertas + p.ofertas }), { vistas: 0, leads: 0, visitas: 0, ofertas: 0 }), [filtered]);
-    const onSort = (k: keyof MBProp) => { if (k === sortKey) setDir((x) => (x === 1 ? -1 : 1)); else { setSortKey(k); setDir(k === 'code' || k === 'asesor' || k === 'colonia' || k === 'op' || k === 'calidad' || k === 'tier' ? 1 : -1); } };
+    const onSort = (k: keyof MBProp) => { if (k === sortKey) setDir((x) => (x === 1 ? -1 : 1)); else { setSortKey(k); setDir(TEXT_COLS.includes(k) ? 1 : -1); } };
     const th: CSSProperties = { textAlign: 'left', padding: '8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
     const td: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
     const sel: CSSProperties = { fontSize: 12, padding: '6px 8px', border: `1px solid ${LGT}`, borderRadius: R, background: '#fff' };
     const chip = (active: boolean): CSSProperties => ({ fontSize: 11, fontWeight: 600, padding: '6px 11px', borderRadius: R, cursor: 'pointer', border: `1px solid ${active ? BLK : LGT}`, background: active ? BLK : '#fff', color: active ? '#fff' : '#555' });
+    const nFiltrosCol = Object.values(colf).filter((v) => v.trim()).length;
 
     return (
         <div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
                 <input placeholder="Buscar código, colonia o asesor…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...sel, width: 220 }} />
                 <select value={op} onChange={(e) => setOp(e.target.value)} style={sel}><option value="">Operación: todas</option><option>Venta</option><option>Renta</option></select>
+                <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={sel}><option value="">Tipo: todos</option>{tipos.map((x) => <option key={x}>{x}</option>)}</select>
                 <select value={estado} onChange={(e) => setEstado(e.target.value)} style={sel}><option value="">Precio: todos</option>{['Óptimo', 'No competitivo', 'Fuera de mercado', 'Haz ACM'].map((x) => <option key={x}>{x}</option>)}</select>
                 <select value={asesor} onChange={(e) => setAsesor(e.target.value)} style={sel}><option value="">Asesor: todos</option>{asesores.map((x) => <option key={x}>{x}</option>)}</select>
                 <select value={rango} onChange={(e) => setRango(e.target.value)} style={sel} title="Ventana de fechas para vistas/leads/visitas/ofertas">{['Todo (histórico)', 'Últimos 30 días', 'Últimos 90 días', 'Este año', 'Personalizado'].map((x) => <option key={x}>{x}</option>)}</select>
@@ -191,16 +199,37 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                 <Funnel vistas={fn.vistas} leads={fn.leads} visitas={fn.visitas} ofertas={fn.ofertas} n={filtered.length} />
             </div>
 
+            {/* Fila de filtros por columna: va sobre fondo gris claro y con su propio rótulo, para que
+                se lea como "filtros" y no como una fila más de datos (feedback: "no se entiende"). */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: BLK }}>Filtrar por columna</span>
+                <span style={{ fontSize: 11, color: GRY }}>en texto escribe parte de la palabra · en números el mínimo (ej. <b>3</b> = 3 o más)</span>
+                {nFiltrosCol > 0 && (
+                    <span onClick={() => setColf({})} style={{ fontSize: 11, color: SEA, fontWeight: 700, cursor: 'pointer' }}>
+                        limpiar {nFiltrosCol} {nFiltrosCol === 1 ? 'filtro' : 'filtros'} ✕
+                    </span>
+                )}
+            </div>
             <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
                     <thead>
-                        <tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)}>{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}<th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Reporte</th></tr>
-                        <tr>{COLS.map((c) => <th key={c.key} style={{ padding: '3px 6px', borderBottom: `1px solid ${LGT}`, background: '#fff' }}><input value={colf[c.key] ?? ''} onChange={(e) => setColf((s) => ({ ...s, [c.key]: e.target.value }))} placeholder={c.num ? '≥' : 'filtrar'} style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, padding: '3px 5px', border: `1px solid ${LGT}`, borderRadius: R, textAlign: c.num ? 'right' : 'left', color: BLK }} /></th>)}<th style={{ borderBottom: `1px solid ${LGT}`, background: '#fff' }} /></tr>
+                        <tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)} title="Clic para ordenar">{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}<th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Reporte</th></tr>
+                        <tr>{COLS.map((c) => {
+                            const on = !!(colf[c.key] ?? '').trim();
+                            return (
+                                <th key={c.key} style={{ padding: '4px 6px', borderBottom: `1px solid ${LGT}`, background: LGT }}>
+                                    <input value={colf[c.key] ?? ''} onChange={(e) => setColf((s) => ({ ...s, [c.key]: e.target.value }))}
+                                        placeholder={c.num ? 'mín.' : 'contiene…'} title={c.num ? `${c.label}: muestra las que sean mayores o iguales a este número` : `${c.label}: muestra las que contengan este texto`}
+                                        style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, padding: '3px 5px', border: `1px solid ${on ? SEA : '#e2e2e2'}`, borderRadius: R, textAlign: c.num ? 'right' : 'left', color: BLK, background: '#fff', fontWeight: on ? 700 : 400 }} />
+                                </th>
+                            );
+                        })}<th style={{ borderBottom: `1px solid ${LGT}`, background: LGT }} /></tr>
                     </thead>
                     <tbody>
                         {rows.map((p) => (
                             <tr key={p.id}>
                                 <td style={td}><Link href={`/ficha/${p.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                <td style={td}>{p.type}</td>
                                 <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td><td style={{ ...td, color: GRY }}>{p.colonia}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{money(p.precio)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
@@ -253,6 +282,11 @@ export default function MBApp({ d }: { d: MBData }) {
     ];
     const topOpp = d.props.filter((p) => p.op === 'Venta' && p.demanda > 0).sort((a, b) => b.oppScore - a.oppScore).slice(0, 10);
     const nDest = cnt((p) => p.tier === 'Super' || p.tier === 'Destacado');
+    // Los bloques de propiedades van de MAYOR a MENOR volumen: lo que más pesa, primero.
+    const porVolumen = <T,>(xs: T[], segOf: (x: T) => string) =>
+        [...xs].sort((a, b) => cnt(SEG_TEST[segOf(b)]) - cnt(SEG_TEST[segOf(a)]));
+    const chipSegsOrd = porVolumen(CHIP_SEGS, (s) => s as string);
+    const redflagsOrd = porVolumen(REDFLAGS, (r) => r.seg as string);
 
     const tth: CSSProperties = { textAlign: 'left', padding: '7px 8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
     const ttd: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
@@ -284,7 +318,7 @@ export default function MBApp({ d }: { d: MBData }) {
                             <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1.15 }}><b style={{ color: YEL }}>{f(cnt((p) => CHIP_SEGS.some((s) => SEG_TEST[s](p))))}</b> propiedades necesitan tu atención.</div>
                             <div style={{ color: '#c9c9c7', fontSize: 13, marginTop: 8, maxWidth: 620 }}>De {f(d.nProps)} publicadas. Prioriza por demanda desperdiciada, precio fuera de mercado y limpieza de cartera. Haz clic en un bloque para verlas.</div>
                             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
-                                {CHIP_SEGS.map((s) => (
+                                {chipSegsOrd.map((s) => (
                                     <div key={s} onClick={() => goSeg(s)} style={heroChip}>
                                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, lineHeight: 1 }}>{f(cnt(SEG_TEST[s]))}</div>
                                         <div style={{ fontSize: 11, color: '#c9c9c7', marginTop: 3 }}>{SEG_LABEL[s]}</div>
@@ -312,7 +346,7 @@ export default function MBApp({ d }: { d: MBData }) {
                         <h2 style={{ ...h2, marginTop: 30 }}>Focos comerciales</h2>
                         <div style={sub}>Patrones accionables. Cada número son propiedades — haz clic para verlas y actuar.</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                            {REDFLAGS.map((r) => {
+                            {redflagsOrd.map((r) => {
                                 const n = cnt(SEG_TEST[r.seg as string]);
                                 return (
                                     <div key={r.seg} onClick={() => n && goSeg(r.seg)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, border: `1px solid ${LGT}`, borderRadius: R, padding: '12px 14px', cursor: n ? 'pointer' : 'default' }}>
@@ -356,7 +390,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <div>
                         <div style={eyebrow}>Propiedades</div><div style={accent} />
                         <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 30, margin: '0 0 3px' }}>Tu inventario</h1>
-                        <div style={sub}>El funnel se recalcula con tus filtros. Ordena o <b>filtra por cualquier columna</b> (texto = contiene · números = ≥) y abre el reporte desde el código. Vistas = sitios de Pulppo + Inmuebles24.</div>
+                        <div style={sub}>El funnel se recalcula con tus filtros. Haz clic en un encabezado para <b>ordenar</b> y usa la fila gris para <b>filtrar por columna</b>; abre el reporte de cada propiedad desde su código. <b>vs. oferta</b> y <b>vs. cierres</b> comparan tu $/m² contra la <b>mediana</b> de tus comparables (no el promedio). Vistas = sitios de Pulppo + Inmuebles24.</div>
                         <PropTable d={d} seg={seg} setSeg={setSeg} />
                     </div>
                 )}
@@ -375,7 +409,7 @@ export default function MBApp({ d }: { d: MBData }) {
                             {dfn('Visitas', 'visitantes únicos confirmados (una misma persona no cuenta doble).')}
                             {dfn('Vistas', 'vistas del anuncio en los sitios de Pulppo (pulppo.com y broker.pulppo.com) y en Inmuebles24. NO incluye otros portales (Mercado Libre, propiedades.com, etc.): es lo único que hoy nos reporta vistas.')}
                             {dfn('Demanda', 'búsquedas de compradores en tu zona (2026), partidas por operación: a cada propiedad se le asigna la demanda de su operación (venta/renta).')}
-                            {dfn('vs. oferta / vs. cierres', 'tu $/m² contra propiedades COMPARABLES: misma colonia, mismo tipo, tamaño ±30% y mismas recámaras. "Oferta" = asking mediano del MLS completo (Inmuebles24 + otras fuentes) + red Pulppo, con filtro de extremos que descarta $/m² imposibles; "cierres" = lo que realmente cerró Pulppo (24m) en comparables (solo Pulppo: no hay data de cierres de mercado). Si no hay suficientes comparables, ampliamos el criterio (quitamos recámaras, luego tamaño, luego tipo) hasta juntar al menos 3.')}
+                            {dfn('vs. oferta / vs. cierres', 'tu $/m² contra la MEDIANA de tus propiedades COMPARABLES (nunca el promedio: un solo anuncio con precio absurdo lo movería). Comparable = misma colonia, mismo tipo, tamaño ±30% y mismas recámaras. "Oferta" = lo que se PIDE hoy en el MLS completo (Inmuebles24 + otras fuentes) + red Pulppo, con filtro de extremos que descarta $/m² imposibles; "cierres" = lo que realmente se VENDIÓ vía Pulppo (24m) en comparables (solo Pulppo: no hay data de cierres de mercado). Si no hay suficientes comparables, ampliamos el criterio (quitamos recámaras, luego tamaño, luego tipo) hasta juntar al menos 3.')}
                             {dfn('Compite', 'cuántos anuncios COMPARABLES (mismos filtros de arriba) hay hoy en el MLS de la zona. Es tu competencia directa, no todo el inventario de la colonia.')}
                             {dfn('Calidad de ficha', 'clasificación Pulppo (Alta/Media/Baja). El benchmark es la media de las mejores inmobiliarias de la comunidad (top 20%).')}
                             {dfn('Destacado', 'nivel informativo del aviso en Inmuebles24 (Súper / Destacado / Simple / Offline). Solo referencia; aquí no recomendamos aún qué destacar.')}
@@ -385,6 +419,8 @@ export default function MBApp({ d }: { d: MBData }) {
                             {dfn('Necesitan tu atención', 'propiedades con algún foco (sin leads, caras sin leads, visitas sin oferta, +12 meses, respuesta lenta). Clic → las abre filtradas.')}
                             {dfn('Velocidad de respuesta', 'Flash ≤5 min · Rápida ≤1 h · Media ≤24 h · Lento >24 h. "Respuesta" muestra los leads que siguen sin responder.')}
                             {dfn('Empieza por aquí', 'ordenado por oportunidad (demanda ÷ (1+leads)). El diagnóstico dice el freno más probable (bajar precio / mejorar ficha).')}
+                            {dfn('Tu inventario (listado)', 'la fila gris debajo de los encabezados filtra por columna: en las de texto escribe parte de la palabra, en las de número el mínimo (3 = 3 o más). Clic en un encabezado ordena.')}
+                            {dfn('Generador de análisis', 'las fechas van en dos bloques. DESEMPEÑO = tu operación (funnel, asesores, leads, sin actividad): un período y contra qué compararlo. COMPARABLES = el mercado (cierres mín. 6 meses, demanda mín. 1 mes); la oferta es siempre foto de hoy porque no se guarda su historia.')}
                         </div>
                         <div style={{ fontSize: 10, color: GRY, marginTop: 18 }}>Corte: hoy, datos en vivo. Borrador.</div>
                     </div>
