@@ -10,6 +10,10 @@ const money = (n?: number | null) =>
     n == null ? '—' : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
 const fmtYoy = (v: number, fmt: string) =>
     fmt === 'money' ? money(v) : fmt === 'pct' ? `${Math.round(v * 100)}%` : fmt === 'pct2' ? `${(v * 100).toFixed(2)}%` : fmt === 'dec' ? v.toFixed(1) : f0(v);
+const median = (xs: number[]): number | null => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s.length ? s[Math.floor(s.length / 2)] : null;
+};
 
 export function GlosarioView({ d, mb = false }: { d: AnalisisData; mb?: boolean }) {
     const terms: [string, ReactNode][] = [
@@ -27,7 +31,9 @@ export function GlosarioView({ d, mb = false }: { d: AnalisisData; mb?: boolean 
         ['Ventana de comparables', <>Las fechas del <b>mercado</b>: cierres ({d.cierresLabel}) y demanda ({d.demandaLabel}). La <b>oferta</b> es una foto de <b>hoy</b>: no se guarda su historia, solo lo que está publicado en este momento.</>],
         ['Ventana de desempeño', <>Las fechas de <b>tu operación</b> ({d.leadsLabel}): funnel, asesores, leads por propiedad y sin actividad. Es la única ventana que se compara contra otro período.</>],
         ['Comparación de períodos', <>La ventana de desempeño contra su base: <b>{d.hasComp ? `${d.compLabels.b} vs. ${d.compLabels.a}` : 'sin comparación'}</b>.</>],
-        ['Tasa de respuesta · 1ª respuesta', <>De los leads que le tocaron a un asesor, cuántos contestó y en cuánto tiempo (de <i>createdAt</i> a <i>answeredAt</i>). Se muestra promedio y mediana.</>],
+        ['Abandono · fuera de SLA', <>Abandono = leads que el asesor <b>nunca</b> contestó. Fuera de SLA 24h = los contestados después de 24 h más los que nunca contestó.</>],
+        ['Props x cliente', <>Propiedades que el asesor le compartió a cada cliente en su búsqueda. Mide <b>trabajo</b>: quien comparte una sola opción no está trabajando la cartera.</>],
+        ['Mejores inmobiliarias', <>Las <b>{d.bench.nInmos}</b> que más cierran en la red, en la misma ventana. Convierten a visita {d.bench.tasaVisita == null ? '—' : `${Math.round(100 * d.bench.tasaVisita)}%`} vs. ~10% del resto, así que es la referencia que importa (contra el promedio casi todos salen bien).</>],
     ];
     return (
         <div className="mt-2 pl-6">
@@ -214,6 +220,20 @@ export function PrecioView({ d }: { d: AnalisisData }) {
     );
 }
 
+// ▲▼ contra el período base. Se usa en el funnel y en los KPIs para que el "vs" se vea
+// DENTRO de cada sección y no solo en la sección de comparación.
+export function Delta({ now, prev, goodUp = true }: { now: number; prev: number | null; goodUp?: boolean }) {
+    if (prev == null) return null;
+    if (!prev) return <span className="text-[9px]" style={{ color: GRAY }}>{now ? 'nuevo' : '—'}</span>;
+    const dv = (now - prev) / prev;
+    const col = (dv >= 0) === goodUp ? SEA : RED;
+    return (
+        <span className="text-[9px] font-bold" style={{ color: dv === 0 ? GRAY : col }}>
+            {dv === 0 ? '=' : `${dv > 0 ? '▲' : '▼'}${Math.abs(Math.round(dv * 100))}%`}
+        </span>
+    );
+}
+
 export function FunnelView({ d, portalMode, portales }: { d: AnalisisData; portalMode: string; portales: string[] }) {
     const mx = Math.max(...d.funnel.flatMap((c) => c.steps.map((s) => s.value)), 1);
     const srcTotal = d.leadsBySource.reduce((a, s) => a + s.n, 0) || 1;
@@ -221,19 +241,44 @@ export function FunnelView({ d, portalMode, portales }: { d: AnalisisData; porta
         ? d.leadsBySource.filter((s) => portales.includes(s.source))
         : d.leadsBySource;
     const srcMx = Math.max(...srcShown.map((s) => s.n), 1);
+    // tasa de respuesta y tiempo: lo que más pesa en la conversión, arriba del embudo
+    const tl = d.funnel.reduce((a, c) => a + (c.steps[0]?.value || 0), 0);
+    const tr = d.funnel.reduce((a, c) => a + (c.steps[1]?.value || 0), 0);
+    const tv = d.funnel.reduce((a, c) => a + (c.steps[2]?.value || 0), 0);
+    const tc = d.funnel.reduce((a, c) => a + (c.steps[4]?.value || 0), 0);
+    const tMed = median(d.asesores.flatMap((a) => [a.respMinMed.sale, a.respMinMed.rent]).filter((x): x is number => x != null));
     return (
         <div className="mt-2 pl-6">
-            <p className="mb-2 text-[11px]" style={{ color: SOFT }}>Actividad de <b>{d.leadsLabel}</b> sobre tu inventario. La tasa es el % que pasa del paso anterior. <span style={{ color: GRAY }}>Únicos = sin duplicados (los incontactables van en la composición).</span></p>
+            <p className="mb-2 text-[11px]" style={{ color: SOFT }}>
+                Actividad de <b>{d.leadsLabel}</b> sobre tu inventario. La tasa es el % que pasa del paso anterior
+                {d.hasComp && <> y el <b>▲▼</b> compara contra <b>{d.compLabels.a}</b></>}.
+            </p>
+            {/* los tres números que mandan, con la referencia de las mejores inmobiliarias */}
+            <div className="mb-3 flex gap-2">
+                {[
+                    ['Tasa de respuesta', tl ? `${Math.round(100 * tr / tl)}%` : '—', d.bench.tasaResp != null ? `mejores ${Math.round(100 * d.bench.tasaResp)}%` : ''],
+                    ['1ª respuesta (mediana)', tMed == null ? '—' : tMed < 60 ? `${Math.round(tMed)} min` : `${(tMed / 60).toFixed(1)} h`, 'meta ≤ 24 h'],
+                    ['Tasa de visita', tl ? `${Math.round(100 * tv / tl)}%` : '—', d.bench.tasaVisita != null ? `mejores ${Math.round(100 * d.bench.tasaVisita)}%` : ''],
+                    ['Lead → cierre', tl ? `${(100 * tc / tl).toFixed(2)}%` : '—', d.bench.leadToClose != null ? `mejores ${(100 * d.bench.leadToClose).toFixed(2)}%` : ''],
+                ].map(([l, v, ref]) => (
+                    <div key={l} className="flex-1 bg-[#F3F3F3] p-2">
+                        <p className="text-[8px] uppercase tracking-wide" style={{ color: GRAY }}>{l}</p>
+                        <p className="text-[17px] leading-tight" style={{ fontFamily: 'var(--font-serif)' }}>{v}</p>
+                        {ref && <p className="text-[8px]" style={{ color: GRAY }}>{ref}</p>}
+                    </div>
+                ))}
+            </div>
             <div className="flex gap-6">
                 {d.funnel.map((col) => (
                     <div key={col.title} className="flex-1">
                         <p className="mb-1.5 text-[12px] font-bold" style={{ color: '#2f6b6b' }}>{col.title}</p>
                         {col.steps.map((s) => (
                             <div key={s.label} className="flex items-center gap-1.5 py-0.5 text-[10px]">
-                                <span className="w-16 whitespace-nowrap" style={{ color: GRAY }}>{s.label}</span>
+                                <span className="w-[68px] whitespace-nowrap" style={{ color: GRAY }}>{s.label}</span>
                                 <span className="w-8 text-right text-[9px] font-bold" style={{ color: SEA }}>{s.rate == null ? '' : `${Math.round(s.rate * 100)}%`}</span>
                                 <span className="h-[13px] flex-1 bg-[#F3F3F3]"><span className="block h-full" style={{ width: `${Math.round(100 * s.value / mx)}%`, background: '#2f6b6b' }} /></span>
                                 <span className="w-10 text-right font-bold">{f0(s.value)}</span>
+                                <span className="w-10 text-right"><Delta now={s.value} prev={s.prev} /></span>
                             </div>
                         ))}
                     </div>
@@ -452,48 +497,54 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
     const [vista, setVista] = useState<Vista>('Total');
     if (!d.asesores.length) return <p className="mt-2 pl-6 text-[11px]" style={{ color: GRAY }}>Sin asesores con inventario publicado.</p>;
 
-    const tot = d.asesores.reduce((a, r) => ({
-        leads: { sale: a.leads.sale + r.leads.sale, rent: a.leads.rent + r.leads.rent },
-        resp: { sale: a.resp.sale + r.resp.sale, rent: a.resp.rent + r.resp.rent },
-        visitas: { sale: a.visitas.sale + r.visitas.sale, rent: a.visitas.rent + r.visitas.rent },
-        ofertas: { sale: a.ofertas.sale + r.ofertas.sale, rent: a.ofertas.rent + r.ofertas.rent },
-        cierres: { sale: a.cierres.sale + r.cierres.sale, rent: a.cierres.rent + r.cierres.rent },
-        comision: { sale: a.comision.sale + r.comision.sale, rent: a.comision.rent + r.comision.rent },
-        gmv: { sale: a.gmv.sale + r.gmv.sale, rent: a.gmv.rent + r.gmv.rent },
-    }), { leads: { sale: 0, rent: 0 }, resp: { sale: 0, rent: 0 }, visitas: { sale: 0, rent: 0 }, ofertas: { sale: 0, rent: 0 },
-        cierres: { sale: 0, rent: 0 }, comision: { sale: 0, rent: 0 }, gmv: { sale: 0, rent: 0 } });
-    // tiempo de respuesta del total: ponderado por leads respondidos de cada operación
-    const totAvg = pickN(vista, {
-        sale: d.asesores.some((r) => r.respMinAvg.sale != null)
-            ? d.asesores.reduce((a, r) => a + (r.respMinAvg.sale ?? 0) * r.resp.sale, 0) / (tot.resp.sale || 1) : null,
-        rent: d.asesores.some((r) => r.respMinAvg.rent != null)
-            ? d.asesores.reduce((a, r) => a + (r.respMinAvg.rent ?? 0) * r.resp.rent, 0) / (tot.resp.rent || 1) : null,
-    }, tot.resp);
+    const pair = (f: (r: AsesorRow) => { sale: number; rent: number }) =>
+        d.asesores.reduce((a, r) => ({ sale: a.sale + f(r).sale, rent: a.rent + f(r).rent }), { sale: 0, rent: 0 });
+    const tot = {
+        leads: pair((r) => r.leads), resp: pair((r) => r.resp), fueraSla: pair((r) => r.fueraSla),
+        visitas: pair((r) => r.visitas), ofertas: pair((r) => r.ofertas), cierres: pair((r) => r.cierres),
+        comision: pair((r) => r.comision), gmv: pair((r) => r.gmv),
+        busquedas: d.asesores.reduce((a, r) => a + r.busquedas, 0),
+        propsCompartidas: d.asesores.reduce((a, r) => a + r.propsCompartidas, 0),
+        clientes: d.asesores.reduce((a, r) => a + r.clientes, 0),
+    };
+    // mediana del equipo = mediana de las medianas de cada asesor (no se puede promediar medianas)
+    const totMed = median(d.asesores
+        .map((r) => pickN(vista, r.respMinMed, r.resp))
+        .filter((x): x is number => x != null));
 
-    const COLS = ['Asesor', 'Leads', 'Respondidos', 'Tasa resp.', '1ª respuesta (prom.)', '1ª respuesta (mediana)',
-        'Visitas', 'Tasa visita', 'Ofertas', 'Tasa oferta', 'Cierres', 'Visita→cierre',
+    const COLS = ['Asesor', 'Leads', 'Sin responder', 'Abandono', 'Fuera de SLA 24h', '1ª respuesta (mediana)',
+        'Búsquedas', 'Props x cliente', 'Visitas', 'Tasa visita', 'Ofertas', 'Cierres', 'Visita→cierre',
         'Comisión', '% com. venta', '% com. renta', 'Ticket venta', 'Ticket renta'];
     const pctCom = (com: number, gmv: number) => (gmv > 0 ? `${(100 * com / gmv).toFixed(1)}%` : '—');
     const ticket = (gmv: number, n: number) => (n > 0 ? money(gmv / n) : '—');
+    const benchVis = d.bench.tasaVisita;
 
     const cells = (r: AsesorRow | typeof tot, name: string, bold = false) => {
         const L = pick(vista, r.leads), R = pick(vista, r.resp), V = pick(vista, r.visitas);
         const O = pick(vista, r.ofertas), C = pick(vista, r.cierres);
-        const avg = 'respMinAvg' in r ? pickN(vista, r.respMinAvg, r.resp) : totAvg;
-        const med = 'respMinMed' in r ? pickN(vista, r.respMinMed, r.resp) : null;
+        const sla = pick(vista, r.fueraSla), sin = L - R;
+        const med = 'respMinMed' in r ? pickN(vista, r.respMinMed, r.resp) : totMed;
+        const bus = 'busquedas' in r ? r.busquedas : tot.busquedas;
+        const pxc = 'clientes' in r ? (r.clientes ? r.propsCompartidas / r.clientes : null)
+            : (tot.clientes ? tot.propsCompartidas / tot.clientes : null);
         const cls = `py-1 text-right${bold ? ' font-bold' : ''}`;
+        // umbrales: abandono ≥15% y fuera de SLA ≥25% son incumplimientos, no matices
+        const colAband = L >= 10 && sin / L >= 0.15 ? RED : SOFT;
+        const colSla = L >= 10 && sla / L >= 0.25 ? RED : SOFT;
+        const colVis = benchVis != null && L >= 20 ? (V / L >= benchVis ? SEA : V / L < benchVis / 2 ? RED : SOFT) : SOFT;
         return (
             <tr key={name} className={bold ? 'border-t' : 'border-b border-neutral-100'} style={bold ? { borderColor: SOFT } : undefined}>
                 <td className={`py-1 text-left${bold ? ' font-bold' : ' font-semibold'}`}>{name}</td>
                 <td className={cls}>{f0(L)}</td>
-                <td className={cls}>{f0(R)}</td>
-                <td className={cls} style={{ color: L && R / L < 0.8 ? RED : SOFT }}>{rate(R, L)}</td>
-                <td className={cls} style={{ color: avg != null && avg > 1440 ? RED : SOFT }}>{dur(avg)}</td>
-                <td className={cls} style={{ color: GRAY }}>{'respMinMed' in r ? dur(med) : '—'}</td>
+                <td className={cls} style={{ color: colAband }}>{f0(sin)}</td>
+                <td className={cls} style={{ color: colAband }}>{rate(sin, L)}</td>
+                <td className={cls} style={{ color: colSla }}>{rate(sla, L)}</td>
+                <td className={cls}>{dur(med)}</td>
+                <td className={cls} style={{ color: GRAY }}>{f0(bus)}</td>
+                <td className={cls} style={{ color: GRAY }}>{pxc == null ? '—' : pxc.toFixed(1)}</td>
                 <td className={cls}>{f0(V)}</td>
-                <td className={cls}>{rate(V, L)}</td>
+                <td className={cls} style={{ color: colVis, fontWeight: 700 }}>{rate(V, L)}</td>
                 <td className={cls}>{f0(O)}</td>
-                <td className={cls}>{rate(O, V)}</td>
                 <td className={cls}>{f0(C)}</td>
                 <td className={cls}>{rate(C, V)}</td>
                 <td className={cls}>{money(pick(vista, r.comision))}</td>
@@ -508,9 +559,18 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
     return (
         <div className="mt-2 pl-6">
             <p className="mb-2 text-[11px]" style={{ color: SOFT }}>
-                Desempeño por asesor en <b>{d.leadsLabel}</b>. El lead se le cuenta al asesor <b>responsable</b> de atenderlo;
-                la visita, a quien la hizo; la oferta y el cierre, al asesor de tu inmobiliaria que participó en la operación.
+                Tus asesores en <b>{d.leadsLabel}</b>. El lead se le cuenta al asesor <b>responsable</b> de atenderlo;
+                la visita, a quien la hizo; la oferta y el cierre, al asesor que participó en la operación.
+                Solo aparecen asesores <b>de tu inmobiliaria</b>.
             </p>
+            {(d.externo.leads > 0 || d.externo.visitas > 0) && (
+                <p className="mb-2 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: SEA, background: '#F3F3F3', color: SOFT }}>
+                    Además, brokers de <b>otras inmobiliarias</b> de la red trabajaron tu inventario:
+                    {' '}<b>{f0(d.externo.visitas)}</b> visitas ({Math.round(100 * d.externo.pctVisitas)}% del total)
+                    {' '}y <b>{f0(d.externo.leads)}</b> leads atendidos. No van en la tabla porque no son tu equipo,
+                    pero sí son ventas potenciales de tus propiedades.
+                </p>
+            )}
             <div className="mb-2 flex gap-2">
                 {(['Total', 'Venta', 'Renta'] as Vista[]).map((v) => (
                     <button key={v} onClick={() => setVista(v)}
@@ -524,7 +584,7 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
                 </span>
             </div>
             <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] border-collapse text-[10px]">
+                <table className="w-full min-w-[1080px] border-collapse text-[10px]">
                     <thead>
                         <tr className="border-b" style={{ borderColor: SOFT }}>
                             {COLS.map((h, i) => (
@@ -539,11 +599,45 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
                 </table>
             </div>
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
-                Tasa resp. = respondidos ÷ leads · tasa visita = visitas ÷ leads · tasa oferta = ofertas ÷ visitas · visita→cierre = cierres ÷ visitas.
-                La <b>1ª respuesta</b> se mide de <i>createdAt</i> a <i>answeredAt</i> del lead; se muestra promedio y mediana porque el promedio
-                lo distorsionan unos pocos leads contestados días después. <b>% de comisión</b> = comisión ÷ valor de cierre; <b>ticket</b> = valor
-                de cierre promedio (en renta es la renta mensual, por eso nunca se suma con venta).
+                <b>Abandono</b> = leads que nunca contestó ÷ sus leads (rojo desde 15%). <b>Fuera de SLA 24h</b> = contestados después
+                de 24 h <i>más</i> los que nunca contestó (rojo desde 25%) — un lead sin contestar es peor que uno contestado tarde,
+                por eso cuenta aquí. <b>1ª respuesta</b> en mediana, no promedio: unos pocos leads contestados días después
+                destruyen el promedio. <b>Búsquedas</b> = búsquedas de comprador que abrió en el período; <b>props x cliente</b> =
+                propiedades que le compartió a cada cliente (mide trabajo, no suerte). <b>Tasa visita</b> en verde si iguala a las
+                mejores inmobiliarias{benchVis != null && ` (${Math.round(100 * benchVis)}%)`}, en rojo si no llega a la mitad.
+                <b> % de comisión</b> = comisión ÷ valor de cierre; <b>ticket</b> = valor de cierre promedio (en renta es la renta
+                mensual, por eso nunca se suma con venta).
             </p>
+            {(() => {
+                // recap de la sección: los hechos que se ven en la tabla, dichos en una línea
+                const conVol = d.asesores.filter((r) => r.leads.sale + r.leads.rent >= 10);
+                if (!conVol.length) return null;
+                const malSla = conVol.filter((r) => {
+                    const L = r.leads.sale + r.leads.rent;
+                    return (r.fueraSla.sale + r.fueraSla.rent) / L >= 0.25;
+                });
+                const abandona = conVol.filter((r) => {
+                    const L = r.leads.sale + r.leads.rent;
+                    return (L - r.resp.sale - r.resp.rent) / L >= 0.15;
+                });
+                const pxc = tot.clientes ? tot.propsCompartidas / tot.clientes : null;
+                const L = tot.leads.sale + tot.leads.rent, V = tot.visitas.sale + tot.visitas.rent;
+                const vsBench = benchVis != null && L
+                    ? (V / L >= benchVis ? 'a la altura de las mejores' : `debajo de las mejores (${Math.round(100 * benchVis)}%)`)
+                    : null;
+                return (
+                    <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: malSla.length ? RED : YEL, background: '#F3F3F3', color: SOFT }}>
+                        <b>{conVol.length}</b> {conVol.length === 1 ? 'asesor' : 'asesores'} con volumen suficiente para evaluar.
+                        {malSla.length > 0
+                            ? <> <b style={{ color: RED }}>{malSla.length}</b> deja más de una cuarta parte de sus leads fuera de las 24 h
+                                {malSla.length <= 3 && <> ({malSla.map((r) => r.name).join(', ')})</>}.</>
+                            : <> Todos responden dentro de las 24 h a la mayoría de sus leads.</>}
+                        {abandona.length > 0 && <> <b style={{ color: RED }}>{abandona.length}</b> abandona 15% o más de sus leads.</>}
+                        {pxc != null && <> El equipo comparte <b>{pxc.toFixed(1)}</b> propiedades por cliente.</>}
+                        {vsBench && <> En tasa de visita el equipo está <b>{vsBench}</b>.</>}
+                    </p>
+                );
+            })()}
         </div>
     );
 }

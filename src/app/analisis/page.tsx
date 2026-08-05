@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Combobox, Dropdown, Select } from '@/components/inputs';
 import type { AnalisisData } from '@/lib/analisis';
 import { CIERRES_WIN, DEMANDA_WIN, DESEMPENO_WIN, COMPARAR_OPTS, mesesOpts } from '@/lib/ventanas';
-import { GlosarioView, InventarioView, PrecioView, FunnelView, RecoView, DestacadosView, YoyView, Top10View, AsesoresView } from './views';
+import { GlosarioView, InventarioView, FunnelView, RecoView, YoyView, Top10View, AsesoresView } from './views';
 
 /* ------------------------------------------------------------------ *
  * /analisis — "Análisis general" (configurador del reporte ampliado)
@@ -24,15 +24,13 @@ const fmtYoy = (v: number, fmt: string) =>
 
 // Secciones del documento (el "hasta qué sí / qué no incluir").
 const SECCIONES = [
-    { id: 'inventario', label: 'Inventario: dónde y cómo', needs: null },
-    { id: 'precio', label: 'Precio × calidad + leads', needs: null },
-    { id: 'destacados', label: 'Cómo se ha destacado', needs: 'destacados' },
-    { id: 'funnel', label: 'Funnel comercial', needs: null },
-    { id: 'asesores', label: 'Desempeño por asesor', needs: null },
+    { id: 'inventario', label: 'Dónde está tu inventario', needs: null },
+    { id: 'funnel', label: 'Qué pasa con tus leads', needs: null },
+    { id: 'asesores', label: 'Cómo están tus asesores', needs: null },
     { id: 'yoy', label: 'Comparación de períodos', needs: null },
-    { id: 'top10', label: 'Top 10 críticas', needs: null },
-    { id: 'reco', label: 'Recomendaciones', needs: null },
-    { id: 'glosario', label: '¿Cómo leer esta información? (glosario)', needs: null },
+    { id: 'top10', label: 'Propiedades con potencial', needs: null },
+    { id: 'reco', label: 'Dame recomendaciones', needs: null },
+    { id: 'glosario', label: 'Cómo leer este reporte', needs: null },
 ] as const;
 
 // ---- primitivas de UI, en el look de la app ----
@@ -82,17 +80,6 @@ function Chips({ options, value, onChange, multi = true }: {
     );
 }
 
-function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
-    return (
-        <button onClick={() => onChange(!on)} className="flex items-center gap-2.5 text-sm text-[#212322]">
-            <span className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-[3px] transition-colors ${on ? 'bg-[#529999]' : 'bg-neutral-300'}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-[2px] bg-white transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
-            </span>
-            <span>{label}</span>
-        </button>
-    );
-}
-
 type Row = { kam?: string; inmobiliaria?: string | null };
 
 const MESES_OPTS = mesesOpts();
@@ -107,6 +94,7 @@ export default function AnalisisGeneral() {
     const [kam, setKam] = useState('(todos)');
     const [inmo, setInmo] = useState('(todas)');
     const [operacion, setOperacion] = useState('Ambas');
+    const [asesor, setAsesor] = useState('');   // nombre exacto de un asesor; '' = toda la inmobiliaria
     // COMPARABLES (mercado): cierres + demanda. La oferta es foto de hoy, no se configura.
     const [ventCierres, setVentCierres] = useState('Últimos 24 meses');
     const [ventDemanda, setVentDemanda] = useState('Últimos 3 meses');
@@ -116,9 +104,8 @@ export default function AnalisisGeneral() {
     const [desempenoMes, setDesempenoMes] = useState(MESES_OPTS[1].v);
     const [comparar, setComparar] = useState('Mismo período del año pasado');
     const [referencias, setReferencias] = useState<string[]>(['ACM (valor estimado)', 'Oferta de zona', 'Cierres reales', 'Qué te alcanza por el mismo precio']);
-    const [destacados, setDestacados] = useState(false);
     const [secciones, setSecciones] = useState<string[]>(
-        SECCIONES.filter((s) => s.id !== 'destacados').map((s) => s.id)
+        SECCIONES.map((s) => s.id)
     );
     const [cortes, setCortes] = useState<string[]>(['Por zona', 'Por tipo', 'Por ticket', 'Por operación']);
     const [portalMode, setPortalMode] = useState('Todas las fuentes');
@@ -159,12 +146,7 @@ export default function AnalisisGeneral() {
         [allInmos, kam, kamByInmo]
     );
 
-    // Cuando se apaga destacados, quitar esa sección del checklist.
-    useEffect(() => {
-        if (!destacados) setSecciones((s) => s.filter((x) => x !== 'destacados'));
-    }, [destacados]);
-
-    const seccionesElegidas = SECCIONES.filter((s) => secciones.includes(s.id) && (!s.needs || destacados));
+    const seccionesElegidas = SECCIONES.filter((s) => secciones.includes(s.id));
 
     const [data, setData] = useState<AnalisisData | null>(null);
     const [loading, setLoading] = useState(false);
@@ -176,7 +158,7 @@ export default function AnalisisGeneral() {
         try {
             const res = await fetch('/api/analisis', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inmo, operacion, ventDemanda, ventCierres, referencias, desempeno, desempenoMes, comparar, mlsGeneral }),
+                body: JSON.stringify({ inmo, operacion, asesor, ventDemanda, ventCierres, referencias, desempeno, desempenoMes, comparar, mlsGeneral }),
             });
             if (res.status === 401) { router.push('/login'); return; }
             const d = await res.json();
@@ -187,7 +169,7 @@ export default function AnalisisGeneral() {
         } finally { setLoading(false); }
     }
     // La config cambió → el preview actual queda obsoleto.
-    useEffect(() => { setData(null); }, [inmo, operacion, ventDemanda, ventCierres, referencias, desempeno, desempenoMes, comparar, mlsGeneral]);
+    useEffect(() => { setData(null); }, [inmo, asesor, operacion, ventDemanda, ventCierres, referencias, desempeno, desempenoMes, comparar, mlsGeneral]);
 
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
@@ -226,6 +208,10 @@ export default function AnalisisGeneral() {
                         <div className="flex flex-col gap-3.5">
                             <Field label="Operación">
                                 <Chips multi={false} options={['Ambas', 'Venta', 'Renta']} value={[operacion]} onChange={(v) => setOperacion(v[0])} />
+                            </Field>
+                            <Field label="Asesor (filtro opcional)" hint="Acota TODO el reporte a la cartera de ese asesor. Escribe el nombre como aparece en Pulppo.">
+                                <input value={asesor} onChange={(e) => setAsesor(e.target.value)} placeholder="Toda la inmobiliaria"
+                                    className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-sm shadow-sm focus:border-[#F6BE00] focus:outline-none" />
                             </Field>
                             <Field label="Cortes de segmentación"
                                 hint="Quita “Por operación” para no comparar venta vs. renta; quita “Por ticket” para no hablar de rangos de precio.">
@@ -282,16 +268,14 @@ export default function AnalisisGeneral() {
 
                     <Card title="4 · Secciones a incluir" hint="Marca qué páginas entran al documento.">
                         <div className="flex flex-col gap-2.5">
-                            <div className="pb-1"><Toggle on={destacados} onChange={setDestacados} label="Incluir capa de destacados (ampliado vs. desempeño)" /></div>
                             {SECCIONES.map((s) => {
-                                const locked = !!s.needs && !destacados;
-                                const on = secciones.includes(s.id) && !locked;
+                                const on = secciones.includes(s.id);
                                 return (
-                                    <label key={s.id} className={`flex items-center gap-2.5 text-sm text-[#212322] ${locked ? 'opacity-40' : 'cursor-pointer'}`}>
-                                        <input type="checkbox" disabled={locked} checked={on}
+                                    <label key={s.id} className="flex cursor-pointer items-center gap-2.5 text-sm text-[#212322]">
+                                        <input type="checkbox" checked={on}
                                             onChange={() => setSecciones((prev) => prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id])}
                                             className="h-4 w-4 accent-[#529999]" />
-                                        <span>{s.label}{locked && <span className="ml-1 text-[10px] text-neutral-400">(requiere destacados)</span>}</span>
+                                        <span>{s.label}</span>
                                     </label>
                                 );
                             })}
@@ -349,7 +333,7 @@ export default function AnalisisGeneral() {
                         <div className="flex items-center gap-2">
                             {error && <span className="text-xs" style={{ color: RED }}>{error}</span>}
                             <button onClick={() => window.print()} disabled={!data} className="rounded-[2px] border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50 disabled:opacity-40">PDF</button>
-                            <button onClick={generar} disabled={loading} className="rounded-[2px] bg-[#212322] px-4 py-1.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60">{loading ? 'Generando…' : 'Generar'}</button>
+                            <button onClick={generar} disabled={loading} className="rounded-[2px] border-2 border-[#F6BE00] bg-[#F6BE00] px-5 py-2 text-sm font-bold text-[#212322] shadow-sm hover:brightness-95 disabled:opacity-60">{loading ? 'Generando…' : 'Generar →'}</button>
                         </div>
                     </div>
 
@@ -371,6 +355,7 @@ export default function AnalisisGeneral() {
                                 <b>Desempeño:</b> {data.leadsLabel}
                                 {data.hasComp ? <> · comparado contra <b>{data.compLabels.a}</b></> : <> · <b>sin comparación</b></>}
                                 {' · '}<b>Comparables:</b> cierres {data.cierresLabel} · demanda {data.demandaLabel} · oferta hoy
+                                {data.asesorFiltro && <> · <b>Solo la cartera de {data.asesorFiltro}</b></>}
                             </p>
                         )}
 
@@ -424,8 +409,6 @@ export default function AnalisisGeneral() {
                                         <h3 className="text-[15px]" style={{ fontFamily: 'var(--font-serif)' }}>{s.label}</h3>
                                     </div>
                                     {data && s.id === 'inventario' ? <InventarioView d={data} referencias={referencias} cortes={cortes} />
-                                        : data && s.id === 'precio' ? <PrecioView d={data} />
-                                        : data && s.id === 'destacados' ? <DestacadosView d={data} />
                                         : data && s.id === 'funnel' ? <FunnelView d={data} portalMode={portalMode} portales={portales} />
                                         : data && s.id === 'asesores' ? <AsesoresView d={data} />
                                         : data && s.id === 'yoy' ? <YoyView d={data} />
@@ -462,8 +445,6 @@ function previewLine(id: string, c: {
         : c.portalMode === 'Análisis general (sin desglose)' ? 'sin desglose por fuente' : 'todas las fuentes';
     switch (id) {
         case 'inventario': return `Distribución del inventario ${c.cortes.map((x) => x.toLowerCase()).join(', ') || '(sin cortes)'}, contra la demanda de cada zona.`;
-        case 'precio': return `Matriz precio × calidad × leads usando ${c.referencias.join(', ') || 'referencias de precio'}. Estado de precio del ACM.`;
-        case 'destacados': return 'Cómo se ha destacado el inventario y el lift de leads (L/L con vs. sin destacado).';
         case 'funnel': return `Embudo lead → visita → cierre; leads por fuente: ${fuentes}.`;
         case 'asesores': return 'Funnel por asesor: leads, respuesta, visitas, ofertas, cierres, comisión y ticket (venta y renta por separado).';
         case 'yoy': return 'La ventana de desempeño contra su base: inventario, leads, cierres y comisión.';

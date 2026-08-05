@@ -79,6 +79,7 @@ export interface AnalisisConfig {
     desempeno?: string;           // ver DESEMPENO_WIN
     desempenoMes?: string;        // 'YYYY-MM' cuando desempeno === 'Mes específico'
     comparar?: string;            // ver COMPARAR_OPTS
+    asesor?: string;              // nombre de un asesor → acota TODO el reporte a su cartera
     // --- legacy (formularios anteriores): se mapean a desempeno/comparar ---
     ventLeads?: string;
     comparacion?: string;
@@ -190,12 +191,21 @@ export interface AsesorRow {
     id: string; name: string;
     leads: PorOp;                 // leads únicos que le tocaron
     resp: PorOp;                  // de esos, los que respondió
+    fueraSla: PorOp;              // respondidos DESPUÉS de 24 h + los que nunca respondió
     respMinAvg: { sale: number | null; rent: number | null };   // minutos a la 1ª respuesta (promedio)
     respMinMed: { sale: number | null; rent: number | null };   // ídem (mediana: el promedio lo rompen los outliers)
     visitas: PorOp; ofertas: PorOp; cierres: PorOp;
     comision: PorOp;              // comisión de las operaciones cerradas
     gmv: PorOp;                   // valor de cierre (para ticket promedio y % de comisión)
+    busquedas: number;            // búsquedas de comprador abiertas en el período (pipeline de demanda)
+    propsCompartidas: number;     // propiedades que le compartió a sus clientes
+    clientes: number;             // clientes distintos con búsqueda en el período
 }
+// Actividad sobre TU inventario que hizo un broker de OTRA inmobiliaria (la red Pulppo es un MLS
+// compartido). No va en la tabla de asesores, pero es información: la red trabajando tu inventario.
+export interface ExternoRow { leads: number; visitas: number; pctLeads: number; pctVisitas: number }
+// Referencia de mercado: las mejores inmobiliarias (TOP 20 por # de cierres en la ventana).
+export interface Bench { tasaVisita: number | null; tasaResp: number | null; leadToClose: number | null; nInmos: number; label: string }
 
 export interface AnalisisData {
     company: string;
@@ -206,7 +216,10 @@ export interface AnalisisData {
     leadsLabel: string;           // etiqueta de la ventana de DESEMPEÑO
     demandaLabel: string;         // etiqueta de la ventana de demanda (comparables)
     ofertaLabel: string;          // "red Pulppo" | "MLS i24"
-    asesores: AsesorRow[];        // desempeño por asesor (ventana de desempeño)
+    asesores: AsesorRow[];        // desempeño por asesor (SOLO asesores de la inmobiliaria)
+    externo: ExternoRow;          // lo que hicieron brokers de otras inmobiliarias sobre tu inventario
+    bench: Bench;                 // referencia: mejores inmobiliarias (TOP 20 por cierres)
+    asesorFiltro: string;         // '' = toda la inmobiliaria; si no, el asesor al que está acotado
     operacion: string;            // 'Ambas' | 'Venta' | 'Renta' (eco del filtro aplicado)
     zombie: { n: number; pct: number; label: string };
     leadsBySource: { source: string; n: number }[];
@@ -223,7 +236,9 @@ export interface AnalisisData {
     nSale: number; nCaro: number; pctCaro: number;
     insightInv: string;           // lectura auto de Inventario
     insightPrecio: string;        // lectura auto de Precio × calidad
-    funnel: { title: string; steps: { label: string; value: number; rate: number | null }[] }[];
+    // funnel de la ventana de desempeño y el MISMO funnel del período base, para mostrar el ▲▼
+    // dentro de la sección (antes la comparación solo existía en su propia sección)
+    funnel: { title: string; steps: { label: string; value: number; rate: number | null; prev: number | null }[] }[];
     funnelReading: string;
     recos: { enfoque: string; title: string; body: string; sev: number }[];
     compLabels: { a: string; b: string };
@@ -239,6 +254,72 @@ export interface AnalisisData {
         llTier: { tier: string; saleLL: number | null; saleLeads: number; rentLL: number | null; rentLeads: number }[];
         reading: string;
     };
+}
+
+// Nombre completo de un agente (null si no es un agente usable: sin _id o sin nombre).
+const agName = (a: Document | null | undefined): string | null => {
+    if (!a || !gv(a, '_id')) return null;
+    const n = [gv(a, 'firstName'), gv(a, 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    return n || null;
+};
+// Se agrupa por nombre normalizado: la misma persona puede tener dos cuentas de agente
+// (visto en producción) y al dueño le interesa la persona, no la cuenta.
+const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+// ---------- Benchmark: las MEJORES inmobiliarias ----------
+// Referencia = TOP 20 por # de cierres en la ventana (decisión de Ale, ago-2026). El ranking por
+// ROI vive fuera de Mongo, pero "quién cierra más" sale de aquí y es defendible.
+// Medido en may–jul 2026: las TOP convierten a visita 14.4% vs 10.4% del resto, así que comparar
+// contra el PROMEDIO no sirve (casi todas salen bien); hay que comparar contra las mejores.
+// Cacheado por ventana: es un escaneo global y cambia lento.
+const _benchCache = new Map<string, { v: Bench; at: number }>();
+async function bestAgencies(db: Db, start: Date, end: Date, label: string): Promise<Bench> {
+    const key = `${start.getTime()}|${end.getTime()}`;
+    const hit = _benchCache.get(key);
+    if (hit && Date.now() - hit.at < 900000) return hit.v;
+
+    const pid2cid = new Map<string, string>();
+    for await (const p of db.collection('properties').find({ 'company._id': { $exists: true } }, { projection: { 'company._id': 1 } }))
+        pid2cid.set(String(p._id), String(gv(p, 'company', '_id')));
+
+    const leads: Record<string, number> = {}, resp: Record<string, number> = {};
+    const vis: Record<string, number> = {}, clo: Record<string, number> = {};
+    const seen = new Set<string>();
+    for await (const l of db.collection('leads').find({ createdAt: { $gte: start, $lt: end } },
+        { projection: { 'property._id': 1, answeredAt: 1, 'contact.phone': 1, 'contact.email': 1, 'contact._id': 1 } })) {
+        const pid = String(gv(l, 'property', '_id')); const cid = pid2cid.get(pid);
+        if (!cid) continue;
+        const who = gv(l, 'contact', 'phone') || gv(l, 'contact', 'email') || String(gv(l, 'contact', '_id') || l._id);
+        const k = `${pid}|${who}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        leads[cid] = (leads[cid] || 0) + 1;
+        if (l.answeredAt) resp[cid] = (resp[cid] || 0) + 1;
+    }
+    for await (const v of db.collection('visits').find({ 'status.last': { $ne: 'cancelled' }, createdAt: { $gte: start, $lt: end } },
+        { projection: { 'steps.property._id': 1 } })) {
+        for (const s of ((v.steps || []) as Document[])) {
+            const cid = pid2cid.get(String(gv(s, 'property', '_id')));
+            if (cid) { vis[cid] = (vis[cid] || 0) + 1; break; }
+        }
+    }
+    for await (const o of db.collection('operations').find({ 'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: start, $lt: end } },
+        { projection: { 'property._id': 1 } })) {
+        const cid = pid2cid.get(String(gv(o, 'property', '_id')));
+        if (cid) clo[cid] = (clo[cid] || 0) + 1;
+    }
+    // universo: inmobiliarias con volumen suficiente para que la tasa signifique algo
+    const univ = Object.keys(leads).filter((c) => leads[c] >= 50);
+    const top = univ.sort((a, b) => (clo[b] || 0) - (clo[a] || 0)).slice(0, 20);
+    const L = top.reduce((a, c) => a + leads[c], 0);
+    const v: Bench = {
+        tasaVisita: L ? top.reduce((a, c) => a + (vis[c] || 0), 0) / L : null,
+        tasaResp: L ? top.reduce((a, c) => a + (resp[c] || 0), 0) / L : null,
+        leadToClose: L ? top.reduce((a, c) => a + (clo[c] || 0), 0) / L : null,
+        nInmos: top.length, label,
+    };
+    _benchCache.set(key, { v, at: Date.now() });
+    return v;
 }
 
 async function resolveCompany(db: Db, name: string): Promise<{ id: ObjectId; name: string }> {
@@ -293,9 +374,29 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const demandStart = windowStart(demandaWindow, 3);
     const demandaLabel = demandaWindow.toLowerCase();
 
+    // ---- QUIÉNES SON TUS ASESORES (y el filtro por asesor) ----
+    // La red Pulppo es un MLS compartido: un broker de OTRA inmobiliaria puede atender un lead o
+    // hacer una visita sobre tu inventario (hasta 17% de las visitas en los casos medidos). En la
+    // tabla "cómo están tus asesores" eso NO puede aparecer, así que la lista sale de la colección
+    // `agents` de la inmobiliaria y lo demás se cuenta aparte como actividad de la red.
+    const internos = new Map<string, string>();
+    for (const a of await db.collection('agents').find({ 'company._id': CID },
+        { projection: { firstName: 1, lastName: 1 } }).toArray()) {
+        const n = agName(a);
+        if (n) internos.set(String(a._id), n);
+    }
+    // Filtro por asesor: acota el reporte a SU CARTERA (las propiedades de las que es responsable).
+    // Es el corte defendible: "el inventario de Juan y lo que pasó con él".
+    const asesorSel = (cfg.asesor || '').trim();
+    const asesorIds = asesorSel
+        ? [...internos.entries()].filter(([, n]) => norm(n) === norm(asesorSel)).map(([id]) => new ObjectId(id))
+        : [];
+    if (asesorSel && !asesorIds.length) throw new Error(`No encontré al asesor "${asesorSel}" en ${CNAME}`);
+    const agentFilter: Document = asesorIds.length ? { 'agent._id': { $in: asesorIds } } : {};
+
     // --- propiedades publicadas ---
     const pub = await db.collection('properties').find(
-        { 'company._id': CID, 'status.last': 'published' },
+        { 'company._id': CID, 'status.last': 'published', ...agentFilter },
         { projection: {
             listing: 1, type: 1, 'acm.price.value': 1, qualityScore: 1, pictures: 1, videos: 1,
             virtualTour: 1, 'address.neighborhood': 1, 'address.city': 1, internalId: 1, publishedAt: 1,
@@ -535,7 +636,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     // ===================== FUNNEL (venta vs renta) + ASESORES + RECOMENDACIONES =====================
     // El funnel usa TODO el inventario (incl. vendido/dado de baja), no solo lo publicado hoy, y se
     // mide dentro de la VENTANA DE DESEMPEÑO elegida (antes estaba clavado a YTD, ignorando el filtro).
-    const allprops = await db.collection('properties').find({ 'company._id': CID },
+    const allprops = await db.collection('properties').find({ 'company._id': CID, ...agentFilter },
         { projection: { 'listing.operation': 1, qualityScore: 1, publishedAt: 1, 'status.last': 1, 'status.history': 1, agent: 1 } }).toArray();
     const pid2op = new Map(allprops.map((p) => [String(p._id), gv(p, 'listing', 'operation') as string]));
     const allpids = allprops.map((p) => p._id as ObjectId);
@@ -545,15 +646,11 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     // --- asesores: acumulador por persona (se agrupa por nombre normalizado: la misma persona
     //     puede tener dos cuentas de agente y al dueño le interesa la persona, no la cuenta) ---
     type Ac = { id: string; name: string; leads: Record<string, number>; resp: Record<string, number>;
+        fueraSla: Record<string, number>;
         mins: Record<string, number[]>; visitas: Record<string, number>; ofertas: Record<string, number>;
-        cierres: Record<string, number>; comision: Record<string, number>; gmv: Record<string, number> };
+        cierres: Record<string, number>; comision: Record<string, number>; gmv: Record<string, number>;
+        busquedas: number; propsCompartidas: number; clientes: Set<string> };
     const ases = new Map<string, Ac>();
-    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-    const agName = (a: Document | null | undefined): string | null => {
-        if (!a || !gv(a, '_id')) return null;
-        const n = [gv(a, 'firstName'), gv(a, 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-        return n || null;
-    };
     // Primer candidato USABLE (con _id y nombre). No basta con `a ?? b`: en Mongo hay `agent: {}`
     // y `agent: null`, y un objeto vacío cortaría la cadena de fallback perdiendo el evento.
     const pickAgent = (...cands: unknown[]): Document | null => {
@@ -568,29 +665,39 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const k = norm(name);
         let e = ases.get(k);
         if (!e) {
-            e = { id, name, leads: zero(), resp: zero(), mins: { sale: [], rent: [] }, visitas: zero(),
-                ofertas: zero(), cierres: zero(), comision: zero(), gmv: zero() };
+            e = { id, name, leads: zero(), resp: zero(), fueraSla: zero(), mins: { sale: [], rent: [] }, visitas: zero(),
+                ofertas: zero(), cierres: zero(), comision: zero(), gmv: zero(),
+                busquedas: 0, propsCompartidas: 0, clientes: new Set<string>() };
             ases.set(k, e);
         }
         return e;
     };
-    // asesores de la inmobiliaria (por _id) → para atribuir operaciones al broker interno correcto
-    const agentsById = new Map<string, string>();
-    const agentsVivos = new Map<string, string>();   // solo los que tienen inventario publicado hoy
+    const esInterno = (a: Document | null | undefined): boolean => !!a && internos.has(String(gv(a, '_id')));
+    // acumula SOLO si el agente es de la inmobiliaria; si no, devuelve null (y quien llama lo cuenta como externo)
+    const accInterno = (a: Document | null | undefined): Ac | null =>
+        esInterno(a) ? acc(agName(a), String(gv(a, '_id') || '')) : null;
+
+    // asesores con inventario publicado hoy (para sembrar la tabla y como fallback de atribución)
+    const agentsVivos = new Map<string, string>();
     for (const p of allprops) {
         const a = gv(p, 'agent') as Document | undefined;
         const n = agName(a);
         if (!a || !n) continue;
-        const aid = String(gv(a, '_id'));
-        agentsById.set(aid, n);
-        if (gv(p, 'status', 'last') === 'published') agentsVivos.set(aid, n);
+        if (gv(p, 'status', 'last') === 'published') agentsVivos.set(String(gv(a, '_id')), n);
     }
     const pid2agent = new Map(allprops.map((p) => [String(p._id), gv(p, 'agent') as Document | undefined]));
-    // todo asesor con inventario publicado aparece en la tabla, aunque no haya tenido actividad
-    // en la ventana (un asesor con 0 leads es información, no un hueco)
-    for (const [id, n] of agentsVivos) acc(n, id);
+    // Todo asesor con inventario publicado aparece en la tabla aunque no haya tenido actividad en la
+    // ventana (un asesor con 0 leads es información, no un hueco). Si trae inventario de la
+    // inmobiliaria, cuenta como interno aunque no esté en `agents` (cuentas viejas sin migrar).
+    for (const [id, n] of agentsVivos) { if (!internos.has(id)) internos.set(id, n); acc(n, id); }
+    let extLeads = 0, extVisitas = 0;   // actividad de brokers de otras inmobiliarias
 
     const leadsByOp = zero(), contByOp = zero();
+    // mismos contadores para el PERÍODO BASE, para poder mostrar el ▲▼ dentro del funnel
+    // (antes la comparación solo existía en su propia sección y no se veía en ningún otro lado)
+    const leadsPrev = zero(), contPrev = zero(), visPrev = zero(), offPrev = zero(), cloPrev = zero();
+    const inCmp = (d: Date | null) => !!d && !!CMP && d >= CMP.start && d < CMP.end;
+    const dupPrev = new Set<string>();
     let perfLeadsAll = 0, perfVis = 0, leadsA = 0, leadsB = 0;
     let compCliente = 0, compBroker = 0, compIncont = 0, compDup = 0;
     const dupSet = new Set<string>();   // clave propiedad+contacto → repetición = duplicado
@@ -620,32 +727,47 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
                 const sl = srcLabel(l.source); srcCount[sl] = (srcCount[sl] || 0) + 1;
                 // asesor RESPONSABLE del lead (agent asignado); si no hay, el de la propiedad
                 const la = pickAgent(gv(l, 'agent'), gv(l, 'property', 'agent'), pid2agent.get(pid));
-                const e = acc(agName(la), String(gv(la, '_id') || ''));
+                const e = accInterno(la);
                 if (e) {
                     e.leads[op]++;
-                    if (ans) { e.resp[op]++; e.mins[op].push(Math.max(0, (ans.getTime() - d.getTime()) / 60000)); }
-                }
+                    if (ans) {
+                        const min = Math.max(0, (ans.getTime() - d.getTime()) / 60000);
+                        e.resp[op]++; e.mins[op].push(min);
+                        if (min > 1440) e.fueraSla[op]++;       // contestado, pero después de 24 h
+                    } else e.fueraSla[op]++;                    // nunca contestado = el peor caso
+                } else if (la) extLeads++;
             }
+        }
+        // el mismo funnel en el período base (dedup propio, sin tocar el del período actual)
+        if (inCmp(d) && (op === 'sale' || op === 'rent') && !dupPrev.has(kk)) {
+            dupPrev.add(kk);
+            leadsPrev[op]++;
+            if (l.answeredAt) contPrev[op]++;
         }
         // comparación de períodos (leads únicos dentro de cada rango)
         if (CMP && d >= CMP.start && d < CMP.end && !seenA.has(kk)) { seenA.add(kk); leadsA++; }
         if (inPerf(d) && !seenB.has(kk)) { seenB.add(kk); leadsB++; }
     }
     const visByOp = zero();
-    const vc = db.collection('visits').find({ 'steps.property._id': { $in: allpids }, 'status.last': { $ne: 'cancelled' }, createdAt: { $gte: PERF.start, $lt: PERF.end } },
-        { projection: { 'steps.property._id': 1, agent: 1 } });
+    // se escanea desde el inicio de la ventana más vieja para poder llenar también el período base
+    const vc = db.collection('visits').find({ 'steps.property._id': { $in: allpids }, 'status.last': { $ne: 'cancelled' }, createdAt: { $gte: leadScanStart, $lt: PERF.end } },
+        { projection: { 'steps.property._id': 1, agent: 1, createdAt: 1 } });
     for await (const v of vc) {
         const steps = (v.steps || []) as Document[];
         const mine = steps.map((s) => String(gv(s, 'property', '_id'))).find((id) => pid2op.has(id));
-        if (mine) {
-            perfVis++; const op = pid2op.get(mine);
-            if (op === 'sale' || op === 'rent') {
-                visByOp[op]++;
-                // asesor que hizo la visita; si no viene, el de la propiedad visitada
-                const va = pickAgent(gv(v, 'agent'), pid2agent.get(mine));
-                const e = acc(agName(va), String(gv(va, '_id') || ''));
-                if (e) e.visitas[op]++;
-            }
+        if (!mine) continue;
+        const vd = asDt(v.createdAt);
+        const op = pid2op.get(mine);
+        if (inCmp(vd) && (op === 'sale' || op === 'rent')) visPrev[op]++;
+        if (!inPerf(vd)) continue;
+        perfVis++;
+        if (op === 'sale' || op === 'rent') {
+            visByOp[op]++;
+            // asesor que hizo la visita; si no viene, el de la propiedad visitada
+            const va = pickAgent(gv(v, 'agent'), pid2agent.get(mine));
+            const e = accInterno(va);
+            if (e) e.visitas[op]++;
+            else if (va) extVisitas++;   // la visita la hizo un broker de otra inmobiliaria
         }
     }
     const offersByOp = zero(), closesByOp = zero();
@@ -662,16 +784,16 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const last = gv(o, 'status', 'last');
         const cerrada = (last === 'closed' || last === 'paying') && inPerf(xd);
         if (cerrada) closesByOp[t]++;
+        // mismos pasos en el período base
+        if (inCmp(cd) || inCmp(xd)) offPrev[t]++;
+        if ((last === 'closed' || last === 'paying') && inCmp(xd)) cloPrev[t]++;
         if (!abierta && !cerrada) continue;
         // la operación se atribuye al primer broker que SÍ es de la inmobiliaria (puede ser el
         // captador o el que trajo al comprador); si ninguno lo es, al asesor de la propiedad.
         const cands = [gv(o, 'seller', 'broker'), gv(o, 'buyer', 'broker'), gv(o, 'property', 'agent')];
-        const interno = cands.find((c) => {
-            const a = c as Document | null | undefined;
-            return a && agentsById.has(String(gv(a, '_id')));
-        });
-        const oa = pickAgent(interno, ...cands, pid2agent.get(pid));
-        const e = acc(agName(oa), String(gv(oa, '_id') || ''));
+        const dentro = cands.find((c) => esInterno(c as Document | null | undefined));
+        const oa = pickAgent(dentro, pid2agent.get(pid));
+        const e = accInterno(oa);
         if (e) {
             if (abierta) e.ofertas[t]++;
             if (cerrada) {
@@ -681,12 +803,38 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
             }
         }
     }
+    // --- pipeline del lado COMPRADOR por asesor: búsquedas abiertas en el período y cuántas
+    //     propiedades le compartió a cada cliente. `searches.properties[]` = lo que el asesor le
+    //     agregó a la búsqueda. Ojo: el 97% de las búsquedas históricas están canceladas, así que
+    //     solo tiene sentido contar las ABIERTAS EN EL PERÍODO, no un acumulado. ---
+    // Se cuenta con $size en el servidor: `properties` trae fichas completas y traerlas sería carísimo.
+    const busqAgg = await db.collection('searches').aggregate([
+        { $match: { 'company._id': CID, createdAt: { $gte: PERF.start, $lt: PERF.end }, ...agentFilter } },
+        { $group: {
+            _id: '$agent._id',
+            busquedas: { $sum: 1 },
+            props: { $sum: { $size: { $ifNull: ['$properties', []] } } },
+            clientes: { $addToSet: '$contact._id' },
+        } },
+    ], { allowDiskUse: true }).toArray();
+    for (const r of busqAgg) {
+        const aid = r._id ? String(r._id) : '';
+        const nm = internos.get(aid);
+        if (!nm) continue;                       // búsqueda de un broker de otra inmobiliaria
+        const e = acc(nm, aid);
+        if (!e) continue;
+        e.busquedas += r.busquedas as number;
+        e.propsCompartidas += r.props as number;
+        for (const c of (r.clientes as unknown[]) || []) if (c) e.clientes.add(String(c));
+    }
+
     // --- asesores: cerrar promedios/medianas y ordenar por volumen de leads ---
     const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
     const asesores: AsesorRow[] = [...ases.values()].map((e) => ({
         id: e.id, name: e.name,
         leads: { sale: e.leads.sale, rent: e.leads.rent },
         resp: { sale: e.resp.sale, rent: e.resp.rent },
+        fueraSla: { sale: e.fueraSla.sale, rent: e.fueraSla.rent },
         respMinAvg: { sale: avg(e.mins.sale), rent: avg(e.mins.rent) },
         respMinMed: { sale: median(e.mins.sale), rent: median(e.mins.rent) },
         visitas: { sale: e.visitas.sale, rent: e.visitas.rent },
@@ -694,14 +842,26 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         cierres: { sale: e.cierres.sale, rent: e.cierres.rent },
         comision: { sale: e.comision.sale, rent: e.comision.rent },
         gmv: { sale: e.gmv.sale, rent: e.gmv.rent },
+        busquedas: e.busquedas, propsCompartidas: e.propsCompartidas, clientes: e.clientes.size,
     })).sort((a, b) =>
         (b.leads.sale + b.leads.rent) - (a.leads.sale + a.leads.rent)
         || (b.cierres.sale + b.cierres.rent) - (a.cierres.sale + a.cierres.rent)
         || a.name.localeCompare(b.name, 'es'));
+    // "Leads" en vez de "Únicos" (el dedup se explica al pie, no en la etiqueta del paso).
+    // `prev` = el mismo paso en el período base → la sección muestra el ▲▼ sin salir de ella.
     const buildFunnel = (title: string, op: string) => {
-        const raw: [string, number][] = [['Únicos', leadsByOp[op]], ['Respuesta', contByOp[op]], ['Visitas', visByOp[op]], ['Ofertas', offersByOp[op]], ['Cierres', closesByOp[op]]];
-        let prev: number | null = null;
-        return { title, steps: raw.map(([label, value]) => { const rate = prev && prev > 0 ? value / prev : null; prev = value; return { label, value, rate }; }) };
+        const raw: [string, number, number][] = [
+            ['Leads', leadsByOp[op], leadsPrev[op]],
+            ['Respondidos', contByOp[op], contPrev[op]],
+            ['Visitas', visByOp[op], visPrev[op]],
+            ['Ofertas', offersByOp[op], offPrev[op]],
+            ['Cierres', closesByOp[op], cloPrev[op]],
+        ];
+        let ant: number | null = null;
+        return { title, steps: raw.map(([label, value, pv]) => {
+            const rate = ant && ant > 0 ? value / ant : null; ant = value;
+            return { label, value, rate, prev: CMP ? pv : null };
+        }) };
     };
     const funnel = [buildFunnel('Venta', 'sale'), buildFunnel('Renta', 'rent')]
         .filter((c) => !opFilter || c.title === (opFilter === 'sale' ? 'Venta' : 'Renta'));
@@ -710,13 +870,19 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const visRateV = leadsByOp.sale ? visByOp.sale / leadsByOp.sale : 0;
     const closeV = leadsByOp.sale ? closesByOp.sale / leadsByOp.sale : 0;
     const closeR = leadsByOp.rent ? closesByOp.rent / leadsByOp.rent : 0;
-    const funnelReading = mb
-        ? `Tu tasa de visita en venta es ${pct(visRateV)}, una referencia sana de mercado. `
-            + `Cierre: ${(100 * closeV).toFixed(1)}% en venta y ${(100 * closeR).toFixed(1)}% en renta. `
-            + `La tasa se lee por operación, nunca mezclando venta y renta.`
-        : `Tu tasa de visita en venta es ${pct(visRateV)} (benchmark Pulppo 14%). `
-            + `Cierre: ${(100 * closeV).toFixed(1)}% en venta (meta 1.6%) y ${(100 * closeR).toFixed(1)}% en renta (meta 6%). `
-            + `La tasa se lee por operación, nunca mezclando venta y renta.`;
+
+    // Referencia real de las mejores inmobiliarias (TOP 20 por cierres) en la misma ventana.
+    const bench = await bestAgencies(db, PERF.start, PERF.end, PERF.label);
+    const totL = leadsByOp.sale + leadsByOp.rent;
+    const visRateTot = totL ? (visByOp.sale + visByOp.rent) / totL : 0;
+    const benchTxt = bench.tasaVisita != null
+        ? `${pct(visRateTot)} de tus leads llega a visita, contra ${pct(bench.tasaVisita)} de las ${bench.nInmos} inmobiliarias que más cierran. `
+            + (visRateTot >= bench.tasaVisita ? 'Estás a la altura de las mejores. ' : 'Ahí está tu principal hueco. ')
+        : '';
+    const funnelReading = benchTxt
+        + `Cierre sobre leads: ${(100 * closeV).toFixed(1)}% en venta y ${(100 * closeR).toFixed(1)}% en renta`
+        + (bench.leadToClose != null ? ` (mejores: ${(100 * bench.leadToClose).toFixed(1)}%)` : '')
+        + `. La tasa se lee por operación, nunca mezclando venta y renta.`;
 
     // --- recomendaciones a nivel cartera (nunca priorizan renta sobre venta) ---
     const altaNow = items.filter((it) => it.q3 === 3).length / (N || 1);
@@ -917,9 +1083,16 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const zombieN = zombieUniverse.filter((it) => !withLead.has(String(it.pid))).length;
     const zombie = { n: zombieN, pct: zombieN / (zombieUniverse.length || 1), label: PERF.label };
 
+    const totVis = visByOp.sale + visByOp.rent;
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
         llProp: leadsWinTotal / (N || 1), leadsLabel, demandaLabel, ofertaLabel, asesores,
+        externo: {
+            leads: extLeads, visitas: extVisitas,
+            pctLeads: extLeads / ((leadsByOp.sale + leadsByOp.rent + extLeads) || 1),
+            pctVisitas: extVisitas / ((totVis + extVisitas) || 1),
+        },
+        bench, asesorFiltro: asesorSel,
         operacion: cfg.operacion || 'Ambas', zombie, leadsBySource, cierresLabel, segTipo, segOp, benchmarkMarket,
         leadsComp: { cliente: compCliente, broker: compBroker, incontactables: compIncont, duplicados: compDup, total: leadsByOp.sale + leadsByOp.rent, totalOp: { sale: leadsByOp.sale, rent: leadsByOp.rent } },
         zones, invVsDemand, matrix, priceLead,

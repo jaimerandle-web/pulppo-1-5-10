@@ -281,6 +281,8 @@ export default function MBApp({ d }: { d: MBData }) {
         { seg: 'respLenta', tip: 'Acelera la 1ª respuesta; los leads se enfrían rápido.' }
     ];
     const topOpp = d.props.filter((p) => p.op === 'Venta' && p.demanda > 0).sort((a, b) => b.oppScore - a.oppScore).slice(0, 10);
+    // asesores de la inmobiliaria (de su inventario publicado) → filtro del reporte
+    const asesoresInmo = [...new Set(d.props.map((p) => p.asesor))].filter((a) => a && a !== '—').sort();
     const nDest = cnt((p) => p.tier === 'Super' || p.tier === 'Destacado');
     // Los bloques de propiedades van de MAYOR a MENOR volumen: lo que más pesa, primero.
     const porVolumen = <T,>(xs: T[], segOf: (x: T) => string) =>
@@ -395,7 +397,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     </div>
                 )}
 
-                {section === 'analisis' && <MBAnalisis companyId={d.companyId} name={d.name} />}
+                {section === 'analisis' && <MBAnalisis companyId={d.companyId} name={d.name} asesores={asesoresInmo} />}
 
                 {section === 'comoleer' && (
                     <div style={{ maxWidth: 780 }}>
