@@ -100,8 +100,10 @@ export function InventarioView({ d, referencias, cortes, mb = false }: { d: Anal
                                 <td className="py-1 text-right" style={{ color: GRAY }}>{f0(z.oferta)}</td>
                                 {showOferta && <td className="py-1 text-right">{delta(z.vsOferta)}</td>}
                                 {showCierres && <td className="py-1 text-right">{delta(z.vsCierres)} <span className="text-[8px]" style={{ color: GRAY }}>({z.nCierres})</span></td>}
-                                <td className="py-1 text-right">{f0(z.dem)}</td>
-                                <td className="py-1 text-right">{f0(z.leads)}</td>
+                                {/* demanda y leads son del período → llevan ▲▼; las columnas de
+                                    arriba son foto de hoy y no se pueden comparar */}
+                                <td className="py-1 text-right whitespace-nowrap">{f0(z.dem)} <Delta now={z.dem} prev={z.demPrev} /></td>
+                                <td className="py-1 text-right whitespace-nowrap">{f0(z.leads)} <Delta now={z.leads} prev={z.leadsPrev} /></td>
                             </tr>
                         ))}
                     </tbody>
@@ -230,6 +232,31 @@ export function Delta({ now, prev, goodUp = true }: { now: number; prev: number 
     return (
         <span className="text-[9px] font-bold" style={{ color: dv === 0 ? GRAY : col }}>
             {dv === 0 ? '=' : `${dv > 0 ? '▲' : '▼'}${Math.abs(Math.round(dv * 100))}%`}
+        </span>
+    );
+}
+
+// Delta de una TASA: va en PUNTOS, no en %. Si la tasa de visita pasa de 15% a 18% eso es
+// "+3 pts"; decir "+20%" exagera la mejora y es la clase de número que se cita mal en una junta.
+function DeltaPts({ now, prev, goodUp = true }: { now: number | null; prev: number | null; goodUp?: boolean }) {
+    if (now == null || prev == null) return null;
+    const pts = Math.round((now - prev) * 100);
+    const col = (pts >= 0) === goodUp ? SEA : RED;
+    return (
+        <span className="text-[9px] font-bold" style={{ color: pts === 0 ? GRAY : col }}>
+            {pts === 0 ? '=' : `${pts > 0 ? '▲' : '▼'}${Math.abs(pts)} pts`}
+        </span>
+    );
+}
+
+// Delta de un TIEMPO de respuesta: bajar es mejorar, y se dice en la unidad del tiempo.
+function DeltaTiempo({ now, prev }: { now: number | null; prev: number | null }) {
+    if (now == null || prev == null || !prev) return null;
+    const dv = (now - prev) / prev;
+    if (Math.abs(dv) < 0.05) return <span className="text-[9px]" style={{ color: GRAY }}>=</span>;
+    return (
+        <span className="text-[9px] font-bold" style={{ color: dv < 0 ? SEA : RED }}>
+            {dv < 0 ? '▼' : '▲'}{Math.abs(Math.round(dv * 100))}%
         </span>
     );
 }
@@ -552,7 +579,18 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
     const ticket = (gmv: number, n: number) => (n > 0 ? money(gmv / n) : '—');
     const benchVis = d.bench.tasaVisita;
 
+    // El período base NO viene partido venta/renta, así que el ▲▼ solo se muestra en la vista
+    // Total: comparar "leads de venta de julio" contra "leads totales de junio" sería falso.
+    const totPrev = d.asesores.some((a) => a.prev)
+        ? d.asesores.reduce((acc, a) => ({
+            leads: acc.leads + (a.prev?.leads ?? 0), resp: acc.resp + (a.prev?.resp ?? 0),
+            visitas: acc.visitas + (a.prev?.visitas ?? 0), cierres: acc.cierres + (a.prev?.cierres ?? 0),
+            respMinMed: acc.respMinMed,
+        }), { leads: 0, resp: 0, visitas: 0, cierres: 0, respMinMed: median(d.asesores.map((a) => a.prev?.respMinMed ?? null).filter((x): x is number => x != null)) })
+        : null;
+
     const cells = (r: AsesorRow | typeof tot, name: string, bold = false) => {
+        const pv = vista === 'Total' ? ('prev' in r ? r.prev : totPrev) : null;
         const L = pick(vista, r.leads), R = pick(vista, r.resp), V = pick(vista, r.visitas);
         const O = pick(vista, r.ofertas), C = pick(vista, r.cierres);
         const sla = pick(vista, r.fueraSla), sin = L - R;
@@ -568,17 +606,24 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
         return (
             <tr key={name} className={bold ? 'border-t' : 'border-b border-neutral-100'} style={bold ? { borderColor: SOFT } : undefined}>
                 <td className={`py-1 text-left${bold ? ' font-bold' : ' font-semibold'}`}>{name}</td>
-                <td className={cls}>{f0(L)}</td>
+                {/* el ▲▼ va debajo del número: la tabla ya tiene 18 columnas, una por delta la rompe */}
+                <td className={cls}>{f0(L)}{pv && <div><Delta now={L} prev={pv.leads} /></div>}</td>
                 <td className={cls} style={{ color: colAband }}>{f0(sin)}</td>
-                <td className={cls} style={{ color: colAband }}>{rate(sin, L)}</td>
+                <td className={cls} style={{ color: colAband }}>
+                    {rate(sin, L)}
+                    {pv && <div><DeltaPts now={L ? sin / L : null} prev={pv.leads ? (pv.leads - pv.resp) / pv.leads : null} goodUp={false} /></div>}
+                </td>
                 <td className={cls} style={{ color: colSla }}>{rate(sla, L)}</td>
-                <td className={cls}>{dur(med)}</td>
+                <td className={cls}>{dur(med)}{pv && <div><DeltaTiempo now={med} prev={pv.respMinMed} /></div>}</td>
                 <td className={cls} style={{ color: GRAY }}>{f0(bus)}</td>
                 <td className={cls} style={{ color: GRAY }}>{pxc == null ? '—' : pxc.toFixed(1)}</td>
-                <td className={cls}>{f0(V)}</td>
-                <td className={cls} style={{ color: colVis, fontWeight: 700 }}>{rate(V, L)}</td>
+                <td className={cls}>{f0(V)}{pv && <div><Delta now={V} prev={pv.visitas} /></div>}</td>
+                <td className={cls} style={{ color: colVis, fontWeight: 700 }}>
+                    {rate(V, L)}
+                    {pv && <div><DeltaPts now={L ? V / L : null} prev={pv.leads ? pv.visitas / pv.leads : null} /></div>}
+                </td>
                 <td className={cls}>{f0(O)}</td>
-                <td className={cls}>{f0(C)}</td>
+                <td className={cls}>{f0(C)}{pv && <div><Delta now={C} prev={pv.cierres} /></div>}</td>
                 <td className={cls}>{rate(C, V)}</td>
                 <td className={cls}>{money(pick(vista, r.comision))}</td>
                 <td className={cls} style={{ color: GRAY }}>{pctCom(r.comision.sale, r.gmv.sale)}</td>
@@ -648,6 +693,9 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
                 mejores inmobiliarias{benchVis != null && ` (${Math.round(100 * benchVis)}%)`}, en rojo si no llega a la mitad.
                 <b> % de comisión</b> = comisión ÷ valor de cierre; <b>ticket</b> = valor de cierre promedio (en renta es la renta
                 mensual, por eso nunca se suma con venta).
+                {d.hasComp && <> El <b>▲▼</b> debajo de cada número compara contra <b>{d.compLabels.a}</b>: en conteos va en %,
+                    en <b>tasas va en puntos</b> (de 15% a 18% son <i>+3 pts</i>, no +20%) y en <b>tiempo de respuesta bajar es
+                    mejorar</b>. Solo aparece en la vista <b>Total</b>, porque el período base no viene partido venta/renta.</>}
             </p>
             {(() => {
                 // recap de la sección: los hechos que se ven en la tabla, dichos en una línea

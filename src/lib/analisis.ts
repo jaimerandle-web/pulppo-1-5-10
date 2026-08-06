@@ -200,6 +200,9 @@ export interface AsesorRow {
     busquedas: number;            // búsquedas de comprador abiertas en el período (pipeline de demanda)
     propsCompartidas: number;     // propiedades que le compartió a sus clientes
     clientes: number;             // clientes distintos con búsqueda en el período
+    // mismos números en el PERÍODO BASE, para el ▲▼ (null = sin comparación elegida).
+    // El tiempo de respuesta se lee al revés: bajar es mejorar.
+    prev: { leads: number; resp: number; visitas: number; cierres: number; respMinMed: number | null } | null;
 }
 // Actividad sobre TU inventario que hizo un broker de OTRA inmobiliaria (la red Pulppo es un MLS
 // compartido). No va en la tabla de asesores, pero es información: la red trabajando tu inventario.
@@ -232,7 +235,9 @@ export interface AnalisisData {
     leadsBySource: { source: string; n: number }[];
     leadsComp: { cliente: number; broker: number; incontactables: number; duplicados: number; total: number; totalOp: { sale: number; rent: number } };
     cierresLabel: string;         // etiqueta de la ventana de cierres
-    zones: { nb: string; n: number; oferta: number; herPpm2: number | null; ofertaPpm2: number | null; cierresPpm2: number | null; vsOferta: number | null; vsCierres: number | null; nCierres: number; dem: number; leads: number }[];
+    // leadsPrev/demPrev = el mismo número en el período base, para el ▲▼. Las demás columnas
+    // (props, oferta, vs. oferta, vs. cierres) son foto de HOY y por eso no llevan comparación.
+    zones: { nb: string; n: number; oferta: number; herPpm2: number | null; ofertaPpm2: number | null; cierresPpm2: number | null; vsOferta: number | null; vsCierres: number | null; nCierres: number; dem: number; leads: number; leadsPrev: number | null; demPrev: number }[];
     segTipo: { tipo: string; n: number; leads: number }[];
     segOp: { op: string; n: number; leads: number }[];
     benchmarkMarket: { vsOfertaAvg: number | null; vsCierresAvg: number | null; zonasCaras: number; zonasCierres: number; absorcion: number | null; demTotal: number; ofertaTotal: number };
@@ -446,14 +451,22 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     // --- demanda por zona y por ticket ---
     const demandByNb: Record<string, number> = {};
+    // La demanda se compara contra el TRAMO PREVIO de la misma ventana (últimos 3 meses vs. los 3
+    // meses previos). No depende de la comparación de desempeño: es una señal de mercado.
+    const demandPrevByNb: Record<string, number> = {};
+    const demandPrevStart = new Date(demandStart.getTime() - (NOW.getTime() - demandStart.getTime()));
     if (nbids.length) {
         const agg = db.collection('searches').aggregate([
-            { $match: { 'filters.addresses.id': { $in: nbids }, createdAt: { $gte: demandStart } } },
+            { $match: { 'filters.addresses.id': { $in: nbids }, createdAt: { $gte: demandPrevStart } } },
             { $unwind: '$filters.addresses' },
             { $match: { 'filters.addresses.id': { $in: nbids } } },
-            { $group: { _id: '$filters.addresses.id', n: { $sum: 1 } } },
+            { $group: { _id: { nb: '$filters.addresses.id', prev: { $lt: ['$createdAt', demandStart] } }, n: { $sum: 1 } } },
         ], { allowDiskUse: true });
-        for await (const r of agg) demandByNb[r._id as string] = r.n as number;
+        for await (const r of agg) {
+            const k = r._id as { nb: string; prev: boolean };
+            const dest = k.prev ? demandPrevByNb : demandByNb;
+            dest[k.nb] = (dest[k.nb] || 0) + (r.n as number);
+        }
     }
     const demandTicket: Record<string, number> = {};
     await Promise.all(VB.map(async ([lab, lo, hi]) => {
@@ -470,25 +483,40 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const leadsByPid: Record<string, number> = {};
     const leadsByNb: Record<string, number> = {};
     const leadsByNbOp: Record<'sale' | 'rent', Record<string, number>> = { sale: {}, rent: {} };
+    // mismos leads por zona en el PERÍODO BASE, para el ▲▼ de la tabla de zonas
+    const leadsPrevByNb: Record<string, number> = {};
+    const leadsPrevByNbOp: Record<'sale' | 'rent', Record<string, number>> = { sale: {}, rent: {} };
     let leadsWinTotal = 0;
     const invSeen = new Set<string>();   // dedup: mismo contacto en la misma propiedad = 1 lead único
+    const invSeenPrev = new Set<string>();
+    const inPerfW = (d: Date | null) => !!d && d >= leadsStart && d < leadsEnd;
+    const inCmpW = (d: Date | null) => !!d && !!CMP && d >= CMP.start && d < CMP.end;
     const leadCur = db.collection('leads').find(
-        { 'property._id': { $in: pubIds }, createdAt: { $gte: leadsStart, $lt: leadsEnd } },
+        { 'property._id': { $in: pubIds }, createdAt: { $gte: CMP ? new Date(Math.min(leadsStart.getTime(), CMP.start.getTime())) : leadsStart, $lt: leadsEnd } },
         { projection: { 'property._id': 1, createdAt: 1, 'contact.phone': 1, 'contact.email': 1, 'contact._id': 1 } }
     );
     for await (const l of leadCur) {
         const pid = String(gv(l, 'property', '_id'));
+        const d = asDt(l.createdAt);
         const who = gv(l, 'contact', 'phone') || gv(l, 'contact', 'email') || String(gv(l, 'contact', '_id') || l._id);
         const k = `${pid}|${who}`;
-        if (invSeen.has(k)) continue;   // duplicado → no cuenta
-        invSeen.add(k);
-        leadsByPid[pid] = (leadsByPid[pid] || 0) + 1;
-        leadsWinTotal++;
         const nb = pid2nb.get(pid);
-        if (nb) {
-            leadsByNb[nb] = (leadsByNb[nb] || 0) + 1;
-            const po = pid2opPub.get(pid);
-            if (po === 'sale' || po === 'rent') leadsByNbOp[po][nb] = (leadsByNbOp[po][nb] || 0) + 1;
+        const po = pid2opPub.get(pid);
+        if (inPerfW(d) && !invSeen.has(k)) {
+            invSeen.add(k);
+            leadsByPid[pid] = (leadsByPid[pid] || 0) + 1;
+            leadsWinTotal++;
+            if (nb) {
+                leadsByNb[nb] = (leadsByNb[nb] || 0) + 1;
+                if (po === 'sale' || po === 'rent') leadsByNbOp[po][nb] = (leadsByNbOp[po][nb] || 0) + 1;
+            }
+        }
+        if (inCmpW(d) && !invSeenPrev.has(k)) {
+            invSeenPrev.add(k);
+            if (nb) {
+                leadsPrevByNb[nb] = (leadsPrevByNb[nb] || 0) + 1;
+                if (po === 'sale' || po === 'rent') leadsPrevByNbOp[po][nb] = (leadsPrevByNbOp[po][nb] || 0) + 1;
+            }
         }
     }
 
@@ -561,9 +589,12 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const vsOferta = vsOfVals.length ? Math.round(median(vsOfVals) as number) : null;
         const vsCierres = vsCiVals.length ? Math.round(median(vsCiVals) as number) : null;
         const leads = opFilter ? (leadsByNbOp[opFilter][nb] || 0) : (leadsByNb[nb] || 0);
+        const leadsPrev = opFilter ? (leadsPrevByNbOp[opFilter][nb] || 0) : (leadsPrevByNb[nb] || 0);
         return { nb, n: its.length, oferta: (nbid && (cfg.mlsGeneral ? mlsCount : propCount)[nbid]) || 0,
             herPpm2, ofertaPpm2: null, cierresPpm2: null, vsOferta, vsCierres, nCierres,
-            dem: (nbid && demandByNb[nbid]) || 0, leads };
+            dem: (nbid && demandByNb[nbid]) || 0, leads,
+            leadsPrev: CMP ? leadsPrev : null,
+            demPrev: (nbid && demandPrevByNb[nbid]) || 0 };
     });
 
     // --- cortes por tipo y por operación (para los "cortes de segmentación") ---
@@ -660,7 +691,8 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         fueraSla: Record<string, number>;
         mins: Record<string, number[]>; visitas: Record<string, number>; ofertas: Record<string, number>;
         cierres: Record<string, number>; comision: Record<string, number>; gmv: Record<string, number>;
-        busquedas: number; propsCompartidas: number; clientes: Set<string> };
+        busquedas: number; propsCompartidas: number; clientes: Set<string>;
+        pLeads: number; pResp: number; pVis: number; pClo: number; pMins: number[] };
     const ases = new Map<string, Ac>();
     // Primer candidato USABLE (con _id y nombre). No basta con `a ?? b`: en Mongo hay `agent: {}`
     // y `agent: null`, y un objeto vacío cortaría la cadena de fallback perdiendo el evento.
@@ -678,7 +710,8 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         if (!e) {
             e = { id, name, leads: zero(), resp: zero(), fueraSla: zero(), mins: { sale: [], rent: [] }, visitas: zero(),
                 ofertas: zero(), cierres: zero(), comision: zero(), gmv: zero(),
-                busquedas: 0, propsCompartidas: 0, clientes: new Set<string>() };
+                busquedas: 0, propsCompartidas: 0, clientes: new Set<string>(),
+                pLeads: 0, pResp: 0, pVis: 0, pClo: 0, pMins: [] };
             ases.set(k, e);
         }
         return e;
@@ -754,6 +787,14 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
             dupPrev.add(kk);
             leadsPrev[op]++;
             if (l.answeredAt) contPrev[op]++;
+            // y por asesor, para el ▲▼ de su fila
+            const lap = pickAgent(gv(l, 'agent'), gv(l, 'property', 'agent'), pid2agent.get(pid));
+            const ep = accInterno(lap);
+            if (ep) {
+                ep.pLeads++;
+                const ansP = asDt(l.answeredAt);
+                if (ansP) { ep.pResp++; ep.pMins.push(Math.max(0, (ansP.getTime() - d.getTime()) / 60000)); }
+            }
         }
         // comparación de períodos (leads únicos dentro de cada rango)
         if (CMP && d >= CMP.start && d < CMP.end && !seenA.has(kk)) { seenA.add(kk); leadsA++; }
@@ -769,7 +810,12 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         if (!mine) continue;
         const vd = asDt(v.createdAt);
         const op = pid2op.get(mine);
-        if (inCmp(vd) && (op === 'sale' || op === 'rent')) visPrev[op]++;
+        if (inCmp(vd) && (op === 'sale' || op === 'rent')) {
+            visPrev[op]++;
+            const vap = pickAgent(gv(v, 'agent'), pid2agent.get(mine));
+            const ep = accInterno(vap);
+            if (ep) ep.pVis++;
+        }
         if (!inPerf(vd)) continue;
         perfVis++;
         if (op === 'sale' || op === 'rent') {
@@ -797,7 +843,14 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         if (cerrada) closesByOp[t]++;
         // mismos pasos en el período base
         if (inCmp(cd) || inCmp(xd)) offPrev[t]++;
-        if ((last === 'closed' || last === 'paying') && inCmp(xd)) cloPrev[t]++;
+        const cerradaPrev = (last === 'closed' || last === 'paying') && inCmp(xd);
+        if (cerradaPrev) {
+            cloPrev[t]++;
+            const candsP = [gv(o, 'seller', 'broker'), gv(o, 'buyer', 'broker'), gv(o, 'property', 'agent')];
+            const dentroP = candsP.find((c) => esInterno(c as Document | null | undefined));
+            const ep = accInterno(pickAgent(dentroP, pid2agent.get(pid)));
+            if (ep) ep.pClo++;
+        }
         if (!abierta && !cerrada) continue;
         // la operación se atribuye al primer broker que SÍ es de la inmobiliaria (puede ser el
         // captador o el que trajo al comprador); si ninguno lo es, al asesor de la propiedad.
@@ -854,6 +907,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         comision: { sale: e.comision.sale, rent: e.comision.rent },
         gmv: { sale: e.gmv.sale, rent: e.gmv.rent },
         busquedas: e.busquedas, propsCompartidas: e.propsCompartidas, clientes: e.clientes.size,
+        prev: CMP ? { leads: e.pLeads, resp: e.pResp, visitas: e.pVis, cierres: e.pClo, respMinMed: median(e.pMins) } : null,
     })).sort((a, b) =>
         (b.leads.sale + b.leads.rent) - (a.leads.sale + a.leads.rent)
         || (b.cierres.sale + b.cierres.rent) - (a.cierres.sale + a.cierres.rent)
