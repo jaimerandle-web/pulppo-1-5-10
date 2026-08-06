@@ -563,6 +563,14 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
                 la visita, a quien la hizo; la oferta y el cierre, al asesor que participó en la operación.
                 Solo aparecen asesores <b>de tu inmobiliaria</b>.
             </p>
+            {/* Con filtro por asesor la tabla trae a TODOS los que atendieron leads de SU inventario,
+                que no es lo mismo que "su desempeño". Hay que decirlo o el lector se confunde. */}
+            {d.asesorFiltro && (
+                <p className="mb-2 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>
+                    El reporte está acotado a la cartera de <b>{d.asesorFiltro}</b>, así que aquí aparece <b>quién atendió
+                    los leads de sus propiedades</b> — puede ser {d.asesorFiltro.split(' ')[0]} u otro compañero del equipo.
+                </p>
+            )}
             {(d.externo.leads > 0 || d.externo.visitas > 0) && (
                 <p className="mb-2 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: SEA, background: '#F3F3F3', color: SOFT }}>
                     Además, brokers de <b>otras inmobiliarias</b> de la red trabajaron tu inventario:
