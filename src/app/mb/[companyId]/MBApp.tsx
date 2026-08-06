@@ -17,7 +17,7 @@ const vsCell = (v: number | null) => {
     return <span style={{ color: col, fontWeight: 600 }}>{v > 0 ? '+' : ''}{v.toFixed(0)}%</span>;
 };
 const DIAG_STYLE: Record<string, { bg: string; fg: string }> = { 'Bajar precio': { bg: '#F3D9D3', fg: RED }, 'Mejorar ficha': { bg: YEL, fg: BLK } };
-const diagPill = (t: string) => { const s = DIAG_STYLE[t] ?? { bg: '#DCEBEB', fg: '#2f6b6b' }; return <span key={t} style={{ background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 11, marginRight: 4, whiteSpace: 'nowrap' }}>{t}</span>; };
+const diagPill = (t: string) => { const s = DIAG_STYLE[t] ?? { bg: '#DCEBEB', fg: '#2f6b6b' }; return <span key={t} style={{ background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 2, marginRight: 4, whiteSpace: 'nowrap' }}>{t}</span>; };
 // "Media" se leía como promedio, no como intermedia. Ahora los rangos se llaman por lo que
 // significan y siempre traen el tiempo a la vista.
 const RESP_LBL: Record<RespKey, string> = { flash: 'Flash', rapida: 'Rápida', media: 'Aceptable', lento: 'Fuera de SLA', sin: 'Sin responder' };

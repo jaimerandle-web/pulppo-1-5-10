@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Combobox, Dropdown, Select } from '@/components/inputs';
 import type { AnalisisData } from '@/lib/analisis';
 import { CIERRES_WIN, DEMANDA_WIN, DESEMPENO_WIN, COMPARAR_OPTS, mesesOpts } from '@/lib/ventanas';
-import { GlosarioView, InventarioView, FunnelView, RecoView, YoyView, Top10View, AsesoresView } from './views';
+import { GlosarioView, InventarioView, FunnelView, RecoView, YoyView, Top10View, AsesoresView, DestacadosView } from './views';
 
 /* ------------------------------------------------------------------ *
  * /analisis — "Análisis general" (configurador del reporte ampliado)
@@ -27,6 +27,7 @@ const SECCIONES = [
     { id: 'inventario', label: 'Dónde está tu inventario', needs: null },
     { id: 'funnel', label: 'Qué pasa con tus leads', needs: null },
     { id: 'asesores', label: 'Cómo están tus asesores', needs: null },
+    { id: 'destacados', label: '¿Cómo estás destacando?', needs: null },
     { id: 'yoy', label: 'Comparación de períodos', needs: null },
     { id: 'top10', label: 'Propiedades con potencial', needs: null },
     { id: 'reco', label: 'Dame recomendaciones', needs: null },
@@ -222,7 +223,7 @@ export default function AnalisisGeneral() {
                             </Field>
                             <Field label="Asesor (filtro opcional)" hint="Acota TODO el reporte a la cartera de ese asesor. Escribe el nombre como aparece en Pulppo.">
                                 <input value={asesor} onChange={(e) => setAsesor(e.target.value)} placeholder="Toda la inmobiliaria"
-                                    className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-sm shadow-sm focus:border-[#F6BE00] focus:outline-none" />
+                                    className="w-full rounded-[2px] border border-neutral-200 bg-white px-3.5 py-2.5 text-sm shadow-sm focus:border-[#F6BE00] focus:outline-none" />
                             </Field>
                             <Field label="Cortes de segmentación"
                                 hint="Quita “Por operación” para no comparar venta vs. renta; quita “Por ticket” para no hablar de rangos de precio.">
@@ -431,6 +432,7 @@ export default function AnalisisGeneral() {
                                     {data && s.id === 'inventario' ? <InventarioView d={data} referencias={referencias} cortes={cortes} />
                                         : data && s.id === 'funnel' ? <FunnelView d={data} portalMode={portalMode} portales={portales} />
                                         : data && s.id === 'asesores' ? <AsesoresView d={data} />
+                                        : data && s.id === 'destacados' ? <DestacadosView d={data} />
                                         : data && s.id === 'yoy' ? <YoyView d={data} />
                                         : data && s.id === 'top10' ? <Top10View d={data} />
                                         : data && s.id === 'reco' ? <RecoView d={data} enfoque={recoEnfoque} tono={recoTono} cantidad={recoCantidad} />
@@ -467,6 +469,7 @@ function previewLine(id: string, c: {
         case 'inventario': return `Distribución del inventario ${c.cortes.map((x) => x.toLowerCase()).join(', ') || '(sin cortes)'}, contra la demanda de cada zona.`;
         case 'funnel': return `Embudo lead → visita → cierre; leads por fuente: ${fuentes}.`;
         case 'asesores': return 'Funnel por asesor: leads, respuesta, visitas, ofertas, cierres, comisión y ticket (venta y renta por separado).';
+        case 'destacados': return 'Cómo se ha destacado el inventario, si destacar rinde, y qué avisos conviene intercambiar (con la razón de cada uno).';
         case 'yoy': return 'La ventana de desempeño contra su base: inventario, leads, cierres y comisión.';
         case 'top10': return 'Propiedades con alta demanda y pocos leads, con la palanca accionable de cada una.';
         case 'reco': return `${c.recoCantidad} recomendaciones (${c.recoEnfoque.join(', ').toLowerCase() || 'sin enfoque'}), tono ${c.recoTono.toLowerCase()}.`;
