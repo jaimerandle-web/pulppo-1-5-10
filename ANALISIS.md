@@ -196,5 +196,100 @@ más y todavía no se aprovecha:
 4. **Sección de destacados**: sigue leyéndose en YTD por mes (aviso-meses), no en la ventana de
    desempeño. Es coherente para lo que mide (historia del nivel de aviso), pero conviene decirlo
    en la sección.
-5. **Asesores, siguiente nivel** (si Ale lo pide): ranking/semáforo por asesor, comparación del
-   asesor contra el promedio de su inmobiliaria, y evolución del tiempo de respuesta por período.
+5. **Deltas por sección**: el ▲▼ contra el período base ya está en el funnel; falta en zonas y
+   en la tabla de asesores.
+6. **"% con valuación"**: la única columna del deck de Karen que no reproduce — ella pone venta
+   95.3% / renta 35.0% y con `acm.price.value` sale al revés (87.2% / 96.2%). Existe un campo
+   `valuation` aparte del ACM; hay que fijar la definición con ella antes de automatizarlo.
+
+---
+
+## 6. Segunda ronda (ago-2026): benchmark, flags y overview
+
+### Benchmark = las mejores, no el promedio
+
+La referencia es el **TOP 20 por # de cierres** de la ventana (decisión de Ale), calculado en
+vivo y cacheado 15 min (`bestAgencies()` en `analisis.ts`). Medido may–jul 2026 sobre 103
+inmobiliarias con ≥50 leads:
+
+| Grupo | Tasa de visita | Lead→cierre |
+|---|---|---|
+| Promedio Pulppo | 11.75% | 0.93% |
+| Mediana entre inmobiliarias | 9.76% | — |
+| **TOP 20 por cierres** | **14.36%** | 1.20% |
+| El resto (83) | 10.44% | 0.78% |
+
+Comparar contra el promedio no discrimina (casi todas salen bien). **No hacen falta datos
+falsos** para "mejores inmobiliarias": el ranking por ROI vive fuera de Mongo, pero "quién
+cierra más" sale de aquí y es defendible.
+
+### Brokers de otras inmobiliarias (bug corregido)
+
+La red Pulppo es un MLS compartido: un broker externo puede atender un lead o hacer una visita
+sobre tu inventario. Medido: **0.2–3% de los leads y hasta 17% de las visitas** (Arpa). La
+tabla de asesores los mezclaba como si fueran del equipo. Ahora la lista sale de la colección
+`agents` de la inmobiliaria y lo externo se reporta aparte como actividad de la red.
+
+### Flags por asesor
+
+Mínimo **10 leads** en la ventana para evaluar a alguien (si no, 3 leads generan ruido).
+
+🔴 fuera de SLA 24h ≥25% · abandono ≥15% · tasa de visita <7% con ≥20 leads · ≤1.2 props por cliente
+🟢 mediana ≤15 min sin abandono · tasa de visita ≥14% (las mejores) · ≥3 props por cliente · ≥1 cierre
+
+Reglas de presentación, aprendidas en producción:
+- **El verde exige cero banderas rojas.** Sin eso, alguien con 1 cierre y 67% de leads fuera de
+  SLA aparecía en "lo que va bien" *y* en "lo que hay que atender", y el dueño no sabía qué hacer.
+- Quien **produce y además tiene banderas rojas** va en una nota aparte ("ojo con estos"): es el
+  que más tiene en juego, no es para felicitar ni para regañar.
+- Es **señal, no ranking**: el que más cierra puede ser el que más quema leads.
+
+### El universo importa
+
+Los asesores se miden sobre **todas** las propiedades de la inmobiliaria, no solo las publicadas
+hoy. Con el universo recortado, un asesor pasaba de 50% a 67% de leads fuera de SLA y otra con
+113 leads y 27% no aparecía. El **listado** sí sigue siendo solo lo publicado, que es lo correcto ahí.
+
+### `answeredAt` se rellena tarde
+
+Un asesor tenía 17 leads sin responder un día y **0 al día siguiente**, con uno contestado a las
+**629 horas** (26 días). "Sin responder" encoge solo con el tiempo y no sirve para un reporte
+mensual. La métrica estable es **% fuera de SLA 24h**, que incluye a los nunca contestados
+precisamente para que no se puedan esconder respondiendo un mes después.
+
+### Qué le falta a una ficha para ser Alta
+
+Medido en toda la red (9,204 publicadas con calificación):
+
+| | ≥8 fotos | video | tour | planos | desc ≥400 |
+|---|---|---|---|---|---|
+| ALTA (1,682) | 92% | **100%** | 7% | 10% | 100% |
+| MEDIA (5,784) | 94% | **32%** | 6% | 9% | 100% |
+| BAJA (1,738) | 83% | 20% | 4% | 2% | 95% |
+
+**El video es el único factor que separa Media de Alta** (+68 pts). Todo lo demás es plano.
+Consecuencia práctica: recomendar "sube un tour virtual" para mejorar la calidad **es mal
+consejo** y el overview lo dice explícitamente.
+
+### Propiedades compartidas por cliente
+
+`searches.properties[]` = lo que el asesor le agregó al cliente en su búsqueda. Mide **trabajo**,
+no suerte, y separa muchísimo: en Arpa va de 6.6 (Liz) a 1.1 (Carmen) propiedades por cliente.
+Ojo: el **97% de las búsquedas históricas están canceladas**, así que solo tiene sentido contar
+las **abiertas en el período**, nunca un acumulado.
+
+### Nombres de sección
+
+Responden una pregunta y dicen la conclusión, no el método: *Dónde está tu inventario · Qué pasa
+con tus leads · Cómo están tus asesores · Comparación de períodos · Propiedades con potencial ·
+Dame recomendaciones · Cómo leer este reporte*. Se eliminaron "Precio × calidad" e "Historial de
+avisos". Cada sección trae su propio "cómo se lee" y su recap al pie.
+
+### Otros
+
+- El "vs" ya se ve **dentro** del funnel (▲▼ contra el período base), no solo en su sección.
+- "Media" en velocidad de respuesta se leía como *promedio*: los rangos ahora son
+  **Flash ≤5 min · Rápida ≤1 h · Aceptable ≤24 h · Fuera de SLA >24 h**, siempre con el tiempo visible.
+- Demanda estandarizada a **últimos 3 meses** también en `/mb` (antes YTD, que en enero medía 3 semanas).
+- Filtro por asesor en el reporte: acota todo a **su cartera**.
+- PDF en MB (A4 horizontal, sin cortar secciones) y botón Generar en amarillo de marca.
