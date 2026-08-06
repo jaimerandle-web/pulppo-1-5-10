@@ -333,12 +333,17 @@ export default function MBApp({ d }: { d: MBData }) {
     const topOpp = d.props.filter((p) => p.op === 'Venta' && p.demanda > 0).sort((a, b) => b.oppScore - a.oppScore).slice(0, 10);
     // asesores de la inmobiliaria (de su inventario publicado) → filtro del reporte
     const asesoresInmo = [...new Set(d.props.map((p) => p.asesor))].filter((a) => a && a !== '—').sort();
-    // top 3 de cada lado. Rojo por severidad (más flags primero, luego más leads en juego);
-    // verde por lo que más vale: cierres, luego volumen.
+    // Rojo por severidad (más banderas primero, luego más leads en juego).
     const redTop = d.asesores.filter((a) => a.red.length > 0)
         .sort((a, b) => b.red.length - a.red.length || b.leads - a.leads).slice(0, 3);
-    const greenTop = d.asesores.filter((a) => a.green.length > 0)
-        .sort((a, b) => b.cierres - a.cierres || b.green.length - a.green.length || b.leads - a.leads).slice(0, 3);
+    // Verde SOLO para quien no trae ninguna bandera roja: si alguien cierra pero quema leads,
+    // felicitarlo en una columna y señalarlo en la otra deja al dueño sin saber qué hacer.
+    const greenTop = d.asesores.filter((a) => a.green.length > 0 && a.red.length === 0)
+        .sort((a, b) => b.green.length - a.green.length || b.cierres - a.cierres || b.leads - a.leads).slice(0, 3);
+    // El matiz que sí importa: quien produce Y tiene banderas rojas. No es para felicitar ni
+    // para regañar, es para arreglarle el proceso porque es el que más tiene en juego.
+    const ojoTop = d.asesores.filter((a) => a.red.length > 0 && a.cierres > 0)
+        .sort((a, b) => b.cierres - a.cierres || b.leads - a.leads).slice(0, 2);
     const nDest = cnt((p) => p.tier === 'Super' || p.tier === 'Destacado');
     // Los bloques de propiedades van de MAYOR a MENOR volumen: lo que más pesa, primero.
     const porVolumen = <T,>(xs: T[], segOf: (x: T) => string) =>
@@ -497,6 +502,14 @@ export default function MBApp({ d }: { d: MBData }) {
                                         </div>
                                     ))}
                                 </div>
+                                {ojoTop.length > 0 && (
+                                    <div style={{ marginTop: 10, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '11px 14px', fontSize: 12, color: '#555', lineHeight: 1.5 }}>
+                                        <b style={{ color: BLK }}>Ojo con estos:</b>{' '}
+                                        {ojoTop.map((a, i) => (
+                                            <span key={a.name}>{i > 0 && ' · '}<b style={{ color: BLK }}>{a.name}</b> cerró {f(a.cierres)} {a.cierres === 1 ? 'operación' : 'operaciones'} y aun así {a.red[0]}</span>
+                                        ))}. Son los que más tienen en juego: no es para regañarlos, es para arreglarles el proceso.
+                                    </div>
+                                )}
                             </>
                         )}
 
