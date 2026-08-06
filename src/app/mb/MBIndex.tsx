@@ -16,18 +16,38 @@ function CopyLink({ companyId }: { companyId: string }) {
     return <button onClick={copy} style={{ fontSize: 11, fontWeight: 600, color: ok ? SEA : '#555', background: '#fff', border: `1px solid ${LGT}`, borderRadius: R, padding: '4px 9px', cursor: 'pointer' }}>{ok ? '¡Copiada!' : 'Copiar liga'}</button>;
 }
 
+// Columnas ordenables: para responder "¿qué inmobiliaria tiene más leads / más props / peor calidad?"
+type SortKey = 'name' | 'kam' | 'nProps' | 'nVenta' | 'calAltaPct' | 'leads30' | 'leadsProp';
+const NUM_KEYS: SortKey[] = ['nProps', 'nVenta', 'calAltaPct', 'leads30', 'leadsProp'];
+const valOf = (r: MBIndexRow, k: SortKey): number | string =>
+    k === 'leadsProp' ? (r.nProps ? r.leads30 / r.nProps : 0) : (r[k as keyof MBIndexRow] as number | string);
+
 export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
     const [kam, setKam] = useState('');
     const [q, setQ] = useState('');
+    const [sortKey, setSortKey] = useState<SortKey>('nProps');
+    const [dir, setDir] = useState<1 | -1>(-1);
+    const [minProps, setMinProps] = useState('');
     const kams = useMemo(() => [...new Set(rows.map((r) => r.kam))].sort(), [rows]);
     const filtered = useMemo(() => {
         const ql = q.trim().toLowerCase();
-        return rows.filter((r) => (!kam || r.kam === kam) && (!ql || r.name.toLowerCase().includes(ql)));
-    }, [rows, kam, q]);
+        const mp = parseInt(minProps) || 0;
+        const out = rows.filter((r) => (!kam || r.kam === kam) && (!ql || r.name.toLowerCase().includes(ql)) && r.nProps >= mp);
+        return out.sort((a, b) => {
+            const va = valOf(a, sortKey), vb = valOf(b, sortKey);
+            if (typeof va === 'number' && typeof vb === 'number') return dir * (va - vb);
+            return dir * String(va).localeCompare(String(vb), 'es');
+        });
+    }, [rows, kam, q, minProps, sortKey, dir]);
     const totProps = filtered.reduce((a, r) => a + r.nProps, 0);
     const totLeads = filtered.reduce((a, r) => a + r.leads30, 0);
+    const onSort = (k: SortKey) => {
+        if (k === sortKey) setDir((x) => (x === 1 ? -1 : 1));
+        else { setSortKey(k); setDir(NUM_KEYS.includes(k) ? -1 : 1); }
+    };
+    const arrow = (k: SortKey) => (sortKey === k ? (dir === 1 ? ' ▲' : ' ▼') : '');
 
-    const th: CSSProperties = { textAlign: 'left', padding: '8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
+    const th: CSSProperties = { textAlign: 'left', padding: '8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
     const td: CSSProperties = { padding: '8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
     const sel: CSSProperties = { fontSize: 12, padding: '6px 8px', border: `1px solid ${LGT}`, borderRadius: R, background: '#fff' };
     const chip = (active: boolean): CSSProperties => ({ fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: R, cursor: 'pointer', border: `1px solid ${active ? BLK : LGT}`, background: active ? BLK : '#fff', color: active ? '#fff' : '#555' });
@@ -48,15 +68,22 @@ export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
                 <span onClick={() => setKam('')} style={chip(kam === '')}>Todos</span>
                 {kams.map((k) => <span key={k} onClick={() => setKam(k)} style={chip(kam === k)}>{k}</span>)}
-                <input placeholder="Buscar inmobiliaria…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...sel, marginLeft: 'auto', width: 220 }} />
+                <input placeholder="Buscar inmobiliaria…" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...sel, marginLeft: 'auto', width: 200 }} />
+                <input placeholder="Mín. props" value={minProps} onChange={(e) => setMinProps(e.target.value.replace(/\D/g, ''))} style={{ ...sel, width: 90, textAlign: 'right' }} title="Oculta las inmobiliarias con menos propiedades que esto" />
             </div>
+            <div style={{ fontSize: 11, color: GRY, marginBottom: 6 }}>Haz clic en cualquier encabezado para ordenar (quién tiene más leads, más inventario o peor calidad de ficha).</div>
 
             <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, background: '#fff' }}>
                     <thead><tr>
-                        <th style={th}>Inmobiliaria</th><th style={th}>KAM</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Props</th><th style={{ ...th, textAlign: 'right' }}>Venta / Renta</th>
-                        <th style={{ ...th, textAlign: 'right' }}>% Alta calidad</th><th style={{ ...th, textAlign: 'right' }}>Leads 30d</th><th style={{ ...th, textAlign: 'right' }}>Liga</th>
+                        <th style={th} onClick={() => onSort('name')}>Inmobiliaria{arrow('name')}</th>
+                        <th style={th} onClick={() => onSort('kam')}>KAM{arrow('kam')}</th>
+                        <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('nProps')}>Props{arrow('nProps')}</th>
+                        <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('nVenta')}>Venta / Renta{arrow('nVenta')}</th>
+                        <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('calAltaPct')}>% Alta calidad{arrow('calAltaPct')}</th>
+                        <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('leads30')}>Leads 30d{arrow('leads30')}</th>
+                        <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('leadsProp')}>Leads / prop{arrow('leadsProp')}</th>
+                        <th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Liga</th>
                     </tr></thead>
                     <tbody>
                         {filtered.map((r) => (
@@ -67,6 +94,7 @@ export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
                                 <td style={{ ...td, textAlign: 'right', color: GRY }}>{f(r.nVenta)} / {f(r.nRenta)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{r.calAltaPct}%</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(r.leads30)}</td>
+                                <td style={{ ...td, textAlign: 'right', color: GRY }}>{r.nProps ? (r.leads30 / r.nProps).toFixed(1) : '—'}</td>
                                 <td style={{ ...td, textAlign: 'right' }}><CopyLink companyId={r.companyId} /></td>
                             </tr>
                         ))}

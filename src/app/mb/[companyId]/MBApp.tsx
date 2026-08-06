@@ -16,7 +16,12 @@ const vsCell = (v: number | null) => {
 };
 const DIAG_STYLE: Record<string, { bg: string; fg: string }> = { 'Bajar precio': { bg: '#F3D9D3', fg: RED }, 'Mejorar ficha': { bg: '#FBF0CC', fg: '#8a6d00' } };
 const diagPill = (t: string) => { const s = DIAG_STYLE[t] ?? { bg: '#DCEBEB', fg: '#2f6b6b' }; return <span key={t} style={{ background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 11, marginRight: 4, whiteSpace: 'nowrap' }}>{t}</span>; };
-const RESP_LBL: Record<RespKey, string> = { flash: 'Flash', rapida: 'Rápida', media: 'Media', lento: 'Lento', sin: 'Sin responder' };
+// "Media" se leía como promedio, no como intermedia. Ahora los rangos se llaman por lo que
+// significan y siempre traen el tiempo a la vista.
+const RESP_LBL: Record<RespKey, string> = { flash: 'Flash', rapida: 'Rápida', media: 'Aceptable', lento: 'Fuera de SLA', sin: 'Sin responder' };
+const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1 hora', media: '≤ 24 horas', lento: '> 24 horas', sin: 'nunca' };
+// minutos → texto corto legible
+const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
 type Section = 'overview' | 'props' | 'analisis' | 'comoleer';
 type Seg = '' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre';
@@ -61,25 +66,44 @@ function OpSplit({ venta, renta }: { venta: number; renta: number }) {
     );
 }
 
-function Funnel({ vistas, leads, visitas, ofertas, n }: { vistas: number; leads: number; visitas: number; ofertas: number; n: number }) {
-    const max = Math.max(vistas, leads, visitas, ofertas, 1);
+function Funnel({ vistas, leads, respondidos, visitas, ofertas, cierres, respMed, n }:
+    { vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number; respMed: number | null; n: number }) {
+    const max = Math.max(vistas, leads, respondidos, visitas, ofertas, 1);
     const rate = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)}%` : '—');
+    // Respondidos entra en el funnel: es el primer paso que el equipo controla.
     const stages: [string, number, string, string][] = [
-        ['Vistas', vistas, GRY, ''], ['Leads', leads, SEA, `${rate(leads, vistas)} de vistas`],
-        ['Visitas', visitas, '#2f6b6b', `${rate(visitas, leads)} de leads`], ['Ofertas', ofertas, BLK, `${rate(ofertas, visitas)} de visitas`]
+        ['Vistas', vistas, GRY, ''],
+        ['Leads', leads, SEA, `${rate(leads, vistas)} de vistas`],
+        ['Respondidos', respondidos, '#3f8080', `${rate(respondidos, leads)} de leads`],
+        ['Visitas', visitas, '#2f6b6b', `${rate(visitas, respondidos)} de respondidos`],
+        ['Ofertas', ofertas, BLK, `${rate(ofertas, visitas)} de visitas`],
+        ['Cierres', cierres, BLK, `${rate(cierres, visitas)} de visitas`]
     ];
+    const kpi = (l: string, v: string, s: string, col?: string) => (
+        <div key={l} style={{ flex: 1, background: '#fff', border: `1px solid ${LGT}`, borderRadius: R, padding: '8px 11px', minWidth: 0 }}>
+            <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>{l}</div>
+            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, lineHeight: 1.1, color: col || BLK }}>{v}</div>
+            <div style={{ fontSize: 9.5, color: GRY }}>{s}</div>
+        </div>
+    );
     return (
         <div>
             <div style={{ fontSize: 11, color: GRY, marginBottom: 10 }}>Sobre las <b>{f(n)}</b> propiedades filtradas. Tasas contra el paso anterior.</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {kpi('Tasa de respuesta', rate(respondidos, leads), `${f(leads - respondidos)} sin responder`, leads && respondidos / leads < 0.8 ? RED : BLK)}
+                {kpi('1ª respuesta (mediana)', dur(respMed), 'meta ≤ 24 horas', respMed != null && respMed > 1440 ? RED : BLK)}
+                {kpi('Tasa de visita', rate(visitas, leads), 'visitas ÷ leads')}
+                {kpi('Lead → cierre', leads ? `${((100 * cierres) / leads).toFixed(2)}%` : '—', 'cierres ÷ leads')}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {stages.map(([lbl, v, c, note]) => (
                     <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ width: 60, fontSize: 12, fontWeight: 600 }}>{lbl}</span>
+                        <span style={{ width: 82, fontSize: 12, fontWeight: 600 }}>{lbl}</span>
                         <span style={{ flex: 1, background: '#fff', height: 20, borderRadius: R, overflow: 'hidden', border: `1px solid ${LGT}` }}>
                             <span style={{ display: 'block', height: '100%', width: `${Math.max((100 * v) / max, 1)}%`, background: c }} />
                         </span>
                         <span style={{ width: 66, textAlign: 'right', fontWeight: 700, fontSize: 13 }}>{f(v)}</span>
-                        <span style={{ width: 84, textAlign: 'right', fontSize: 10, color: GRY }}>{note}</span>
+                        <span style={{ width: 108, textAlign: 'right', fontSize: 10, color: GRY }}>{note}</span>
                     </div>
                 ))}
             </div>
@@ -94,12 +118,14 @@ const COLS: Col[] = [
     { key: 'colonia', label: 'Colonia' }, { key: 'precio', label: 'Precio', num: true },
     { key: 'vsOferta', label: 'vs. oferta', num: true }, { key: 'vsCierres', label: 'vs. cierres', num: true },
     { key: 'compite', label: 'Compite', num: true }, { key: 'demanda', label: 'Demanda', num: true },
-    { key: 'calidad', label: 'Calidad' }, { key: 'tier', label: 'Destacado' }, { key: 'dias', label: 'Días', num: true },
+    { key: 'calidad', label: 'Calidad' }, { key: 'dias', label: 'Días', num: true },
     { key: 'vistas', label: 'Vistas', num: true }, { key: 'leads', label: 'Leads', num: true },
+    { key: 'respondidos', label: 'Respondidos', num: true },
+    { key: 'respMedMin', label: '1ª respuesta', num: true },
     { key: 'visitas', label: 'Visitas', num: true }, { key: 'ofertas', label: 'Ofertas', num: true }
 ];
 // Columnas que se ordenan alfabéticamente (el resto, de mayor a menor).
-const TEXT_COLS: (keyof MBProp)[] = ['code', 'type', 'asesor', 'colonia', 'op', 'calidad', 'tier'];
+const TEXT_COLS: (keyof MBProp)[] = ['code', 'type', 'asesor', 'colonia', 'op', 'calidad'];
 
 function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) => void }) {
     const [sortKey, setSortKey] = useState<keyof MBProp>('leads');
@@ -117,7 +143,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     const [rango, setRango] = useState('Todo (histórico)');
     const [cfrom, setCfrom] = useState('');
     const [cto, setCto] = useState('');
-    type Ovr = Record<string, { vistas: number; leads: number; visitas: number; ofertas: number }>;
+    type Ovr = Record<string, { vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number }>;
     const [ovr, setOvr] = useState<Ovr | null>(null);
     const [rloading, setRloading] = useState(false);
     useEffect(() => {
@@ -131,16 +157,19 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
         let cancel = false; setRloading(true);
         fetch('/api/mb-metrics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId: d.companyId, from: from.toISOString(), to: to.toISOString() }) })
             .then((r) => r.json())
-            .then((m: { error?: string; leads?: Record<string, number>; vistas?: Record<string, number>; visitas?: Record<string, number>; ofertas?: Record<string, number> }) => {
+            .then((m: { error?: string; leads?: Record<string, number>; respondidos?: Record<string, number>; vistas?: Record<string, number>; visitas?: Record<string, number>; ofertas?: Record<string, number>; cierres?: Record<string, number> }) => {
                 if (cancel || m.error) return;
-                const o: Ovr = {}; const ids = new Set([...Object.keys(m.leads || {}), ...Object.keys(m.vistas || {}), ...Object.keys(m.visitas || {}), ...Object.keys(m.ofertas || {})]);
-                ids.forEach((id) => { o[id] = { vistas: m.vistas?.[id] ?? 0, leads: m.leads?.[id] ?? 0, visitas: m.visitas?.[id] ?? 0, ofertas: m.ofertas?.[id] ?? 0 }; });
+                const o: Ovr = {};
+                const ids = new Set([...Object.keys(m.leads || {}), ...Object.keys(m.vistas || {}), ...Object.keys(m.visitas || {}), ...Object.keys(m.ofertas || {}), ...Object.keys(m.cierres || {})]);
+                ids.forEach((id) => { o[id] = { vistas: m.vistas?.[id] ?? 0, leads: m.leads?.[id] ?? 0, respondidos: m.respondidos?.[id] ?? 0, visitas: m.visitas?.[id] ?? 0, ofertas: m.ofertas?.[id] ?? 0, cierres: m.cierres?.[id] ?? 0 }; });
                 setOvr(o);
             }).finally(() => { if (!cancel) setRloading(false); });
         return () => { cancel = true; };
     }, [rango, cfrom, cto, d.companyId]);
     // props con las métricas del rango (si hay rango); si no, históricas
-    const dprops = useMemo(() => ovr ? d.props.map((p) => ({ ...p, vistas: ovr[p.id]?.vistas ?? 0, leads: ovr[p.id]?.leads ?? 0, visitas: ovr[p.id]?.visitas ?? 0, ofertas: ovr[p.id]?.ofertas ?? 0 })) : d.props, [d.props, ovr]);
+    const dprops = useMemo(() => ovr ? d.props.map((p) => ({ ...p,
+        vistas: ovr[p.id]?.vistas ?? 0, leads: ovr[p.id]?.leads ?? 0, respondidos: ovr[p.id]?.respondidos ?? 0,
+        visitas: ovr[p.id]?.visitas ?? 0, ofertas: ovr[p.id]?.ofertas ?? 0, cierres: ovr[p.id]?.cierres ?? 0 })) : d.props, [d.props, ovr]);
 
     const filtered = useMemo(() => {
         const ql = q.trim().toLowerCase();
@@ -155,7 +184,15 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                 const fv = (colf[c.key] ?? '').trim();
                 if (!fv) continue;
                 const cell = p[c.key];
-                if (c.num) { const n = parseFloat(fv.replace(/[^0-9.\-]/g, '')); if (isNaN(n)) continue; if (!(typeof cell === 'number' && cell >= n)) return false; }
+                if (c.num) {
+                    const n = parseFloat(fv.replace(/[^0-9.\-]/g, ''));
+                    if (isNaN(n)) continue;
+                    // el tiempo de respuesta se busca al revés: "contéstame quién tardó ESTO o menos"
+                    const okNum = c.key === 'respMedMin'
+                        ? typeof cell === 'number' && cell <= n
+                        : typeof cell === 'number' && cell >= n;
+                    if (!okNum) return false;
+                }
                 else if (!String(cell ?? '').toLowerCase().includes(fv.toLowerCase())) return false;
             }
             return true;
@@ -168,7 +205,15 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
         return dir * String(va ?? '').localeCompare(String(vb ?? ''), 'es');
     }), [filtered, sortKey, dir]);
 
-    const fn = useMemo(() => filtered.reduce((a, p) => ({ vistas: a.vistas + p.vistas, leads: a.leads + p.leads, visitas: a.visitas + p.visitas, ofertas: a.ofertas + p.ofertas }), { vistas: 0, leads: 0, visitas: 0, ofertas: 0 }), [filtered]);
+    const fn = useMemo(() => filtered.reduce((a, p) => ({
+        vistas: a.vistas + p.vistas, leads: a.leads + p.leads, respondidos: a.respondidos + p.respondidos,
+        visitas: a.visitas + p.visitas, ofertas: a.ofertas + p.ofertas, cierres: a.cierres + p.cierres,
+    }), { vistas: 0, leads: 0, respondidos: 0, visitas: 0, ofertas: 0, cierres: 0 }), [filtered]);
+    // mediana de las medianas por propiedad (no se pueden promediar medianas)
+    const fnRespMed = useMemo(() => {
+        const xs = filtered.map((p) => p.respMedMin).filter((x): x is number => x != null).sort((a, b) => a - b);
+        return xs.length ? xs[Math.floor(xs.length / 2)] : null;
+    }, [filtered]);
     const onSort = (k: keyof MBProp) => { if (k === sortKey) setDir((x) => (x === 1 ? -1 : 1)); else { setSortKey(k); setDir(TEXT_COLS.includes(k) ? 1 : -1); } };
     const th: CSSProperties = { textAlign: 'left', padding: '8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
     const td: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
@@ -196,7 +241,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
             <div style={{ background: LGT, padding: '14px 16px', borderRadius: R, marginBottom: 16 }}>
                 <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 17, marginBottom: 2 }}>Funnel comercial</div>
                 <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>Vistas/leads/visitas/ofertas: <b>{ovr ? rango.toLowerCase() : 'histórico'}</b>.</div>
-                <Funnel vistas={fn.vistas} leads={fn.leads} visitas={fn.visitas} ofertas={fn.ofertas} n={filtered.length} />
+                <Funnel vistas={fn.vistas} leads={fn.leads} respondidos={fn.respondidos} visitas={fn.visitas} ofertas={fn.ofertas} cierres={fn.cierres} respMed={fnRespMed} n={filtered.length} />
             </div>
 
             {/* Fila de filtros por columna: va sobre fondo gris claro y con su propio rótulo, para que
@@ -213,17 +258,19 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
             <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
                     <thead>
-                        <tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)} title="Clic para ordenar">{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}<th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Reporte</th></tr>
+                        <tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)} title="Clic para ordenar">{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}<th style={{ ...th, cursor: 'default' }}>Acción</th><th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Reporte</th></tr>
                         <tr>{COLS.map((c) => {
                             const on = !!(colf[c.key] ?? '').trim();
                             return (
                                 <th key={c.key} style={{ padding: '4px 6px', borderBottom: `1px solid ${LGT}`, background: LGT }}>
                                     <input value={colf[c.key] ?? ''} onChange={(e) => setColf((s) => ({ ...s, [c.key]: e.target.value }))}
-                                        placeholder={c.num ? 'mín.' : 'contiene…'} title={c.num ? `${c.label}: muestra las que sean mayores o iguales a este número` : `${c.label}: muestra las que contengan este texto`}
+                                        placeholder={c.key === 'respMedMin' ? 'máx. min' : c.num ? 'mín.' : 'contiene…'}
+                                        title={c.key === 'respMedMin' ? '1ª respuesta: muestra las que respondieron en ESE número de minutos o menos'
+                                            : c.num ? `${c.label}: muestra las que sean mayores o iguales a este número` : `${c.label}: muestra las que contengan este texto`}
                                         style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, padding: '3px 5px', border: `1px solid ${on ? SEA : '#e2e2e2'}`, borderRadius: R, textAlign: c.num ? 'right' : 'left', color: BLK, background: '#fff', fontWeight: on ? 700 : 400 }} />
                                 </th>
                             );
-                        })}<th style={{ borderBottom: `1px solid ${LGT}`, background: LGT }} /></tr>
+                        })}<th style={{ borderBottom: `1px solid ${LGT}`, background: LGT }} /><th style={{ borderBottom: `1px solid ${LGT}`, background: LGT }} /></tr>
                     </thead>
                     <tbody>
                         {rows.map((p) => (
@@ -237,12 +284,14 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                 <td style={{ ...td, textAlign: 'right' }}>{p.compite ?? '—'}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.demanda)}</td>
                                 <td style={td}><span style={{ color: calidadColor(p.calidad), fontWeight: 600 }}>{p.calidad}</span></td>
-                                <td style={{ ...td, color: p.tier === 'Super' || p.tier === 'Destacado' ? SEA : GRY }}>{p.tier}</td>
                                 <td style={{ ...td, textAlign: 'right', color: GRY }}>{p.dias ?? '—'}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.vistas)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.leads)}</td>
+                                <td style={{ ...td, textAlign: 'right', color: p.leads && p.respondidos < p.leads ? RED : BLK }}>{p.leads ? f(p.respondidos) : ''}</td>
+                                <td style={{ ...td, textAlign: 'right', color: p.respMedMin == null ? GRY : p.respMedMin > 1440 ? RED : BLK }}>{dur(p.respMedMin)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
+                                <td style={td}>{p.diag.length ? p.diag.map(diagPill) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>}</td>
                                 <td style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}?v=simple`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
                             </tr>
                         ))}
@@ -273,6 +322,7 @@ export default function MBApp({ d }: { d: MBData }) {
     const domResp = domOf(d.resp), domV = domOf(d.respV), domR = domOf(d.respR);
     const flashPct = answered ? Math.round((100 * d.resp.flash) / answered) : 0;
     const dl = d.leads30 - d.leads30prev;
+    const dlPct = d.leads30prev ? Math.round((100 * dl) / d.leads30prev) : null;
     const calDelta = d.calAltaPct - d.benchAltaPct;
     const REDFLAGS: { seg: Seg; tip: string }[] = [
         { seg: 'muchasVisitas', tip: 'Revisa precio y expectativas; refuerza el cierre después de la visita.' },
@@ -283,6 +333,12 @@ export default function MBApp({ d }: { d: MBData }) {
     const topOpp = d.props.filter((p) => p.op === 'Venta' && p.demanda > 0).sort((a, b) => b.oppScore - a.oppScore).slice(0, 10);
     // asesores de la inmobiliaria (de su inventario publicado) → filtro del reporte
     const asesoresInmo = [...new Set(d.props.map((p) => p.asesor))].filter((a) => a && a !== '—').sort();
+    // top 3 de cada lado. Rojo por severidad (más flags primero, luego más leads en juego);
+    // verde por lo que más vale: cierres, luego volumen.
+    const redTop = d.asesores.filter((a) => a.red.length > 0)
+        .sort((a, b) => b.red.length - a.red.length || b.leads - a.leads).slice(0, 3);
+    const greenTop = d.asesores.filter((a) => a.green.length > 0)
+        .sort((a, b) => b.cierres - a.cierres || b.green.length - a.green.length || b.leads - a.leads).slice(0, 3);
     const nDest = cnt((p) => p.tier === 'Super' || p.tier === 'Destacado');
     // Los bloques de propiedades van de MAYOR a MENOR volumen: lo que más pesa, primero.
     const porVolumen = <T,>(xs: T[], segOf: (x: T) => string) =>
@@ -332,17 +388,56 @@ export default function MBApp({ d }: { d: MBData }) {
                         {/* KPIs */}
                         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                             <Kpi label="Inventario activo" value={f(d.nProps)} sub={`${d.nVenta} venta · ${d.nRenta} renta`} />
-                            <Kpi label="Calidad de ficha" value={`${d.calAltaPct}% Alta`} color={calDelta < 0 ? '#8a6d00' : SEA} sub={`venta ${d.calAltaVenta}% · renta ${d.calAltaRenta}% · mejores* ${d.benchAltaPct}%`} />
-                            <Kpi label="Leads · 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED} sub={`venta ${f(d.leads30V)} · renta ${f(d.leads30R)} · ${dl >= 0 ? '▲' : '▼'} vs. previos`} />
-                            <Kpi label="Respuesta" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`sin responder · venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`} />
-                            <Kpi label="Velocidad de respuesta" value={RESP_LBL[domResp]} color={domResp === 'flash' || domResp === 'rapida' ? SEA : domResp === 'lento' ? RED : '#8a6d00'} sub={`venta ${RESP_LBL[domV]} · renta ${RESP_LBL[domR]}`} />
+                            <Kpi label="Leads · últimos 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED}
+                                sub={`${dl >= 0 ? '▲' : '▼'} ${dlPct == null ? `${dl >= 0 ? '+' : ''}${f(dl)}` : `${dl >= 0 ? '+' : ''}${dlPct}%`} vs. los 30 días anteriores (${f(d.leads30prev)}) · venta ${f(d.leads30V)} · renta ${f(d.leads30R)}`} />
+                            <Kpi label="Sin responder" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`} />
+                            <Kpi label="1ª respuesta (mediana)" value={dur(d.respMedMin)}
+                                color={d.respMedMin == null ? GRY : d.respMedMin <= 60 ? SEA : d.respMedMin > 1440 ? RED : '#8a6d00'}
+                                sub={`la mitad de tus leads se contesta antes de eso · el grupo más común es ${RESP_LBL[domResp].toLowerCase()} (${RESP_RANGO[domResp]})`} />
                         </div>
-                        <div style={{ fontSize: 10, color: GRY, marginTop: 6 }}>*media de las mejores inmobiliarias de la comunidad (top 20% por calidad).</div>
 
                         {/* Venta vs renta */}
                         <h2 style={{ ...h2, marginTop: 28 }}>Venta vs. renta</h2>
                         <div style={sub}>Balance de tu inventario publicado por tipo de operación.</div>
                         <OpSplit venta={d.nVenta} renta={d.nRenta} />
+
+                        {/* Calidad de ficha: bajó de los KPIs de arriba a aquí, con # y % por nivel */}
+                        <h2 style={{ ...h2, marginTop: 30 }}>Calidad de tus fichas</h2>
+                        <div style={sub}>Cuántas propiedades tienes en cada nivel. Las mejores inmobiliarias de la comunidad traen <b>{d.benchAltaPct}%</b> en Alta{calDelta < 0 ? <> y tú <b style={{ color: '#8a6d00' }}>{d.calAltaPct}%</b></> : <> y tú <b style={{ color: SEA }}>{d.calAltaPct}%</b></>}.</div>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            {([['Alta', d.calidad.alta, SEA], ['Media', d.calidad.media, '#8a6d00'], ['Baja', d.calidad.baja, RED]] as [string, number, string][]).map(([lbl, n, col]) => (
+                                <div key={lbl} style={{ flex: 1, background: '#fff', border: `1px solid ${LGT}`, borderTop: `3px solid ${col}`, padding: '13px 15px', borderRadius: R }}>
+                                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>Calidad {lbl}</div>
+                                    <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 27, lineHeight: 1.05, margin: '8px 0 3px', color: col }}>
+                                        {f(n)} <span style={{ fontSize: 15, color: GRY }}>· {d.nProps ? Math.round((100 * n) / d.nProps) : 0}%</span>
+                                    </div>
+                                    <div style={{ fontSize: 10.5, color: '#777' }}>de {f(d.nProps)} publicadas</div>
+                                </div>
+                            ))}
+                        </div>
+                        <div style={{ marginTop: 12, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '13px 16px', fontSize: 12.5, color: '#444', lineHeight: 1.55 }}>
+                            <b style={{ color: BLK }}>¿Qué le falta a tus propiedades para ser Alta?</b>
+                            <div style={{ marginTop: 6 }}>
+                                Medimos toda la red Pulppo y el <b>video es el único factor que separa Media de Alta</b>:
+                                el 100% de las fichas Alta tiene video, contra 32% de las Media. Fotos, descripción y tour
+                                virtual están casi iguales en los tres niveles, así que <b>subir un tour no mejora tu calificación</b>.
+                            </div>
+                            <div style={{ marginTop: 9, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {([
+                                    ['Sin video', d.falta.video, 'la palanca #1', true],
+                                    ['Con menos de 8 fotos', d.falta.fotos, 'ayuda a salir de Baja', d.falta.fotos > 0],
+                                    ['Sin amenidades capturadas', d.falta.amenidades, 'ayuda a salir de Baja', d.falta.amenidades > 0],
+                                    ['Sin ACM', d.falta.acm, 'sin esto no sabes si tu precio compite', d.falta.acm > 0],
+                                    ['Sin tour virtual', d.falta.tour, 'no mueve la calidad, es solo referencia', false]
+                                ] as [string, number, string, boolean][]).map(([lbl, n, nota, fuerte]) => (
+                                    <div key={lbl} style={{ background: '#fff', border: `1px solid ${fuerte ? YEL : LGT}`, borderRadius: R, padding: '8px 11px', minWidth: 140 }}>
+                                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 21, color: fuerte ? BLK : GRY }}>{f(n)}</div>
+                                        <div style={{ fontSize: 11, fontWeight: 600 }}>{lbl}</div>
+                                        <div style={{ fontSize: 10, color: GRY }}>{nota}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
 
                         {/* Focos comerciales (red flags accionables) */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Focos comerciales</h2>
@@ -358,6 +453,52 @@ export default function MBApp({ d }: { d: MBData }) {
                                 );
                             })}
                         </div>
+
+                        {/* Zonas — la lectura de mercado, ahora también en el overview */}
+                        <h2 style={{ ...h2, marginTop: 30 }}>Tus zonas</h2>
+                        <div style={sub}>Dónde está tu inventario, cuánta competencia tiene, cuánta gente busca ahí y qué tan competitivo es tu precio. <b>vs. oferta</b> y <b>vs. cierres</b> son la <b>mediana</b> contra propiedades comparables. Demanda = búsquedas de {d.demandaLabel}.</div>
+                        <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
+                                <thead><tr>{['Colonia', 'Tus props', 'Compiten en la zona', 'Demanda', 'Leads', 'vs. oferta', 'vs. cierres'].map((hh, i) => (
+                                    <th key={hh} style={{ ...tth, textAlign: i ? 'right' : 'left' }}>{hh}</th>
+                                ))}</tr></thead>
+                                <tbody>
+                                    {d.zonas.map((z) => (
+                                        <tr key={z.nb}>
+                                            <td style={{ ...ttd, fontWeight: 600 }}>{z.nb}</td>
+                                            <td style={{ ...ttd, textAlign: 'right' }}>{f(z.n)}</td>
+                                            <td style={{ ...ttd, textAlign: 'right', color: GRY }}>{z.oferta ? f(z.oferta) : '—'}</td>
+                                            <td style={{ ...ttd, textAlign: 'right' }}>{f(z.demanda)}</td>
+                                            <td style={{ ...ttd, textAlign: 'right' }}>{f(z.leads)}</td>
+                                            <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(z.vsOferta)}</td>
+                                            <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(z.vsCierres)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Recap de asesores: flags, no ranking */}
+                        {(greenTop.length > 0 || redTop.length > 0) && (
+                            <>
+                                <h2 style={{ ...h2, marginTop: 30 }}>Cómo va tu equipo</h2>
+                                <div style={sub}>Últimos 90 días, solo asesores de tu inmobiliaria con al menos 10 leads. Son <b>señales</b>, no un ranking: alguien puede ser el que más cierra y a la vez estar quemando leads.</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    {([['Lo que va bien', greenTop, SEA], ['Lo que hay que atender', redTop, RED]] as [string, typeof greenTop, string][]).map(([titulo, lista, col]) => (
+                                        <div key={titulo} style={{ border: `1px solid ${LGT}`, borderTop: `3px solid ${col}`, borderRadius: R, padding: '12px 14px' }}>
+                                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: col, marginBottom: 8 }}>{titulo}</div>
+                                            {lista.length === 0 && <div style={{ fontSize: 12, color: GRY }}>Nada que destacar en esta ventana.</div>}
+                                            {lista.map((a) => (
+                                                <div key={a.name} style={{ padding: '6px 0', borderBottom: `1px solid ${LGT}` }}>
+                                                    <div style={{ fontSize: 12.5, fontWeight: 700 }}>{a.name} <span style={{ fontWeight: 400, color: GRY }}>· {f(a.leads)} leads</span></div>
+                                                    <div style={{ fontSize: 11.5, color: '#666', marginTop: 1 }}>{(titulo.startsWith('Lo que va') ? a.green : a.red).join(' · ')}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
 
                         {/* Empieza por aquí */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Empieza por aquí</h2>

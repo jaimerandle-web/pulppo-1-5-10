@@ -25,6 +25,9 @@ export async function POST(req: Request) {
         };
 
         const leads = await byField('leads', 'property._id', { 'property._id': { $in: ids }, createdAt: rng });
+        // respondidos: leads del rango que sí tienen answeredAt (el funnel del listado lo usa)
+        const respondidos = await byField('leads', 'property._id', { 'property._id': { $in: ids }, createdAt: rng, answeredAt: { $type: 'date' } });
+        const cierres = await byField('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': { $in: ['closed', 'paying'] }, closedAt: rng });
         const vistas = await byField('metrics', 'property', { property: { $in: ids }, type: 'view', createdAt: rng });
         const ofertas = await byField('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': { $in: ADVANCED }, createdAt: rng });
         // visitas = visitantes únicos confirmados con la visita dentro del rango
@@ -36,7 +39,7 @@ export async function POST(req: Request) {
         ]).toArray();
         const visitas = Object.fromEntries(visRows.map((r) => [String(r._id), r.n as number]));
 
-        return Response.json({ leads, vistas, visitas, ofertas });
+        return Response.json({ leads, respondidos, vistas, visitas, ofertas, cierres });
     } catch (e) {
         return Response.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 500 });
     }
