@@ -1,4 +1,4 @@
-import { buildAnalisis, type AnalisisConfig } from '@/lib/analisis';
+import { buildAnalisis, InputError, type AnalisisConfig } from '@/lib/analisis';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -13,7 +13,8 @@ export async function POST(req: Request) {
         const data = await buildAnalisis(body);
         return Response.json(data);
     } catch (e) {
+        // dato mal pedido → 400; falla real del servidor → 500
         const msg = e instanceof Error ? e.message : 'Error generando el análisis';
-        return Response.json({ error: msg }, { status: 500 });
+        return Response.json({ error: msg }, { status: e instanceof InputError ? 400 : 500 });
     }
 }

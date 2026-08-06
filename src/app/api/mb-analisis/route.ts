@@ -1,4 +1,4 @@
-import { buildAnalisis, type AnalisisConfig } from '@/lib/analisis';
+import { buildAnalisis, InputError, type AnalisisConfig } from '@/lib/analisis';
 
 // Análisis por inmobiliaria para Master Brokers: scoped por companyId (la liga), audiencia 'mb'
 // (sin destacados ni metas OKR internas). Datos en vivo, read-only.
@@ -12,6 +12,8 @@ export async function POST(req: Request) {
         const data = await buildAnalisis({ ...body, audiencia: 'mb' });
         return Response.json(data);
     } catch (e) {
-        return Response.json({ error: e instanceof Error ? e.message : 'Error generando el análisis' }, { status: 500 });
+        // dato mal pedido → 400; falla real del servidor → 500
+        const status = e instanceof InputError ? 400 : 500;
+        return Response.json({ error: e instanceof Error ? e.message : 'Error generando el análisis' }, { status });
     }
 }

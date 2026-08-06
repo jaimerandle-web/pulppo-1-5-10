@@ -272,6 +272,12 @@ export interface AnalisisData {
     };
 }
 
+// Error de ENTRADA (pidieron algo que no existe): las rutas lo devuelven como 400, no 500.
+// Un 500 en los logs parece una caída del servidor y ensucia el monitoreo.
+export class InputError extends Error {
+    constructor(msg: string) { super(msg); this.name = 'InputError'; }
+}
+
 // Nombre completo de un agente (null si no es un agente usable: sin _id o sin nombre).
 const agName = (a: Document | null | undefined): string | null => {
     if (!a || !gv(a, '_id')) return null;
@@ -341,7 +347,7 @@ async function bestAgencies(db: Db, start: Date, end: Date, label: string): Prom
 async function resolveCompany(db: Db, name: string): Promise<{ id: ObjectId; name: string }> {
     const rx = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     const cands = await db.collection('companies').find({ name: rx }, { projection: { name: 1 } }).toArray();
-    if (!cands.length) throw new Error(`No encontré inmobiliaria ~ "${name}"`);
+    if (!cands.length) throw new InputError(`No encontré inmobiliaria ~ "${name}"`);
     // la de más inventario publicado
     let best = cands[0], bestN = -1;
     for (const c of cands) {
@@ -360,7 +366,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const c = await db.collection('companies').findOne({ _id: CID }, { projection: { name: 1 } });
         CNAME = (c?.name as string) ?? 'Inmobiliaria';
     } else {
-        if (!cfg.inmo) throw new Error('Falta inmo o companyId');
+        if (!cfg.inmo) throw new InputError('Falta inmo o companyId');
         const r = await resolveCompany(db, cfg.inmo); CID = r.id; CNAME = r.name;
     }
 
@@ -407,7 +413,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const asesorIds = asesorSel
         ? [...internos.entries()].filter(([, n]) => norm(n) === norm(asesorSel)).map(([id]) => new ObjectId(id))
         : [];
-    if (asesorSel && !asesorIds.length) throw new Error(`No encontré al asesor "${asesorSel}" en ${CNAME}`);
+    if (asesorSel && !asesorIds.length) throw new InputError(`No encontré al asesor "${asesorSel}" en ${CNAME}. Revisa el nombre como aparece en Pulppo.`);
     const agentFilter: Document = asesorIds.length ? { 'agent._id': { $in: asesorIds } } : {};
 
     // --- propiedades publicadas ---
