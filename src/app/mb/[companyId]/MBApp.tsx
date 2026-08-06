@@ -8,13 +8,15 @@ const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = 
 const R = 2; // design system Pulppo: esquinas cuadradas
 const money = (n?: number | null) => (n == null || isNaN(n) ? '—' : `$${Math.round(n).toLocaleString('en-US')}`);
 const f = (n: number) => n.toLocaleString('es-MX');
-const calidadColor = (c: string) => (c === 'Alta' ? SEA : c === 'Baja' ? RED : '#8a6d00'); // Media = ámbar
+// Media / No competitivo van en negro de marca (el amarillo no se lee sobre blanco; se usa
+// como fondo del tag, no como color de texto).
+const calidadColor = (c: string) => (c === 'Alta' ? SEA : c === 'Baja' ? RED : BLK);
 const vsCell = (v: number | null) => {
     if (v == null) return <span style={{ color: GRY }}>—</span>;
     const col = v > 10 ? RED : v < -5 ? SEA : '#555';
     return <span style={{ color: col, fontWeight: 600 }}>{v > 0 ? '+' : ''}{v.toFixed(0)}%</span>;
 };
-const DIAG_STYLE: Record<string, { bg: string; fg: string }> = { 'Bajar precio': { bg: '#F3D9D3', fg: RED }, 'Mejorar ficha': { bg: '#FBF0CC', fg: '#8a6d00' } };
+const DIAG_STYLE: Record<string, { bg: string; fg: string }> = { 'Bajar precio': { bg: '#F3D9D3', fg: RED }, 'Mejorar ficha': { bg: YEL, fg: BLK } };
 const diagPill = (t: string) => { const s = DIAG_STYLE[t] ?? { bg: '#DCEBEB', fg: '#2f6b6b' }; return <span key={t} style={{ background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 11, marginRight: 4, whiteSpace: 'nowrap' }}>{t}</span>; };
 // "Media" se leía como promedio, no como intermedia. Ahora los rangos se llaman por lo que
 // significan y siempre traen el tiempo a la vista.
@@ -397,7 +399,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                 sub={`${dl >= 0 ? '▲' : '▼'} ${dlPct == null ? `${dl >= 0 ? '+' : ''}${f(dl)}` : `${dl >= 0 ? '+' : ''}${dlPct}%`} vs. los 30 días anteriores (${f(d.leads30prev)}) · venta ${f(d.leads30V)} · renta ${f(d.leads30R)}`} />
                             <Kpi label="Sin responder" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`} />
                             <Kpi label="1ª respuesta (mediana)" value={dur(d.respMedMin)}
-                                color={d.respMedMin == null ? GRY : d.respMedMin <= 60 ? SEA : d.respMedMin > 1440 ? RED : '#8a6d00'}
+                                color={d.respMedMin == null ? GRY : d.respMedMin <= 60 ? SEA : d.respMedMin > 1440 ? RED : BLK}
                                 sub={`la mitad de tus leads se contesta antes de eso · el grupo más común es ${RESP_LBL[domResp].toLowerCase()} (${RESP_RANGO[domResp]})`} />
                         </div>
 
@@ -408,12 +410,12 @@ export default function MBApp({ d }: { d: MBData }) {
 
                         {/* Calidad de ficha: bajó de los KPIs de arriba a aquí, con # y % por nivel */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Calidad de tus fichas</h2>
-                        <div style={sub}>Cuántas propiedades tienes en cada nivel. Las mejores inmobiliarias de la comunidad traen <b>{d.benchAltaPct}%</b> en Alta{calDelta < 0 ? <> y tú <b style={{ color: '#8a6d00' }}>{d.calAltaPct}%</b></> : <> y tú <b style={{ color: SEA }}>{d.calAltaPct}%</b></>}.</div>
+                        <div style={sub}>Cuántas propiedades tienes en cada nivel. Las mejores inmobiliarias de la comunidad traen <b>{d.benchAltaPct}%</b> en Alta{calDelta < 0 ? <> y tú <b style={{ color: BLK }}>{d.calAltaPct}%</b></> : <> y tú <b style={{ color: SEA }}>{d.calAltaPct}%</b></>}.</div>
                         <div style={{ display: 'flex', gap: 10 }}>
-                            {([['Alta', d.calidad.alta, SEA], ['Media', d.calidad.media, '#8a6d00'], ['Baja', d.calidad.baja, RED]] as [string, number, string][]).map(([lbl, n, col]) => (
+                            {([['Alta', d.calidad.alta, SEA], ['Media', d.calidad.media, YEL], ['Baja', d.calidad.baja, RED]] as [string, number, string][]).map(([lbl, n, col]) => (
                                 <div key={lbl} style={{ flex: 1, background: '#fff', border: `1px solid ${LGT}`, borderTop: `3px solid ${col}`, padding: '13px 15px', borderRadius: R }}>
                                     <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>Calidad {lbl}</div>
-                                    <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 27, lineHeight: 1.05, margin: '8px 0 3px', color: col }}>
+                                    <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 27, lineHeight: 1.05, margin: '8px 0 3px', color: col === YEL ? BLK : col }}>
                                         {f(n)} <span style={{ fontSize: 15, color: GRY }}>· {d.nProps ? Math.round((100 * n) / d.nProps) : 0}%</span>
                                     </div>
                                     <div style={{ fontSize: 10.5, color: '#777' }}>de {f(d.nProps)} publicadas</div>

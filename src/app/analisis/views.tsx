@@ -40,7 +40,7 @@ export function GlosarioView({ d, mb = false }: { d: AnalisisData; mb?: boolean 
             <p className="mb-1.5 text-[11px] font-semibold" style={{ color: SOFT }}>Señales de precio <span style={{ color: GRAY }}>(taxonomía del ACM: precio ÷ valor estimado)</span></p>
             <div className="mb-4 flex gap-2">
                 {[['Óptimo', '≤ +5%: en línea o por debajo del estimado. El que más interesados atrae.', SEA_D, SEA],
-                  ['No competitivo', '+5% a +20% sobre el estimado. Con margen para ajustarse.', SOFT, GRAY],
+                  ['No competitivo', '+5% a +20% sobre el estimado. Con margen para ajustarse.', SOFT, YEL],
                   ['Fuera de mercado', '> +20% sobre el estimado. El freno #1 de leads.', RED, RED]].map(([t, desc, txtCol, barCol]) => (
                     <div key={t as string} className="flex-1 bg-[#F3F3F3] p-2.5" style={{ borderTop: `3px solid ${barCol as string}` }}>
                         <p className="text-[11px] font-bold" style={{ color: txtCol as string }}>{t as string}</p>
@@ -642,8 +642,24 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
     );
 }
 
+// Tag de acción. Marca: rojo para precio, amarillo con texto negro para ficha, verde mar para
+// visibilidad. Nunca texto suelto: en tabla los textos largos se empalman con la columna vecina.
+export function Tag({ t }: { t: string }) {
+    const s = t.startsWith('Bajar') ? { bg: '#F3D9D3', fg: RED }
+        : t.startsWith('Destacar') ? { bg: '#DCEBEB', fg: SEA_D }
+            : { bg: YEL, fg: SOFT };
+    return (
+        <span style={{ background: s.bg, color: s.fg, fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 10, whiteSpace: 'nowrap', display: 'inline-block', marginRight: 3, marginBottom: 2 }}>{t}</span>
+    );
+}
+
 export function Top10View({ d }: { d: AnalisisData }) {
     if (!d.top10.length) return <p className="mt-2 pl-6 text-[11px]" style={{ color: GRAY }}>Sin propiedades críticas con palanca accionable en zonas con demanda.</p>;
+    // recap de la sección: qué frena a estas propiedades, en una línea
+    const conPrecio = d.top10.filter((t) => t.lev.some((l) => l.startsWith('Bajar'))).length;
+    const conFicha = d.top10.filter((t) => t.lev.some((l) => l.startsWith('Mejorar'))).length;
+    const sinLead = d.top10.filter((t) => !t.leads).length;
+    const demTot = d.top10.reduce((a, t) => a + t.dz, 0);
     return (
         <div className="mt-2 pl-6">
             <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Alta demanda en su zona pero pocos o cero leads, con un freno claro y fácil de arreglar. Prioriza estas.</p>
@@ -651,7 +667,8 @@ export function Top10View({ d }: { d: AnalisisData }) {
                 <thead>
                     <tr className="border-b" style={{ borderColor: SOFT }}>
                         {['#', 'Código', 'Zona', 'Precio', 'vs. mercado', 'Leads', 'Demanda', 'Qué cambiar'].map((h, i) => (
-                            <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i === 1 || i === 2 || i === 7 ? 'text-left' : 'text-right'}`}>{h}</th>
+                            <th key={h} className={`py-1 text-[8px] font-bold uppercase tracking-wide ${i === 1 || i === 2 || i === 7 ? 'text-left' : 'text-right'}`}
+                                style={i === 7 ? { paddingLeft: 14, width: '30%' } : undefined}>{h}</th>
                         ))}
                     </tr>
                 </thead>
@@ -664,16 +681,21 @@ export function Top10View({ d }: { d: AnalisisData }) {
                             <td className="py-1 text-right">{money(t.val)}</td>
                             <td className="py-1 text-right" style={{ color: t.sp && t.sp > 1.2 ? RED : SOFT }}>{t.sp ? `+${Math.round((t.sp - 1) * 100)}%` : '—'}</td>
                             <td className="py-1 text-right">{t.leads}</td>
-                            <td className="py-1 text-right">{f0(t.dz)}</td>
-                            <td className="py-1">{t.lev.map((l, j) => {
-                                const col = l.startsWith('Bajar') ? RED : l.startsWith('Destacar') ? SEA : SOFT;
-                                return <span key={l} style={{ color: col, fontWeight: 700 }}>{j ? ' · ' : ''}{l}</span>;
-                            })}</td>
+                            <td className="py-1 pr-2 text-right">{f0(t.dz)}</td>
+                            {/* los textos largos iban sueltos y se empalmaban con Demanda; ahora son tags */}
+                            <td className="py-1 pl-3.5">{t.lev.map((l) => <Tag key={l} t={l} />)}</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
             <p className="mt-2 text-[9px]" style={{ color: GRAY }}>Demanda = búsquedas de la colonia en la ventana elegida. Vs. mercado = precio ÷ ACM.</p>
+            <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>
+                Estas <b>{d.top10.length}</b> propiedades tienen <b>{f0(demTot)}</b> búsquedas de compradores detrás
+                {sinLead > 0 && <> y <b>{sinLead}</b> no ha recibido un solo lead</>}.
+                {conPrecio > 0 && <> El freno de <b>{conPrecio}</b> es el <b>precio</b>{conFicha > 0 && <> y el de <b>{conFicha}</b> la <b>ficha</b></>}.</>}
+                {conPrecio === 0 && conFicha > 0 && <> El freno de <b>{conFicha}</b> es la <b>ficha</b>.</>}
+                {' '}Es demanda que ya está ahí: no hay que salir a buscarla, hay que dejar de desperdiciarla.
+            </p>
         </div>
     );
 }

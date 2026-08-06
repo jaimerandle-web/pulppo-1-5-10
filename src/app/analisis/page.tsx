@@ -174,7 +174,18 @@ export default function AnalisisGeneral() {
     return (
         <div className="mx-auto max-w-[1400px] px-5 py-6">
             {/* print: aislar solo la hoja de preview */}
-            <style>{`@media print { body * { visibility: hidden !important; } #preview-sheet, #preview-sheet * { visibility: visible !important; } #preview-sheet { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none !important; border: none !important; } }`}</style>
+            {/* Impresión: carta VERTICAL, solo la hoja del reporte, sin cortar secciones. Las tablas
+                anchas se reducen con zoom en vez de desbordarse fuera de la página. */}
+            <style>{`@media print {
+                body * { visibility: hidden !important; }
+                #preview-sheet, #preview-sheet * { visibility: visible !important; }
+                #preview-sheet { position: absolute; left: 0; top: 0; width: 100%; padding: 0 !important; box-shadow: none !important; border: none !important; max-width: none !important; zoom: .74; }
+                #preview-sheet .sec { break-inside: avoid; page-break-inside: avoid; }
+                #preview-sheet .banner { break-after: avoid; page-break-after: avoid; }
+                #preview-sheet .overflow-x-auto { overflow: visible !important; }
+                #preview-sheet [class*="min-w-"] { min-width: 0 !important; }
+                @page { size: letter portrait; margin: 11mm; }
+            }`}</style>
 
             <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -338,13 +349,22 @@ export default function AnalisisGeneral() {
                     </div>
 
                     <div id="preview-sheet" className="mx-auto max-w-[8.5in] rounded-[2px] border border-neutral-200 bg-white p-10">
-                        <p className="text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: SOFT }}>
-                            Análisis de inventario · {audiencia === 'KAM (interno)' ? 'Uso interno KAM' : 'Para la inmobiliaria'}
-                        </p>
-                        <div className="my-2.5 h-px w-16" style={{ background: YEL }} />
-                        <h2 className="text-[26px] leading-tight" style={{ fontFamily: 'var(--font-serif)' }}>
-                            {data?.company || (inmo === '(todas)' ? 'Nombre de la inmobiliaria' : inmo)}
-                        </h2>
+                        <div className="banner -mx-10 -mt-10 mb-5 px-10 py-7" style={{ background: SOFT, color: '#fff' }}>
+                            <div className="mb-3 h-0.5 w-10" style={{ background: YEL }} />
+                            <p className="text-[10px] font-bold uppercase tracking-[1.6px]" style={{ color: '#c9c9c7' }}>
+                                {data?.asesorFiltro ? 'Desempeño del asesor' : 'Desempeño de la inmobiliaria'}
+                                {audiencia === 'KAM (interno)' && ' · uso interno KAM'}
+                            </p>
+                            <h2 className="mt-1.5 text-[30px] leading-tight" style={{ fontFamily: 'var(--font-serif)' }}>
+                                {data?.asesorFiltro || data?.company || (inmo === '(todas)' ? 'Nombre de la inmobiliaria' : inmo)}
+                            </h2>
+                            {data && (
+                                <p className="mt-1 text-[13px]" style={{ fontFamily: 'var(--font-serif)', color: YEL }}>
+                                    {data.leadsLabel}{data.hasComp && <span style={{ color: '#c9c9c7' }}> · vs. {data.compLabels.a}</span>}
+                                </p>
+                            )}
+                            {data?.asesorFiltro && <p className="mt-2 text-[11px]" style={{ color: '#c9c9c7' }}>{data.company} · solo su cartera</p>}
+                        </div>
                         <p className="mt-1 text-xs" style={{ color: GRAY }}>
                             {operacion} · publicadas hoy
                             {benchmark !== 'Ninguno' && ` · ${benchmark}`}
@@ -403,7 +423,7 @@ export default function AnalisisGeneral() {
 
                         <div className="mt-6 space-y-4">
                             {seccionesElegidas.map((s, i) => (
-                                <div key={s.id} className="border-b border-neutral-100 pb-4">
+                                <div key={s.id} className="sec border-b border-neutral-100 pb-4">
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-[13px]" style={{ fontFamily: 'var(--font-serif)', color: SEA }}>{String(i + 1).padStart(2, '0')}</span>
                                         <h3 className="text-[15px]" style={{ fontFamily: 'var(--font-serif)' }}>{s.label}</h3>

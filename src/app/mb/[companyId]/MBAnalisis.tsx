@@ -131,7 +131,13 @@ export default function MBAnalisis({ companyId, name, asesores = [] }: { company
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                     <div><div style={lbl}>Cierres comparables</div><select value={ventCierres} onChange={(e) => setVentCierres(e.target.value)} style={sel}>{CIERRES_WIN.map((o) => <option key={o}>{o}</option>)}</select><div style={{ fontSize: 9.5, color: GRY, marginTop: 4 }}>Mínimo 6 meses: los cierres son pocos.</div></div>
                     <div><div style={lbl}>Demanda (búsquedas)</div><select value={ventDemanda} onChange={(e) => setVentDemanda(e.target.value)} style={sel}>{DEMANDA_WIN.map((o) => <option key={o}>{o}</option>)}</select><div style={{ fontSize: 9.5, color: GRY, marginTop: 4 }}>Mínimo 1 mes.</div></div>
-                    <div style={{ alignSelf: 'flex-end', fontSize: 11, color: GRY, padding: '7px 11px', background: LGT, borderRadius: R }}>Oferta: <b style={{ color: BLK }}>hoy</b> (fija)</div>
+                    {/* Misma forma que los otros dos campos, pero sin nada que elegir: la oferta no es
+                        configurable. Un chip gris suelto rompía la línea de controles. */}
+                    <div>
+                        <div style={lbl}>Oferta (lo que se pide)</div>
+                        <div style={{ ...sel, color: BLK, background: LGT, display: 'flex', alignItems: 'center', height: 34, boxSizing: 'border-box' }}>Hoy</div>
+                        <div style={{ fontSize: 9.5, color: GRY, marginTop: 4 }}>No se guarda su historia.</div>
+                    </div>
                 </div>
             </div>
 
@@ -162,23 +168,41 @@ export default function MBAnalisis({ companyId, name, asesores = [] }: { company
 
             {data && (
                 <div id="mb-reporte" style={{ marginTop: 24 }}>
-                    {/* Al imprimir: solo el reporte, en ancho de hoja y sin cortar secciones a la mitad. */}
+                    {/* Al imprimir: carta VERTICAL, solo el reporte, sin cortar secciones a la mitad.
+                        Las tablas anchas se reducen con zoom en vez de desbordarse fuera de la hoja. */}
                     <style>{`@media print {
                         body * { visibility: hidden !important; }
                         #mb-reporte, #mb-reporte * { visibility: visible !important; }
-                        #mb-reporte { position: absolute; left: 0; top: 0; width: 100%; margin: 0 !important; }
-                        #mb-reporte .sec { break-inside: avoid; page-break-inside: avoid; margin-bottom: 18px !important; }
-                        #mb-reporte table { font-size: 8px !important; }
-                        @page { size: A4 landscape; margin: 12mm; }
+                        #mb-reporte { position: absolute; left: 0; top: 0; width: 100%; margin: 0 !important; zoom: .74; }
+                        #mb-reporte .sec { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px !important; }
+                        #mb-reporte .banner { break-after: avoid; page-break-after: avoid; }
+                        #mb-reporte table { font-size: 8.5px !important; }
+                        #mb-reporte .overflow-x-auto { overflow: visible !important; }
+                        #mb-reporte table.min-w-\\[1080px\\], #mb-reporte [class*="min-w-"] { min-width: 0 !important; }
+                        @page { size: letter portrait; margin: 11mm; }
                     }`}</style>
-                    {/* El reporte declara arriba, sin que haya que adivinarlo, qué está comparando. */}
-                    <div style={{ background: LGT, borderLeft: `2px solid ${YEL}`, padding: '11px 14px', fontSize: 11.5, color: '#555', marginBottom: 16, lineHeight: 1.5 }}>
-                        <b style={{ color: BLK }}>Desempeño:</b> {data.leadsLabel}
-                        {data.hasComp ? <> · comparado contra <b style={{ color: BLK }}>{data.compLabels.a}</b> <span style={{ color: GRY }}>(el ▲▼ de cada sección es contra ese período)</span></> : <> · <b style={{ color: BLK }}>sin comparación</b></>}
-                        {' '}· <b style={{ color: BLK }}>Comparables:</b> cierres {data.cierresLabel} · demanda {data.demandaLabel} · oferta hoy
-                        {data.asesorFiltro && <> · <b style={{ color: BLK }}>Solo la cartera de {data.asesorFiltro}</b></>}
+
+                    {/* Encabezado del reporte: banner negro con el título de lo que se está viendo. */}
+                    <div className="banner" style={{ background: BLK, color: '#fff', borderRadius: R, padding: '22px 26px', marginBottom: 14 }}>
+                        <div style={{ width: 40, height: 2, background: YEL, marginBottom: 13 }} />
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1.6px', textTransform: 'uppercase', color: '#c9c9c7' }}>
+                            {data.asesorFiltro ? 'Desempeño del asesor' : 'Desempeño de la inmobiliaria'}
+                        </div>
+                        <h2 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 32, lineHeight: 1.15, margin: '6px 0 0' }}>
+                            {data.asesorFiltro || data.company}
+                        </h2>
+                        <div style={{ fontSize: 13, color: YEL, marginTop: 4, fontFamily: 'EB Garamond, serif' }}>
+                            {data.leadsLabel}{data.hasComp && <span style={{ color: '#c9c9c7' }}> · vs. {data.compLabels.a}</span>}
+                        </div>
+                        {data.asesorFiltro && <div style={{ fontSize: 11.5, color: '#c9c9c7', marginTop: 8 }}>{data.company} · solo su cartera</div>}
+                        <div style={{ fontSize: 10.5, color: '#9a9a98', marginTop: 12, borderTop: '1px solid rgba(255,255,255,.14)', paddingTop: 10 }}>
+                            Datos en vivo de Pulppo · corte {new Date(data.corte).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+                            {' '}· comparables: cierres {data.cierresLabel} · demanda {data.demandaLabel} · oferta hoy
+                        </div>
                     </div>
-                    <div style={{ fontSize: 11, color: GRY, marginBottom: 14 }}>Datos en vivo · corte {new Date(data.corte).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })} · {data.company}</div>
+                    {data.hasComp && (
+                        <div style={{ fontSize: 11, color: GRY, marginBottom: 14 }}>El <b>▲▼</b> de cada sección compara contra <b>{data.compLabels.a}</b>.</div>
+                    )}
                     {SECS.filter((s) => secs.includes(s.id)).map((s, i) => (
                         <div key={s.id} className="sec" style={{ marginBottom: 30 }}>
                             <div style={eyebrow}>{String(i + 1).padStart(2, '0')} · {s.label}</div><div style={accent} />
