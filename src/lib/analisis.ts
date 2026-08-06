@@ -1114,25 +1114,39 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     }
     salen.sort((a, b) => b.sev - a.sev || b.s.val - a.s.val);
     // --- candidatas a ENTRAR: bien puestas, con demanda en su zona y sin explotar ---
+    // Dos reglas que parecen detalle y no lo son:
+    //  1) SIN ACM no entra. Si no sabes si el precio compite, no puedes apostar un slot: era el
+    //     caso de 3 de 5 propuestas en las primeras pruebas.
+    //  2) Máximo 2 por colonia. Ordenar solo por demanda concentraba los 8 swaps en Polanco, que
+    //     además hace que los avisos compitan entre ellos.
+    const MAX_POR_COLONIA = 2;
+    const porColonia: Record<string, number> = {};
     const entran = items
         .filter((it) => {
             if (it.tier && DEST.has(it.tier)) return false;             // ya está destacada
             const spV = it.sp != null && it.sp > 0.2 && it.sp < 3 ? it.sp : null;
-            if (spV != null && spV > 1.20) return false;                // fuera de mercado: no destacar
+            if (spV == null) return false;                              // sin ACM: no sabes si el precio compite
+            if (spV > 1.20) return false;                               // fuera de mercado: no destacar
             if (calOf(it.q3) === 'Baja') return false;                  // ficha floja: primero arreglarla
             return ((it.nbid && demandByNb[it.nbid]) || 0) > 0;         // tiene que haber quién la busque
         })
         .map((it) => {
             const lds = leadsByPid[String(it.pid)] || 0;
             const dem = (it.nbid && demandByNb[it.nbid]) || 0;
-            return { it, score: dem / (1 + lds), lds, dem };
+            // el precio óptimo pesa: entre dos con la misma demanda, primero la mejor puesta
+            const bonus = (it.sp as number) <= 1.05 ? 1.3 : 1;
+            return { it, score: (dem / (1 + lds)) * bonus, lds, dem };
         })
         .sort((a, b) => b.score - a.score)
+        .filter(({ it }) => {
+            const k = it.nb || '—';
+            if ((porColonia[k] || 0) >= MAX_POR_COLONIA) return false;
+            porColonia[k] = (porColonia[k] || 0) + 1;
+            return true;
+        })
         .map(({ it, lds, dem }) => {
             const cal = calOf(it.q3);
-            const spV = it.sp != null && it.sp > 0.2 && it.sp < 3 ? it.sp : null;
-            const precioTxt = spV == null ? 'sin ACM para comparar'
-                : spV <= 1.05 ? 'precio óptimo' : 'precio con margen (≤ +20% del ACM)';
+            const precioTxt = (it.sp as number) <= 1.05 ? 'precio óptimo' : 'precio con margen (≤ +20% del ACM)';
             return mkSwap(it, `${precioTxt}, ficha ${cal}, ${dem.toLocaleString('es-MX')} búsquedas en su zona y ${lds === 0 ? 'ningún lead' : `solo ${lds} ${lds === 1 ? 'lead' : 'leads'}`}`);
         });
     const nSwaps = Math.min(salen.length, entran.length, 8);

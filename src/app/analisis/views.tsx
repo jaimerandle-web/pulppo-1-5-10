@@ -434,8 +434,10 @@ export function DestacadosView({ d }: { d: AnalisisData }) {
                     <p className="mt-2 text-[9px]" style={{ color: GRAY }}>
                         <b>Sale</b> si está &gt;+20% del ACM (la visibilidad no arregla el sobreprecio), si su ficha es
                         Baja (el tráfico llega a una publicación floja) o si lleva el período destacada sin un solo lead.
-                        <b> Entra</b> lo que ya está bien puesto —precio dentro de rango y ficha Media o Alta— y tiene
-                        búsquedas en su zona sin explotar, ordenado por demanda ÷ (1 + leads).
+                        <b> Entra</b> lo que ya está bien puesto —con ACM, precio dentro de rango y ficha Media o Alta— y
+                        tiene búsquedas en su zona sin explotar, ordenado por demanda ÷ (1 + leads). Sin ACM no entra:
+                        si no sabes si el precio compite, no puedes apostar un slot. Y máximo <b>2 por colonia</b>, para
+                        no concentrar todo en la misma zona ni hacer que tus propios avisos compitan entre ellos.
                     </p>
                 </>
             )}
