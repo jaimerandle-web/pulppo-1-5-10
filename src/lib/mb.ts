@@ -125,11 +125,19 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const leadDocs = await db.collection('leads').find({ 'property._id': { $in: ids } },
         { projection: { 'property._id': 1, createdAt: 1, answeredAt: 1, agent: 1 } }).toArray();
     const pidOp = new Map(props.map((p) => [String(p._id), dig(p, 'listing', 'operation') as string]));
-    const pidAgent = new Map(props.map((p) => [String(p._id), dig(p, 'agent') as Document | undefined]));
     // asesores DE la inmobiliaria (por el inventario que traen). Un broker de otra inmobiliaria
     // puede atender un lead sobre tu inventario y no debe aparecer como si fuera de tu equipo.
     const internos = new Map<string, string>();
     for (const p of props) { const a = dig(p, 'agent') as Document | undefined; const n = agName(a); if (a && n) internos.set(String(dig(a, '_id')), n); }
+
+    // UNIVERSO DE LOS ASESORES: todas las propiedades de la inmobiliaria, no solo las publicadas
+    // hoy. Juzgar cómo trabaja una persona ignorando los leads de lo que ya vendió o pausó la
+    // deja mal medida (en pruebas, un asesor pasaba de 50% a 67% de leads fuera de SLA).
+    const allProps = await db.collection('properties').find({ 'company._id': cid },
+        { projection: { agent: 1 } }).toArray();
+    const allIds = allProps.map((p) => p._id as ObjectId);
+    const allAgent = new Map(allProps.map((p) => [String(p._id), dig(p, 'agent') as Document | undefined]));
+    for (const p of allProps) { const a = dig(p, 'agent') as Document | undefined; const n = agName(a); if (a && n && !internos.has(String(dig(a, '_id')))) internos.set(String(dig(a, '_id')), n); }
 
     const leadsMap = new Map<string, number>();
     const ansMap = new Map<string, number>();       // leads RESPONDIDOS por propiedad
@@ -163,18 +171,28 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         if (ca instanceof Date) {
             if (ca >= D30) { leads30++; if (lop === 'sale') leads30V++; else if (lop === 'rent') leads30R++; }
             else if (ca >= D60) { leads30prev++; if (lop === 'sale') leads30prevV++; else if (lop === 'rent') leads30prevR++; }
-            // por asesor (90d): el responsable de atenderlo; si es externo, el dueño del inventario
-            if (ca >= D90) {
-                const la = dig(l, 'agent') as Document | undefined;
-                const usable = la && internos.has(String(dig(la, '_id'))) ? la : pidAgent.get(pid);
-                const e = accA(agName(usable));
-                if (e) {
-                    e.leads++;
-                    if (mins != null) { e.resp++; e.mins.push(mins); if (mins > 1440) e.fueraSla++; }
-                    else e.fueraSla++;   // nunca respondido: peor que respondido tarde
-                }
-            }
         }
+    }
+
+    // --- por asesor (90d) sobre TODO el inventario de la inmobiliaria, no solo lo publicado ---
+    for (const l of await db.collection('leads').find(
+        { 'property._id': { $in: allIds }, createdAt: { $gte: D90 } },
+        { projection: { 'property._id': 1, createdAt: 1, answeredAt: 1, agent: 1 } }
+    ).toArray()) {
+        const pid = String(dig(l, 'property', '_id'));
+        const ca = dig(l, 'createdAt'), aa = dig(l, 'answeredAt');
+        if (!(ca instanceof Date)) continue;
+        // el responsable de atenderlo; si ese es de otra inmobiliaria, el dueño del inventario
+        const la = dig(l, 'agent') as Document | undefined;
+        const usable = la && internos.has(String(dig(la, '_id'))) ? la : allAgent.get(pid);
+        const e = accA(agName(usable));
+        if (!e) continue;
+        e.leads++;
+        if (aa instanceof Date) {
+            const mins = Math.max(0, (aa.getTime() - ca.getTime()) / 60000);
+            e.resp++; e.mins.push(mins);
+            if (mins > 1440) e.fueraSla++;
+        } else e.fueraSla++;   // nunca respondido: peor que respondido tarde
     }
 
     // --- desempeño por propiedad ---
@@ -199,7 +217,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const fichaMap = new Map(fichaRows.map((r) => [String(r._id), r]));
     // visitas y cierres por ASESOR en los últimos 90 días (para las flags del overview)
     const visAgRows = await db.collection('visits').aggregate([
-        { $match: { 'steps.property._id': { $in: ids }, 'status.last': 'confirmed', createdAt: { $gte: D90 } } },
+        { $match: { 'steps.property._id': { $in: allIds }, 'status.last': 'confirmed', createdAt: { $gte: D90 } } },
         { $group: { _id: '$agent._id', n: { $sum: 1 } } },
     ]).toArray();
     for (const r of visAgRows) {
@@ -279,13 +297,13 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
 
     // comisión y cierres por asesor (90d) para las flags
     const closeAg = await db.collection('operations').find(
-        { 'property._id': { $in: ids }, 'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: D90 } },
+        { 'property._id': { $in: allIds }, 'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: D90 } },
         { projection: { 'property._id': 1, 'comission.value': 1, 'seller.broker': 1, 'buyer.broker': 1 } }
     ).toArray();
     for (const o of closeAg) {
         const cands = [dig(o, 'seller', 'broker'), dig(o, 'buyer', 'broker')] as (Document | undefined)[];
         const dentro = cands.find((c) => c && internos.has(String(dig(c, '_id'))));
-        const e = accA(agName(dentro ?? pidAgent.get(String(dig(o, 'property', '_id')))));
+        const e = accA(agName(dentro ?? allAgent.get(String(dig(o, 'property', '_id')))));
         if (e) { e.cierres++; e.comision += num(dig(o, 'comission', 'value')) ?? 0; }
     }
 
