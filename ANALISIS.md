@@ -293,3 +293,34 @@ avisos". Cada sección trae su propio "cómo se lee" y su recap al pie.
 - Demanda estandarizada a **últimos 3 meses** también en `/mb` (antes YTD, que en enero medía 3 semanas).
 - Filtro por asesor en el reporte: acota todo a **su cartera**.
 - PDF en MB (A4 horizontal, sin cortar secciones) y botón Generar en amarillo de marca.
+
+---
+
+## 7. QA automático
+
+`qa/qa_analisis.py` pega a **producción** y verifica invariantes contra Mongo. Es la verificación
+automática del proyecto, porque sin Node no hay build ni tests locales.
+
+```bash
+PULPPO_QA_EMAIL=tu@pulppo.com ~/Documents/Pulppo/.venv-mongo/bin/python qa/qa_analisis.py
+```
+
+Cubre 6 inmobiliarias de perfil distinto (946 props / 216 / 20 / 3 props / solo venta), 6 casos
+borde (sin comparación, mes viejo, 12 meses, solo renta, mes en curso, asesor inexistente) y los
+dos endpoints. Comprueba: inventario contra Mongo · el funnel cuadra con los asesores **más** la
+actividad externa · nadie ajeno a la inmobiliaria en la tabla de asesores · zonas ≤ total ·
+benchmark en rango · swaps cumpliendo sus reglas (sale destacada, entra con ACM y ≤+20%, tope 2
+por colonia) · `hasComp` consistente con `yoy` · sin NaN/Infinity · tiempos contra el límite de 60s.
+
+**Última corrida: 0 fallas, 0 advertencias.** Peor tiempo medido 13.7s (NURA, 946 props, 12 meses
+vs. año pasado) contra un límite de 60s.
+
+### Dos trampas al escribir checks de este proyecto
+
+1. **Normalizar espacios.** Mongo guarda nombres como `'Francisca  Maria Castro'` con espacio
+   doble; el motor los colapsa (es lo que fusiona cuentas duplicadas de la misma persona). Un
+   check que compare sin colapsar marca a asesores propios como "brokers externos colados" —
+   pasó en la primera corrida, 12 falsos positivos.
+2. **La suma de asesores NO iguala al funnel.** La diferencia es exactamente `externo.leads`: lo
+   que atendió un broker de otra inmobiliaria no va en la tabla del equipo. El invariante correcto
+   es `asesores + externos == funnel`.
