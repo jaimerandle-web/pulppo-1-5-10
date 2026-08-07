@@ -436,38 +436,6 @@ export function DestacadosView({ d }: { d: AnalisisData }) {
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>Nivel reconstruido del historial de cada aviso; leads (únicos) atribuidos al nivel que tenía el aviso cuando llegó el contacto. L/L = leads ÷ aviso-meses en ese nivel (— si &lt;3 aviso-meses).</p>
             {de.reading && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{de.reading}</p>}
 
-            {/* ---- SWAPS: qué mover, sin pedir más presupuesto ---- */}
-            <p className="mb-1 mt-5 text-[12px] font-bold" style={{ color: SOFT }}>Qué avisos conviene intercambiar</p>
-            <p className="mb-2 text-[11px]" style={{ color: SOFT }}>{d.swapsNota}</p>
-            {d.swaps.length > 0 && (
-                <>
-                    <div className="flex flex-col gap-1.5">
-                        {d.swaps.map((sw, i) => (
-                            <div key={i} className="grid items-stretch gap-1.5" style={{ gridTemplateColumns: '1fr 22px 1fr' }}>
-                                <div className="bg-[#F9F9F9] p-2" style={{ borderLeft: `3px solid ${RED}` }}>
-                                    <p className="text-[8px] font-bold uppercase tracking-wide" style={{ color: RED }}>Sale · {sw.sale.tier}</p>
-                                    <p className="mt-0.5 text-[11px] font-bold">{sw.sale.code} <span className="font-normal" style={{ color: GRAY }}>· {sw.sale.nb} · {money(sw.sale.val)}</span></p>
-                                    <p className="mt-0.5 text-[10px] leading-snug" style={{ color: SOFT }}>{sw.sale.razon}</p>
-                                </div>
-                                <div className="flex items-center justify-center text-[13px] font-bold" style={{ color: GRAY }}>→</div>
-                                <div className="bg-[#F9F9F9] p-2" style={{ borderLeft: `3px solid ${SEA}` }}>
-                                    <p className="text-[8px] font-bold uppercase tracking-wide" style={{ color: SEA_D }}>Entra · hoy {sw.entra.tier}</p>
-                                    <p className="mt-0.5 text-[11px] font-bold">{sw.entra.code} <span className="font-normal" style={{ color: GRAY }}>· {sw.entra.nb} · {money(sw.entra.val)}</span></p>
-                                    <p className="mt-0.5 text-[10px] leading-snug" style={{ color: SOFT }}>{sw.entra.razon}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    <p className="mt-2 text-[9px]" style={{ color: GRAY }}>
-                        <b>Sale</b> si está &gt;+20% del ACM (la visibilidad no arregla el sobreprecio), si su ficha es
-                        Baja (el tráfico llega a una publicación floja) o si lleva el período destacada sin un solo lead.
-                        <b> Entra</b> lo que ya está bien puesto —con ACM, precio dentro de rango y ficha Media o Alta— y
-                        tiene búsquedas en su zona sin explotar, ordenado por demanda ÷ (1 + leads). Sin ACM no entra:
-                        si no sabes si el precio compite, no puedes apostar un slot. Y máximo <b>2 por colonia</b>, para
-                        no concentrar todo en la misma zona ni hacer que tus propios avisos compitan entre ellos.
-                    </p>
-                </>
-            )}
         </div>
     );
 }

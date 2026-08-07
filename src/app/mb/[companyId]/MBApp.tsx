@@ -16,7 +16,15 @@ const vsCell = (v: number | null) => {
     const col = v > 10 ? RED : v < -5 ? SEA : '#555';
     return <span style={{ color: col, fontWeight: 600 }}>{v > 0 ? '+' : ''}{v.toFixed(0)}%</span>;
 };
-const DIAG_STYLE: Record<string, { bg: string; fg: string }> = { 'Bajar precio': { bg: '#F3D9D3', fg: RED }, 'Mejorar ficha': { bg: YEL, fg: BLK } };
+const DIAG_STYLE: Record<string, { bg: string; fg: string }> = {
+    'Bajar precio': { bg: '#F3D9D3', fg: RED },
+    'Mejorar ficha': { bg: YEL, fg: BLK },
+    'Corregir datos': { bg: '#F3D9D3', fg: RED },
+    'Contestar más rápido': { bg: '#DCEBEB', fg: '#2f6b6b' },
+    'Convertir a visita': { bg: '#DCEBEB', fg: '#2f6b6b' },
+    'Cerrar la visita': { bg: '#DCEBEB', fg: '#2f6b6b' },
+    'Compartir con clientes': { bg: '#DCEBEB', fg: '#2f6b6b' }
+};
 const diagPill = (t: string) => { const s = DIAG_STYLE[t] ?? { bg: '#DCEBEB', fg: '#2f6b6b' }; return <span key={t} style={{ background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 2, marginRight: 4, whiteSpace: 'nowrap' }}>{t}</span>; };
 // "Media" se leía como promedio, no como intermedia. Ahora los rangos se llaman por lo que
 // significan y siempre traen el tiempo a la vista.
@@ -26,7 +34,8 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
 type Section = 'overview' | 'props' | 'analisis' | 'comoleer';
-type Seg = '' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre';
+type Seg = '' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre'
+    | 'sinVideo' | 'pocasFotos' | 'sinAmenidades' | 'sinAcm' | 'sinTour' | 'conErrores';
 const SEG_TEST: Record<string, (p: MBProp) => boolean> = {
     sinleads: (p) => p.leads === 0,
     caroSinLeads: (p) => p.leads === 0 && (p.estado === 'Fuera de mercado' || p.estado === 'No competitivo'),
@@ -35,13 +44,35 @@ const SEG_TEST: Record<string, (p: MBProp) => boolean> = {
     respLenta: (p) => p.respMedMin != null && p.respMedMin > 1440,
     muchasVisitas: (p) => p.visitas >= 3 && p.ofertas === 0,
     altaDemanda: (p) => p.op === 'Venta' && p.demanda >= 200 && p.leads <= 1,
-    ofertasSinCierre: (p) => p.ofertas > 0 && p.cierres === 0
+    ofertasSinCierre: (p) => p.ofertas > 0 && p.cierres === 0,
+    sinVideo: (p) => !p.video,
+    pocasFotos: (p) => p.fotos < 8,
+    sinAmenidades: (p) => !p.amenidades,
+    sinAcm: (p) => p.estado === 'Haz ACM',
+    sinTour: (p) => !p.tour,
+    conErrores: (p) => p.errores.length > 0
 };
+// cada hueco de ficha del overview abre el listado ya filtrado
+const FALTA_SEG: Record<string, Seg> = { video: 'sinVideo', fotos: 'pocasFotos', amenidades: 'sinAmenidades', acm: 'sinAcm', tour: 'sinTour' };
 const SEG_LABEL: Record<string, string> = {
     sinleads: 'Sin leads', caroSinLeads: 'Caro sin leads', visitasSinOferta: 'Visitas sin oferta', mas12: '+12 meses', respLenta: 'Respuesta lenta',
-    muchasVisitas: 'Muchas visitas, 0 ofertas', altaDemanda: 'Alta demanda, sin leads', ofertasSinCierre: 'Ofertas sin cierre'
+    muchasVisitas: 'Muchas visitas, 0 ofertas', altaDemanda: 'Alta demanda, sin leads', ofertasSinCierre: 'Ofertas sin cierre',
+    sinVideo: 'Sin video', pocasFotos: 'Menos de 8 fotos', sinAmenidades: 'Sin amenidades', sinAcm: 'Sin ACM',
+    sinTour: 'Sin tour virtual', conErrores: 'Con errores de captura'
 };
 const CHIP_SEGS: Seg[] = ['sinleads', 'caroSinLeads', 'visitasSinOferta', 'mas12', 'respLenta'];
+
+// Qué hacer con esta propiedad. Además de precio y ficha (que ya venían), acciones de DESEMPEÑO:
+// lo que el asesor puede cambiar mañana sin tocar el precio ni volver a fotografiar.
+const accionesDe = (p: MBProp): string[] => {
+    const a = [...p.diag];
+    if (p.errores.length) a.push('Corregir datos');
+    if (p.respMedMin != null && p.respMedMin > 1440) a.push('Contestar más rápido');
+    if (p.leads >= 5 && p.visitas === 0) a.push('Convertir a visita');
+    if (p.visitas >= 3 && p.ofertas === 0) a.push('Cerrar la visita');
+    if (p.demanda >= 200 && p.leads === 0) a.push('Compartir con clientes');
+    return a;
+};
 
 function Kpi({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
     return (
@@ -142,7 +173,9 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     const tipos = useMemo(() => [...new Set(d.props.map((p) => p.type))].filter(Boolean).sort(), [d.props]);
 
     // filtro de fechas: recalcula vistas/leads/visitas/ofertas del rango (endpoint /api/mb-metrics)
-    const [rango, setRango] = useState('Todo (histórico)');
+    // Por default el listado (y su funnel) muestra los ÚLTIMOS 30 DÍAS, no el histórico: un
+    // acumulado de años no dice nada de cómo va la operación hoy. El filtro lo refleja.
+    const [rango, setRango] = useState('Últimos 30 días');
     const [cfrom, setCfrom] = useState('');
     const [cto, setCto] = useState('');
     type Ovr = Record<string, { vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number }>;
@@ -293,7 +326,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                 <td style={{ ...td, textAlign: 'right', color: p.respMedMin == null ? GRY : p.respMedMin > 1440 ? RED : BLK }}>{dur(p.respMedMin)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
-                                <td style={td}>{p.diag.length ? p.diag.map(diagPill) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>}</td>
+                                <td style={td}>{(() => { const t = accionesDe(p); return t.length ? t.map(diagPill) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
                                 <td style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}?v=simple`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
                             </tr>
                         ))}
@@ -411,16 +444,29 @@ export default function MBApp({ d }: { d: MBData }) {
                         {/* Calidad de ficha: bajó de los KPIs de arriba a aquí, con # y % por nivel */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Calidad de tus fichas</h2>
                         <div style={sub}>Cuántas propiedades tienes en cada nivel. Las mejores inmobiliarias de la comunidad traen <b>{d.benchAltaPct}%</b> en Alta{calDelta < 0 ? <> y tú <b style={{ color: BLK }}>{d.calAltaPct}%</b></> : <> y tú <b style={{ color: SEA }}>{d.calAltaPct}%</b></>}.</div>
-                        <div style={{ display: 'flex', gap: 10 }}>
-                            {([['Alta', d.calidad.alta, SEA], ['Media', d.calidad.media, YEL], ['Baja', d.calidad.baja, RED]] as [string, number, string][]).map(([lbl, n, col]) => (
-                                <div key={lbl} style={{ flex: 1, background: '#fff', border: `1px solid ${LGT}`, borderTop: `3px solid ${col}`, padding: '13px 15px', borderRadius: R }}>
-                                    <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>Calidad {lbl}</div>
-                                    <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 27, lineHeight: 1.05, margin: '8px 0 3px', color: col === YEL ? BLK : col }}>
-                                        {f(n)} <span style={{ fontSize: 15, color: GRY }}>· {d.nProps ? Math.round((100 * n) / d.nProps) : 0}%</span>
-                                    </div>
-                                    <div style={{ fontSize: 10.5, color: '#777' }}>de {f(d.nProps)} publicadas</div>
-                                </div>
-                            ))}
+                        {/* partido venta/renta: en la red la renta trae mucho mejor ficha que la
+                            venta, y un total los promedia y esconde el problema */}
+                        <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, background: '#fff' }}>
+                                <thead><tr>{['', 'Alta', 'Media', 'Baja', 'Total'].map((hh, i) => (
+                                    <th key={hh} style={{ ...tth, textAlign: i ? 'right' : 'left' }}>{hh}</th>
+                                ))}</tr></thead>
+                                <tbody>
+                                    {([['Venta', d.calidadVenta], ['Renta', d.calidadRenta], ['Total', d.calidad]] as [string, typeof d.calidad][]).map(([lbl, c]) => {
+                                        const pct = (x: number) => (c.total ? `${Math.round((100 * x) / c.total)}%` : '—');
+                                        const bold = lbl === 'Total';
+                                        return (
+                                            <tr key={lbl} style={bold ? { borderTop: `1px solid ${BLK}` } : undefined}>
+                                                <td style={{ ...ttd, fontWeight: 700 }}>{lbl}</td>
+                                                <td style={{ ...ttd, textAlign: 'right', fontWeight: bold ? 700 : 400 }}><b style={{ color: SEA }}>{f(c.alta)}</b> <span style={{ color: GRY }}>· {pct(c.alta)}</span></td>
+                                                <td style={{ ...ttd, textAlign: 'right', fontWeight: bold ? 700 : 400 }}>{f(c.media)} <span style={{ color: GRY }}>· {pct(c.media)}</span></td>
+                                                <td style={{ ...ttd, textAlign: 'right', fontWeight: bold ? 700 : 400 }}><b style={{ color: c.baja ? RED : BLK }}>{f(c.baja)}</b> <span style={{ color: GRY }}>· {pct(c.baja)}</span></td>
+                                                <td style={{ ...ttd, textAlign: 'right', color: GRY }}>{f(c.total)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
                         <div style={{ marginTop: 12, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '13px 16px', fontSize: 12.5, color: '#444', lineHeight: 1.55 }}>
                             <b style={{ color: BLK }}>¿Qué le falta a tus propiedades para ser Alta?</b>
@@ -428,21 +474,31 @@ export default function MBApp({ d }: { d: MBData }) {
                                 Medimos toda la red Pulppo y el <b>video es el único factor que separa Media de Alta</b>:
                                 el 100% de las fichas Alta tiene video, contra 32% de las Media. Fotos, descripción y tour
                                 virtual están casi iguales en los tres niveles, así que <b>subir un tour no mejora tu calificación</b>.
+                                {' '}Haz clic en cualquiera para ver esas propiedades.
                             </div>
                             <div style={{ marginTop: 9, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                 {([
-                                    ['Sin video', d.falta.video, 'la palanca #1', true],
-                                    ['Con menos de 8 fotos', d.falta.fotos, 'ayuda a salir de Baja', d.falta.fotos > 0],
-                                    ['Sin amenidades capturadas', d.falta.amenidades, 'ayuda a salir de Baja', d.falta.amenidades > 0],
-                                    ['Sin ACM', d.falta.acm, 'sin esto no sabes si tu precio compite', d.falta.acm > 0],
-                                    ['Sin tour virtual', d.falta.tour, 'no mueve la calidad, es solo referencia', false]
-                                ] as [string, number, string, boolean][]).map(([lbl, n, nota, fuerte]) => (
-                                    <div key={lbl} style={{ background: '#fff', border: `1px solid ${fuerte ? YEL : LGT}`, borderRadius: R, padding: '8px 11px', minWidth: 140 }}>
-                                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 21, color: fuerte ? BLK : GRY }}>{f(n)}</div>
-                                        <div style={{ fontSize: 11, fontWeight: 600 }}>{lbl}</div>
-                                        <div style={{ fontSize: 10, color: GRY }}>{nota}</div>
-                                    </div>
-                                ))}
+                                    ['Sin video', 'video', 'la palanca #1', true],
+                                    ['Con menos de 8 fotos', 'fotos', 'ayuda a salir de Baja', false],
+                                    ['Sin amenidades capturadas', 'amenidades', 'ayuda a salir de Baja', false],
+                                    ['Sin ACM', 'acm', 'sin esto no sabes si tu precio compite', false],
+                                    ['Sin tour virtual', 'tour', 'no mueve la calidad, es solo referencia', false]
+                                ] as [string, keyof typeof d.falta, string, boolean][]).map(([lbl, k, nota, fuerte]) => {
+                                    const tot = d.falta[k] as number, v = d.faltaVenta[k] as number, r = d.faltaRenta[k] as number;
+                                    const seg = FALTA_SEG[k];
+                                    return (
+                                        <div key={lbl} onClick={() => seg && goSeg(seg)}
+                                            style={{ background: '#fff', border: `1px solid ${fuerte && tot ? YEL : LGT}`, borderRadius: R, padding: '8px 11px', minWidth: 152, cursor: seg && tot ? 'pointer' : 'default' }}>
+                                            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 21, color: fuerte && tot ? BLK : GRY }}>{f(tot)}</div>
+                                            <div style={{ fontSize: 11, fontWeight: 600 }}>{lbl}{seg && tot ? ' ↗' : ''}</div>
+                                            <div style={{ fontSize: 10, color: GRY }}>{f(v)} venta · {f(r)} renta</div>
+                                            <div style={{ fontSize: 10, color: GRY }}>{nota}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <div style={{ marginTop: 9, fontSize: 11.5 }}>
+                                {diagPill('Mejorar ficha')} <span style={{ color: '#666' }}>es el tag que verás en el listado sobre estas mismas propiedades.</span>
                             </div>
                         </div>
 
@@ -466,7 +522,7 @@ export default function MBApp({ d }: { d: MBData }) {
                         <div style={sub}>Dónde está tu inventario, cuánta competencia tiene, cuánta gente busca ahí y qué tan competitivo es tu precio. <b>vs. oferta</b> y <b>vs. cierres</b> son la <b>mediana</b> contra propiedades comparables. Demanda = búsquedas de {d.demandaLabel}.</div>
                         <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
-                                <thead><tr>{['Colonia', 'Tus props', 'Compiten en la zona', 'Demanda', 'Leads', 'vs. oferta', 'vs. cierres'].map((hh, i) => (
+                                <thead><tr>{['Colonia', 'Tus props', 'Props competencia', 'Demanda', 'Leads', 'vs. oferta', 'vs. cierres'].map((hh, i) => (
                                     <th key={hh} style={{ ...tth, textAlign: i ? 'right' : 'left' }}>{hh}</th>
                                 ))}</tr></thead>
                                 <tbody>
@@ -536,6 +592,28 @@ export default function MBApp({ d }: { d: MBData }) {
                                 </tbody>
                             </table>
                         </div>
+                        {/* Errores de CAPTURA, no de venta: una propiedad en $30 o con 7 millones
+                            de m² no es un problema comercial, es un dedazo que además rompe todo
+                            el análisis de precio de esa propiedad. */}
+                        {d.nErrores > 0 && (
+                            <>
+                                <h2 style={{ ...h2, marginTop: 30 }}>¡Ojo con estas!</h2>
+                                <div style={sub}><b>{f(d.nErrores)}</b> {d.nErrores === 1 ? 'propiedad tiene' : 'propiedades tienen'} algo mal capturado. No es que se vendan mal: es que el dato está mal escrito, y mientras siga así esa propiedad no se puede comparar contra el mercado.</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    {d.errores.map((er) => (
+                                        <div key={er.tipo} onClick={() => goSeg('conErrores')} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, border: `1px solid ${LGT}`, borderLeft: `3px solid ${RED}`, borderRadius: R, padding: '12px 14px', cursor: 'pointer' }}>
+                                            <b style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, width: 44, color: RED }}>{f(er.n)}</b>
+                                            <div>
+                                                <div style={{ fontSize: 13, fontWeight: 700 }}>{er.tipo} ↗</div>
+                                                <div style={{ fontSize: 11.5, color: '#666', marginTop: 2 }}>{er.nota}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={{ fontSize: 11, color: GRY, marginTop: 8 }}>Clic para ver la lista completa. Una propiedad puede tener más de un error, por eso la suma de los bloques puede pasar de {f(d.nErrores)}.</div>
+                            </>
+                        )}
+
                         <div style={{ marginTop: 30, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '13px 16px', fontSize: 12, color: '#555' }}>
                             Tienes <b>{f(nDest)}</b> propiedades en destacado/súper. Estamos afinando el criterio de <b>swaps de destacado</b>
                             {' '}(qué aviso conviene mover según precio, oferta, demanda y calidad — no solo si recibe leads) y estará aquí pronto,

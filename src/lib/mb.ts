@@ -52,6 +52,8 @@ export interface MBProp {
     respMedMin: number | null; oppScore: number; diag: string[]; tier: string;
     // qué le falta a la ficha (para los insights de calidad del overview)
     fotos: number; video: boolean; tour: boolean; amenidades: number;
+    // errores de captura evidentes (precio de $30, superficie de 7 millones de m²…)
+    errores: string[];
 }
 // Desempeño por asesor para el recap de flags del overview. Solo asesores de la inmobiliaria.
 export interface MBAsesor {
@@ -59,6 +61,40 @@ export interface MBAsesor {
     visitas: number; cierres: number; comision: number; busquedas: number; clientes: number; propsCompartidas: number;
     green: string[]; red: string[];
 }
+export type PorOpCal = { alta: number; media: number; baja: number; total: number };
+export type PorOpFalta = { video: number; fotos: number; amenidades: number; tour: number; acm: number; total: number };
+
+// Errores de captura: lo que está mal escrito, no mal vendido. Umbrales elegidos midiendo la red
+// completa (9,211 publicadas): sin superficie es el más común con 8.3%, y hay ventas de $1 y
+// superficies de 7,710,000 m². Son "revisa esto", no "esto está roto".
+const erroresDe = (op: string, val: number | null, surf: number | null, suites: number | null, fotos: number): string[] => {
+    const e: string[] = [];
+    if (!val || val <= 0) e.push('Sin precio');
+    else if (op === 'sale' && val < 100000) e.push('Precio irrisorio');
+    else if (op === 'rent' && val < 1000) e.push('Precio irrisorio');
+    else if (op === 'rent' && val > 500000) e.push('Renta con precio de venta');
+    if (!surf || surf <= 0) e.push('Sin superficie');
+    else if (surf > 5000) e.push('Superficie imposible');
+    else if (surf < 20) e.push('Superficie imposible');
+    else if (op === 'sale' && val) {
+        const ppm = val / surf;
+        if (ppm < 3000 || ppm > 300000) e.push('$/m² imposible');
+    }
+    if ((suites ?? 0) > 15) e.push('Recámaras imposibles');
+    if (!fotos) e.push('Sin fotos');
+    return e;
+};
+const ERROR_NOTA: Record<string, string> = {
+    'Sin precio': 'no se puede publicar ni comparar sin precio',
+    'Precio irrisorio': 'un cero de menos: nadie vende ni renta en ese monto',
+    'Renta con precio de venta': 'parece el precio de venta capturado como renta mensual',
+    'Sin superficie': 'sin m² no se puede calcular $/m² ni comparar contra el mercado',
+    'Superficie imposible': 'los m² capturados no corresponden al tipo de propiedad',
+    '$/m² imposible': 'el precio y la superficie no cuadran entre sí',
+    'Recámaras imposibles': 'el número de recámaras está fuera de lo real',
+    'Sin fotos': 'una publicación sin fotos no recibe contactos',
+};
+
 export interface MBZona {
     nb: string; n: number; leads: number; demanda: number; oferta: number;
     vsOferta: number | null; vsCierres: number | null;
@@ -76,8 +112,12 @@ export interface MBData {
     // Medido en toda la red: el ÚNICO factor que separa Media de Alta es el VIDEO (100% de las
     // Alta lo tienen vs 32% de las Media). Fotos, descripción, tour y planos son planos entre
     // niveles, así que recomendar un tour para "subir la calidad" es mal consejo.
-    calidad: { alta: number; media: number; baja: number };
-    falta: { video: number; fotos: number; amenidades: number; tour: number; acm: number };
+    // calidad y huecos de ficha, partidos venta/renta: en la red la renta trae mucho mejor ficha
+    // que la venta, y un total los promedia y esconde el problema.
+    calidad: PorOpCal; calidadVenta: PorOpCal; calidadRenta: PorOpCal;
+    falta: PorOpFalta; faltaVenta: PorOpFalta; faltaRenta: PorOpFalta;
+    // propiedades con errores de captura evidentes, agrupadas por tipo de error
+    errores: { tipo: string; n: number; nota: string }[]; nErrores: number;
     // --- zonas (la sección que más le gusta a Ale, ahora también en el overview) ---
     zonas: MBZona[]; demandaLabel: string;
     // --- asesores con sus flags, para el recap del overview ---
@@ -309,8 +349,12 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
 
     const now = Date.now();
     let nVenta = 0, nRenta = 0, captaciones90 = 0, tVistas = 0, tLeads = 0, tResp = 0, tVisitas = 0, tOfertas = 0, tCierres = 0, sinLeads = 0, nAlta = 0, nAltaV = 0, nAltaR = 0;
-    const cal = { alta: 0, media: 0, baja: 0 };
-    const falta = { video: 0, fotos: 0, amenidades: 0, tour: 0, acm: 0 };
+    // calidad y huecos, contados en total y por operación
+    const mkCal = (): PorOpCal => ({ alta: 0, media: 0, baja: 0, total: 0 });
+    const mkFal = (): PorOpFalta => ({ video: 0, fotos: 0, amenidades: 0, tour: 0, acm: 0, total: 0 });
+    const cal = mkCal(), calV = mkCal(), calR = mkCal();
+    const falta = mkFal(), faltaV = mkFal(), faltaR = mkFal();
+    const errCount: Record<string, number> = {};
     const rows: MBProp[] = props.map((p) => {
         const hex = String(p._id);
         const op = dig(p, 'listing', 'operation') as string;
@@ -343,14 +387,21 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const fotos = (fi?.fotos as number) ?? 0, video = !!fi?.video, tour = !!fi?.tour, amenidades = (fi?.amen as number) ?? 0;
         tVistas += vistas; tLeads += leads; tResp += respondidos; tVisitas += vis; tOfertas += ofertas; tCierres += cierres;
         if (leads === 0) sinLeads++;
-        if (calidad === 'Alta') cal.alta++; else if (calidad === 'Baja') cal.baja++; else cal.media++;
+        const cs = op === 'sale' ? [cal, calV] : op === 'rent' ? [cal, calR] : [cal];
+        const fs = op === 'sale' ? [falta, faltaV] : op === 'rent' ? [falta, faltaR] : [falta];
+        for (const c of cs) { c.total++; if (calidad === 'Alta') c.alta++; else if (calidad === 'Baja') c.baja++; else c.media++; }
         // qué le falta a la ficha. El video es EL factor que separa Media de Alta en toda la red;
         // el tour se cuenta solo como referencia porque NO mueve la calificación.
-        if (!video) falta.video++;
-        if (fotos < 8) falta.fotos++;
-        if (!amenidades) falta.amenidades++;
-        if (!tour) falta.tour++;
-        if (!acm) falta.acm++;
+        for (const fa of fs) {
+            fa.total++;
+            if (!video) fa.video++;
+            if (fotos < 8) fa.fotos++;
+            if (!amenidades) fa.amenidades++;
+            if (!tour) fa.tour++;
+            if (!acm) fa.acm++;
+        }
+        const errores = erroresDe(op, val, surf, num(dig(p, 'attributes', 'suites')), fotos);
+        for (const er of errores) errCount[er] = (errCount[er] || 0) + 1;
         return {
             id: hex, code: (p.internalId as string) ?? hex, type: (p.type as string) ?? '—',
             op: op === 'sale' ? 'Venta' : op === 'rent' ? 'Renta' : '—',
@@ -363,7 +414,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             respMedMin: median(respByProp.get(hex) ?? []),
             oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag,
             tier: TIER[dig(p, 'portals', 'inmuebles24', 'type') as string] ?? 'Simple',
-            fotos, video, tour, amenidades
+            fotos, video, tour, amenidades, errores
         };
     });
     rows.sort((a, b) => b.leads - a.leads || b.vistas - a.vistas);
@@ -424,7 +475,11 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         calAltaPct: props.length ? Math.round((100 * nAlta) / props.length) : 0, benchAltaPct, props: rows,
         calAltaVenta: nVenta ? Math.round((100 * nAltaV) / nVenta) : 0, calAltaRenta: nRenta ? Math.round((100 * nAltaR) / nRenta) : 0,
         leads30V, leads30R, leads30prevV, leads30prevR, respV, respR,
-        calidad: cal, falta, zonas, demandaLabel: DEMANDA_LABEL, asesores
+        calidad: cal, calidadVenta: calV, calidadRenta: calR,
+        falta, faltaVenta: faltaV, faltaRenta: faltaR,
+        errores: Object.entries(errCount).map(([tipo, n]) => ({ tipo, n, nota: ERROR_NOTA[tipo] ?? '' })).sort((a, b) => b.n - a.n),
+        nErrores: rows.filter((r) => r.errores.length).length,
+        zonas, demandaLabel: DEMANDA_LABEL, asesores
     };
 }
 

@@ -7,13 +7,14 @@ const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = 
 const R = 2;
 const f = (n: number) => n.toLocaleString('es-MX');
 
-function CopyLink({ companyId }: { companyId: string }) {
-    const [ok, setOk] = useState(false);
-    const copy = () => {
-        const url = `${window.location.origin}/mb/${companyId}`;
-        navigator.clipboard?.writeText(url).then(() => { setOk(true); setTimeout(() => setOk(false), 1500); });
-    };
-    return <button onClick={copy} style={{ fontSize: 11, fontWeight: 600, color: ok ? SEA : '#555', background: '#fff', border: `1px solid ${LGT}`, borderRadius: R, padding: '4px 9px', cursor: 'pointer' }}>{ok ? '¡Copiada!' : 'Copiar liga'}</button>;
+// Abre la herramienta de la inmobiliaria en otra pestaña, sin perder el índice.
+function IrLink({ companyId }: { companyId: string }) {
+    return (
+        <a href={`/mb/${companyId}`} target="_blank" rel="noreferrer"
+            style={{ fontSize: 11.5, fontWeight: 700, color: BLK, background: YEL, border: `1px solid ${YEL}`, borderRadius: R, padding: '5px 13px', cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            Ir ↗
+        </a>
+    );
 }
 
 // Columnas ordenables: para responder "¿qué inmobiliaria tiene más leads / más props / peor calidad?"
@@ -57,7 +58,7 @@ export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: GRY }}>Master Brokers · Índice</div>
             <div style={{ width: 52, height: 2, background: YEL, margin: '9px 0 12px' }} />
             <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 32, margin: 0 }}>Tus inmobiliarias</h1>
-            <div style={{ fontSize: 12, color: GRY, marginTop: 2 }}>Filtra por KAM y abre la herramienta de cada inmobiliaria. La liga es compartible con su master broker.</div>
+            <div style={{ fontSize: 12, color: GRY, marginTop: 2 }}>Filtra por KAM y abre la herramienta de cada inmobiliaria. Abre la de cada una en otra pestaña.</div>
 
             <div style={{ display: 'flex', gap: 12, margin: '20px 0 16px' }}>
                 <div style={{ flex: 1, background: LGT, padding: '13px 16px', borderRadius: R }}><div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1 }}>{f(filtered.length)}</div><div style={{ fontSize: 11, marginTop: 5, fontWeight: 600 }}>inmobiliarias</div></div>
@@ -83,7 +84,7 @@ export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
                         <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('calAltaPct')}>% Alta calidad{arrow('calAltaPct')}</th>
                         <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('leads30')}>Leads 30d{arrow('leads30')}</th>
                         <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('leadsProp')}>Leads / prop{arrow('leadsProp')}</th>
-                        <th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Liga</th>
+                        <th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Abrir</th>
                     </tr></thead>
                     <tbody>
                         {filtered.map((r) => (
@@ -95,7 +96,7 @@ export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
                                 <td style={{ ...td, textAlign: 'right' }}>{r.calAltaPct}%</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{f(r.leads30)}</td>
                                 <td style={{ ...td, textAlign: 'right', color: GRY }}>{r.nProps ? (r.leads30 / r.nProps).toFixed(1) : '—'}</td>
-                                <td style={{ ...td, textAlign: 'right' }}><CopyLink companyId={r.companyId} /></td>
+                                <td style={{ ...td, textAlign: 'right' }}><IrLink companyId={r.companyId} /></td>
                             </tr>
                         ))}
                     </tbody>
