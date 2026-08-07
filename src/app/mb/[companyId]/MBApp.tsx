@@ -23,7 +23,7 @@ const DIAG_STYLE: Record<string, { bg: string; fg: string }> = {
     'Contestar más rápido': { bg: '#DCEBEB', fg: '#2f6b6b' },
     'Convertir a visita': { bg: '#DCEBEB', fg: '#2f6b6b' },
     'Cerrar la visita': { bg: '#DCEBEB', fg: '#2f6b6b' },
-    'Compartir con clientes': { bg: '#DCEBEB', fg: '#2f6b6b' }
+    'Compartir similares': { bg: '#DCEBEB', fg: '#2f6b6b' }
 };
 const diagPill = (t: string) => { const s = DIAG_STYLE[t] ?? { bg: '#DCEBEB', fg: '#2f6b6b' }; return <span key={t} style={{ background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 2, marginRight: 4, whiteSpace: 'nowrap' }}>{t}</span>; };
 // "Media" se leía como promedio, no como intermedia. Ahora los rangos se llaman por lo que
@@ -70,7 +70,7 @@ const accionesDe = (p: MBProp): string[] => {
     if (p.respMedMin != null && p.respMedMin > 1440) a.push('Contestar más rápido');
     if (p.leads >= 5 && p.visitas === 0) a.push('Convertir a visita');
     if (p.visitas >= 3 && p.ofertas === 0) a.push('Cerrar la visita');
-    if (p.demanda >= 200 && p.leads === 0) a.push('Compartir con clientes');
+    if (p.demanda >= 200 && p.leads === 0) a.push('Compartir similares');
     return a;
 };
 
@@ -586,7 +586,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{p.leads}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{f(p.demanda)}</td>
-                                            <td style={ttd}>{p.diag.length ? p.diag.map(diagPill) : <span style={{ color: GRY }}>revisar</span>}</td>
+                                            <td style={ttd}>{(() => { const a = accionesDe(p); return a.length ? a.map(diagPill) : <span style={{ color: GRY }}>revisar</span>; })()}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -606,6 +606,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                             <div>
                                                 <div style={{ fontSize: 13, fontWeight: 700 }}>{er.tipo} ↗</div>
                                                 <div style={{ fontSize: 11.5, color: '#666', marginTop: 2 }}>{er.nota}</div>
+                                                {er.ejemplo && <div style={{ fontSize: 11, color: BLK, marginTop: 4, background: LGT, padding: '4px 7px', borderRadius: R }}>Ej. {er.ejemplo}</div>}
                                             </div>
                                         </div>
                                     ))}

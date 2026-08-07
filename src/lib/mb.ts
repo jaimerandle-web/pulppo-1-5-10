@@ -54,6 +54,8 @@ export interface MBProp {
     fotos: number; video: boolean; tour: boolean; amenidades: number;
     // errores de captura evidentes (precio de $30, superficie de 7 millones de m²…)
     errores: string[];
+    // cómo se arregla, cuando se puede calcular (ej. la renta por m² × los m² de la propiedad)
+    sugerencia: string | null;
 }
 // Desempeño por asesor para el recap de flags del overview. Solo asesores de la inmobiliaria.
 export interface MBAsesor {
@@ -99,7 +101,7 @@ const erroresDe = (tipo: string | null, op: string, val: number | null, surf: nu
 const ERROR_NOTA: Record<string, string> = {
     'Sin precio': 'no se puede publicar ni comparar sin precio',
     'Precio irrisorio': 'un cero de menos: nadie vende ni renta en ese monto',
-    'Renta capturada por m²': 'el monto parece el precio POR M² al mes, no la renta total; así no se puede comparar',
+    'Renta capturada por m²': 'el monto parece el precio POR M² al mes, no la renta total. Multiplícalo por los m² de la propiedad para capturar la renta correcta',
     'Renta con precio de venta': 'parece el precio de venta capturado como renta mensual',
     'Sin superficie': 'sin m² no se puede calcular $/m² ni comparar contra el mercado',
     'Superficie imposible': 'los m² capturados no corresponden al tipo de propiedad',
@@ -130,7 +132,7 @@ export interface MBData {
     calidad: PorOpCal; calidadVenta: PorOpCal; calidadRenta: PorOpCal;
     falta: PorOpFalta; faltaVenta: PorOpFalta; faltaRenta: PorOpFalta;
     // propiedades con errores de captura evidentes, agrupadas por tipo de error
-    errores: { tipo: string; n: number; nota: string }[]; nErrores: number;
+    errores: { tipo: string; n: number; nota: string; ejemplo: string | null }[]; nErrores: number;
     // --- zonas (la sección que más le gusta a Ale, ahora también en el overview) ---
     zonas: MBZona[]; demandaLabel: string;
     // --- asesores con sus flags, para el recap del overview ---
@@ -368,6 +370,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const cal = mkCal(), calV = mkCal(), calR = mkCal();
     const falta = mkFal(), faltaV = mkFal(), faltaR = mkFal();
     const errCount: Record<string, number> = {};
+    const errEjemplo: Record<string, string> = {};
     const rows: MBProp[] = props.map((p) => {
         const hex = String(p._id);
         const op = dig(p, 'listing', 'operation') as string;
@@ -415,6 +418,11 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         }
         const errores = erroresDe((p.type as string) ?? null, op, val, surf, num(dig(p, 'attributes', 'suites')), fotos);
         for (const er of errores) errCount[er] = (errCount[er] || 0) + 1;
+        // si el precio está capturado por m², la renta correcta es precio × superficie
+        const sugerencia = errores.includes('Renta capturada por m²') && val && surf
+            ? `si son $${Math.round(val).toLocaleString('es-MX')}/m², la renta sería $${Math.round(val * surf).toLocaleString('es-MX')}/mes (× ${Math.round(surf).toLocaleString('es-MX')} m²)`
+            : null;
+        if (sugerencia && !errEjemplo['Renta capturada por m²']) errEjemplo['Renta capturada por m²'] = `${(p.internalId as string) ?? ''}: ${sugerencia}`;
         return {
             id: hex, code: (p.internalId as string) ?? hex, type: (p.type as string) ?? '—',
             op: op === 'sale' ? 'Venta' : op === 'rent' ? 'Renta' : '—',
@@ -427,7 +435,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             respMedMin: median(respByProp.get(hex) ?? []),
             oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag,
             tier: TIER[dig(p, 'portals', 'inmuebles24', 'type') as string] ?? 'Simple',
-            fotos, video, tour, amenidades, errores
+            fotos, video, tour, amenidades, errores, sugerencia
         };
     });
     rows.sort((a, b) => b.leads - a.leads || b.vistas - a.vistas);
@@ -490,7 +498,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         leads30V, leads30R, leads30prevV, leads30prevR, respV, respR,
         calidad: cal, calidadVenta: calV, calidadRenta: calR,
         falta, faltaVenta: faltaV, faltaRenta: faltaR,
-        errores: Object.entries(errCount).map(([tipo, n]) => ({ tipo, n, nota: ERROR_NOTA[tipo] ?? '' })).sort((a, b) => b.n - a.n),
+        errores: Object.entries(errCount).map(([tipo, n]) => ({ tipo, n, nota: ERROR_NOTA[tipo] ?? '', ejemplo: errEjemplo[tipo] ?? null })).sort((a, b) => b.n - a.n),
         nErrores: rows.filter((r) => r.errores.length).length,
         zonas, demandaLabel: DEMANDA_LABEL, asesores
     };
