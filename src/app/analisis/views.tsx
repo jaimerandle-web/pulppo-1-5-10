@@ -76,14 +76,14 @@ export function InventarioView({ d, referencias, cortes, mb = false }: { d: Anal
             {v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`}
         </span>
     );
-    const cols = ['Colonia', 'Tus props', 'Oferta zona', ...(showOferta ? ['vs. oferta (mediana)'] : []), ...(showCierres ? ['vs. cierres (mediana)'] : []), `Demanda · ${d.demandaLabel}`, `Leads · ${d.leadsLabel}`];
+    const cols = ['Colonia', 'Tus props', 'Oferta zona', ...(showOferta ? ['vs. oferta'] : []), ...(showCierres ? ['vs. cierres'] : []), 'Demanda', 'Leads'];
     // barra simple reutilizable (# de props + leads) para los cortes por tipo/operación
     const maxTipo = Math.max(...d.segTipo.map((t) => t.n), 1);
     const maxOp = Math.max(...d.segOp.map((o) => o.n), 1);
     return (
         <div className="mt-2 pl-6">
             {has('Por zona') && <>
-                <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, la oferta total de la zona y qué tan competitivo es tu precio vs. lo que se pide y lo que se vende.</p>
+                <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, la competencia de la zona y qué tan competitivo es tu <b>precio $/m²</b> contra lo que se pide y lo que se vende. <span style={{ color: GRAY }}>Demanda = búsquedas de {d.demandaLabel} · leads de {d.leadsLabel}.</span></p>
                 <table className="w-full border-collapse text-[11px]">
                     <thead>
                         <tr className="border-b" style={{ borderColor: SOFT }}>
