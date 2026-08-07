@@ -64,14 +64,26 @@ export interface MBAsesor {
 export type PorOpCal = { alta: number; media: number; baja: number; total: number };
 export type PorOpFalta = { video: number; fotos: number; amenidades: number; tour: number; acm: number; total: number };
 
-// Errores de captura: lo que está mal escrito, no mal vendido. Umbrales elegidos midiendo la red
-// completa (9,211 publicadas): sin superficie es el más común con 8.3%, y hay ventas de $1 y
-// superficies de 7,710,000 m². Son "revisa esto", no "esto está roto".
-const erroresDe = (op: string, val: number | null, surf: number | null, suites: number | null, fotos: number): string[] => {
+// Comercial (oficina, local, bodega, nave, edificio, terreno) vs. residencial: los umbrales de
+// precio no pueden ser los mismos, porque en comercial se acostumbra cotizar POR M².
+const esComercial = (tipo: string | null) => /oficina|local|bodega|nave|edificio|terreno|industrial|comercial/i.test(tipo || '');
+
+// Errores de captura: lo que está mal escrito, no mal vendido. Umbrales medidos sobre la red
+// completa (9,211 publicadas), no elegidos a ojo:
+//  · VENTA < $10,000 → 33 casos, todos inequívocos ($1, $30, $400). Entre $10k y $100k solo hay
+//    6 y casi todas son terrenos donde el monto podría ser el $/m²: ambiguas, no se marcan.
+//  · RENTA residencial < $1,000 → nadie renta una casa en eso.
+//  · RENTA comercial < $500 → 39 de 41 son oficinas con montos de $250-$380 sobre superficies de
+//    69 a 6,716 m². No son rentas de $370: son $370 POR M² capturados en el campo del total.
+//  · Sin superficie es el error más común de todos: 8.3% de la red.
+// Son "revisa esto", no "esto está roto".
+const erroresDe = (tipo: string | null, op: string, val: number | null, surf: number | null, suites: number | null, fotos: number): string[] => {
     const e: string[] = [];
+    const com = esComercial(tipo);
     if (!val || val <= 0) e.push('Sin precio');
-    else if (op === 'sale' && val < 100000) e.push('Precio irrisorio');
-    else if (op === 'rent' && val < 1000) e.push('Precio irrisorio');
+    else if (op === 'sale' && val < 10000) e.push('Precio irrisorio');
+    else if (op === 'rent' && com && val < 500) e.push('Renta capturada por m²');
+    else if (op === 'rent' && !com && val < 1000) e.push('Precio irrisorio');
     else if (op === 'rent' && val > 500000) e.push('Renta con precio de venta');
     if (!surf || surf <= 0) e.push('Sin superficie');
     else if (surf > 5000) e.push('Superficie imposible');
@@ -87,6 +99,7 @@ const erroresDe = (op: string, val: number | null, surf: number | null, suites: 
 const ERROR_NOTA: Record<string, string> = {
     'Sin precio': 'no se puede publicar ni comparar sin precio',
     'Precio irrisorio': 'un cero de menos: nadie vende ni renta en ese monto',
+    'Renta capturada por m²': 'el monto parece el precio POR M² al mes, no la renta total; así no se puede comparar',
     'Renta con precio de venta': 'parece el precio de venta capturado como renta mensual',
     'Sin superficie': 'sin m² no se puede calcular $/m² ni comparar contra el mercado',
     'Superficie imposible': 'los m² capturados no corresponden al tipo de propiedad',
@@ -400,7 +413,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             if (!tour) fa.tour++;
             if (!acm) fa.acm++;
         }
-        const errores = erroresDe(op, val, surf, num(dig(p, 'attributes', 'suites')), fotos);
+        const errores = erroresDe((p.type as string) ?? null, op, val, surf, num(dig(p, 'attributes', 'suites')), fotos);
         for (const er of errores) errCount[er] = (errCount[er] || 0) + 1;
         return {
             id: hex, code: (p.internalId as string) ?? hex, type: (p.type as string) ?? '—',
