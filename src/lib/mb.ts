@@ -64,7 +64,10 @@ export interface MBAsesor {
     green: string[]; red: string[];
 }
 export type PorOpCal = { alta: number; media: number; baja: number; total: number };
-export type PorOpFalta = { video: number; fotos: number; amenidades: number; tour: number; acm: number; total: number };
+// `doc`, `contrato` y `propietario` NO afectan la calificación de la ficha: son expediente.
+// Se cuentan aquí por comodidad, pero en el overview van en su propia fila.
+export type PorOpFalta = { video: number; fotos: number; amenidades: number; tour: number; acm: number;
+    doc: number; contrato: number; propietario: number; total: number };
 
 // Comercial (oficina, local, bodega, nave, edificio, terreno) vs. residencial: los umbrales de
 // precio no pueden ser los mismos, porque en comercial se acostumbra cotizar POR M².
@@ -169,7 +172,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const db = await getDb();
     const props = await db.collection('properties').find(
         { 'company._id': cid, 'status.last': 'published' },
-        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, 'attributes.suites': 1, address: 1, agent: 1, publishedAt: 1, createdAt: 1, 'status.history': 1, company: 1, 'portals.inmuebles24.type': 1 } }
+        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, 'attributes.suites': 1, address: 1, agent: 1, publishedAt: 1, createdAt: 1, 'status.history': 1, company: 1, 'portals.inmuebles24.type': 1, 'files.type': 1, 'contract.url': 1, 'contact.phone': 1, 'contact.email': 1 } }
     ).toArray();
     if (!props.length) return null;
     const name = (dig(props[0], 'company', 'name') as string) ?? 'Inmobiliaria';
@@ -366,7 +369,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     let nVenta = 0, nRenta = 0, captaciones90 = 0, tVistas = 0, tLeads = 0, tResp = 0, tVisitas = 0, tOfertas = 0, tCierres = 0, sinLeads = 0, nAlta = 0, nAltaV = 0, nAltaR = 0;
     // calidad y huecos, contados en total y por operación
     const mkCal = (): PorOpCal => ({ alta: 0, media: 0, baja: 0, total: 0 });
-    const mkFal = (): PorOpFalta => ({ video: 0, fotos: 0, amenidades: 0, tour: 0, acm: 0, total: 0 });
+    const mkFal = (): PorOpFalta => ({ video: 0, fotos: 0, amenidades: 0, tour: 0, acm: 0, doc: 0, contrato: 0, propietario: 0, total: 0 });
     const cal = mkCal(), calV = mkCal(), calR = mkCal();
     const falta = mkFal(), faltaV = mkFal(), faltaR = mkFal();
     const errCount: Record<string, number> = {};
@@ -401,6 +404,14 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const respondidos = ansMap.get(hex) ?? 0;
         const fi = fichaMap.get(hex);
         const fotos = (fi?.fotos as number) ?? 0, video = !!fi?.video, tour = !!fi?.tour, amenidades = (fi?.amen as number) ?? 0;
+        // Expediente. `files[].type` no es el formato del archivo, es la CATEGORÍA del
+        // documento: 'title' (escritura), 'contract', 'identification'.
+        const tiposDoc = new Set(((p.files as Document[]) ?? []).map((f) => String(f?.type)));
+        const sinDoc = !['title', 'contract', 'identification'].some((t) => tiposDoc.has(t));
+        // Contrato: vale el flujo digital (contract.url) o el escaneado subido al expediente.
+        const sinContrato = !dig(p, 'contract', 'url') && !tiposDoc.has('contract');
+        // Sin forma de contactar al dueño. Ojo: no es lo mismo que "sin contacto asignado".
+        const sinProp = !dig(p, 'contact', 'phone') && !dig(p, 'contact', 'email');
         tVistas += vistas; tLeads += leads; tResp += respondidos; tVisitas += vis; tOfertas += ofertas; tCierres += cierres;
         if (leads === 0) sinLeads++;
         const cs = op === 'sale' ? [cal, calV] : op === 'rent' ? [cal, calR] : [cal];
@@ -415,6 +426,9 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             if (!amenidades) fa.amenidades++;
             if (!tour) fa.tour++;
             if (!acm) fa.acm++;
+            if (sinDoc) fa.doc++;
+            if (sinContrato) fa.contrato++;
+            if (sinProp) fa.propietario++;
         }
         const errores = erroresDe((p.type as string) ?? null, op, val, surf, num(dig(p, 'attributes', 'suites')), fotos);
         for (const er of errores) errCount[er] = (errCount[er] || 0) + 1;

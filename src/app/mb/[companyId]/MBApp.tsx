@@ -497,6 +497,32 @@ export default function MBApp({ d }: { d: MBData }) {
                                     );
                                 })}
                             </div>
+                            {/* Expediente. Va en su propia fila y NO bajo la pregunta de "para ser
+                                Alta": la documentación no mueve la calificación de la ficha, así
+                                que mezclarlas afirmaría algo falso. */}
+                            <div style={{ marginTop: 14, paddingTop: 11, borderTop: `1px solid ${LGT}` }}>
+                                <b style={{ color: BLK }}>Expediente y contacto del propietario</b>
+                                <div style={{ fontSize: 11.5, color: GRY, marginTop: 3 }}>
+                                    No cambia la calificación de la ficha, pero sin esto la operación se frena cuando llega el momento de cerrar.
+                                </div>
+                                <div style={{ marginTop: 9, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {([
+                                        ['Sin ningún documento', 'doc', 'ni escritura, ni contrato, ni identificación'],
+                                        ['Sin contrato', 'contrato', 'ni firmado en la plataforma ni escaneado'],
+                                        ['Sin datos del propietario', 'propietario', 'sin teléfono ni correo para contactarlo']
+                                    ] as [string, keyof typeof d.falta, string][]).map(([lbl, k, nota]) => {
+                                        const tot = d.falta[k] as number, v = d.faltaVenta[k] as number, r = d.faltaRenta[k] as number;
+                                        return (
+                                            <div key={lbl} style={{ background: '#fff', border: `1px solid ${LGT}`, borderRadius: R, padding: '8px 11px', minWidth: 152, flex: 1 }}>
+                                                <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 21, color: tot ? BLK : GRY }}>{f(tot)}</div>
+                                                <div style={{ fontSize: 11, fontWeight: 600 }}>{lbl}</div>
+                                                <div style={{ fontSize: 10, color: GRY }}>{f(v)} venta · {f(r)} renta</div>
+                                                <div style={{ fontSize: 10, color: GRY }}>{nota}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                             <div style={{ marginTop: 9, fontSize: 11.5 }}>
                                 {diagPill('Mejorar ficha')} <span style={{ color: '#666' }}>es el tag que verás en el listado sobre estas mismas propiedades.</span>
                             </div>
