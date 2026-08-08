@@ -207,13 +207,6 @@ export interface AsesorRow {
 // Actividad sobre TU inventario que hizo un broker de OTRA inmobiliaria (la red Pulppo es un MLS
 // compartido). No va en la tabla de asesores, pero es información: la red trabajando tu inventario.
 export interface ExternoRow { leads: number; visitas: number; pctLeads: number; pctVisitas: number }
-// Una propiedad dentro de una propuesta de swap de destacado, con la razón en palabras.
-export interface SwapProp {
-    code: string; nb: string; val: number; tier: string;
-    sp: number | null;            // precio ÷ ACM
-    calidad: string; leads: number; demanda: number;
-    razon: string;
-}
 // Referencia de mercado: las mejores inmobiliarias (TOP 20 por # de cierres en la ventana).
 export interface Bench { tasaVisita: number | null; tasaResp: number | null; leadToClose: number | null; nInmos: number; label: string }
 
@@ -259,10 +252,6 @@ export interface AnalisisData {
     yoyMix: { period: string; sale: number; rent: number; com: number }[];
     yoyReading: string;
     top10: { code: string; nb: string; val: number; sp: number | null; leads: number; dz: number; lev: string[] }[];
-    // Swaps de destacado: qué aviso conviene sacar del slot y qué meter, con su razón. Es
-    // presupuesto-neutro (mismo número de slots) para que el KAM lo pueda proponer sin pedir más.
-    swaps: { sale: SwapProp; entra: SwapProp }[];
-    swapsNota: string;
     destacados: {
         sdNow: number; dNow: number; simpleNow: number; pctDest: number;
         splits: { sd: { sale: number; rent: number }; d: { sale: number; rent: number }; simple: { sale: number; rent: number } };
@@ -1144,80 +1133,6 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         llTier, reading: destReading,
     };
 
-    // ===================== SWAPS DE DESTACADO =====================
-    // Qué aviso conviene SACAR del slot y qué METER, con la razón. Presupuesto-neutro: se propone
-    // el mismo número de slots que ya se paga, así el KAM no tiene que pedir más inversión.
-    //
-    // Regla de fondo: destacar solo rinde cuando la propiedad ya está bien puesta. Un aviso
-    // destacado con precio fuera de mercado no convierte — la visibilidad no arregla el sobreprecio.
-    const DEST = new Set(['Súper destacado', 'Destacado']);
-    const calOf = (q: number | null) => CAL[q as number] || 'Media';
-    const mkSwap = (it: Item, razon: string): SwapProp => ({
-        code: it.code || '—', nb: it.nb || '—', val: it.val, tier: it.tier || 'Simple',
-        sp: it.sp != null && it.sp > 0.2 && it.sp < 3 ? it.sp : null,
-        calidad: calOf(it.q3), leads: leadsByPid[String(it.pid)] || 0,
-        demanda: (it.nbid && demandByNb[it.nbid]) || 0, razon,
-    });
-    // --- candidatas a SALIR: destacadas hoy que no están aprovechando el slot ---
-    const salen: { s: SwapProp; sev: number }[] = [];
-    for (const it of items) {
-        if (!it.tier || !DEST.has(it.tier)) continue;
-        const spV = it.sp != null && it.sp > 0.2 && it.sp < 3 ? it.sp : null;
-        const lds = leadsByPid[String(it.pid)] || 0;
-        const cal = calOf(it.q3);
-        if (spV != null && spV > 1.20)
-            salen.push({ s: mkSwap(it, `está ${Math.round((spV - 1) * 100)}% arriba del ACM: destacar no arregla el sobreprecio`), sev: 3 });
-        else if (cal === 'Baja')
-            salen.push({ s: mkSwap(it, 'ficha en calidad Baja: el tráfico llega a una publicación floja'), sev: 2 });
-        else if (lds === 0)
-            salen.push({ s: mkSwap(it, `destacada y sin un solo lead en ${PERF.label}`), sev: 1 });
-    }
-    salen.sort((a, b) => b.sev - a.sev || b.s.val - a.s.val);
-    // --- candidatas a ENTRAR: bien puestas, con demanda en su zona y sin explotar ---
-    // Dos reglas que parecen detalle y no lo son:
-    //  1) SIN ACM no entra. Si no sabes si el precio compite, no puedes apostar un slot: era el
-    //     caso de 3 de 5 propuestas en las primeras pruebas.
-    //  2) Máximo 2 por colonia. Ordenar solo por demanda concentraba los 8 swaps en Polanco, que
-    //     además hace que los avisos compitan entre ellos.
-    const MAX_POR_COLONIA = 2;
-    const porColonia: Record<string, number> = {};
-    const entran = items
-        .filter((it) => {
-            if (it.tier && DEST.has(it.tier)) return false;             // ya está destacada
-            const spV = it.sp != null && it.sp > 0.2 && it.sp < 3 ? it.sp : null;
-            if (spV == null) return false;                              // sin ACM: no sabes si el precio compite
-            if (spV > 1.20) return false;                               // fuera de mercado: no destacar
-            if (calOf(it.q3) === 'Baja') return false;                  // ficha floja: primero arreglarla
-            return ((it.nbid && demandByNb[it.nbid]) || 0) > 0;         // tiene que haber quién la busque
-        })
-        .map((it) => {
-            const lds = leadsByPid[String(it.pid)] || 0;
-            const dem = (it.nbid && demandByNb[it.nbid]) || 0;
-            // el precio óptimo pesa: entre dos con la misma demanda, primero la mejor puesta
-            const bonus = (it.sp as number) <= 1.05 ? 1.3 : 1;
-            return { it, score: (dem / (1 + lds)) * bonus, lds, dem };
-        })
-        .sort((a, b) => b.score - a.score)
-        .filter(({ it }) => {
-            const k = it.nb || '—';
-            if ((porColonia[k] || 0) >= MAX_POR_COLONIA) return false;
-            porColonia[k] = (porColonia[k] || 0) + 1;
-            return true;
-        })
-        .map(({ it, lds, dem }) => {
-            const cal = calOf(it.q3);
-            const precioTxt = (it.sp as number) <= 1.05 ? 'precio óptimo' : 'precio con margen (≤ +20% del ACM)';
-            return mkSwap(it, `${precioTxt}, ficha ${cal}, ${dem.toLocaleString('es-MX')} búsquedas en su zona y ${lds === 0 ? 'ningún lead' : `solo ${lds} ${lds === 1 ? 'lead' : 'leads'}`}`);
-        });
-    const nSwaps = Math.min(salen.length, entran.length, 8);
-    const swaps = Array.from({ length: nSwaps }, (_, i) => ({ sale: salen[i].s, entra: entran[i] }));
-    const swapsNota = (sdNow + dNow) === 0
-        ? 'Hoy no hay avisos destacados, así que no hay nada que intercambiar: la propuesta sería empezar a destacar las propiedades bien puestas con demanda en su zona.'
-        : swaps.length === 0
-            ? 'Tus avisos destacados están bien elegidos: ninguno está fuera de mercado, con ficha Baja ni sin leads. No hay swap que proponer.'
-            : `${swaps.length} ${swaps.length === 1 ? 'intercambio' : 'intercambios'} sin gastar un peso más: sale un aviso que no está aprovechando el slot y entra uno que sí puede. `
-              + `Se propone el mismo número de slots que ya pagas.`;
-
     // ===================== SIN ACTIVIDAD (props sin lead en la ventana de desempeño) =====================
     // Ya no tiene su propio selector: "sin actividad" se lee SIEMPRE en la ventana de desempeño,
     // que es la misma con la que se leen el funnel y los asesores.
@@ -1245,6 +1160,6 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         insightInv, insightPrecio,
         funnel, funnelReading, recos,
         compLabels: { a: rngA.label, b: PERF.label }, hasComp,
-        yoy, yoyMix, yoyReading, top10, destacados, swaps, swapsNota,
+        yoy, yoyMix, yoyReading, top10, destacados,
     };
 }

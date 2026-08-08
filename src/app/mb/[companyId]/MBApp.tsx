@@ -642,9 +642,8 @@ export default function MBApp({ d }: { d: MBData }) {
                         )}
 
                         <div style={{ marginTop: 30, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '13px 16px', fontSize: 12, color: '#555' }}>
-                            Tienes <b>{f(nDest)}</b> propiedades en destacado/súper. Estamos afinando el criterio de <b>swaps de destacado</b>
-                            {' '}(qué aviso conviene mover según precio, oferta, demanda y calidad — no solo si recibe leads) y estará aquí pronto,
-                            {' '}junto con <b>inventario vs. últimos 6 meses</b> y la comparativa ampliada vs. la comunidad.
+                            Tienes <b>{f(nDest)}</b> propiedades en destacado o súper destacado en Inmuebles24. Estamos trabajando
+                            en <b>inventario vs. últimos 6 meses</b> y en la comparativa ampliada contra la comunidad.
                         </div>
                     </div>
                 )}
@@ -658,7 +657,19 @@ export default function MBApp({ d }: { d: MBData }) {
                     </div>
                 )}
 
-                {section === 'analisis' && <MBAnalisis companyId={d.companyId} name={d.name} asesores={asesoresInmo} />}
+                {section === 'analisis' && (d.companyId === 'demo' ? (
+                    /* La cartera demo no existe en Mongo, así que el generador —que sí consulta la
+                       base— no puede correr sobre ella. Se avisa en vez de reventar en pantalla. */
+                    <div>
+                        <div style={eyebrow}>Generador de análisis</div><div style={accent} />
+                        <div style={{ marginTop: 14, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '14px 16px', fontSize: 13, maxWidth: 640 }}>
+                            <b style={{ color: BLK }}>No disponible en la cartera de ejemplo.</b>
+                            <div style={{ marginTop: 6, color: '#555' }}>
+                                Esta inmobiliaria es una cartera de ejemplo para mostrar el panel; sus propiedades no existen en la base, así que el generador no tiene de dónde leer. En tu inmobiliaria funciona normal.
+                            </div>
+                        </div>
+                    </div>
+                ) : <MBAnalisis companyId={d.companyId} name={d.name} asesores={asesoresInmo} />)}
 
                 {section === 'comoleer' && (
                     <div style={{ maxWidth: 780 }}>
