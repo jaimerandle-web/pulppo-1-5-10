@@ -541,11 +541,15 @@ export async function fetchIndex(): Promise<MBIndexRow[]> {
         { $group: { _id: '$company._id', n: { $sum: 1 } } }
     ], { allowDiskUse: true }).toArray();
     const l30Map = new Map(l30.map((r) => [String(r._id), r.n as number]));
-    const excl = (s: string) => /tuhabi|habi|prueba|test|demo/i.test(s);
+    // Habi se excluye SIEMPRE por el email (`admin@inmobiliaria.tuhabi.mx`): sus ~121 inmobiliarias
+    // tienen nombres arbitrarios que no dicen "habi". Nunca filtrar 'habi' contra el nombre —
+    // se lleva por delante inmobiliarias reales (Habitare, Habitat, Habix…).
+    const esHabi = (email: string) => /tuhabi/i.test(email);
+    const esPrueba = (name: string) => /\btest\b|testing|\bdemo\b|prueba/i.test(name);
     const rows: MBIndexRow[] = [];
     for (const r of pc) {
         const id = String(r._id), name = (r.name as string) ?? '';
-        if (!masterSet.has(id) || excl(`${name} ${r.email ?? ''}`)) continue;
+        if (!masterSet.has(id) || esHabi(String(r.email ?? '')) || esPrueba(name)) continue;
         const total = r.total as number;
         rows.push({ companyId: id, name, kam: getKam(name), nProps: total, nVenta: r.venta as number, nRenta: r.renta as number,
             calAltaPct: total ? Math.round((100 * (r.alta as number)) / total) : 0, leads30: l30Map.get(id) ?? 0 });
