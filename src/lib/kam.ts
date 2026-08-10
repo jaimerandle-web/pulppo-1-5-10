@@ -152,3 +152,14 @@ export function getKam(nombre?: string | null): string {
     if (!nombre) return 'Sin KAM';
     return KAM_BY_NORM[norm(nombre)] || 'Sin KAM';
 }
+
+// Cuentas dadas de baja. Se mantiene a mano: la baja es comercial y NO se refleja en Mongo
+// (siguen con status 'active', inventario publicado y leads entrando), así que ninguna señal
+// de datos las distingue. Agregar aquí conforme se den de baja.
+const BAJAS = new Set<string>([
+    'habix grupo inmobiliario'
+]);
+
+export function esBaja(nombre?: string | null): boolean {
+    return !!nombre && BAJAS.has(norm(nombre));
+}

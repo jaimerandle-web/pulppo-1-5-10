@@ -3,7 +3,7 @@
 // precio vs. oferta MLS y vs. cierres Pulppo, competencia, calidad) + funnel comercial. Datos en vivo.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
-import { getKam } from './kam';
+import { getKam, esBaja } from './kam';
 import { refComps, idxPool, type PoolItem, type Subj } from './comparables';
 
 const ADVANCED = new Set(['offer', 'offer_blocked', 'contract', 'paying', 'closed']);
@@ -549,7 +549,7 @@ export async function fetchIndex(): Promise<MBIndexRow[]> {
     const rows: MBIndexRow[] = [];
     for (const r of pc) {
         const id = String(r._id), name = (r.name as string) ?? '';
-        if (!masterSet.has(id) || esHabi(String(r.email ?? '')) || esPrueba(name)) continue;
+        if (!masterSet.has(id) || esHabi(String(r.email ?? '')) || esPrueba(name) || esBaja(name)) continue;
         const total = r.total as number;
         rows.push({ companyId: id, name, kam: getKam(name), nProps: total, nVenta: r.venta as number, nRenta: r.renta as number,
             calAltaPct: total ? Math.round((100 * (r.alta as number)) / total) : 0, leads30: l30Map.get(id) ?? 0 });
