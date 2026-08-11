@@ -63,8 +63,8 @@ function LoginContent() {
                     </div>
                     <p className="text-center font-serif text-2xl tracking-wide text-white">pulppo</p>
 
-                    <h1 className="mt-1 text-center text-4xl tracking-wide text-[#F6BE00]">
-                        1 · 5 · 10
+                    <h1 className="mt-1 text-center font-serif text-3xl tracking-wide text-[#F6BE00]">
+                        Inmobiliarias Pulppo
                     </h1>
                     <p className="mt-2 text-center text-sm font-light text-neutral-400">
                         Centro de mando del programa de exclusivas
