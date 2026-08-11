@@ -38,7 +38,8 @@ function LoginContent() {
                     body: JSON.stringify({ idToken })
                 });
                 const d = await res.json().catch(() => ({}));
-                if (res.ok) router.push('/');
+                // Master broker → directo al panel de su inmobiliaria; equipo interno → dashboard.
+                if (res.ok) router.push(d.companyId ? `/mb/${d.companyId}` : '/');
                 else setError(d.error || 'No se pudo ingresar');
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión con Google.');

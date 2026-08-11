@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/data';
+import { canAccessCompany } from '@/lib/companyAccess';
 
 // Métricas por propiedad (vistas/leads/visitas/ofertas) para un RANGO de fechas, para el filtro de
 // fechas del listado /mb. Devuelve mapas { propId: n }. Datos en vivo, read-only.
@@ -12,6 +13,8 @@ export async function POST(req: Request) {
     try {
         const { companyId, from, to } = (await req.json()) as { companyId?: string; from?: string; to?: string };
         if (!companyId || !from || !to) return Response.json({ error: 'Falta companyId / from / to' }, { status: 400 });
+        // Interno: cualquier company. Externo: solo la suya.
+        if (!(await canAccessCompany(companyId))) return Response.json({ error: 'No autorizado' }, { status: 403 });
         const fromD = new Date(from), toD = new Date(to);
         const db = await getDb();
         const cid = new ObjectId(companyId);
