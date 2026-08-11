@@ -97,7 +97,7 @@ function LoginContent() {
                     </p>
                 </div>
 
-                <p className="mt-6 text-center text-[11px] text-neutral-600">Pulppo · 1·5·10</p>
+                <p className="mt-6 text-center text-[11px] text-neutral-600">Inmobiliarias Pulppo</p>
             </div>
         </div>
     );
