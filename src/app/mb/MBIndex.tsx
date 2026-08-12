@@ -7,6 +7,8 @@ const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = 
 const R = 2;
 const f = (n: number) => n.toLocaleString('es-MX');
 
+const navLink: CSSProperties = { fontSize: 11.5, fontWeight: 600, color: '#555', border: `1px solid ${LGT}`, borderRadius: R, padding: '6px 11px', textDecoration: 'none', whiteSpace: 'nowrap' };
+
 // Abre la herramienta de la inmobiliaria en otra pestaña, sin perder el índice.
 function IrLink({ companyId }: { companyId: string }) {
     return (
@@ -55,10 +57,19 @@ export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
 
     return (
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 28px 60px', fontFamily: "'Nunito Sans', sans-serif", color: BLK }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: GRY }}>Master Brokers · Índice</div>
-            <div style={{ width: 52, height: 2, background: YEL, margin: '9px 0 12px' }} />
-            <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 32, margin: 0 }}>Tus inmobiliarias</h1>
-            <div style={{ fontSize: 12, color: GRY, marginTop: 2 }}>Filtra por KAM y abre la herramienta de cada inmobiliaria. Abre la de cada una en otra pestaña.</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: GRY }}>Master Brokers · Índice</div>
+                    <div style={{ width: 52, height: 2, background: YEL, margin: '9px 0 12px' }} />
+                    <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 32, margin: 0 }}>Tus inmobiliarias</h1>
+                    <div style={{ fontSize: 12, color: GRY, marginTop: 2 }}>Filtra por KAM y abre la herramienta de cada inmobiliaria. Abre la de cada una en otra pestaña.</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <a href="/" style={navLink}>← Herramientas</a>
+                    {/* /analisis corre el mismo motor que esta herramienta, pero configurable para el KAM. */}
+                    <a href="/analisis" style={navLink}>🧭 Análisis general</a>
+                </div>
+            </div>
 
             <div style={{ display: 'flex', gap: 12, margin: '20px 0 16px' }}>
                 <div style={{ flex: 1, background: LGT, padding: '13px 16px', borderRadius: R }}><div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1 }}>{f(filtered.length)}</div><div style={{ fontSize: 11, marginTop: 5, fontWeight: 600 }}>inmobiliarias</div></div>

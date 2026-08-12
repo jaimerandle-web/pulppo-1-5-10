@@ -225,7 +225,7 @@ export default function CampanasPage() {
                     <img src="/pulppo-icon.png" alt="Pulppo" className="h-9 w-9" />
                     <h1 className="text-3xl sm:text-4xl">Campañas · 1 · 5 · 10</h1>
                 </div>
-                <a href="/" className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50">← Dashboard</a>
+                <a href="/1-5-10" className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50">← Dashboard</a>
             </header>
 
             <div className="mb-4 rounded-lg border border-[#F6BE00] bg-[#fffdf5] px-4 py-2 text-xs text-neutral-700">

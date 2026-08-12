@@ -1,62 +1,40 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { CarteraRow, ProgramRow, DataPayload } from '@/types';
-import CarteraTab from '@/components/CarteraTab';
-import ProgramaTab from '@/components/ProgramaTab';
-import CampanasTab from '@/components/CampanasTab';
-import { Combobox, Dropdown } from '@/components/inputs';
 
-export default function Home() {
+/* ------------------------------------------------------------------ *
+ * / — Menú. La raíz ya no es el dashboard de 1·5·10 (ése vive en
+ * /1-5-10): es el índice de los proyectos que conviven en esta app.
+ * /ficha/[id] NO aparece aquí a propósito — no es un proyecto, es una
+ * vista compartida que abren tanto 1·5·10 como Master Brokers.
+ * ------------------------------------------------------------------ */
+
+type Link = { href: string; label: string; hint: string };
+
+const PROYECTOS: { eyebrow: string; title: string; blurb: string; links: Link[] }[] = [
+    {
+        eyebrow: 'Programa de exclusivas',
+        title: '1 · 5 · 10',
+        blurb: 'Cartera y operación del programa: pipeline de ofertas y ventas, desempeño por propiedad, alertas y recap mensual para bonos.',
+        links: [
+            { href: '/1-5-10', label: 'Cartera y programa', hint: 'Pipeline, métricas, alertas y recap' },
+            { href: '/1-5-10/evaluar', label: 'Evaluar elegibilidad', hint: '¿Esta propiedad entra al programa?' },
+            { href: '/1-5-10/campanas', label: 'Campañas de email', hint: 'Digest por zona: planear, aprobar y programar' }
+        ]
+    },
+    {
+        eyebrow: 'Inmobiliarias',
+        title: 'Master Brokers',
+        blurb: 'La herramienta del dueño de la inmobiliaria: qué inventario necesita atención, cómo van sus leads, sus zonas y su equipo.',
+        links: [
+            { href: '/mb', label: 'Índice de inmobiliarias', hint: 'Filtra por KAM y abre la de cada una' },
+            { href: '/analisis', label: 'Análisis general', hint: 'El mismo motor, configurable para el reporte del KAM' }
+        ]
+    }
+];
+
+export default function Menu() {
     const router = useRouter();
-    const [data, setData] = useState<DataPayload | null>(null);
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(true);
-    const [tab, setTab] = useState<'cartera' | 'programa' | 'campanas'>('cartera');
-    const [kam, setKam] = useState('(todos)');
-    const [inmo, setInmo] = useState('(todas)');
-    const [tipos, setTipos] = useState<string[]>([]);
-
-    async function load(refresh = false) {
-        setLoading(true);
-        setError('');
-        try {
-            const res = await fetch(`/api/data${refresh ? '?refresh=1' : ''}`);
-            if (res.status === 401) {
-                router.push('/login');
-                return;
-            }
-            const d = await res.json();
-            if (!res.ok) throw new Error(d.error || 'Error cargando datos');
-            setData(d);
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Error cargando datos');
-        } finally {
-            setLoading(false);
-        }
-    }
-    useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    const df = data?.rows || [];
-    const pg = data?.program || [];
-
-    const kams = useMemo(() => ['(todos)', ...Array.from(new Set(df.map((r) => r.kam).filter(Boolean))).sort()], [df]);
-    const inmos = useMemo(() => {
-        const base = kam === '(todos)' ? df : df.filter((r) => r.kam === kam);
-        return ['(todas)', ...Array.from(new Set(base.map((r) => r.inmobiliaria).filter(Boolean) as string[])).sort()];
-    }, [df, kam]);
-    const tiposAll = useMemo(() => Array.from(new Set(df.map((r) => r.tipo).filter(Boolean) as string[])).sort(), [df]);
-
-    function applyFilters<T extends CarteraRow | ProgramRow>(d: T[]): T[] {
-        let out = d;
-        if (kam !== '(todos)') out = out.filter((r) => r.kam === kam);
-        if (inmo !== '(todas)') out = out.filter((r) => r.inmobiliaria === inmo);
-        if (tipos.length) out = out.filter((r) => r.tipo && tipos.includes(r.tipo));
-        return out;
-    }
-    const f = applyFilters(df);
-    const fp = applyFilters(pg);
 
     async function logout() {
         await fetch('/api/auth/login', { method: 'DELETE' });
@@ -64,70 +42,51 @@ export default function Home() {
     }
 
     return (
-        <div className="mx-auto max-w-[1400px] px-5 py-6">
-            <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="mx-auto max-w-[1080px] px-7 py-10">
+            <header className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-brand-gray">Pulppo · Interno</p>
+                    <div className="my-[9px] h-0.5 w-[52px] bg-brand-yellow" />
+                    <h1 className="text-[32px]">Herramientas</h1>
+                    <p className="mt-0.5 text-xs text-brand-gray">Datos en vivo desde Mongo. Elige con qué vas a trabajar.</p>
+                </div>
                 <div className="flex items-center gap-3">
                     <img src="/pulppo-icon.png" alt="Pulppo" className="h-9 w-9" />
-                    <h1 className="text-3xl sm:text-4xl">Pulppo · 1 · 5 · 10</h1>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-neutral-500">
-                    <span>Datos live desde Mongo (cache 10 min)</span>
-                    <a href="/analisis" className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
-                        🧭 Análisis general
-                    </a>
-                    <a href="/evaluar" className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
-                        ✅ Evaluar
-                    </a>
-                    <a href="/campanas" className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
-                        ✉️ Campañas
-                    </a>
-                    <button onClick={() => load(true)} className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
-                        🔄 Actualizar
-                    </button>
-                    <button onClick={logout} className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
+                    <button onClick={logout} className="rounded-[2px] border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50">
                         Salir
                     </button>
                 </div>
             </header>
 
-            <div className="mt-5 flex flex-wrap items-end gap-4 rounded-xl bg-light p-4">
-                <Dropdown label="KAM" value={kam} options={kams}
-                    onChange={(v) => { setKam(v); setInmo('(todas)'); }} className="w-44" />
-                <Combobox label="Inmobiliaria" value={inmo} allLabel="(todas)"
-                    options={inmos.filter((i) => i !== '(todas)')}
-                    placeholder="Buscar inmobiliaria…" onChange={setInmo} />
-                <div>
-                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Tipo</p>
-                    <div className="flex flex-wrap gap-2">
-                        {tiposAll.map((t) => (
-                            <button key={t}
-                                onClick={() => setTipos((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t])}
-                                className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${tipos.includes(t)
-                                    ? 'border-transparent bg-[#212322] text-white'
-                                    : 'border-neutral-300 bg-white hover:bg-neutral-50'}`}>
-                                {t}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
+            <div className="mt-9 grid gap-5 md:grid-cols-2">
+                {PROYECTOS.map((p) => (
+                    <section key={p.title} className="rounded-[2px] border border-neutral-200 bg-white p-6">
+                        <p className="text-[10px] font-bold uppercase tracking-[1.2px] text-brand-gray">{p.eyebrow}</p>
+                        <h2 className="mt-1 text-[26px] leading-none">{p.title}</h2>
+                        <p className="mt-2.5 text-[13px] leading-relaxed text-neutral-500">{p.blurb}</p>
 
-            <div className="mt-6 flex gap-1 border-b border-neutral-200">
-                {([['cartera', '📋 Cartera y operación'], ['programa', '📈 Programa (general)'], ['campanas', '📣 Campañas']] as const).map(([id, label]) => (
-                    <button key={id} onClick={() => setTab(id)}
-                        className={`px-4 py-2.5 text-sm font-semibold transition-colors ${tab === id
-                            ? 'border-b-2 border-[#F6BE00] text-[#212322]'
-                            : 'text-neutral-400 hover:text-neutral-600'}`}>
-                        {label}
-                    </button>
+                        <div className="mt-5 flex flex-col gap-2">
+                            {p.links.map((l, i) => (
+                                <a key={l.href} href={l.href}
+                                    className={`group flex items-baseline justify-between gap-3 rounded-[2px] border px-4 py-3 transition-colors ${i === 0
+                                        ? 'border-transparent bg-[#212322] hover:bg-black'
+                                        : 'border-neutral-200 bg-white hover:bg-light'}`}>
+                                    <span>
+                                        <span className={`block text-[13px] font-bold ${i === 0 ? 'text-white' : 'text-soft'}`}>{l.label}</span>
+                                        <span className={`mt-0.5 block text-[11px] ${i === 0 ? 'text-neutral-400' : 'text-brand-gray'}`}>{l.hint}</span>
+                                    </span>
+                                    <span className={`text-sm ${i === 0 ? 'text-brand-yellow' : 'text-sea'}`}>→</span>
+                                </a>
+                            ))}
+                        </div>
+                    </section>
                 ))}
             </div>
 
-            {loading && <p className="mt-10 text-center text-sm text-neutral-500">Consultando Mongo…</p>}
-            {error && <p className="mt-10 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-            {!loading && !error && data && tab === 'cartera' && <CarteraTab f={f} fp={fp} />}
-            {!loading && !error && data && tab === 'programa' && <ProgramaTab fp={fp} />}
-            {tab === 'campanas' && <CampanasTab kam={kam} inmo={inmo} />}
+            <p className="mt-8 text-[10px] text-brand-gray">
+                Acceso por allowlist interno. La ficha de propiedad (<span className="font-mono">/ficha/…</span>) es
+                compartida por ambos proyectos y se abre desde adentro de cada uno.
+            </p>
         </div>
     );
 }
