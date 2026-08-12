@@ -545,18 +545,28 @@ export default function MBApp({ d }: { d: MBData }) {
 
                         {/* Zonas — la lectura de mercado, ahora también en el overview */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Tus zonas</h2>
-                        <div style={sub}>Dónde está tu inventario, cuánta competencia tiene, cuánta gente busca ahí y qué tan competitivo es tu precio. <b>vs. oferta</b> y <b>vs. cierres</b> son la <b>mediana</b> contra propiedades comparables. Demanda = búsquedas de {d.demandaLabel}.</div>
+                        <div style={sub}>Dónde está tu inventario, cuánto pesas dentro de Pulppo ahí, qué tan grande es el mercado y qué tan competitivo es tu precio. <b>Mercado</b> cuenta cada propiedad <b>una sola vez</b>: el mismo inmueble suele estar repetido en varios portales. <b>vs. oferta</b> y <b>vs. cierres</b> son la <b>mediana</b> contra propiedades comparables. Demanda = búsquedas de {d.demandaLabel}.</div>
                         <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
-                                <thead><tr>{['Colonia', 'Tus props', 'Props competencia', 'Demanda', 'Leads', 'vs. oferta', 'vs. cierres'].map((hh, i) => (
+                                <thead><tr>{['Colonia', 'Tus props / Pulppo', 'Mercado en la colonia', 'Demanda', 'Leads', 'vs. oferta', 'vs. cierres'].map((hh, i) => (
                                     <th key={hh} style={{ ...tth, textAlign: i ? 'right' : 'left' }}>{hh}</th>
                                 ))}</tr></thead>
                                 <tbody>
                                     {d.zonas.map((z) => (
                                         <tr key={z.nb}>
                                             <td style={{ ...ttd, fontWeight: 600 }}>{z.nb}</td>
-                                            <td style={{ ...ttd, textAlign: 'right' }}>{f(z.n)}</td>
-                                            <td style={{ ...ttd, textAlign: 'right', color: GRY }}>{z.oferta ? f(z.oferta) : '—'}</td>
+                                            {/* tuyo / lo que tiene toda la red Pulppo en esa colonia */}
+                                            <td style={{ ...ttd, textAlign: 'right' }}
+                                                title={z.pulppo ? `Tienes ${f(z.n)} de las ${f(z.pulppo)} propiedades que Pulppo tiene publicadas en ${z.nb} (${Math.round(100 * z.n / z.pulppo)}%). Es tu peso dentro de la red, no dentro del mercado.` : undefined}>
+                                                {f(z.n)} <span style={{ color: GRY }}>/ {z.pulppo ? f(z.pulppo) : '—'}</span>
+                                            </td>
+                                            {/* mercado deduplicado; el bruto queda a la vista para que el número sea auditable */}
+                                            <td style={{ ...ttd, textAlign: 'right', color: GRY }}
+                                                title={z.oferta && z.ofertaBruta > z.oferta ? `${f(z.ofertaBruta)} anuncios publicados en la colonia, pero muchos son la misma propiedad repetida entre portales y agencias. Contando cada propiedad una sola vez quedan ${f(z.oferta)}. Incluye las de Pulppo: también son mercado.` : undefined}>
+                                                {z.oferta ? f(z.oferta) : '—'}
+                                                {z.oferta && z.ofertaBruta > z.oferta
+                                                    ? <span style={{ fontSize: 10, color: GRY }}> · {f(z.ofertaBruta)} anuncios</span> : null}
+                                            </td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{f(z.demanda)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{f(z.leads)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(z.vsOferta)}</td>
@@ -694,7 +704,7 @@ export default function MBApp({ d }: { d: MBData }) {
                             {dfn('Necesitan tu atención', 'propiedades con algún foco (sin leads, caras sin leads, visitas sin oferta, +12 meses, respuesta lenta). Clic → las abre filtradas.')}
                             {dfn('Velocidad de respuesta', 'Flash ≤5 min · Rápida ≤1 h · Aceptable ≤24 h · Fuera de SLA >24 h. Arriba se muestra la MEDIANA (la mitad de tus leads se contesta antes de ese tiempo), no el promedio: unos pocos leads contestados días después destruyen el promedio.')}
                             {dfn('Calidad de tus fichas', 'cuántas propiedades hay en cada nivel, partido venta/renta. Debajo, qué le falta a las que no son Alta; haz clic en cualquiera para ver esa lista.')}
-                            {dfn('Tus zonas', 'dónde está tu inventario y qué tan competitivo es tu precio ahí. "Props competencia" son los anuncios comparables que hay hoy en el MLS de esa colonia.')}
+                            {dfn('Tus zonas', 'dónde está tu inventario y qué tan competitivo es tu precio ahí. "Tus props / Pulppo" es cuánto del inventario que la red tiene en esa colonia es tuyo — es tu peso dentro de Pulppo, no dentro del mercado. "Mercado en la colonia" son las propiedades distintas en venta que hay hoy (red Pulppo + MLS de portales), contando cada una una sola vez: el mismo inmueble se re-publica en varios portales y por varias agencias, así que el número de anuncios es bastante mayor. Incluye las de Pulppo, que también son oferta.')}
                             {dfn('Cómo va tu equipo', 'últimos 90 días, solo asesores de tu inmobiliaria y con al menos 10 leads. Son señales, no un ranking: el que más cierra puede a la vez estar quemando leads, y por eso aparece en "ojo con estos" en vez de en la columna verde.')}
                             {dfn('Empieza por aquí', 'ordenado por oportunidad (demanda ÷ (1+leads)). El diagnóstico dice el freno más probable (bajar precio / mejorar ficha).')}
                             {dfn('¡Ojo con estas!', 'propiedades con errores de captura. Una propiedad puede tener más de un error, por eso la suma de los bloques puede pasar del total.')}

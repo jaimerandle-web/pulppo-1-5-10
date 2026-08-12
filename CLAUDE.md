@@ -91,6 +91,23 @@ src/lib/analisis.ts    Motor del análisis de inventario, COMPARTIDO por /analis
                        Las fechas están estandarizadas en DOS ventanas — comparables (mercado) y
                        desempeño (tu operación). Ver ANALISIS.md: es el doc canónico, léelo antes
                        de tocar fechas, atribución de asesores o secciones.
+src/lib/mb.ts          Motor de Master Brokers (/mb). Ojo con la tabla "Tus zonas":
+                       · `oferta` = MERCADO de la colonia, DEDUPLICADO por firma
+                         (colonia+tipo+m²+precio). El MLS repite el mismo inmueble entre
+                         portales y agencias: medido ago-2026, ~39% del pool era duplicado
+                         (inflación 1.2x–2.3x según colonia). Deduplicar NO excluye a Pulppo:
+                         `properties` se recorre PRIMERO para que la copia que sobreviva sea
+                         la nuestra, y un anuncio de Pulppo en el MLS sin gemela en el pool se
+                         conserva. Limitación aceptada: en zonas de desarrollo varias unidades
+                         idénticas comparten firma y se colapsan (para quien vende, un
+                         desarrollo es UN competidor). El dedup casi no mueve el $/m² mediano
+                         — corrige el CONTEO, no el precio.
+                       · `ofertaBruta` = el mismo conteo sin deduplicar (se muestra al lado).
+                       · `pulppo` = inventario de TODA la red en esa colonia; con `n` forma
+                         "tus props / Pulppo". Es peso dentro de la RED, no del mercado — hay
+                         inmobiliarias al 90-100% (NURA, Vive Chic) y al 5% (Andina, HS).
+                       · Las colonias se agrupan por NOMBRE pero se consultan por id, y un
+                         nombre puede tener varios ids ("Centro"): se suman todos (`nbidsOf`).
 src/lib/ventanas.ts    Opciones de las ventanas de fecha. Vive aparte de analisis.ts porque los
                        formularios son 'use client' y no pueden importar valores de un módulo que
                        importa mongodb (se lo llevarían al bundle del navegador).
