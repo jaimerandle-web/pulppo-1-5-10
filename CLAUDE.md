@@ -9,7 +9,7 @@ Lee en vivo de MongoDB (read-only) y muestra: pipeline de ofertas/ventas, desemp
 alertas, métricas del programa y recap mensual para bonos. Es un port a Next.js del dashboard
 original en Streamlit.
 
-- **Prod**: https://pulppo-1-5-10.vercel.app (proyecto `pulppo-1-5-10` en el team de Vercel `pulppo-cx`)
+- **Prod**: https://pulppo-inmobiliarias.vercel.app (proyecto `pulppo-1-5-10` en el team de Vercel `pulppo-cx`)
 - **Repo**: github.com/jaimerandle18/centro-1-5-10
 
 ## Stack
