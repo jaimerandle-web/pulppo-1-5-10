@@ -545,10 +545,10 @@ export default function MBApp({ d }: { d: MBData }) {
 
                         {/* Zonas — la lectura de mercado, ahora también en el overview */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Tus zonas</h2>
-                        <div style={sub}>Dónde está tu inventario, cuánto pesas dentro de Pulppo ahí, qué tan grande es el mercado y qué tan competitivo es tu precio. <b>Mercado</b> cuenta cada propiedad <b>una sola vez</b>: el mismo inmueble suele estar repetido en varios portales. <b>vs. oferta</b> y <b>vs. cierres</b> son la <b>mediana</b> contra propiedades comparables. Demanda = búsquedas de {d.demandaLabel}.</div>
+                        <div style={sub}>Dónde está tu inventario, cuánto pesas dentro de Pulppo ahí, qué tan grande es el mercado y qué tan competitivo es tu precio. <b>Mercado</b> cuenta cada propiedad <b>una sola vez</b>: el mismo inmueble suele estar repetido en varios portales. <b>Leads</b> y <b>demanda</b> van en la misma ventana de <b>90 días</b>, y al lado de los leads está cuántos genera cada propiedad tuya. <b>vs. oferta</b> y <b>vs. cierres</b> son la <b>mediana</b> contra propiedades comparables.</div>
                         <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
-                                <thead><tr>{['Colonia', 'Tus props / Pulppo', 'Mercado en la colonia', 'Demanda', 'Leads', 'vs. oferta', 'vs. cierres'].map((hh, i) => (
+                                <thead><tr>{['Colonia', 'Tus props / Pulppo', 'Mercado en la colonia', 'Demanda', 'Leads 90d', 'vs. oferta', 'vs. cierres'].map((hh, i) => (
                                     <th key={hh} style={{ ...tth, textAlign: i ? 'right' : 'left' }}>{hh}</th>
                                 ))}</tr></thead>
                                 <tbody>
@@ -568,7 +568,15 @@ export default function MBApp({ d }: { d: MBData }) {
                                                     ? <span style={{ fontSize: 10, color: GRY }}> · {f(z.ofertaBruta)} anuncios</span> : null}
                                             </td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{f(z.demanda)}</td>
-                                            <td style={{ ...ttd, textAlign: 'right' }}>{f(z.leads)}</td>
+                                            {/* El volumen absoluto premia a la zona donde hay más inventario, que es
+                                                justo lo que el dueño ya sabe. El leads/prop es lo que corrige la
+                                                lectura, así que va pegado al número que corrige. En zonas chicas el
+                                                cociente es frágil: se atenúa en vez de presumirlo. */}
+                                            <td style={{ ...ttd, textAlign: 'right' }}
+                                                title={z.n ? `${f(z.leads)} leads en 90 días sobre ${f(z.n)} ${z.n === 1 ? 'propiedad' : 'propiedades'} = ${(z.leads / z.n).toFixed(1)} por propiedad.${z.n < 8 ? ' Con tan pocas propiedades el promedio se mueve mucho con un solo lead — tómalo como referencia, no como medida.' : ''}` : undefined}>
+                                                {f(z.leads)}
+                                                {z.n ? <span style={{ fontSize: 10, color: z.n < 8 ? GRY : '#555' }}> · {(z.leads / z.n).toFixed(1)} por prop</span> : null}
+                                            </td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(z.vsOferta)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(z.vsCierres)}</td>
                                         </tr>
@@ -714,7 +722,7 @@ export default function MBApp({ d }: { d: MBData }) {
                             {dfn('Necesitan tu atención', 'propiedades con algún foco (sin leads, caras sin leads, visitas sin oferta, +12 meses, respuesta lenta). Clic → las abre filtradas.')}
                             {dfn('Velocidad de respuesta', 'Flash ≤5 min · Rápida ≤1 h · Aceptable ≤24 h · Fuera de SLA >24 h. Arriba se muestra la MEDIANA (la mitad de tus leads se contesta antes de ese tiempo), no el promedio: unos pocos leads contestados días después destruyen el promedio.')}
                             {dfn('Calidad de tus fichas', 'cuántas propiedades hay en cada nivel, partido venta/renta. Debajo, qué le falta a las que no son Alta; haz clic en cualquiera para ver esa lista.')}
-                            {dfn('Tus zonas', 'dónde está tu inventario y qué tan competitivo es tu precio ahí. "Tus props / Pulppo" es cuánto del inventario que la red tiene en esa colonia es tuyo — es tu peso dentro de Pulppo, no dentro del mercado. "Mercado en la colonia" son las propiedades distintas en venta que hay hoy (red Pulppo + MLS de portales), contando cada una una sola vez: el mismo inmueble se re-publica en varios portales y por varias agencias, así que el número de anuncios es bastante mayor. Incluye las de Pulppo, que también son oferta.')}
+                            {dfn('Tus zonas', 'dónde está tu inventario y qué tan competitivo es tu precio ahí. "Tus props / Pulppo" es cuánto del inventario que la red tiene en esa colonia es tuyo — es tu peso dentro de Pulppo, no dentro del mercado. "Mercado en la colonia" son las propiedades distintas en venta que hay hoy (red Pulppo + MLS de portales), contando cada una una sola vez: el mismo inmueble se re-publica en varios portales y por varias agencias, así que el número de anuncios es bastante mayor. Incluye las de Pulppo, que también son oferta. "Leads 90d" son los leads de tu inventario en esa colonia en los últimos 90 días (misma ventana que la demanda), y al lado cuántos toca por propiedad: el total premia a la zona donde tienes más inventario, el promedio dice dónde rinde mejor cada una. En zonas con menos de 8 propiedades ese promedio va atenuado porque un solo lead lo mueve mucho.')}
                             {dfn('Cómo va tu equipo', 'últimos 90 días, solo asesores de tu inmobiliaria y con al menos 10 leads. Son señales, no un ranking: el que más cierra puede a la vez estar quemando leads, y por eso aparece en "ojo con estos" en vez de en la columna verde.')}
                             {dfn('Empieza por aquí', 'ordenado por oportunidad (demanda ÷ (1+leads)). El diagnóstico dice el freno más probable (bajar precio / mejorar ficha).')}
                             {dfn('¡Ojo con estas!', 'propiedades con errores de captura. Una propiedad puede tener más de un error, por eso la suma de los bloques puede pasar del total.')}

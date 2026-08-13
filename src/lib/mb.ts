@@ -122,6 +122,10 @@ const ERROR_NOTA: Record<string, string> = {
 };
 
 export interface MBZona {
+    // `leads` aquí son los de los ÚLTIMOS 90 DÍAS, no los históricos (a diferencia de MBProp.leads).
+    // Misma ventana que `demanda`, para que la fila se lea de corrido. Con el histórico, una zona
+    // con inventario viejo salía "mejor" solo por haber acumulado más tiempo: medido ago-2026, en
+    // 6 de 8 zonas de Andina y de Diamond House cambiaba el orden al poner la ventana.
     nb: string; n: number; leads: number; demanda: number; oferta: number;
     // pulppo = todo el inventario publicado de la red en esa colonia (incluye el propio):
     // contesta "de lo que Pulppo tiene aquí, ¿cuánto es mío?".
@@ -229,6 +233,10 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     }
 
     const leadsMap = new Map<string, number>();
+    // Leads de los últimos 90 días por propiedad. `leadsMap` es HISTÓRICO (sin corte de fecha) y
+    // sirve para el detalle de cada propiedad; la tabla de zonas necesita una ventana o el número
+    // premia al inventario viejo por el solo hecho de llevar más tiempo publicado.
+    const leads90Map = new Map<string, number>();
     const ansMap = new Map<string, number>();       // leads RESPONDIDOS por propiedad
     const respByProp = new Map<string, number[]>();
     const zero = (): Record<RespKey, number> => ({ flash: 0, rapida: 0, media: 0, lento: 0, sin: 0 });
@@ -250,6 +258,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     for (const l of leadDocs) {
         const pid = String(dig(l, 'property', '_id'));
         leadsMap.set(pid, (leadsMap.get(pid) ?? 0) + 1);
+        if (dig(l, 'createdAt') instanceof Date && (dig(l, 'createdAt') as Date) >= D90) leads90Map.set(pid, (leads90Map.get(pid) ?? 0) + 1);
         const lop = pidOp.get(pid);
         const ca = dig(l, 'createdAt'), aa = dig(l, 'answeredAt');
         const mins = ca instanceof Date && aa instanceof Date ? Math.max(0, (aa.getTime() - ca.getTime()) / 60000) : null;
@@ -546,7 +555,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             const ids = [...(nbidsOf.get(nb) ?? [])];
             return {
                 nb, n: ps.length,
-                leads: ps.reduce((a, x) => a + x.leads, 0),
+                leads: ps.reduce((a, x) => a + (leads90Map.get(x.id) ?? 0), 0),
                 demanda: Math.max(...ps.map((x) => x.demanda), 0),
                 oferta: ids.reduce((a, id) => a + (offByNb.get(id)?.length ?? 0), 0),
                 pulppo: sumaPorNombre(nb, pulppoByNb),

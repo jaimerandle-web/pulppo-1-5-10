@@ -175,7 +175,9 @@ export function demoData(): MBData {
         // el mercado deduplicado, y el bruto ~1.6x arriba (la proporción real medida en prod)
         const oferta = ent(120, 3400);
         return {
-            nb, n: xs.length, leads: sum(xs, (p) => p.leads), demanda: dem,
+            // los leads de la zona ahora son de 90 días, no históricos: se recorta el sintético
+            // para que el orden de magnitud se parezca al de producción.
+            nb, n: xs.length, leads: Math.round(sum(xs, (p) => p.leads) * 0.35), demanda: dem,
             oferta, ofertaBruta: Math.round(oferta * 1.6),
             // la inmobiliaria demo pesa entre un tercio y todo el inventario Pulppo de su colonia
             pulppo: xs.length + ent(0, Math.max(1, xs.length * 2)),

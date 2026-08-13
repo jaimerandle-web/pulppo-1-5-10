@@ -107,6 +107,14 @@ src/lib/mb.ts          Motor de Master Brokers (/mb). Ojo con la tabla "Tus zona
                        · `pulppo` = inventario de TODA la red en esa colonia; con `n` forma
                          "tus props / Pulppo". Es peso dentro de la RED, no del mercado — hay
                          inmobiliarias al 90-100% (NURA, Vive Chic) y al 5% (Andina, HS).
+                       · `zonas[].leads` son los de los ÚLTIMOS 90 DÍAS (`leads90Map`), NO los
+                         históricos de `MBProp.leads`. Misma ventana que `demanda`. Con el histórico
+                         el número premiaba al inventario viejo por llevar más tiempo publicado:
+                         medido ago-2026, en 6 de 8 zonas de Andina y de Diamond House cambiaba el
+                         orden al aplicar la ventana (Lomas de Chapultepec pasaba de 29.6 leads/prop
+                         a 5.2, con 1,050 días de antigüedad mediana). La UI muestra el total y, en
+                         chico, leads/prop — atenuado si la zona tiene <8 props (con tan pocas, un
+                         lead mueve el promedio).
                        · Las colonias se agrupan por NOMBRE pero se consultan por id, y un
                          nombre puede tener varios ids ("Centro"): se suman todos (`nbidsOf`).
                        · `asesor.whatsapp` = `agents.whatsapp` (booleano; `agents._id` es
