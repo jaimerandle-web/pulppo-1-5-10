@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import { evaluarElegibilidad } from '@/lib/elegibilidad';
-import ExportButton from '../../ficha/[id]/ExportButton';
+// Alias en vez de ruta relativa: /ficha vive en la raíz (la comparten 1·5·10 y MB) y este
+// archivo ya se movió una vez. Con '@/' no se vuelve a romper si cambia de carpeta.
+import ExportButton from '@/app/ficha/[id]/ExportButton';
 
 // Evaluación de elegibilidad 1·5·10 por propiedad. Datos en vivo. Acepta ObjectId o código (CTA-422).
 export const dynamic = 'force-dynamic';
