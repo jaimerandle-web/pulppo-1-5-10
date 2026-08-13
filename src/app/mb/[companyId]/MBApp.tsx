@@ -589,7 +589,17 @@ export default function MBApp({ d }: { d: MBData }) {
                                             {lista.length === 0 && <div style={{ fontSize: 12, color: GRY }}>Nada que destacar en esta ventana.</div>}
                                             {lista.map((a) => (
                                                 <div key={a.name} style={{ padding: '6px 0', borderBottom: `1px solid ${LGT}` }}>
-                                                    <div style={{ fontSize: 12.5, fontWeight: 700 }}>{a.name} <span style={{ fontWeight: 400, color: GRY }}>· {f(a.leads)} leads</span></div>
+                                                    <div style={{ fontSize: 12.5, fontWeight: 700 }}>{a.name} <span style={{ fontWeight: 400, color: GRY }}>· {f(a.leads)} leads</span>
+                                                        {/* Sin WhatsApp vinculado contesta por fuera y la plataforma no lo registra:
+                                                            sus tiempos de respuesta salen peores de lo que son. Es una advertencia
+                                                            sobre el dato, no una excusa — por eso va en gris y no en rojo. */}
+                                                        {!a.whatsapp && (
+                                                            <span title={`${a.name} no tiene su WhatsApp vinculado a Pulppo. Si contesta por fuera, la plataforma no registra la respuesta y estos números salen peores de lo que realmente son. Conviene vincularlo antes de sacar conclusiones.`}
+                                                                style={{ marginLeft: 6, fontWeight: 600, fontSize: 10, color: '#555', background: LGT, border: `1px solid ${GRY}`, borderRadius: R, padding: '1px 6px', whiteSpace: 'nowrap', cursor: 'help' }}>
+                                                                ⚠ WhatsApp sin vincular
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <div style={{ fontSize: 11.5, color: '#666', marginTop: 1 }}>{(titulo.startsWith('Lo que va') ? a.green : a.red).join(' · ')}</div>
                                                 </div>
                                             ))}

@@ -198,6 +198,9 @@ export function demoData(): MBData {
             name, leads, respondidos: sum(xs, (p) => p.respondidos), fueraSla, respMedMin: rm,
             visitas, cierres: ent(0, 4), comision: 0, busquedas: ent(4, 40),
             clientes: ent(3, 28), propsCompartidas: 1 + r() * 4, green, red,
+            // en la red real ~6% de los asesores con volumen no tiene WhatsApp vinculado, y
+            // casi siempre son de los que salen mal medidos: se le da el aviso a uno con rojo.
+            whatsapp: !(red.length > 0 && r() < 0.35),
         };
     }).sort((a, b) => b.leads - a.leads);
 

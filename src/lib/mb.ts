@@ -62,6 +62,14 @@ export interface MBAsesor {
     name: string; leads: number; respondidos: number; fueraSla: number; respMedMin: number | null;
     visitas: number; cierres: number; comision: number; busquedas: number; clientes: number; propsCompartidas: number;
     green: string[]; red: string[];
+    // `agents.whatsapp` = si el asesor tiene su WhatsApp vinculado a la plataforma. Cuando NO
+    // lo está, contesta por fuera y `leads.answeredAt` nunca se llena: sus métricas de respuesta
+    // salen peores de lo que realmente son. Medido ago-2026 sobre 442 asesores con ≥10 leads en
+    // 90 días: los 26 sin vincular abandonan 38.1% de sus leads contra 6.5% de los vinculados,
+    // y entre los marcados por "abandona ≥15%" aparecen 3x más de lo que les tocaría.
+    // Sirve para ADVERTIR que el número puede estar sesgado, no para excusarlo: 82% de las
+    // banderas rojas son de asesores que SÍ tienen WhatsApp vinculado.
+    whatsapp: boolean;
 }
 export type PorOpCal = { alta: number; media: number; baja: number; total: number };
 // `doc`, `contrato` y `propietario` NO afectan la calificación de la ficha: son expediente.
@@ -202,6 +210,23 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const allIds = allProps.map((p) => p._id as ObjectId);
     const allAgent = new Map(allProps.map((p) => [String(p._id), dig(p, 'agent') as Document | undefined]));
     for (const p of allProps) { const a = dig(p, 'agent') as Document | undefined; const n = agName(a); if (a && n && !internos.has(String(dig(a, '_id')))) internos.set(String(dig(a, '_id')), n); }
+
+    // WhatsApp vinculado por asesor (ver el comentario de MBAsesor.whatsapp). `agents._id` es
+    // ObjectId y coincide con `properties.agent._id`, así que el join es directo.
+    // Ante la duda se asume vinculado: es preferible no avisar que marcar a alguien de más.
+    const waByName = new Map<string, boolean>();
+    {
+        const oids = [...internos.keys()].map((h) => { try { return new ObjectId(h); } catch { return null; } })
+            .filter((x): x is ObjectId => x !== null);
+        if (oids.length) {
+            const agDocs = await db.collection('agents').find(
+                { _id: { $in: oids } }, { projection: { whatsapp: 1 } }).toArray();
+            for (const a of agDocs) {
+                const n = internos.get(String(a._id));
+                if (n) waByName.set(normName(n), a.whatsapp === true);
+            }
+        }
+    }
 
     const leadsMap = new Map<string, number>();
     const ansMap = new Map<string, number>();       // leads RESPONDIDOS por propiedad
@@ -552,6 +577,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         }
         if (e.cierres >= 1) green.push(`${e.cierres} ${e.cierres === 1 ? 'cierre' : 'cierres'} en 90 días`);
         return { name: e.name, leads: e.leads, respondidos: e.resp, fueraSla: e.fueraSla, respMedMin: med,
+            whatsapp: waByName.get(normName(e.name)) ?? true,
             visitas: e.visitas, cierres: e.cierres, comision: e.comision, busquedas: e.busquedas,
             clientes: e.clientes, propsCompartidas: e.props, green, red };
     }).sort((a, b) => b.leads - a.leads || a.name.localeCompare(b.name, 'es'));

@@ -109,6 +109,14 @@ src/lib/mb.ts          Motor de Master Brokers (/mb). Ojo con la tabla "Tus zona
                          inmobiliarias al 90-100% (NURA, Vive Chic) y al 5% (Andina, HS).
                        · Las colonias se agrupan por NOMBRE pero se consultan por id, y un
                          nombre puede tener varios ids ("Centro"): se suman todos (`nbidsOf`).
+                       · `asesor.whatsapp` = `agents.whatsapp` (booleano; `agents._id` es
+                         ObjectId y casa con `properties.agent._id`). Sin WhatsApp vinculado el
+                         asesor contesta por fuera y `leads.answeredAt` queda vacío → sus
+                         métricas de respuesta salen peores de lo que son. Medido ago-2026
+                         (442 asesores con ≥10 leads/90d): los 26 sin vincular abandonan 38.1%
+                         vs 6.5%, y entre los marcados por "abandona ≥15%" pesan 3x. La UI lo
+                         muestra como AVISO en gris, no como excusa: 82% de las banderas rojas
+                         son de asesores que sí lo tienen vinculado. Ante la duda: vinculado.
 src/lib/ventanas.ts    Opciones de las ventanas de fecha. Vive aparte de analisis.ts porque los
                        formularios son 'use client' y no pueden importar valores de un módulo que
                        importa mongodb (se lo llevarían al bundle del navegador).
