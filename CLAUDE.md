@@ -4,14 +4,31 @@ Guía para Claude Code al trabajar en este repo.
 
 ## Qué es
 
-**Pulppo · 1·5·10** — dashboard interno del programa de exclusivas de venta de Pulppo (México).
-Lee en vivo de MongoDB (read-only) y muestra: pipeline de ofertas/ventas, desempeño por propiedad,
-alertas, métricas del programa y recap mensual para bonos. Es un port a Next.js del dashboard
-original en Streamlit.
+App interna de Pulppo (México) que hospeda **dos proyectos** sobre la misma base de datos
+(MongoDB read-only) y el mismo login:
+
+1. **1·5·10** — el programa de exclusivas de venta: pipeline de ofertas/ventas, desempeño por
+   propiedad, alertas, métricas del programa y recap mensual para bonos. Es un port a Next.js
+   del dashboard original en Streamlit.
+2. **Master Brokers** — la herramienta de la inmobiliaria: qué inventario necesita atención,
+   funnel de leads, zonas y equipo. `/analisis` es la variante configurable para el KAM (mismo
+   motor, `lib/analisis.ts`).
 
 - **Prod**: https://pulppo-inmobiliarias.vercel.app (proyecto `pulppo-1-5-10` en el team de Vercel `pulppo-cx`;
   el dominio viejo `pulppo-1-5-10.vercel.app` hace redirect 308 al nuevo)
 - **Repo**: github.com/jaimerandle-web/pulppo-1-5-10
+
+## Mapa de rutas
+
+| Ruta | Proyecto | Notas |
+|---|---|---|
+| `/` | — | **Menú** de proyectos (`src/app/page.tsx`). No es el dashboard. |
+| `/1-5-10` | 1·5·10 | Cartera y programa (era la raíz hasta ago-2026) |
+| `/1-5-10/evaluar`, `/1-5-10/campanas` | 1·5·10 | `/evaluar` y `/campanas` redirigen aquí (`next.config.ts`) |
+| `/mb`, `/mb/[companyId]` | Master Brokers | **No mover**: el PDF del Overview imprime estas URLs |
+| `/analisis` | Master Brokers | Entra desde el índice de `/mb`, no desde el menú |
+| `/ficha/[id]` | **compartida** | La abren 1·5·10 (Cartera) y MB. Tiene links públicos con token → **no mover** |
+| `/login` | — | Fuera del middleware |
 
 ## Stack
 
@@ -75,6 +92,23 @@ src/lib/analisis.ts    Motor del análisis de inventario, COMPARTIDO por /analis
                        Las fechas están estandarizadas en DOS ventanas — comparables (mercado) y
                        desempeño (tu operación). Ver ANALISIS.md: es el doc canónico, léelo antes
                        de tocar fechas, atribución de asesores o secciones.
+src/lib/mb.ts          Motor de Master Brokers (/mb). Ojo con la tabla "Tus zonas":
+                       · `oferta` = MERCADO de la colonia, DEDUPLICADO por firma
+                         (colonia+tipo+m²+precio). El MLS repite el mismo inmueble entre
+                         portales y agencias: medido ago-2026, ~39% del pool era duplicado
+                         (inflación 1.2x–2.3x según colonia). Deduplicar NO excluye a Pulppo:
+                         `properties` se recorre PRIMERO para que la copia que sobreviva sea
+                         la nuestra, y un anuncio de Pulppo en el MLS sin gemela en el pool se
+                         conserva. Limitación aceptada: en zonas de desarrollo varias unidades
+                         idénticas comparten firma y se colapsan (para quien vende, un
+                         desarrollo es UN competidor). El dedup casi no mueve el $/m² mediano
+                         — corrige el CONTEO, no el precio.
+                       · `ofertaBruta` = el mismo conteo sin deduplicar (se muestra al lado).
+                       · `pulppo` = inventario de TODA la red en esa colonia; con `n` forma
+                         "tus props / Pulppo". Es peso dentro de la RED, no del mercado — hay
+                         inmobiliarias al 90-100% (NURA, Vive Chic) y al 5% (Andina, HS).
+                       · Las colonias se agrupan por NOMBRE pero se consultan por id, y un
+                         nombre puede tener varios ids ("Centro"): se suman todos (`nbidsOf`).
 src/lib/ventanas.ts    Opciones de las ventanas de fecha. Vive aparte de analisis.ts porque los
                        formularios son 'use client' y no pueden importar valores de un módulo que
                        importa mongodb (se lo llevarían al bundle del navegador).
@@ -86,12 +120,15 @@ src/app/login/         Login SOLO con Google: auth-code → NEXT_PUBLIC_API_URL/
                        → Firebase custom token → idToken verificado server-side → cookies cm-user/cm-name.
 src/app/api/auth/      POST valida idToken contra accounts:lookup + allowlist; DELETE = logout.
 src/app/api/data/      GET → { rows, program } con cache en memoria 10 min (?refresh=1 fuerza).
-src/app/page.tsx       Dashboard client-side: filtros (KAM select, inmobiliaria autocomplete, tipo pills)
+src/app/page.tsx       MENÚ de proyectos (1·5·10 · Master Brokers). Ojo: la raíz ya NO es el dashboard.
+src/app/1-5-10/        Dashboard client-side: filtros (KAM select, inmobiliaria autocomplete, tipo pills)
                        y 2 pestañas. El filtrado es 100% client-side sobre el payload completo.
-src/app/evaluar/       Evaluador de elegibilidad 1·5·10: /evaluar (uno o varios códigos → tabla, modo lote
+src/app/mb/            Master Brokers: índice de inmobiliarias (MBIndex) + herramienta por inmobiliaria
+                       (MBApp/MBAnalisis). Desde el índice se entra a /analisis.
+src/app/1-5-10/evaluar/ Evaluador de elegibilidad 1·5·10: /evaluar (uno o varios códigos → tabla, modo lote
                        vía api/evaluar) y /evaluar/[id] (scorecard imprimible on-brand con % de aceptación,
                        gates, sub-scores, mix de precio y qué mejorar).
-src/app/campanas/      Módulo de campañas de email. Fase 1: buscar propiedad → preview en iframe →
+src/app/1-5-10/campanas/ Módulo de campañas de email. Fase 1: buscar propiedad → preview en iframe →
                        generar base (audiencia en vivo, CSV) → enviar prueba → solapamiento entre bases.
                        Fase 2 (human-in-the-loop): planear DIGEST POR ZONA → crear borradores en SendGrid
                        → aprobar y programar (nada sale sin aprobación) + estado/métricas. Digest = un

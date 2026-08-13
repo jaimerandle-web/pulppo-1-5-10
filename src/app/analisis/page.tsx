@@ -198,7 +198,7 @@ export default function AnalisisGeneral() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-500">
                     <span className="rounded-[2px] bg-[#F6BE00]/20 px-2.5 py-1 font-semibold text-[#8a6d00]">Vista previa · datos en vivo</span>
-                    <a href="/" className="rounded-[2px] border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">← Inicio</a>
+                    <a href="/mb" className="rounded-[2px] border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">← Master Brokers</a>
                 </div>
             </header>
 

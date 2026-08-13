@@ -4,7 +4,7 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { getKam, esBaja } from './kam';
-import { refComps, idxPool, type PoolItem, type Subj } from './comparables';
+import { refComps, idxPool, sanePpm, type PoolItem, type Subj } from './comparables';
 
 const ADVANCED = new Set(['offer', 'offer_blocked', 'contract', 'paying', 'closed']);
 const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
@@ -115,6 +115,12 @@ const ERROR_NOTA: Record<string, string> = {
 
 export interface MBZona {
     nb: string; n: number; leads: number; demanda: number; oferta: number;
+    // pulppo = todo el inventario publicado de la red en esa colonia (incluye el propio):
+    // contesta "de lo que Pulppo tiene aquí, ¿cuánto es mío?".
+    pulppo: number;
+    // ofertaBruta = anuncios sin deduplicar. Se guarda para poder mostrar de dónde sale el
+    // número limpio; la diferencia entre los dos es el re-publicado entre portales.
+    ofertaBruta: number;
     vsOferta: number | null; vsCierres: number | null;
 }
 export interface MBData {
@@ -315,11 +321,32 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         ], { allowDiskUse: true }).toArray();
         for (const r of dr) { demandSale.set(String(r._id), r.sale as number); demandRent.set(String(r._id), r.rent as number); }
     }
-    // Oferta = MLS completo (todas las fuentes) + red Pulppo. La guarda de extremos (comparables.ts)
-    // neutraliza la basura de portales; los comparables se filtran por tipo/tamaño/recámaras.
+    // Oferta = el MERCADO de la colonia: red Pulppo (properties) + MLS de portales.
+    //
+    // Un mismo inmueble aparece MUCHAS veces en el MLS: lo re-publican varios portales
+    // (propiedadesDotCom, easybroker, inmuebles24) y varias agencias a la vez. Medido en
+    // ago-2026 sobre las 12 colonias con más inventario: de 35,880 anuncios, ~39% eran la
+    // misma propiedad repetida (en Polanco un depa de Rubén Darío 43 aparecía 42 veces).
+    // Sin deduplicar, "mercado" se infla entre 1.2x y 2.3x según la colonia.
+    //
+    // Se deduplica por FIRMA = colonia + tipo + m² + precio. Es la huella que sobrevive al
+    // re-scrapeo (el título y las fotos no: cada portal re-hostea sus imágenes, por eso solo
+    // 11-19% de las copias comparten URL de foto y ese camino no sirve como llave).
+    //
+    // ⚠️ Deduplicar NO es sacar a Pulppo del mercado: nuestras propiedades SON oferta y se
+    // conservan. Por eso `properties` se procesa PRIMERO — la copia que sobrevive es la
+    // nuestra — y del MLS solo se descarta lo que ya vimos. Un anuncio de Pulppo en el MLS
+    // cuya gemela no esté en el pool (por datos incompletos) se conserva: son 40 de 718 y
+    // borrarlos a ciegas subcontaría el mercado.
+    //
+    // Límite conocido: en zonas de desarrollo (Temozón, Cholul) varias unidades idénticas al
+    // mismo precio comparten firma y se colapsan en una. Es deliberado — para quien vende,
+    // un desarrollo con 40 unidades iguales es UN producto que le compite, no 40.
     const offByNb = new Map<string, PoolItem[]>(), offByCi = new Map<string, PoolItem[]>();
+    const ofertaBruta = new Map<string, number>();
     if (nbids.length) {
-        for (const coll of ['mls', 'properties']) {
+        const firmas = new Set<string>();
+        for (const coll of ['properties', 'mls']) {
             const cur = db.collection(coll).find(
                 { 'address.neighborhood.id': { $in: nbids }, 'status.last': 'published', 'listing.operation': 'sale', 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
                 { projection: { type: 1, 'address.neighborhood.id': 1, 'address.city.id': 1, 'listing.value': 1, 'attributes.totalSurface': 1, 'attributes.suites': 1 } }
@@ -327,10 +354,29 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             for await (const p of cur) {
                 const v = num(dig(p, 'listing', 'value')), s = num(dig(p, 'attributes', 'totalSurface'));
                 if (!v || !s || s <= 0) continue;
-                const it: PoolItem = { id: String(p._id), nb: (dig(p, 'address', 'neighborhood', 'id') as string) ?? null, ci: (dig(p, 'address', 'city', 'id') as string) ?? null, type: (p.type as string) ?? '—', surf: s, suites: num(dig(p, 'attributes', 'suites')), ppm: v / s };
+                const ppm = v / s;
+                if (!sanePpm(ppm)) continue;   // misma guarda de extremos que aplicaba idxPool
+                const nb = (dig(p, 'address', 'neighborhood', 'id') as string) ?? null;
+                const type = (p.type as string) ?? '—';
+                if (nb) ofertaBruta.set(nb, (ofertaBruta.get(nb) ?? 0) + 1);
+                const firma = `${nb}|${type}|${Math.round(s)}|${Math.round(v)}`;
+                if (firmas.has(firma)) continue;
+                firmas.add(firma);
+                const it: PoolItem = { id: String(p._id), nb, ci: (dig(p, 'address', 'city', 'id') as string) ?? null, type, surf: s, suites: num(dig(p, 'attributes', 'suites')), ppm };
                 idxPool(offByNb, offByCi, it);
             }
         }
+    }
+
+    // Inventario de TODA la red Pulppo por colonia (cualquier operación, igual que "tus props",
+    // para que el cociente tus/Pulppo sea comparable).
+    const pulppoByNb = new Map<string, number>();
+    if (nbids.length) {
+        const pr = await db.collection('properties').aggregate([
+            { $match: { 'address.neighborhood.id': { $in: nbids }, 'status.last': 'published' } },
+            { $group: { _id: '$address.neighborhood.id', n: { $sum: 1 } } }
+        ], { allowDiskUse: true }).toArray();
+        for (const r of pr) pulppoByNb.set(String(r._id), r.n as number);
     }
     const cloByNb = new Map<string, PoolItem[]>(), cloByCi = new Map<string, PoolItem[]>();
     const ops = await db.collection('operations').find(
@@ -457,22 +503,29 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     // --- zonas: se agrega desde las propias propiedades (ya traen vsOferta/vsCierres/demanda) ---
     const byNb = new Map<string, MBProp[]>();
     for (const r of rows) if (r.colonia && r.colonia !== '—') { const a = byNb.get(r.colonia) ?? []; a.push(r); byNb.set(r.colonia, a); }
-    const nbidOf = new Map<string, string>();
+    // Un mismo NOMBRE de colonia puede tener varios ids (hay "Centro" y "San Miguel" en
+    // ciudades distintas). Como las filas se agrupan por nombre, hay que sumar TODOS sus ids:
+    // con uno solo, "tus props" podía superar a "props Pulppo" y salir un 110%.
+    const nbidsOf = new Map<string, Set<string>>();
     for (const p of props) {
         const nm = dig(p, 'address', 'neighborhood', 'name') as string, id = dig(p, 'address', 'neighborhood', 'id') as string;
-        if (nm && id && !nbidOf.has(nm)) nbidOf.set(nm, id);
+        if (nm && id) { const s = nbidsOf.get(nm); if (s) s.add(id); else nbidsOf.set(nm, new Set([id])); }
     }
+    const sumaPorNombre = (nb: string, m: Map<string, number>) =>
+        [...(nbidsOf.get(nb) ?? [])].reduce((a, id) => a + (m.get(id) ?? 0), 0);
     const zonas: MBZona[] = [...byNb.entries()]
         .sort((a, b) => b[1].length - a[1].length).slice(0, 8)
         .map(([nb, ps]) => {
-            const nbid = nbidOf.get(nb);
             const vo = median(ps.map((x) => x.vsOferta).filter((x): x is number => x != null));
             const vc = median(ps.map((x) => x.vsCierres).filter((x): x is number => x != null));
+            const ids = [...(nbidsOf.get(nb) ?? [])];
             return {
                 nb, n: ps.length,
                 leads: ps.reduce((a, x) => a + x.leads, 0),
                 demanda: Math.max(...ps.map((x) => x.demanda), 0),
-                oferta: nbid ? (offByNb.get(nbid)?.length ?? 0) : 0,
+                oferta: ids.reduce((a, id) => a + (offByNb.get(id)?.length ?? 0), 0),
+                pulppo: sumaPorNombre(nb, pulppoByNb),
+                ofertaBruta: sumaPorNombre(nb, ofertaBruta),
                 vsOferta: vo == null ? null : Math.round(vo),
                 vsCierres: vc == null ? null : Math.round(vc),
             };

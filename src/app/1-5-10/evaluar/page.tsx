@@ -43,7 +43,7 @@ export default function EvaluarBuscador() {
                     <img src="/pulppo-icon.png" alt="Pulppo" className="h-9 w-9" />
                     <h1 className="text-3xl sm:text-4xl">Evaluar para 1 · 5 · 10</h1>
                 </div>
-                <a href="/" className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50">← Dashboard</a>
+                <a href="/1-5-10" className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50">← Dashboard</a>
             </header>
 
             <p className="mb-4 text-sm text-neutral-600">
@@ -95,7 +95,7 @@ export default function EvaluarBuscador() {
                                             <td className="py-2 pr-3">{dpct(r.vsCierre)}</td>
                                             <td className="py-2 pr-3">{r.velocidadMed != null ? `${Math.round(r.velocidadMed)} d` : '—'}</td>
                                             <td className="py-2 pr-3">{r.okMat ? '✓ completo' : <span className="text-[#A5700a]">falta {r.faltaMat?.join(', ').toLowerCase()}</span>}</td>
-                                            <td className="py-2 pr-3"><a className="text-[#529999] underline" href={`/evaluar/${encodeURIComponent(r.code)}`} target="_blank" rel="noreferrer">ver ficha</a></td>
+                                            <td className="py-2 pr-3"><a className="text-[#529999] underline" href={`/1-5-10/evaluar/${encodeURIComponent(r.code)}`} target="_blank" rel="noreferrer">ver ficha</a></td>
                                         </>
                                     )}
                                 </tr>

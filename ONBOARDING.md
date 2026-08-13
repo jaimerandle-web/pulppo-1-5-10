@@ -5,11 +5,18 @@ interno del programa de exclusivas de Pulppo. Está pensada para abrirse desde C
 
 ## Qué es el proyecto
 
-Dashboard Next.js que lee en vivo de MongoDB (read-only) y muestra el estado del programa 1·5·10:
-pipeline de ofertas/ventas, desempeño por propiedad (leads por fuente, visitas, material), alertas,
-métricas históricas del programa y el recap mensual de vendidas para calcular bonos.
+App Next.js que lee en vivo de MongoDB (read-only) y hospeda **dos proyectos** bajo el mismo login:
 
-- **Producción**: https://pulppo-1-5-10.vercel.app
+- **1·5·10** (`/1-5-10`) — estado del programa de exclusivas: pipeline de ofertas/ventas, desempeño
+  por propiedad (leads por fuente, visitas, material), alertas, métricas históricas y el recap
+  mensual de vendidas para calcular bonos. Cuelgan de ahí `/1-5-10/evaluar` y `/1-5-10/campanas`.
+- **Master Brokers** (`/mb`) — la herramienta de la inmobiliaria, más `/analisis` (misma máquina,
+  configurable para el KAM).
+
+La raíz `/` es el **menú** que lleva a los dos. `/ficha/[id]` es compartida por ambos.
+El mapa de rutas completo está en el `CLAUDE.md`.
+
+- **Producción**: https://pulppo-inmobiliarias.vercel.app
 - **Repo**: https://github.com/jaimerandle18/centro-1-5-10 (privado — pedile acceso a Jaime si no lo tenés)
 - **Vercel**: proyecto `pulppo-1-5-10` en el team `pulppo` (pulppo-cx)
 

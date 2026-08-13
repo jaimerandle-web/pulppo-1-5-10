@@ -172,9 +172,14 @@ export function demoData(): MBData {
         const xs = props.filter((p) => p.colonia === nb);
         const vs = xs.map((p) => p.vsOferta).filter((x): x is number => x != null);
         const vc = xs.map((p) => p.vsCierres).filter((x): x is number => x != null);
+        // el mercado deduplicado, y el bruto ~1.6x arriba (la proporción real medida en prod)
+        const oferta = ent(120, 3400);
         return {
             nb, n: xs.length, leads: sum(xs, (p) => p.leads), demanda: dem,
-            oferta: ent(120, 3400), vsOferta: mediana(vs), vsCierres: mediana(vc),
+            oferta, ofertaBruta: Math.round(oferta * 1.6),
+            // la inmobiliaria demo pesa entre un tercio y todo el inventario Pulppo de su colonia
+            pulppo: xs.length + ent(0, Math.max(1, xs.length * 2)),
+            vsOferta: mediana(vs), vsCierres: mediana(vc),
         };
     }).sort((a, b) => b.n - a.n);
 
