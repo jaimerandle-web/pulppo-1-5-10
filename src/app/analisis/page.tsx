@@ -185,6 +185,14 @@ export default function AnalisisGeneral() {
                 #preview-sheet .banner { break-after: avoid; page-break-after: avoid; }
                 #preview-sheet .overflow-x-auto { overflow: visible !important; }
                 #preview-sheet [class*="min-w-"] { min-width: 0 !important; }
+                /* Sin esto los encabezados se tocan y la fila de títulos se lee como una sola
+                   palabra ("OFERTASCIERRESVISITA→CIERRE"): en 8px, el letter-spacing de pantalla
+                   y la falta de aire lateral los pegan. Mismo arreglo que en /mb. */
+                #preview-sheet table th { letter-spacing: 0 !important; }
+                #preview-sheet table th, #preview-sheet table td { padding-left: 3px !important; padding-right: 3px !important; }
+                /* La de asesores lleva 18 columnas: necesita más aire que el resto. */
+                #preview-sheet table[class*="min-w-"] { font-size: 7px !important; }
+                #preview-sheet table[class*="min-w-"] th, #preview-sheet table[class*="min-w-"] td { padding-left: 2px !important; padding-right: 2px !important; }
                 @page { size: letter portrait; margin: 11mm; }
             }`}</style>
 
