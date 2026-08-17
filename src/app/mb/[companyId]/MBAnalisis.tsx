@@ -179,6 +179,14 @@ export default function MBAnalisis({ companyId, name, asesores = [] }: { company
                         #mb-reporte table { font-size: 8.5px !important; }
                         #mb-reporte .overflow-x-auto { overflow: visible !important; }
                         #mb-reporte table.min-w-\\[1080px\\], #mb-reporte [class*="min-w-"] { min-width: 0 !important; }
+                        /* Sin esto los encabezados se tocan entre sí y la fila de títulos se lee como
+                           una sola palabra ("OFERTASCIERRESVISITA→CIERRE"). El letter-spacing de la
+                           pantalla, en 8px y sin aire a los lados, es lo que los pega. */
+                        #mb-reporte table th { letter-spacing: 0 !important; }
+                        #mb-reporte table th, #mb-reporte table td { padding-left: 3px !important; padding-right: 3px !important; }
+                        /* La de asesores lleva 18 columnas: necesita más aire que el resto. */
+                        #mb-reporte table[class*="min-w-"] { font-size: 7px !important; }
+                        #mb-reporte table[class*="min-w-"] th, #mb-reporte table[class*="min-w-"] td { padding-left: 2px !important; padding-right: 2px !important; }
                         @page { size: letter portrait; margin: 11mm; }
                     }`}</style>
 
