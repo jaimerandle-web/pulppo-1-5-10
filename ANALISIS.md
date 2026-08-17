@@ -118,9 +118,19 @@ mensual, así que sumarlo con venta no significa nada (pedido explícito de Ale)
 - Se **agrupa por nombre normalizado**, no por `_id`: la misma persona puede tener dos cuentas de
   agente (visto en producción) y al dueño le interesa la persona.
 - Todo asesor con inventario **publicado** aparece aunque tenga 0 actividad: un asesor con 0 leads
-  es información, no un hueco.
-- **Verificado**: la suma de los asesores cuadra con el funnel (leads/visitas/ofertas/cierres) en
-  las 3 inmobiliarias probadas, sin fugas.
+  es información, no un hueco. Pero **no** aparece quien no tiene inventario en el corte ni actividad
+  en la ventana y solo entró por haber atendido algo en el **período de comparación**: eso era una
+  fila de puros ceros (visto en Ricoy, ago-2026).
+- **Con filtro por asesor la tabla muestra SOLO a esa persona** (decisión de Ale, ago-2026). Antes
+  traía a todo el que hubiera atendido un lead de su cartera y, al filtrar, "salían todos" — se leía
+  como que el filtro no jalaba. ⚠️ **Con filtro la tabla YA NO cuadra con el funnel**, a propósito:
+  el funnel cuenta toda la cartera, incluido lo que atendieron los compañeros. Medido en Ricoy con
+  Omar filtrado: funnel 596 leads, su fila 537; los 59 de diferencia son 54 de dos compañeros y 5 de
+  brokers externos. La nota amarilla de `AsesoresView` lo dice en pantalla. La fila "Total" se oculta
+  cuando queda un solo asesor (sería su propia fila repetida).
+- **Verificado**: SIN filtro la suma de los asesores cuadra con el funnel (leads/visitas/ofertas/
+  cierres) en las 3 inmobiliarias probadas, sin fugas — salvo la actividad de brokers de otras
+  inmobiliarias, que va aparte en `externo`.
 
 ### Ojo con el tiempo de respuesta
 
@@ -291,7 +301,8 @@ avisos". Cada sección trae su propio "cómo se lee" y su recap al pie.
 - "Media" en velocidad de respuesta se leía como *promedio*: los rangos ahora son
   **Flash ≤5 min · Rápida ≤1 h · Aceptable ≤24 h · Fuera de SLA >24 h**, siempre con el tiempo visible.
 - Demanda estandarizada a **últimos 3 meses** también en `/mb` (antes YTD, que en enero medía 3 semanas).
-- Filtro por asesor en el reporte: acota todo a **su cartera**.
+- Filtro por asesor en el reporte: acota todo a **su cartera**, y la tabla de asesores queda **solo
+  con él** (ver §2).
 - PDF en MB (A4 horizontal, sin cortar secciones) y botón Generar en amarillo de marca.
 
 ---

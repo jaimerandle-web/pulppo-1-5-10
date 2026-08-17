@@ -907,6 +907,20 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         (b.leads.sale + b.leads.rent) - (a.leads.sale + a.leads.rent)
         || (b.cierres.sale + b.cierres.rent) - (a.cierres.sale + a.cierres.rent)
         || a.name.localeCompare(b.name, 'es'));
+
+    // Con FILTRO POR ASESOR la tabla muestra SOLO a esa persona (decisión de Ale, ago-2026). Antes
+    // traía a todo el que hubiera atendido un lead de su cartera, y al filtrar "salían todos" —
+    // se leía como que el filtro no jalaba. Lo que hicieron sus compañeros sobre esa cartera sigue
+    // contado en el funnel, así que la tabla ya NO cuadra con él cuando hay filtro: es a propósito.
+    // Sin filtro no cambia nada (sigue cuadrando).
+    // Además: fuera un asesor que no tiene inventario en el corte NI actividad en la ventana y solo
+    // existe porque atendió algo en el PERÍODO DE COMPARACIÓN — salía como fila de puros ceros.
+    const conInventario = new Set([...agentsVivos.values()].map((n) => norm(n)));
+    const activo = (r: AsesorRow): boolean =>
+        r.leads.sale + r.leads.rent + r.visitas.sale + r.visitas.rent + r.ofertas.sale + r.ofertas.rent
+        + r.cierres.sale + r.cierres.rent + r.busquedas + r.propsCompartidas > 0;
+    const asesoresOut = asesores.filter((r) =>
+        asesorSel ? norm(r.name) === norm(asesorSel) : (conInventario.has(norm(r.name)) || activo(r)));
     // "Leads" en vez de "Únicos" (el dedup se explica al pie, no en la etiqueta del paso).
     // `prev` = el mismo paso en el período base → la sección muestra el ▲▼ sin salir de ella.
     const buildFunnel = (title: string, op: string) => {
@@ -1146,7 +1160,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const totVis = visByOp.sale + visByOp.rent;
     return {
         company: CNAME, corte: NOW.toISOString(), N, opSplit,
-        llProp: leadsWinTotal / (N || 1), leadsLabel, demandaLabel, ofertaLabel, asesores,
+        llProp: leadsWinTotal / (N || 1), leadsLabel, demandaLabel, ofertaLabel, asesores: asesoresOut,
         externo: {
             leads: extLeads, visitas: extVisitas,
             pctLeads: extLeads / ((leadsByOp.sale + leadsByOp.rent + extLeads) || 1),

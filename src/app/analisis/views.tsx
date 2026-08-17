@@ -609,12 +609,13 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
                 la visita, a quien la hizo; la oferta y el cierre, al asesor que participó en la operación.
                 Solo aparecen asesores <b>de tu inmobiliaria</b>.
             </p>
-            {/* Con filtro por asesor la tabla trae a TODOS los que atendieron leads de SU inventario,
-                que no es lo mismo que "su desempeño". Hay que decirlo o el lector se confunde. */}
+            {/* Con filtro por asesor la tabla muestra SOLO a esa persona. El funnel sigue contando
+                toda la cartera —incluido lo que atendieron sus compañeros—, así que aquí la suma no
+                cuadra con él a propósito. Decirlo, o el lector cree que faltan leads. */}
             {d.asesorFiltro && (
                 <p className="mb-2 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>
-                    El reporte está acotado a la cartera de <b>{d.asesorFiltro}</b>, así que aquí aparece <b>quién atendió
-                    los leads de sus propiedades</b> — puede ser {d.asesorFiltro.split(' ')[0]} u otro compañero del equipo.
+                    Solo el desempeño de <b>{d.asesorFiltro}</b> sobre su cartera. Si un compañero atendió leads de
+                    sus propiedades, esos leads cuentan en el funnel pero no en esta tabla.
                 </p>
             )}
             {(d.externo.leads > 0 || d.externo.visitas > 0) && (
@@ -648,7 +649,8 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
                     </thead>
                     <tbody>
                         {d.asesores.map((r) => cells(r, r.name))}
-                        {cells(tot, 'Total inmobiliaria', true)}
+                        {/* con un solo asesor el total es su propia fila repetida: no aporta */}
+                        {d.asesores.length > 1 && cells(tot, d.asesorFiltro ? 'Total' : 'Total inmobiliaria', true)}
                     </tbody>
                 </table>
             </div>
