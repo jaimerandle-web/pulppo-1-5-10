@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import type { MBData, MBProp, RespKey } from '@/lib/mb';
+import type { MBData, MBProp, MBFuera, RespKey } from '@/lib/mb';
 import MBAnalisis from './MBAnalisis';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
@@ -180,6 +180,8 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     const [cto, setCto] = useState('');
     type Ovr = Record<string, { vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number }>;
     const [ovr, setOvr] = useState<Ovr | null>(null);
+    // Actividad del rango en propiedades que ya salieron del inventario (ver MBFuera en lib/mb.ts).
+    const [ovrFuera, setOvrFuera] = useState<MBFuera[] | null>(null);
     const [rloading, setRloading] = useState(false);
     useEffect(() => {
         const now = new Date();
@@ -188,16 +190,17 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
         else if (rango === 'Últimos 90 días') from = new Date(Date.now() - 90 * 864e5);
         else if (rango === 'Este año') from = new Date(now.getFullYear(), 0, 1);
         else if (rango === 'Personalizado' && cfrom && cto) { from = new Date(cfrom); to = new Date(`${cto}T23:59:59`); }
-        if (!from) { setOvr(null); return; }
+        if (!from) { setOvr(null); setOvrFuera(null); return; }
         let cancel = false; setRloading(true);
         fetch('/api/mb-metrics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId: d.companyId, from: from.toISOString(), to: to.toISOString() }) })
             .then((r) => r.json())
-            .then((m: { error?: string; leads?: Record<string, number>; respondidos?: Record<string, number>; vistas?: Record<string, number>; visitas?: Record<string, number>; ofertas?: Record<string, number>; cierres?: Record<string, number> }) => {
+            .then((m: { error?: string; leads?: Record<string, number>; respondidos?: Record<string, number>; vistas?: Record<string, number>; visitas?: Record<string, number>; ofertas?: Record<string, number>; cierres?: Record<string, number>; fuera?: MBFuera[] }) => {
                 if (cancel || m.error) return;
                 const o: Ovr = {};
                 const ids = new Set([...Object.keys(m.leads || {}), ...Object.keys(m.vistas || {}), ...Object.keys(m.visitas || {}), ...Object.keys(m.ofertas || {}), ...Object.keys(m.cierres || {})]);
                 ids.forEach((id) => { o[id] = { vistas: m.vistas?.[id] ?? 0, leads: m.leads?.[id] ?? 0, respondidos: m.respondidos?.[id] ?? 0, visitas: m.visitas?.[id] ?? 0, ofertas: m.ofertas?.[id] ?? 0, cierres: m.cierres?.[id] ?? 0 }; });
                 setOvr(o);
+                setOvrFuera(m.fuera ?? []);
             }).finally(() => { if (!cancel) setRloading(false); });
         return () => { cancel = true; };
     }, [rango, cfrom, cto, d.companyId]);
@@ -240,10 +243,37 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
         return dir * String(va ?? '').localeCompare(String(vb ?? ''), 'es');
     }), [filtered, sortKey, dir]);
 
-    const fn = useMemo(() => filtered.reduce((a, p) => ({
-        vistas: a.vistas + p.vistas, leads: a.leads + p.leads, respondidos: a.respondidos + p.respondidos,
-        visitas: a.visitas + p.visitas, ofertas: a.ofertas + p.ofertas, cierres: a.cierres + p.cierres,
-    }), { vistas: 0, leads: 0, respondidos: 0, visitas: 0, ofertas: 0, cierres: 0 }), [filtered]);
+    // Propiedades que ya salieron del inventario (vendidas) pero cuya actividad SÍ es del período.
+    // Sin ellas, ofertas y cierres del funnel daban ~0 siempre: al cerrarse, una propiedad deja de
+    // estar publicada y se cae del listado. Sólo alimentan el funnel — ni la tabla ni el overview,
+    // que hablan de inventario vivo. Responden a los filtros que se pueden evaluar sin métricas de
+    // inventario (operación, tipo, asesor, búsqueda); con un chip de segmento, el filtro de precio
+    // o un filtro por columna no hay cómo clasificarlas, así que se excluyen y se avisa.
+    const fueraSrc: MBFuera[] = useMemo(() => (ovr ? (ovrFuera ?? []) : d.fuera) ?? [], [ovr, ovrFuera, d.fuera]);
+    const fueraAplica = !seg && !estado && Object.values(colf).every((v) => !v.trim());
+    const fueraFiltrada = useMemo(() => {
+        if (!fueraAplica) return [];
+        const ql = q.trim().toLowerCase();
+        return fueraSrc.filter((x) => {
+            if (op && x.op !== op) return false;
+            if (tipo && x.type !== tipo) return false;
+            if (asesor && x.asesor !== asesor) return false;
+            if (ql && !`${x.code} ${x.colonia} ${x.asesor}`.toLowerCase().includes(ql)) return false;
+            return true;
+        });
+    }, [fueraSrc, fueraAplica, q, op, tipo, asesor]);
+
+    const fn = useMemo(() => {
+        const base = filtered.reduce((a, p) => ({
+            vistas: a.vistas + p.vistas, leads: a.leads + p.leads, respondidos: a.respondidos + p.respondidos,
+            visitas: a.visitas + p.visitas, ofertas: a.ofertas + p.ofertas, cierres: a.cierres + p.cierres,
+        }), { vistas: 0, leads: 0, respondidos: 0, visitas: 0, ofertas: 0, cierres: 0 });
+        return fueraFiltrada.reduce((a, x) => ({
+            vistas: a.vistas + x.vistas, leads: a.leads + x.leads, respondidos: a.respondidos + x.respondidos,
+            visitas: a.visitas + x.visitas, ofertas: a.ofertas + x.ofertas, cierres: a.cierres + x.cierres,
+        }), base);
+    }, [filtered, fueraFiltrada]);
+    const nFueraCierres = useMemo(() => fueraFiltrada.reduce((a, x) => a + x.cierres, 0), [fueraFiltrada]);
     // mediana de las medianas por propiedad (no se pueden promediar medianas)
     const fnRespMed = useMemo(() => {
         const xs = filtered.map((p) => p.respMedMin).filter((x): x is number => x != null).sort((a, b) => a - b);
@@ -275,7 +305,12 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
 
             <div style={{ background: LGT, padding: '14px 16px', borderRadius: R, marginBottom: 16 }}>
                 <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 17, marginBottom: 2 }}>Funnel comercial</div>
-                <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>Vistas/leads/visitas/ofertas: <b>{ovr ? rango.toLowerCase() : 'histórico'}</b>.</div>
+                <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>
+                    Vistas/leads/visitas/ofertas: <b>{ovr ? rango.toLowerCase() : 'histórico'}</b>.
+                    {fueraFiltrada.length > 0 && <> Incluye <b>{f(fueraFiltrada.length)}</b> {fueraFiltrada.length === 1 ? 'propiedad que ya salió' : 'propiedades que ya salieron'} del inventario
+                        {nFueraCierres > 0 && <> ({f(nFueraCierres)} {nFueraCierres === 1 ? 'cierre' : 'cierres'})</>}: al venderse dejan de estar publicadas, pero su actividad es de este período. Por eso el funnel puede no cuadrar con la suma de la tabla.</>}
+                    {!fueraAplica && fueraSrc.length > 0 && <> Con este filtro sólo se cuenta el inventario publicado, así que <b>ofertas y cierres salen incompletos</b>.</>}
+                </div>
                 <Funnel vistas={fn.vistas} leads={fn.leads} respondidos={fn.respondidos} visitas={fn.visitas} ofertas={fn.ofertas} cierres={fn.cierres} respMed={fnRespMed} n={filtered.length} />
             </div>
 
@@ -310,7 +345,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                     <tbody>
                         {rows.map((p) => (
                             <tr key={p.id}>
-                                <td style={td}><Link href={`/ficha/${p.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                <td style={td}><Link href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
                                 <td style={td}>{p.type}</td>
                                 <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td><td style={{ ...td, color: GRY }}>{p.colonia}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{money(p.precio)}</td>
@@ -327,7 +362,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                 <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
                                 <td style={td}>{(() => { const t = accionesDe(p); return t.length ? t.map(diagPill) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
-                                <td style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}?v=simple`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
+                                <td style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
                             </tr>
                         ))}
                     </tbody>
@@ -634,7 +669,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                 <tbody>
                                     {topOpp.map((p) => (
                                         <tr key={p.id}>
-                                            <td style={ttd}><Link href={`/ficha/${p.id}?v=simple`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                            <td style={ttd}><Link href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
                                             <td style={{ ...ttd, color: GRY }}>{p.colonia}</td><td style={ttd}>{p.op}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{money(p.precio)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>

@@ -129,7 +129,7 @@ export function demoData(): MBData {
             calidad, dias, mesesPub: dias / 30,
             vistas, leads, respondidos, visitas, ofertas, cierres, respMedMin,
             oppScore: demandaZona / (1 + leads), diag, tier: 'SIMPLE',
-            fotos, video, tour, amenidades, errores, sugerencia,
+            fotos, video, tour, amenidades, errores, sugerencia, token: '',
         });
     }
 
@@ -237,6 +237,6 @@ export function demoData(): MBData {
         calidad: cal(props), calidadVenta: cal(V), calidadRenta: cal(R),
         falta: fal(iTodas), faltaVenta: fal(iVenta), faltaRenta: fal(iRenta),
         errores: errTipos, nErrores: conError.length,
-        zonas, demandaLabel: 'últimos 3 meses', asesores, props,
+        zonas, demandaLabel: 'últimos 3 meses', asesores, props, fuera: [],
     };
 }

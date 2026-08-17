@@ -5,8 +5,11 @@ import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { getKam, esBaja } from './kam';
 import { refComps, idxPool, sanePpm, type PoolItem, type Subj } from './comparables';
+import { fichaToken } from './token';
 
 const ADVANCED = new Set(['offer', 'offer_blocked', 'contract', 'paying', 'closed']);
+// Cierre = 'closed' + 'paying' (la operación ya cerró y está en cobranza). Mismo criterio en /api/mb-metrics.
+const CERRADAS = ['closed', 'paying'];
 const dig = (d: Document | null | undefined, ...ks: string[]): unknown => {
     let cur: unknown = d;
     for (const k of ks) { if (cur == null || typeof cur !== 'object') return undefined; cur = (cur as Record<string, unknown>)[k]; }
@@ -50,6 +53,9 @@ export interface MBProp {
     compite: number | null; calidad: string; dias: number | null; mesesPub: number | null;
     vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number;
     respMedMin: number | null; oppScore: number; diag: string[]; tier: string;
+    // Token de la ficha: los master brokers (externos) no pasan el middleware con la URL pelada
+    // —los rebota a su overview—, así que la liga tiene que ir firmada. Ver src/lib/token.ts.
+    token: string;
     // qué le falta a la ficha (para los insights de calidad del overview)
     fotos: number; video: boolean; tour: boolean; amenidades: number;
     // errores de captura evidentes (precio de $30, superficie de 7 millones de m²…)
@@ -135,6 +141,16 @@ export interface MBZona {
     ofertaBruta: number;
     vsOferta: number | null; vsCierres: number | null;
 }
+// Actividad comercial de propiedades que YA NO están en el inventario publicado: al cerrarse, una
+// propiedad pasa a `completed` y sale del listado. Medido ago-2026: de 4,679 propiedades con oferta
+// o cierre, solo el 2% sigue `published` (75% completed, 23% cancelled). Contando únicamente el
+// inventario vivo, las dos últimas barras del funnel daban ~0 siempre y "Lead → cierre" marcaba
+// 0.00%. Se traen aparte —no entran a la tabla ni a los KPIs del overview, que son sobre inventario
+// vivo— con los campos necesarios para que respondan a los filtros del listado.
+export interface MBFuera {
+    code: string; type: string; op: string; colonia: string; asesor: string;
+    vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number;
+}
 export interface MBData {
     companyId: string; name: string; nProps: number; nVenta: number; nRenta: number; captaciones90: number;
     vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number; sinLeads: number;
@@ -158,6 +174,8 @@ export interface MBData {
     zonas: MBZona[]; demandaLabel: string;
     // --- asesores con sus flags, para el recap del overview ---
     asesores: MBAsesor[];
+    // --- ofertas/cierres fuera del inventario vivo: SOLO para el funnel (ver MBFuera) ---
+    fuera: MBFuera[];
 }
 
 const countBy = async (coll: string, field: string, match: Document): Promise<Map<string, number>> => {
@@ -340,7 +358,47 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     }
     const viewMap = await countBy('metrics', 'property', { property: { $in: ids }, type: 'view' });
     const ofMap = await countBy('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': { $in: [...ADVANCED] } });
-    const cloMap = await countBy('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': 'closed' });
+    // 'paying' cuenta como cierre: la operación ya se cerró y está en cobranza. Van juntos aquí y en
+    // /api/mb-metrics (antes el histórico contaba solo 'closed' y el filtro de fechas los dos).
+    const cloMap = await countBy('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': { $in: CERRADAS } });
+
+    // --- actividad de propiedades que ya salieron del inventario publicado (ver MBFuera) ---
+    const pubSet = new Set(ids.map((x) => String(x)));
+    const outIds = ((await db.collection('operations').distinct('property._id',
+        { 'property._id': { $in: allIds }, 'status.last': { $in: [...ADVANCED] } })) as ObjectId[])
+        .filter((x) => x && !pubSet.has(String(x)));
+    const fuera: MBFuera[] = [];
+    if (outIds.length) {
+        const outDocs = await db.collection('properties').find({ _id: { $in: outIds } },
+            { projection: { internalId: 1, type: 1, 'listing.operation': 1, 'address.neighborhood.name': 1, agent: 1 } }).toArray();
+        const outVisRows = await db.collection('visits').aggregate([
+            { $match: { 'steps.property._id': { $in: outIds }, 'status.last': 'confirmed' } },
+            { $unwind: '$steps' }, { $match: { 'steps.property._id': { $in: outIds } } },
+            { $group: { _id: { p: '$steps.property._id', c: { $ifNull: ['$contact._id', { $ifNull: ['$contact.email', '$_id'] }] } } } },
+            { $group: { _id: '$_id.p', n: { $sum: 1 } } }
+        ]).toArray();
+        const outVis = new Map(outVisRows.map((r) => [String(r._id), r.n as number]));
+        const [outVw, outLd, outAns, outOf, outClo] = await Promise.all([
+            countBy('metrics', 'property', { property: { $in: outIds }, type: 'view' }),
+            countBy('leads', 'property._id', { 'property._id': { $in: outIds } }),
+            countBy('leads', 'property._id', { 'property._id': { $in: outIds }, answeredAt: { $type: 'date' } }),
+            countBy('operations', 'property._id', { 'property._id': { $in: outIds }, 'status.last': { $in: [...ADVANCED] } }),
+            countBy('operations', 'property._id', { 'property._id': { $in: outIds }, 'status.last': { $in: CERRADAS } })
+        ]);
+        for (const p of outDocs) {
+            const hex = String(p._id);
+            const ag = dig(p, 'agent') as Document | undefined;
+            const pop = dig(p, 'listing', 'operation') as string | undefined;
+            fuera.push({
+                code: (p.internalId as string) ?? hex, type: (p.type as string) ?? '—',
+                op: pop === 'sale' ? 'Venta' : pop === 'rent' ? 'Renta' : '—',
+                colonia: (dig(p, 'address', 'neighborhood', 'name') as string) ?? '—',
+                asesor: agName(ag) ?? '—',
+                vistas: outVw.get(hex) ?? 0, leads: outLd.get(hex) ?? 0, respondidos: outAns.get(hex) ?? 0,
+                visitas: outVis.get(hex) ?? 0, ofertas: outOf.get(hex) ?? 0, cierres: outClo.get(hex) ?? 0
+            });
+        }
+    }
 
     // --- mercado por zona ---
     // demanda partida por operación: a cada propiedad se le asigna la demanda de SU operación (venta/renta).
@@ -454,6 +512,8 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const falta = mkFal(), faltaV = mkFal(), faltaR = mkFal();
     const errCount: Record<string, number> = {};
     const errEjemplo: Record<string, string> = {};
+    // Token por propiedad para la liga a la ficha (el map de abajo es sync, así que se precalculan).
+    const fichaTokens = new Map(await Promise.all(ids.map(async (id) => [String(id), await fichaToken(String(id))] as const)));
     const rows: MBProp[] = props.map((p) => {
         const hex = String(p._id);
         const op = dig(p, 'listing', 'operation') as string;
@@ -529,7 +589,8 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             respMedMin: median(respByProp.get(hex) ?? []),
             oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag,
             tier: TIER[dig(p, 'portals', 'inmuebles24', 'type') as string] ?? 'Simple',
-            fotos, video, tour, amenidades, errores, sugerencia
+            fotos, video, tour, amenidades, errores, sugerencia,
+            token: fichaTokens.get(hex) ?? ''
         };
     });
     rows.sort((a, b) => b.leads - a.leads || b.vistas - a.vistas);
@@ -602,7 +663,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         falta, faltaVenta: faltaV, faltaRenta: faltaR,
         errores: Object.entries(errCount).map(([tipo, n]) => ({ tipo, n, nota: ERROR_NOTA[tipo] ?? '', ejemplo: errEjemplo[tipo] ?? null })).sort((a, b) => b.n - a.n),
         nErrores: rows.filter((r) => r.errores.length).length,
-        zonas, demandaLabel: DEMANDA_LABEL, asesores
+        zonas, demandaLabel: DEMANDA_LABEL, asesores, fuera
     };
 }
 
