@@ -30,6 +30,16 @@ const PROYECTOS: { eyebrow: string; title: string; blurb: string; links: Link[] 
             { href: '/mb', label: 'Índice de inmobiliarias', hint: 'Filtra por KAM y abre la de cada una' },
             { href: '/analisis', label: 'Análisis general', hint: 'El mismo motor, configurable para el reporte del KAM' }
         ]
+    },
+    {
+        eyebrow: 'Contenido',
+        title: 'Studio',
+        blurb: 'Le propone al asesor qué publicar hoy y le entrega la pieza lista para bajar, armada con su perfil, sus zonas y sus operaciones.',
+        links: [
+            // Piloto: HTML estático servido desde public/, protegido por el mismo middleware que el
+            // resto. Cuando el asesor pueda entrar con su cuenta pasa a ser una ruta propia.
+            { href: '/studio/index.html', label: 'Piloto · Diamond House', hint: '19 asesores, datos en vivo' }
+        ]
     }
 ];
 
