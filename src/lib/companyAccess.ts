@@ -26,6 +26,27 @@ export async function masterCompanyForEmail(email?: string | null): Promise<stri
     return id ? String(id) : null;
 }
 
+// Acceso de asesores (type:'associate') a Studio. Gemelo de masterCompanyForEmail: mismo criterio
+// —agente activo, con company— pero devuelve el _id del AGENTE, no el de la company: el asesor se ve
+// a sí mismo, no a su inmobiliaria. Un master NO cae acá (se resuelve antes como master broker).
+export async function asesorIdForEmail(email?: string | null): Promise<string | null> {
+    const mail = (email || '').trim().toLowerCase();
+    if (!mail) return null;
+    const db = await getDb();
+    const doc = await db.collection('agents').findOne(
+        {
+            status: 'active',
+            type: 'associate',
+            deletedAt: null,
+            'company._id': { $exists: true },
+            $or: [{ email: mail }, { 'personal.email': mail }]
+        },
+        { projection: { _id: 1 }, collation: { locale: 'en', strength: 2 } }
+    );
+    const id = (doc as { _id?: unknown } | null)?._id;
+    return id ? String(id) : null;
+}
+
 export interface CurrentUser {
     email: string;
     internal: boolean; // true = miembro del equipo Pulppo (allowlist) → acceso total
@@ -51,4 +72,12 @@ export async function canAccessCompany(companyId?: string | null): Promise<boole
     if (!companyId) return false;
     const own = await masterCompanyForEmail(u.email);
     return !!own && own === companyId;
+}
+
+// Barrera real de Studio: recalcula el asesor contra Mongo en vez de confiar en la cookie cm-asesor
+// (que solo sirve para rutear en el middleware). Devuelve el _id del agente, o null si no le toca.
+export async function currentAsesorId(): Promise<string | null> {
+    const u = await currentUser();
+    if (!u) return null;
+    return asesorIdForEmail(u.email);
 }
