@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { isAllowed } from '@/lib/access';
 import { userToken } from '@/lib/token';
-import { masterCompanyForEmail } from '@/lib/companyAccess';
+import { asesorIdForEmail, masterCompanyForEmail } from '@/lib/companyAccess';
 
 // POST /api/auth/login { idToken } — SOLO Google: verifica el idToken de Firebase
 // contra Google (accounts:lookup) y recién ahí valida allowlist + setea cookies.
@@ -30,7 +30,10 @@ export async function POST(req: NextRequest) {
     // que es ambas cosas se trata como interno (acceso total, sin redirect a su panel).
     const internal = isAllowed(mail);
     const companyId = internal ? null : await masterCompanyForEmail(mail);
-    if (!internal && !companyId) {
+    // Tercer tipo: asesor (type:'associate'). Solo se prueba si no es interno ni master, así que
+    // ni el equipo ni los master brokers cambian de comportamiento. Único acceso: /studio.
+    const asesorId = internal || companyId ? null : await asesorIdForEmail(mail);
+    if (!internal && !companyId && !asesorId) {
         return Response.json({ error: 'Tu email no tiene acceso. Pedí que te agreguen al equipo.' }, { status: 403 });
     }
 
@@ -44,7 +47,11 @@ export async function POST(req: NextRequest) {
     // seguridad real igual recalcula la company server-side (canAccessCompany), no confía en esta cookie.
     if (companyId) store.set('cm-company', companyId, opts);
     else store.delete('cm-company');
-    return Response.json({ ok: true, email: mail, companyId });
+    // cm-asesor: igual que cm-company, solo para rutear en el middleware. La barrera real
+    // (currentAsesorId) se recalcula server-side y no confía en esta cookie.
+    if (asesorId) store.set('cm-asesor', asesorId, opts);
+    else store.delete('cm-asesor');
+    return Response.json({ ok: true, email: mail, companyId, asesorId });
 }
 
 // DELETE limpia la sesión.
@@ -54,5 +61,6 @@ export async function DELETE() {
     store.delete('cm-name');
     store.delete('cm-sig');
     store.delete('cm-company');
+    store.delete('cm-asesor');
     return Response.json({ ok: true });
 }

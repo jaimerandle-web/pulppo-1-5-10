@@ -5,6 +5,7 @@ import { fichaToken, userToken } from '@/lib/token';
 // Enforcea el acceso en TODAS las rutas/API (no solo en el login). Dos tipos de usuario:
 //  - Interno (equipo Pulppo, allowlist) → acceso total.
 //  - Externo (master broker) → SOLO el panel de su inmobiliaria /mb/{company} + sus APIs.
+//  - Externo (asesor) → SOLO /studio.
 // La identidad (cookie cm-user) se valida con su firma cm-sig para que no sea suplantable. Edge-safe:
 // solo isAllowed (lista estática) + userToken (Web Crypto); la verificación contra Mongo vive en el server.
 export async function middleware(req: NextRequest) {
@@ -33,6 +34,19 @@ export async function middleware(req: NextRequest) {
         if (p.startsWith('/api')) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         const url = req.nextUrl.clone();
         url.pathname = `/mb/${company}`;
+        url.search = '';
+        return NextResponse.redirect(url);
+    }
+
+    // Asesor (associate) con identidad válida → encerrado en Studio. Misma lógica que el master
+    // broker: cm-asesor solo rutea acá; la barrera real (currentAsesorId) se recalcula server-side.
+    const asesor = req.cookies.get('cm-asesor')?.value || '';
+    if (validId && asesor) {
+        const p = req.nextUrl.pathname;
+        if (p === '/studio' || p.startsWith('/studio/') || p.startsWith('/api/studio')) return NextResponse.next();
+        if (p.startsWith('/api')) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        const url = req.nextUrl.clone();
+        url.pathname = '/studio/index.html';
         url.search = '';
         return NextResponse.redirect(url);
     }
