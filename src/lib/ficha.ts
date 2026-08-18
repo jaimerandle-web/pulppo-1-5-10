@@ -575,30 +575,114 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     if (dval != null && dval < 0) insights.push(`Precio ${Math.abs(dval).toFixed(0)}% por debajo del estimado (${money(acm)}).`);
 
     const conv = leads.length ? (100 * vis) / leads.length : 0;
-    const cand: [number, string][] = [];
+
+    // Plan de acción: cada paso lleva QUIÉN lo hace, CUÁNDO y el UMBRAL que dice cuándo se abandona.
+    // El peso ordena por IMPACTO, no por facilidad: primero "¿alguien ve el aviso?" (10), luego
+    // "¿los que lo ven convierten?" (20), luego precio (30), y al final la higiene del anuncio (40).
+    // Un aviso apagado pesa más que el número de fotos — antes salía casi al final por peso 10 vs 9.
+    type Paso = { w: number; title: string; detail: string; who: string; when: string; umbral: string };
+    const cand: Paso[] = [];
+    const ASESOR = broker || 'Asesor';
+
+    // ---- 10 · Visibilidad: si nadie ve el aviso, lo demás no importa ----
+    if (!simple && ((i24Status && i24Status !== 'ONLINE') || (mlStatus && mlStatus.toUpperCase() !== 'ONLINE'))) {
+        cand.push({
+            w: 10, title: 'Reactivar los portales apagados', who: 'Marketing', when: 'Hoy',
+            detail: `Estado actual: i24 ${i24Status || '—'} · ML ${mlStatus || '—'}. Un aviso apagado no aparece en ninguna búsqueda, así que ningún otro cambio puede funcionar mientras siga así.`,
+            umbral: 'Se resuelve hoy. Si el portal no deja reactivarlo, escalar con el equipo de portales.'
+        });
+    }
+    if (!simple && !SUPER.has(cat ?? '')) {
+        cand.push({
+            w: 11, title: 'Subir el anuncio a Super destacado', who: 'Marketing', when: 'Esta semana',
+            detail: 'La categoría actual limita la exposición en el portal. El Super destacado duplica los contactos en promedio (no los cuadruplica).',
+            umbral: 'Umbral: si a 30 días en Super destacado no sube el volumen de leads, el freno no es exposición — bajar la categoría y no seguir gastando ahí.'
+        });
+    }
+
+    // ---- 20 · Conversión: te ven, pero no avanza ----
+    if (leads.length && conv < 15) {
+        cand.push({
+            w: 20, title: 'Empujar visitas', who: ASESOR, when: 'Esta semana',
+            detail: `Solo ${vis} de ${leads.length} leads agendaron visita (${conv.toFixed(0)}%). Reforzar la primera respuesta y el seguimiento a las 24 y 72 horas.`,
+            umbral: 'Umbral: llegar a 15% de leads con visita agendada en 30 días.'
+        });
+    }
+    if (vis >= 3 && ofertas === 0) {
+        cand.push({
+            w: 21, title: 'Cerrar el hueco entre visita y oferta', who: ASESOR, when: 'Esta semana',
+            detail: 'Hay visitas pero ninguna oferta: el problema no es atraer, es cerrar. Reforzar seguimiento post-visita y manejo de objeciones, y acordar con el propietario el piso de precio ANTES de seguir mostrando.',
+            umbral: 'Umbral: si 3 visitas más terminan sin oferta, el precio ya está diciendo algo — pasar a la conversación de ajuste.'
+        });
+    }
+
+    // ---- 30 · Precio ----
+    if (dval != null && dval > 10) {
+        cand.push({
+            w: 30, title: `Ajustar precio hacia ${money(acm)}`, who: ASESOR, when: 'Semana 2',
+            detail: `El precio está ${dval.toFixed(0)}% por encima del estimado. Usar el ACM y los cierres de la zona como palanca con el propietario, no la opinión del asesor.`,
+            umbral: 'Umbral: 30 días al precio nuevo. Si no genera al menos 2 visitas, el freno no es el precio de lista.'
+        });
+    }
+    if (ppm2 && avgPpm && ppm2 > avgPpm * 1.1) {
+        cand.push({
+            w: 31, title: 'Revisar el $/m² contra los comparables', who: ASESOR, when: 'Semana 2',
+            detail: `Tu $/m² (${money(ppm2)}) está ${Math.round((ppm2 / avgPpm - 1) * 100)}% arriba del promedio de comparables (${money(avgPpm)}).`,
+            umbral: 'Umbral: si el ajuste no se puede negociar, competir con producto (multimedia, mejoras visibles) en lugar de precio.'
+        });
+    }
+    if (meses != null && meses >= 6 && ofertas === 0) {
+        const caro = dval == null || dval > 0;
+        cand.push({
+            w: 32, title: `${meses} meses publicada sin ofertas`, who: ASESOR, when: 'Semana 2',
+            detail: caro
+                ? 'Probable precio fuera de mercado. Llevar el ACM y los cierres reales de la zona al propietario.'
+                : 'El precio es competitivo y aun así no hay ofertas: el freno no es precio. Revisar difusión y geolocalización del aviso, republicar para refrescar el ranking y validar el seguimiento de leads.',
+            umbral: caro
+                ? 'Umbral: si el propietario no ajusta en esta ronda, definir con él una fecha de revisión o liberar el inventario.'
+                : 'Umbral: si con difusión y geolocalización sanas siguen 30 días sin ofertas, entonces sí es precio.'
+        });
+    }
+
+    // ---- 40 · Higiene del anuncio: importa, pero no es la causa raíz ----
     if (!zonaOk || !tipoOk || !opOk) {
         const falta = [['tipo', tipoOk], ['operación', opOk], ['zona', zonaOk]].filter(([, ok]) => !ok).map(([x]) => x).join(', ');
-        cand.push([1, `Corregir el título: debe incluir tipo, operación y zona (falta ${falta}).`]);
+        cand.push({
+            w: 40, title: 'Corregir el título', who: 'Marketing', when: 'Esta semana',
+            detail: `El título debe incluir tipo, operación y zona (falta ${falta}). Ayuda al clic, no a aparecer en la búsqueda: eso lo decide la colonia cargada en el aviso.`,
+            umbral: 'Sin costo. Se hace en una sesión.'
+        });
     }
-    if (leads.length && conv < 15) cand.push([2, `Empujar visitas: solo ${vis} de ${leads.length} leads agendaron (${conv.toFixed(0)}%). Reforzar 1ª respuesta y seguimiento.`]);
-    if (dval != null && dval > 10) cand.push([3, `Precio ${dval.toFixed(0)}% por encima del estimado: ajuste moderado a la baja hacia ${money(acm)} (usar ACM como palanca).`]);
-    if (ppm2 && avgPpm && ppm2 > avgPpm * 1.1) cand.push([3, `Tu $/m² (${money(ppm2)}) está ${Math.round((ppm2 / avgPpm - 1) * 100)}% arriba del promedio de comparables (${money(avgPpm)}): considerar ajuste a la baja.`]);
-    if (meses != null && meses >= 6 && ofertas === 0) {
-        if (dval != null && dval <= 0) cand.push([4, `${meses} meses publicada, precio competitivo y sin ofertas: el freno no es precio. Revisar difusión/geolocalización, republicar para refrescar ranking y validar seguimiento.`]);
-        else cand.push([4, `${meses} meses publicada sin ofertas: probable precio fuera de mercado. Usar ACM y cierres de la zona como palanca con el propietario.`]);
+    if (q != null && q < 85) {
+        cand.push({
+            w: 41, title: `Mejorar la calidad del anuncio (${q.toFixed(0)}/100)`, who: 'Marketing', when: 'Esta semana',
+            detail: simple ? 'Los anuncios incompletos rankean más abajo y reciben menos contactos.' : 'i24 penaliza en ranking los anuncios incompletos.',
+            umbral: 'Umbral: llegar a 85/100.'
+        });
     }
-    if (vis >= 3 && ofertas === 0) cand.push([5, 'Visitas sin ofertas: reforzar seguimiento post-visita y manejo de objeciones; acordar precio con el propietario antes de mostrar.']);
-    // Destacar (aviso pagado) SOLO en la ficha completa 1·5·10; en los reportes generales no se habla de destacados.
-    if (!simple && !SUPER.has(cat ?? '')) cand.push([6, 'Subir el anuncio a Super destacado para más exposición.']);
-    if (q != null && q < 85) cand.push([7, `Mejorar la calidad del anuncio (${q.toFixed(0)}/100): ${simple ? 'los anuncios incompletos rankean más abajo y reciben menos contactos' : 'i24 penaliza en ranking los anuncios incompletos'}.`]);
-    if (words > 200) cand.push([8, 'Descripción muy larga: simplificar para no confundir al comprador.']);
-    if (pics < 12) cand.push([9, `Subir más fotos: hay ${pics}, se recomiendan 12+.`]);
-    if (!video) cand.push([9, 'Agregar video de la propiedad.']);
-    // Estado de portales (i24/ML) solo en la ficha completa 1·5·10; en la general no se detallan portales.
-    if (!simple && ((i24Status && i24Status !== 'ONLINE') || (mlStatus && mlStatus.toUpperCase() !== 'ONLINE'))) cand.push([10, `Verificar difusión: i24 ${i24Status || '—'} · ML ${mlStatus || '—'}. Reactivar portales apagados.`]);
-    if (zonaComp >= 20) cand.push([11, `Alta competencia en la zona (${zonaComp} publicadas del mismo tipo): diferenciar con mejor multimedia o precio.`]);
-    const plan = cand.sort((a, b) => a[0] - b[0]).slice(0, 6).map(([, t]) => t);
-    if (!plan.length) plan.push('Anuncio saludable. Mantener seguimiento de leads y visitas.');
+    if (pics < 12 || !video) {
+        const falta = [pics < 12 ? `subir fotos (hay ${pics}, se recomiendan 12+)` : '', !video ? 'agregar video' : ''].filter(Boolean).join(' y ');
+        cand.push({
+            w: 42, title: 'Completar el material', who: 'Marketing', when: 'Esta semana',
+            detail: `Falta ${falta}.`, umbral: 'Umbral: 12 fotos y un video antes de la próxima revisión.'
+        });
+    }
+    if (words > 200) {
+        cand.push({
+            w: 43, title: 'Simplificar la descripción', who: 'Marketing', when: 'Esta semana',
+            detail: `Tiene ${words} palabras. Una descripción muy larga confunde al comprador y entierra lo que sí importa.`,
+            umbral: 'Umbral: entre 40 y 200 palabras.'
+        });
+    }
+    if (zonaComp >= 20) {
+        cand.push({
+            w: 50, title: 'Diferenciar en una zona saturada', who: ASESOR, when: 'Semana 2',
+            detail: `Hay ${zonaComp} propiedades publicadas del mismo tipo en la zona. Con esa competencia, el aviso tiene que ganar por multimedia o por precio: no alcanza con estar publicado.`,
+            umbral: 'Umbral: revisar en 30 días si el aviso ya aparece arriba de los comparables directos.'
+        });
+    }
+
+    const plan = cand.sort((a, b) => a.w - b.w).slice(0, 6);
 
     // ---------- HTML ----------
     const dot = (s: 'ok' | 'warn' | 'bad' | 'na') => `<span class="dt" style="background:${{ ok: SEA, warn: YEL, bad: RED, na: GRY }[s]}"></span>`;
@@ -790,9 +874,15 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
       <div><div class="n">${zratio >= 1 ? zratio.toFixed(1) : zratio.toFixed(2)}</div><div class="l">búsquedas por propiedad</div></div>
     </div>
     <p style="margin-top:8px;font-size:12px">${zread}</p>` : '';
+    // Plan de acción: pasos numerados con responsable, cuándo y umbral. Ancho completo (no en columna
+    // junto a Insights) porque cada paso lleva ya tres líneas de contexto.
+    const pasosHtml = plan.length
+        ? plan.map((p, i) => `<div class="step"><div class="stepn">${String(i + 1).padStart(2, '0')}</div><div class="stepbody"><div class="steptitle">${esc(p.title)}</div><div class="steptags"><span class="tagl">${esc(p.when)}</span><span class="tagl">${esc(p.who)}</span></div><p>${esc(p.detail)}</p><p class="umbral">${esc(p.umbral)}</p></div></div>`).join('')
+        : '<p>Anuncio saludable. Mantener el seguimiento de leads y visitas.</p>';
     const secAnalisis = `<div class="sec"><div class="eyebrow">Análisis y oportunidades</div><div class="accent"></div>
     ${frenoHtml}
-    <div class="two"><div class="box"><div class="eyebrow">Insights</div><ul>${insights.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></div><div class="box"><div class="eyebrow">Plan de acción</div><ul>${plan.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div></div>
+    <div class="box"><div class="eyebrow">Insights</div><ul>${insights.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></div>
+    <div style="margin-top:20px"><div class="eyebrow">Plan de acción</div><div class="accent"></div>${pasosHtml}</div>
   </div>`;
     const bodyFull = `${secSalud}
 ${promoHtml}
@@ -837,6 +927,13 @@ ${secFunnel}
 .ficha-root .fsn{width:22px;text-align:right;font-weight:700;margin:0 8px}
 .ficha-root .fconvinline{position:absolute;right:6px;top:0;height:18px;display:flex;align-items:center;font-size:10px;color:${BLK};white-space:nowrap}
 .ficha-root .recap{display:flex;gap:20px;margin-top:14px}.ficha-root .recap .n{font-family:'EB Garamond',serif;font-size:22px}.ficha-root .recap .l{font-size:9px;color:${GRY};text-transform:uppercase;letter-spacing:.05em}
+.ficha-root .step{display:flex;gap:16px;padding:14px 0;border-bottom:1px solid ${LGT};break-inside:avoid}
+.ficha-root .stepn{font-family:'EB Garamond',serif;font-size:24px;color:${GRY};width:34px;flex-shrink:0}
+.ficha-root .stepbody{flex:1}.ficha-root .steptitle{font-weight:700;font-size:13px}
+.ficha-root .steptags{margin:5px 0 7px}
+.ficha-root .tagl{display:inline-block;border:1px solid ${GRY};color:${GRY};font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;margin-right:6px}
+.ficha-root .stepbody p{margin-top:5px}
+.ficha-root .umbral{border-left:1px solid ${YEL};padding-left:10px;font-size:11px}
 .ficha-root .frow{display:flex;align-items:center;font-size:11px;margin:3px 0}.ficha-root .frow span:first-child{width:96px}
 .ficha-root .fbarwrap{flex:1;background:${LGT};height:16px;margin:0 8px}.ficha-root .fbar{display:block;height:16px;background:${BLK}}.ficha-root .fn{width:20px;text-align:right;font-weight:700}
 .ficha-root .fcomp{display:flex;height:16px}.ficha-root .fcli,.ficha-root .fase{display:flex;align-items:center;justify-content:center;height:16px;color:#fff;font-size:9px;font-weight:700;overflow:hidden}.ficha-root .fcli{background:${SEA}}.ficha-root .fase{background:${BLK}}
