@@ -38,7 +38,7 @@ const PROYECTOS: { eyebrow: string; title: string; blurb: string; links: Link[] 
         links: [
             // Piloto: HTML estático servido desde public/, protegido por el mismo middleware que el
             // resto. Cuando el asesor pueda entrar con su cuenta pasa a ser una ruta propia.
-            { href: '/studio/index.html', label: 'Piloto · Diamond House', hint: '19 asesores, datos en vivo' }
+            { href: '/studio/index.html', label: 'Piloto · Diamond House', hint: '22 asesores, datos en vivo' }
         ]
     }
 ];
