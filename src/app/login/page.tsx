@@ -18,6 +18,16 @@ function LoginContent() {
     // -> idToken verificado en el server (allowlist + cookies cm-user/cm-name).
     const googleLogin = useGoogleLogin({
         flow: 'auth-code',
+        // Esta app sólo necesita saber QUIÉN entra: openid + profile + email, y nada más.
+        //
+        // Google incluye por defecto `include_granted_scopes=true`, que significa "súmale
+        // todo lo que este usuario ya le concedió a este client ID". Y el client es el de
+        // Pulppo, compartido con la plataforma principal, que pide YouTube y Drive. A quien
+        // ya había autorizado esos permisos, Google le armaba una petición con
+        // youtube + youtube.upload + drive.file juntos — combinación que Google PROHÍBE— y
+        // respondía `Error 400: invalid_request` antes de llegar a nuestro código.
+        // Le pasaba sólo a quien tenía esos permisos concedidos, por eso no fallaba para todos.
+        include_granted_scopes: false,
         onSuccess: async (codeResponse) => {
             setError('');
             setLoading(true);
