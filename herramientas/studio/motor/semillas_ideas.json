@@ -1,0 +1,109 @@
+{
+  "consejo": [
+    {
+      "semilla": "Ventajas de invertir en una zona",
+      "patron": "5 ventajas de invertir en {zona}",
+      "template": "zonas_los-mejores_post.json"
+    },
+    {
+      "semilla": "Guía de un proceso en pasos",
+      "patron": "Cómo {tramite/tema} en 3 pasos",
+      "template": "consejo_3-pasos_post.json"
+    },
+    {
+      "semilla": "Errores comunes al comprar/rentar",
+      "patron": "3 errores al {accion} que te cuestan caro",
+      "template": "consejo_3-pasos_post.json"
+    },
+    {
+      "semilla": "Qué revisar antes de firmar",
+      "patron": "Cómo revisar {tema} antes de firmar",
+      "template": "consejo_3-pasos_post.json"
+    }
+  ],
+  "requisitos": [
+    {
+      "semilla": "Requisitos de un trámite",
+      "patron": "Requisitos para {tramite}",
+      "template": "consejo_requisitos_post.json"
+    },
+    {
+      "semilla": "Documentos para vender",
+      "patron": "Requisitos para vender tu propiedad",
+      "template": "consejo_requisitos_post.json"
+    },
+    {
+      "semilla": "Requisitos de crédito",
+      "patron": "Requisitos para un crédito hipotecario",
+      "template": "consejo_requisitos_post.json"
+    }
+  ],
+  "frase": [
+    {
+      "semilla": "Motivación patrimonial",
+      "patron": "{frase} (motivación)",
+      "template": "frase_quote_post.json"
+    },
+    {
+      "semilla": "Inversión / mentalidad",
+      "patron": "{frase} (inversión)",
+      "template": "frase_quote_post.json"
+    },
+    {
+      "semilla": "Frase para historia",
+      "patron": "{frase corta}",
+      "template": "stories/historia_frase_story.json"
+    }
+  ],
+  "zonas": [
+    {
+      "semilla": "Lo mejor de una zona",
+      "patron": "Los mejores {lugar} de {zona}",
+      "template": "consejo_5-ventajas_post.json"
+    },
+    {
+      "semilla": "Top 5 de una zona",
+      "patron": "Top 5 {cosa} de {zona}",
+      "template": "zonas_top5_post.json"
+    },
+    {
+      "semilla": "Zona portada (historia)",
+      "patron": "{zona}: por qué vivir aquí",
+      "template": "stories/historia_zona_story.json"
+    }
+  ],
+  "dato": [
+    {
+      "semilla": "Dato de mercado que sorprende",
+      "patron": "{dato} + contexto",
+      "template": "dato_declaracion_post.json"
+    },
+    {
+      "semilla": "Lo más buscado en la ciudad",
+      "patron": "Lo más buscado en {ciudad}: {dato}",
+      "template": "stories/historia_dato_story.json"
+    },
+    {
+      "semilla": "Tiempo/velocidad de venta",
+      "patron": "Una propiedad bien puesta se vende en {dato}",
+      "template": "dato_declaracion_post.json"
+    }
+  ],
+  "pregunta": [
+    {
+      "semilla": "Enganche por DM",
+      "patron": "¿{pregunta}?",
+      "template": "pregunta_portada_post.json"
+    },
+    {
+      "semilla": "Pregunta aspiracional",
+      "patron": "¿En qué zona sueñas con vivir?",
+      "template": "stories/historia_pregunta_story.json"
+    },
+    {
+      "semilla": "Pregunta de decisión",
+      "patron": "¿{comprar vs rentar / casa vs depto}?",
+      "template": "pregunta_portada_post.json"
+    }
+  ]
+}

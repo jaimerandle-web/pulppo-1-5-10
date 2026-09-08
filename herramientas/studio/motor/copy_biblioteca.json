@@ -1,0 +1,642 @@
+{
+  "_nota": "Biblioteca de copy generada como capa de IA (reglas de prompt_personalizacion.md), personalizada a Romina Toso / Polanco. Alimenta el prototipo web. Sin cifras inventadas: donde no hay dato verificado, el campo queda marcado para que el broker lo complete.",
+  "_broker": "romina.toso@pulppo.com",
+  "ideas": [
+    {
+      "id": "story-pregunta",
+      "seccion": "story",
+      "categoria": "pregunta",
+      "template_ref": "stories/historia_pregunta_story.json",
+      "titulo_idea": "¿Comprar o rentar en {zona}?",
+      "gancho": "Las preguntas de decisión son las que más responden por DM.",
+      "valores_sugeridos": {
+        "tema": "{zona}",
+        "pregunta": "Comprar o rentar en {zona}"
+      },
+      "caption_sugerida": "La respuesta cambia según cuánto tiempo te vas a quedar. Cuéntame tu caso y te digo qué te conviene."
+    },
+    {
+      "id": "story-dato",
+      "seccion": "story",
+      "categoria": "dato",
+      "template_ref": "stories/historia_dato_story.json",
+      "titulo_idea": "Un dato de {zona} que sorprende",
+      "gancho": "El dato concreto genera más guardados que cualquier consejo.",
+      "valores_sugeridos": {
+        "tema": "{zona}",
+        "contexto": "Lo que más se busca en la zona.",
+        "dato": "",
+        "fuente": ""
+      },
+      "campos_a_completar": [
+        "dato",
+        "fuente"
+      ],
+      "nota_guardrail": "El motor NO inventa cifras. Si no hay un dato verificado, deja el campo vacío y le pide al broker que lo ponga con su fuente.",
+      "caption_sugerida": "Un dato que cambia cómo se ve la zona. Si estás mirando {zona}, esto te sirve para negociar."
+    },
+    {
+      "id": "story-zona",
+      "seccion": "story",
+      "categoria": "zonas",
+      "template_ref": "stories/historia_zona_story.json",
+      "titulo_idea": "{zona}: por qué vivir aquí",
+      "gancho": "Contenido de zona: te posiciona como quien mejor conoce el lugar, sin vender nada.",
+      "valores_sugeridos": {
+        "zona": "{zona}",
+        "ciudad": "{ciudad}",
+        "bajada": "Todo a pie y con la ciudad a diez minutos."
+      },
+      "caption_sugerida": "{zona} no se explica solo por el precio. Te muestro por qué la gente que llega se queda."
+    },
+    {
+      "id": "story-frase",
+      "seccion": "story",
+      "categoria": "frase",
+      "template_ref": "stories/historia_frase_story.json",
+      "titulo_idea": "Frase de inversión patrimonial",
+      "gancho": "Rota bien entre las piezas informativas y descansa el feed.",
+      "valores_sugeridos": {
+        "tema": "Inversión",
+        "frase": "La mejor propiedad no es la más barata, es la que no te deja dudas."
+      },
+      "usa_handle": true,
+      "caption_sugerida": "Lo repito en cada asesoría. Si la propiedad te genera dudas, no es la tuya."
+    },
+    {
+      "id": "post-ventajas",
+      "seccion": "post",
+      "categoria": "consejo",
+      "template_ref": "zonas_los-mejores_post.json",
+      "titulo_idea": "5 ventajas de invertir en {zona}",
+      "gancho": "La pieza que más te posiciona como referencia de tu zona principal.",
+      "valores_sugeridos": {
+        "zona": "{zona}",
+        "ventaja_1": "Demanda de renta constante todo el año.",
+        "ventaja_2": "Inventario nuevo escaso, precio firme.",
+        "ventaja_3": "Oficinas, comercio y restaurantes a pie.",
+        "ventaja_4": "Buena conexión a las vías principales.",
+        "ventaja_5": "Inquilino solvente y menor rotación."
+      },
+      "caption_sugerida": "Invertir en {zona} no es moda, es estrategia. Te dejo las 5 razones por las que sigue siendo la zona más sólida de la ciudad. ¿Cuál te pesa más al decidir?"
+    },
+    {
+      "id": "post-requisitos",
+      "seccion": "post",
+      "categoria": "requisitos",
+      "template_ref": "consejo_requisitos_post.json",
+      "titulo_idea": "Requisitos para un crédito hipotecario",
+      "gancho": "Lo más guardado por quien está por comprar su primera propiedad.",
+      "valores_sugeridos": {
+        "tramite": "un crédito hipotecario",
+        "requisito_1": "Identificación oficial y CURP.",
+        "requisito_2": "Comprobantes de ingresos de los últimos tres meses.",
+        "requisito_3": "Historial crediticio sano.",
+        "requisito_4": "Enganche disponible y comprobable.",
+        "requisito_5": "Avalúo de la propiedad."
+      },
+      "caption_sugerida": "Antes de enamorarte de una propiedad, junta estos cinco documentos. Te ahorra semanas de trámite. ¿Te ayudo a revisar si califica tu caso?"
+    },
+    {
+      "id": "post-rincones",
+      "seccion": "post",
+      "categoria": "zonas",
+      "template_ref": "consejo_5-ventajas_post.json",
+      "titulo_idea": "Los mejores rincones de {zona}",
+      "gancho": "Atrae seguidores locales sin hablar de propiedades.",
+      "valores_sugeridos": {
+        "zona": "{zona}",
+        "ciudad": "{ciudad}",
+        "lugar": "rincones",
+        "bajada": "La zona que mejor conozco, en cinco paradas."
+      },
+      "caption_sugerida": "{zona} no se entiende solo por sus precios. Te llevo por los rincones que le dan valor a la zona y que casi nadie menciona en una visita. ¿Cuál te falta conocer?"
+    },
+    {
+      "id": "evento-captacion",
+      "seccion": "operacion",
+      "clase": "captacion",
+      "categoria": "zonas",
+      "template_ref": "propiedad/propiedad_datos_post_45.json",
+      "titulo_idea": "Ficha de la propiedad",
+      "gancho": "La ficha completa, para quien ya está mirando. Se llena sola con los datos del aviso.",
+      "caption_sugerida": "Nueva propiedad en la zona. La conozco por dentro y en dos minutos te digo si es para ti. ¿Te mando la ficha?",
+      "menu_desc": "story con 4 fotos, medidas y recámaras",
+      "formatos": {
+        "post": "propiedad/propiedad_datos_post_45.json",
+        "story": "propiedad/propiedad_datos_story.json"
+      }
+    },
+    {
+      "id": "evento-vendida",
+      "seccion": "operacion",
+      "clase": "venta",
+      "categoria": "dato",
+      "template_ref": "propiedad/cierre_exitoso_post_45.json",
+      "titulo_idea": "Cierre exitoso",
+      "gancho": "Contar una venta real es lo que más confianza genera. Nada la supera.",
+      "caption_sugerida": "Cerramos otra operación en la zona. Cada cierre se logra con trabajo, no con suerte. Si estás pensando en vender, hablemos.",
+      "variantes": true,
+      "menu_desc": "post con la foto del aviso",
+      "formatos": {
+        "post": "propiedad/cierre_exitoso_post_45.json",
+        "story": "propiedad/cierre_exitoso_story.json"
+      }
+    },
+    {
+      "id": "evento-contrato",
+      "seccion": "operacion",
+      "clase": "contrato",
+      "categoria": "dato",
+      "template_ref": "propiedad/contrato_nuevo_post_45.json",
+      "titulo_idea": "Avanzó un contrato",
+      "gancho": "Se firmó contrato. Todavía no es cierre, pero ya salió del mercado.",
+      "caption_sugerida": "Nuevo contrato firmado. Una menos disponible en la zona. Si andas buscando algo parecido, escríbeme y te aviso primero.",
+      "valores_sugeridos": {},
+      "menu_desc": "post con la foto del aviso",
+      "formatos": {
+        "post": "propiedad/contrato_nuevo_post_45.json",
+        "story": "propiedad/contrato_nuevo_story.json"
+      }
+    },
+    {
+      "id": "evento-baja-precio",
+      "seccion": "operacion",
+      "clase": "baja_precio",
+      "categoria": "dato",
+      "template_ref": "propiedad/baja_precio_post_45.json",
+      "titulo_idea": "Bajó el precio de un aviso tuyo",
+      "gancho": "Un ajuste de precio es la mejor excusa para volver a mostrar la propiedad.",
+      "caption_sugerida": "Ajustamos el precio. Si la tenías en la mira y no te cerraban los números, ahora sí conviene verla. Escríbeme y la agendamos.",
+      "valores_sugeridos": {},
+      "menu_desc": "post con el precio anterior tachado",
+      "formatos": {
+        "post": "propiedad/baja_precio_post_45.json",
+        "story": "propiedad/baja_precio_story.json"
+      }
+    },
+    {
+      "id": "evento-nueva-propiedad",
+      "seccion": "operacion",
+      "clase": "captacion",
+      "categoria": "zonas",
+      "template_ref": "propiedad/nueva_propiedad_post_45.json",
+      "titulo_idea": "Anuncio: recién publicada",
+      "gancho": "Recién salió al mercado. El primero que la vea tiene ventaja.",
+      "caption_sugerida": "Nueva en el mercado. Todavía no la ha visto nadie: si andas buscando en la zona, escríbeme y te la muestro primero.",
+      "valores_sugeridos": {},
+      "menu_desc": "post de una foto, sin datos",
+      "formatos": {
+        "post": "propiedad/nueva_propiedad_post_45.json",
+        "story": "propiedad/nueva_propiedad_story.json"
+      }
+    },
+    {
+      "id": "swipe-inquilinos",
+      "seccion": "carrusel",
+      "categoria": "consejo",
+      "template_ref": "consejo_swipe_post.json",
+      "titulo_idea": "¿En qué se fijan los inquilinos?",
+      "gancho": "El carrusel es el formato que más se guarda. Cinco páginas, tres ideas.",
+      "valores_sugeridos": {
+        "titulo": "¿En qué se fijan los inquilinos al rentar?",
+        "bajada": "Si vas a rentar tu propiedad, esto es lo que miran antes de decidir.",
+        "punto_1_titulo": "La luz natural.",
+        "punto_1_a": "Es lo primero que notan al entrar y lo que más recuerdan.",
+        "punto_1_b": "Una visita de día vale más que veinte fotos.",
+        "punto_2_titulo": "El costo real de vivir ahí.",
+        "punto_2_a": "Preguntan por el mantenimiento antes que por la renta.",
+        "punto_2_b": "Ten claro qué incluye y qué no.",
+        "punto_3_titulo": "Cuánto tardan en llegar.",
+        "punto_3_a": "Miden el trayecto al trabajo, no la distancia en el mapa.",
+        "punto_3_b": "Menciona transporte y accesos en el anuncio.",
+        "cierre": "Prepara la propiedad antes de publicarla.",
+        "cta": "Te ayudo a definir el precio y a dejarla lista para las visitas."
+      },
+      "caption_sugerida": "Un inquilino decide en los primeros diez minutos de la visita. Estas son las tres cosas que revisa sin decírtelo. Guárdalo antes de publicar tu propiedad."
+    },
+    {
+      "id": "story-pregunta-tiempo",
+      "seccion": "story",
+      "categoria": "pregunta",
+      "template_ref": "stories/historia_pregunta_story.json",
+      "titulo_idea": "¿Cuánto tarda en venderse una casa?",
+      "gancho": "Casi nadie acierta. Por eso responden.",
+      "valores_sugeridos": {
+        "tema": "{zona}",
+        "pregunta": "Cuánto tarda en venderse una casa en {zona}"
+      },
+      "caption_ref": "zona-tiempo-de-venta"
+    },
+    {
+      "id": "story-pregunta-freno",
+      "seccion": "story",
+      "categoria": "pregunta",
+      "template_ref": "stories/historia_pregunta_story.json",
+      "titulo_idea": "¿Qué te detiene para comprar?",
+      "gancho": "La respuesta te dice exactamente qué contenido hacer después.",
+      "valores_sugeridos": {
+        "tema": "Compra",
+        "pregunta": "Qué te detiene para comprar: el enganche o el crédito"
+      },
+      "caption_ref": "credito-capacidad-primero"
+    },
+    {
+      "id": "story-pregunta-espacio",
+      "seccion": "story",
+      "categoria": "pregunta",
+      "template_ref": "stories/historia_pregunta_story.json",
+      "titulo_idea": "¿Espacio o ubicación?",
+      "gancho": "Disyuntiva clásica. Divide opiniones y llena la bandeja.",
+      "valores_sugeridos": {
+        "tema": "Decisión",
+        "pregunta": "Prefieres más espacio o mejor ubicación"
+      },
+      "caption_ref": "pregunta-comprar-rentar"
+    },
+    {
+      "id": "story-zona-tres-razones",
+      "seccion": "story",
+      "categoria": "zonas",
+      "template_ref": "stories/historia_zona_story.json",
+      "titulo_idea": "{zona} en tres razones",
+      "gancho": "Contenido de zona: atrae seguidores locales sin vender nada.",
+      "valores_sugeridos": {
+        "zona": "{zona}",
+        "ciudad": "{ciudad}",
+        "bajada": "Servicios a pie, buena conexión y oferta que no se satura."
+      },
+      "caption_ref": "zona-que-la-sostiene"
+    },
+    {
+      "id": "story-zona-nadie-cuenta",
+      "seccion": "story",
+      "categoria": "zonas",
+      "template_ref": "stories/historia_zona_story.json",
+      "titulo_idea": "Lo que nadie te cuenta de {zona}",
+      "gancho": "Promete información de adentro. Es de lo que más se abre.",
+      "valores_sugeridos": {
+        "zona": "{zona}",
+        "ciudad": "{ciudad}",
+        "bajada": "Lo bueno, lo caro y lo que conviene revisar antes."
+      },
+      "caption_ref": "zona-tiempo-de-venta"
+    },
+    {
+      "id": "story-frase-momento",
+      "seccion": "story",
+      "categoria": "frase",
+      "template_ref": "stories/historia_frase_story.json",
+      "titulo_idea": "Frase sobre el momento correcto",
+      "gancho": "Descansa el feed entre piezas informativas.",
+      "valores_sugeridos": {
+        "tema": "Decisión",
+        "frase": "El mejor momento para ordenar tus papeles es antes de que aparezca el comprador."
+      },
+      "caption_ref": "frase-papeles-antes"
+    },
+    {
+      "id": "story-frase-perfecta",
+      "seccion": "story",
+      "categoria": "frase",
+      "template_ref": "stories/historia_frase_story.json",
+      "titulo_idea": "Frase sobre la propiedad perfecta",
+      "gancho": "Consuela a quien lleva meses buscando. Genera respuestas.",
+      "valores_sugeridos": {
+        "tema": "Búsqueda",
+        "frase": "No existe la propiedad perfecta. Existe la que se ajusta a cómo vives hoy."
+      },
+      "caption_ref": "frase-propiedad-perfecta"
+    },
+    {
+      "id": "story-dato-renta",
+      "seccion": "story",
+      "categoria": "dato",
+      "template_ref": "stories/historia_dato_story.json",
+      "titulo_idea": "Cuánto tarda en rentarse en {zona}",
+      "gancho": "Dato concreto de tu zona. El campo va vacío a propósito.",
+      "valores_sugeridos": {
+        "tema": "{zona}",
+        "contexto": "Lo que veo en la zona.",
+        "dato": "",
+        "fuente": ""
+      },
+      "campos_a_completar": [
+        "dato",
+        "fuente"
+      ],
+      "nota_guardrail": "El motor NO inventa cifras. El asesor pone el dato con su fuente.",
+      "caption_ref": "tendencia-cuanto-tarda"
+    },
+    {
+      "id": "post-pregunta-enganche",
+      "seccion": "post",
+      "categoria": "pregunta",
+      "template_ref": "pregunta_portada_post.json",
+      "titulo_idea": "¿Cuánto necesitas para el enganche?",
+      "gancho": "La duda número uno de quien compra por primera vez.",
+      "valores_sugeridos": {
+        "tema": "Crédito",
+        "pregunta": "Sabes cuánto necesitas para el enganche"
+      },
+      "caption_ref": "credito-gastos-aparte"
+    },
+    {
+      "id": "post-3pasos-visitas",
+      "seccion": "post",
+      "categoria": "consejo",
+      "template_ref": "consejo_3-pasos_post.json",
+      "titulo_idea": "Cómo preparar tu propiedad para las visitas",
+      "gancho": "Le habla directo a quien va a vender o rentar. Capta.",
+      "valores_sugeridos": {
+        "tema": "preparar tu propiedad para las visitas",
+        "paso_1_titulo": "Entra luz.",
+        "paso_1_desc": "Abre cortinas y persianas antes de cada visita. Es lo primero que se nota.",
+        "paso_2_titulo": "Quita lo personal.",
+        "paso_2_desc": "Fotos, imanes y objetos a la vista impiden que la gente se imagine viviendo ahí.",
+        "paso_3_titulo": "Arregla lo chico.",
+        "paso_3_desc": "Una puerta que raspa o una llave que gotea siembran dudas sobre todo lo demás."
+      },
+      "caption_ref": "renta-diez-minutos"
+    },
+    {
+      "id": "post-3pasos-antes-firmar",
+      "seccion": "post",
+      "categoria": "consejo",
+      "template_ref": "consejo_3-pasos_post.json",
+      "titulo_idea": "Cómo revisar una propiedad antes de firmar",
+      "gancho": "Consejo de compra con utilidad inmediata. Se guarda.",
+      "valores_sugeridos": {
+        "tema": "revisar una propiedad antes de firmar",
+        "paso_1_titulo": "Los papeles.",
+        "paso_1_desc": "Escrituras, predial al corriente y régimen de condominio si aplica.",
+        "paso_2_titulo": "Los costos fijos.",
+        "paso_2_desc": "Pregunta el mantenimiento mensual y exactamente qué incluye.",
+        "paso_3_titulo": "La hora del día.",
+        "paso_3_desc": "Vuelve a visitarla en otro horario. La luz y el ruido cambian por completo."
+      },
+      "caption_ref": "compra-dos-horarios"
+    },
+    {
+      "id": "post-3pasos-credito",
+      "seccion": "post",
+      "categoria": "consejo",
+      "template_ref": "consejo_3-pasos_post.json",
+      "titulo_idea": "Cómo empezar tu crédito hipotecario",
+      "gancho": "Ordena el proceso para quien no sabe por dónde empezar.",
+      "valores_sugeridos": {
+        "tema": "empezar tu crédito hipotecario",
+        "paso_1_titulo": "Revisa tu buró.",
+        "paso_1_desc": "Puedes consultarlo gratis una vez al año. Corrige lo que esté mal antes de pedir nada.",
+        "paso_2_titulo": "Junta tus comprobantes.",
+        "paso_2_desc": "Tres meses de ingresos demostrables es lo mínimo que te van a pedir.",
+        "paso_3_titulo": "Pide tu precalificación.",
+        "paso_3_desc": "Saber cuánto te prestan cambia por completo la lista de propiedades que vale la pena ver."
+      },
+      "caption_ref": "credito-capacidad-primero"
+    },
+    {
+      "id": "post-requisitos-vender",
+      "seccion": "post",
+      "categoria": "requisitos",
+      "template_ref": "consejo_requisitos_post.json",
+      "titulo_idea": "Requisitos para vender tu propiedad",
+      "gancho": "Checklist de captación. Es la pieza que más conversaciones abre con dueños.",
+      "valores_sugeridos": {
+        "tramite": "vender tu propiedad",
+        "requisito_1": "Escrituras a tu nombre.",
+        "requisito_2": "Predial al corriente.",
+        "requisito_3": "Agua y servicios sin adeudo.",
+        "requisito_4": "Régimen de condominio, si aplica.",
+        "requisito_5": "Identificación oficial vigente."
+      },
+      "caption_ref": "venta-papeles-antes"
+    },
+    {
+      "id": "post-requisitos-rentar",
+      "seccion": "post",
+      "categoria": "requisitos",
+      "template_ref": "consejo_requisitos_post.json",
+      "titulo_idea": "Requisitos para rentar",
+      "gancho": "Le sirve al inquilino y te posiciona con quien renta.",
+      "valores_sugeridos": {
+        "tramite": "rentar una propiedad",
+        "requisito_1": "Identificación oficial vigente.",
+        "requisito_2": "Comprobantes de ingresos.",
+        "requisito_3": "Un aval o fiador con propiedad.",
+        "requisito_4": "Depósito en garantía.",
+        "requisito_5": "Póliza jurídica, cuando la piden."
+      },
+      "caption_ref": "renta-no-es-tirar"
+    },
+    {
+      "id": "post-lista-revisar-zona",
+      "seccion": "post",
+      "categoria": "consejo",
+      "template_ref": "zonas_los-mejores_post.json",
+      "titulo_idea": "5 cosas que revisar antes de comprar en {zona}",
+      "gancho": "Lista numerada aplicada a tu zona. Mezcla consejo y territorio.",
+      "valores_sugeridos": {
+        "zona": "{zona}",
+        "ventaja_1": "Cómo llegas en hora pico, no en el mapa.",
+        "ventaja_2": "Qué se está construyendo a dos calles.",
+        "ventaja_3": "El monto del mantenimiento y qué cubre.",
+        "ventaja_4": "Estacionamiento asignado o de calle.",
+        "ventaja_5": "Cuánto tarda en venderse lo que se publica ahí."
+      },
+      "caption_ref": "compra-mantenimiento"
+    },
+    {
+      "id": "post-mejores-desayunar",
+      "seccion": "post",
+      "categoria": "zonas",
+      "template_ref": "consejo_5-ventajas_post.json",
+      "titulo_idea": "Los mejores lugares para desayunar en {zona}",
+      "gancho": "Contenido local puro. Atrae vecinos, que son quienes recomiendan.",
+      "valores_sugeridos": {
+        "zona": "{zona}",
+        "ciudad": "{ciudad}",
+        "lugar": "lugares para desayunar",
+        "bajada": "La zona que mejor conozco, también en fin de semana."
+      },
+      "caption_ref": "zona-que-la-sostiene"
+    },
+    {
+      "id": "post-top5-razones",
+      "seccion": "post",
+      "categoria": "zonas",
+      "template_ref": "zonas_top5_post.json",
+      "titulo_idea": "Top 5 razones para mudarte a {zona}",
+      "gancho": "Formato de lista con la zona como protagonista.",
+      "valores_sugeridos": {
+        "zona": "{zona}",
+        "ciudad": "{ciudad}",
+        "cosa": "razones para mudarte",
+        "lugar_1": "Llegas a todo caminando.",
+        "lugar_2": "Buena conexión a las vías principales.",
+        "lugar_3": "Oferta escolar cerca.",
+        "lugar_4": "Comercio de barrio, no solo plazas.",
+        "lugar_5": "Se rentan rápido, así que conserva valor."
+      },
+      "caption_ref": "zona-que-la-sostiene"
+    },
+    {
+      "id": "post-frase-patrimonio",
+      "seccion": "post",
+      "categoria": "frase",
+      "template_ref": "frase_quote_post.json",
+      "titulo_idea": "Frase sobre patrimonio",
+      "gancho": "Frase corta sobre foto: el formato más publicado de todos.",
+      "valores_sugeridos": {
+        "tema": "Patrimonio",
+        "frase": "Un patrimonio no se construye con suerte, se construye con decisiones ordenadas.",
+        "autor": ""
+      },
+      "campos_a_completar": [
+        "autor"
+      ],
+      "caption_ref": "inversion-sin-dudas"
+    },
+    {
+      "id": "post-dato-mercado",
+      "seccion": "post",
+      "categoria": "dato",
+      "template_ref": "dato_declaracion_post.json",
+      "titulo_idea": "El dato de tu zona",
+      "gancho": "Número grande. El campo va vacío: el dato lo pones tú, con fuente.",
+      "valores_sugeridos": {
+        "tema": "{zona}",
+        "dato": "",
+        "bajada": "Lo que veo en la zona este mes.",
+        "cta": "¿Te busco el de tu calle?"
+      },
+      "campos_a_completar": [
+        "dato"
+      ],
+      "nota_guardrail": "El motor NO inventa cifras.",
+      "caption_ref": "tendencia-cuanto-tarda"
+    },
+    {
+      "id": "carrusel-elegir-entre-dos",
+      "seccion": "carrusel",
+      "categoria": "consejo",
+      "template_ref": "consejo_swipe_post.json",
+      "titulo_idea": "Cómo elegir entre dos propiedades",
+      "gancho": "El carrusel es el formato que más se guarda. Cinco páginas, tres ideas.",
+      "valores_sugeridos": {
+        "titulo": "¿Cómo eliges entre dos propiedades?",
+        "bajada": "Cuando las dos te gustan, estas tres preguntas desempatan.",
+        "punto_1_titulo": "¿Cuál te deja mejor parado en cinco años?",
+        "punto_1_a": "Piensa en cómo vas a vivir después, no solo hoy.",
+        "punto_1_b": "La que se rente o se venda más rápido te da salida.",
+        "punto_2_titulo": "¿Cuál te cuesta menos cada mes?",
+        "punto_2_a": "Suma mantenimiento, predial y servicios, no solo el precio.",
+        "punto_2_b": "Dos precios iguales pueden dar costos muy distintos.",
+        "punto_3_titulo": "¿En cuál te imaginas un martes cualquiera?",
+        "punto_3_a": "Los fines de semana todo se ve bien. Ve entre semana.",
+        "punto_3_b": "Mide el trayecto real a tu trabajo en hora pico.",
+        "cierre": "Si sigues empatado, es que falta información.",
+        "cta": "Te ayudo a compararlas con datos, no con corazonadas."
+      },
+      "caption_ref": "compra-precio-lista"
+    },
+    {
+      "id": "carrusel-visita",
+      "seccion": "carrusel",
+      "categoria": "consejo",
+      "template_ref": "consejo_swipe_post.json",
+      "titulo_idea": "Qué revisar en una visita",
+      "gancho": "Utilidad pura en formato carrusel. Se guarda y se reenvía.",
+      "valores_sugeridos": {
+        "titulo": "¿Qué revisas cuando visitas una propiedad?",
+        "bajada": "Lo que se ve en la foto es lo de menos. Esto es lo que importa.",
+        "punto_1_titulo": "Abre y cierra todo.",
+        "punto_1_a": "Puertas, ventanas y llaves de agua, una por una.",
+        "punto_1_b": "Lo que raspa o gotea hoy, se paga después.",
+        "punto_2_titulo": "Pregunta por los costos fijos.",
+        "punto_2_a": "Mantenimiento mensual y qué incluye exactamente.",
+        "punto_2_b": "Predial del año y si hay adeudos de servicios.",
+        "punto_3_titulo": "Sal a la calle.",
+        "punto_3_a": "Camina la cuadra: comercio, banquetas, iluminación.",
+        "punto_3_b": "Fíjate dónde estacionarías si llegas de noche.",
+        "cierre": "Una buena visita evita un mal año.",
+        "cta": "Si quieres, te acompaño a la próxima."
+      },
+      "caption_ref": "errores-tres-caros"
+    }
+  ],
+  "ideas_sin_diseno": [
+    {
+      "id": "reel-recorrido",
+      "formato": "Reel",
+      "titulo": "Recorrido de 20 segundos",
+      "idea": "Graba entrando a la propiedad y narra en voz alta lo primero que ves. Sin guion escrito: la voz natural retiene más que el texto en pantalla.",
+      "porque": "Es el formato que más alcance orgánico tiene hoy.",
+      "esfuerzo": "20 segundos de grabación"
+    },
+    {
+      "id": "reel-mito",
+      "formato": "Reel",
+      "titulo": "Un mito de tu zona",
+      "idea": "Empieza con «Todos creen que en {zona} ya no hay nada por debajo de X» y responde en tres frases. Habla a cámara, sin edición.",
+      "porque": "El desmentido genera comentarios, y el comentario es lo que empuja el alcance.",
+      "esfuerzo": "30 segundos"
+    },
+    {
+      "id": "dm-visita",
+      "formato": "Mensaje directo",
+      "titulo": "Reactiva a quien te visitó",
+      "idea": "Escríbele a las personas que visitaron una propiedad hace más de un mes y no cerraron: «Bajó el precio de la que viste en {zona}, ¿te la vuelvo a mandar?»",
+      "porque": "No es contenido, pero es lo que más rápido convierte.",
+      "esfuerzo": "5 minutos"
+    },
+    {
+      "id": "comentario-pregunta",
+      "formato": "Comentarios",
+      "titulo": "Pregunta para responder tú",
+      "idea": "Publica una pregunta abierta sobre tu zona y responde uno por uno en los comentarios, con nombre.",
+      "porque": "Responder personalmente multiplica el alcance del post original.",
+      "esfuerzo": "10 minutos"
+    },
+    {
+      "id": "reel-antes-despues",
+      "formato": "Reel",
+      "titulo": "Antes y después de preparar una propiedad",
+      "idea": "Graba la propiedad como estaba y cómo quedó después de ordenarla y abrir cortinas. Sin edición: dos tomas y tu voz explicando qué cambiaste.",
+      "porque": "Muestra tu trabajo sin hablar de ti. Es de lo que más se comparte.",
+      "esfuerzo": "dos tomas de 15 segundos"
+    },
+    {
+      "id": "reel-pregunta-frecuente",
+      "formato": "Reel",
+      "titulo": "Responde la pregunta que más te hacen",
+      "idea": "Habla a cámara y responde en treinta segundos la duda que más te repiten esta semana. Empieza con la pregunta textual, sin presentación.",
+      "porque": "Si te la preguntan a ti, se la están preguntando muchos más.",
+      "esfuerzo": "30 segundos"
+    },
+    {
+      "id": "reel-recorrido-zona",
+      "formato": "Reel",
+      "titulo": "Camina tu zona",
+      "idea": "Graba caminando por {zona} y señala tres cosas que un comprador no vería en una visita rápida: dónde se estaciona la gente, qué abre de noche, cómo se llena la calle en hora pico.",
+      "porque": "Te posiciona como quien conoce el lugar, no quien vende ahí.",
+      "esfuerzo": "una caminata de 40 segundos"
+    },
+    {
+      "id": "historia-encuesta",
+      "formato": "Historia con sticker",
+      "titulo": "Encuesta de dos opciones",
+      "idea": "Sube una foto de una propiedad y pon una encuesta con dos opciones: «¿Comprarías o rentarías esta?». Responde por mensaje a quien vote.",
+      "porque": "El sticker de encuesta es la forma más barata de convertir vistas en conversaciones.",
+      "esfuerzo": "2 minutos"
+    },
+    {
+      "id": "dm-precio-bajo",
+      "formato": "Mensaje directo",
+      "titulo": "Avisa de una bajada de precio",
+      "idea": "Escríbele a quien visitó una propiedad parecida y no cerró: «Bajó de precio una en {zona} que se parece a la que viste. ¿Te la mando?»",
+      "porque": "No es contenido, pero es lo que más rápido se convierte en visita.",
+      "esfuerzo": "5 minutos"
+    }
+  ]
+}

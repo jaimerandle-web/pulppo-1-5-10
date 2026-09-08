@@ -1,0 +1,16 @@
+{
+  "_nota": "Salida de la capa de IA para la idea zonas:0 (Viola Prat). Ejercita el slot de imagen a sangre foto.lugar, que se llena con una foto de su propio inventario en Polanco.",
+  "categoria": "zonas",
+  "formato": "post",
+  "template_ref": "consejo_5-ventajas_post.json",
+  "titulo_idea": "Los mejores rincones de Polanco",
+  "gancho": "Contenido de zona: atrae seguidores locales sin hablar de propiedades.",
+  "valores_sugeridos": {
+    "zona": "Polanco",
+    "ciudad": "Ciudad de México",
+    "lugar": "rincones",
+    "bajada": "La zona que mejor conozco, en cinco paradas."
+  },
+  "caption_sugerida": "Polanco no se entiende solo por sus precios. Te llevo por los rincones que le dan valor a la zona y que casi nadie menciona en una visita. ¿Cuál te falta conocer?",
+  "campos_a_completar": []
+}

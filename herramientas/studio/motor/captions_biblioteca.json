@@ -1,0 +1,241 @@
+{
+  "_nota": "Biblioteca curada de captions para el piloto. Escritas a mano con el doc de voz de Pulppo (Notion, 'Voz y tono') delante. Reemplaza la llamada a la IA en la fase 1: no hay API key ni costo, y las correcciones que hagan los asesores son el material para afinar el prompt después.",
+  "_reglas": [
+    "TÚ, nunca usted ni vos. Español de México.",
+    "Voz activa: 'Publicaste tu propiedad', no 'Tu propiedad fue publicada'.",
+    "Escritura positiva: decir qué sí se puede hacer, no qué no.",
+    "Español sencillo, sin jerga tecnológica ni de startup.",
+    "Sin género: nada de 'experto/experta'. La misma caption sirve para los 988.",
+    "Sin cifras inventadas. Si un dato no está verificado, no va.",
+    "Emojis: no se prohíben, pero el default es sin ellos. Los de persona y mano SIEMPRE con tono de piel (👋🏽), nunca la carita amarilla.",
+    "{zona}, {ciudad} y {cta} se resuelven del perfil del asesor."
+  ],
+  "captions": [
+    {
+      "id": "compra-dos-horarios",
+      "categoria": "consejo",
+      "tema": "compra",
+      "texto": "Antes de enamorarte de una propiedad, visítala a dos horas distintas del día. La luz cambia, el ruido cambia y el estacionamiento de la calle también. Es la prueba más barata que puedes hacer antes de decidir. {cta}",
+      "porque": "Consejo accionable que nadie da y que se puede aplicar el mismo día."
+    },
+    {
+      "id": "compra-precio-lista",
+      "categoria": "consejo",
+      "tema": "compra",
+      "texto": "El precio de lista no es el precio final, pero tampoco es una rifa. Si sabes qué se vendió cerca y en cuánto tiempo, negocias con datos en la mano. ¿Quieres saber cómo está {zona} hoy?",
+      "porque": "Ofrece información concreta a cambio de la conversación."
+    },
+    {
+      "id": "compra-mantenimiento",
+      "categoria": "consejo",
+      "tema": "compra",
+      "texto": "La pregunta que casi nadie hace en una visita: ¿cuánto es el mantenimiento y qué incluye? Dos departamentos con la misma renta pueden costar muy distinto al final del mes.",
+      "porque": "Revela un costo oculto. Genera guardados."
+    },
+    {
+      "id": "renta-diez-minutos",
+      "categoria": "consejo",
+      "tema": "renta",
+      "texto": "Un inquilino decide en los primeros diez minutos de la visita. Lo que más pesa: la luz natural, el olor y qué tan fácil fue llegar. Prepara esos tres antes de publicar. {cta}",
+      "porque": "Le habla a quien va a rentar su propiedad, que es quien capta."
+    },
+    {
+      "id": "renta-no-es-tirar",
+      "categoria": "consejo",
+      "tema": "renta",
+      "texto": "Rentar no es tirar el dinero. Si vas a estar menos de tres años en la ciudad, casi siempre sale mejor rentar que comprar y volver a vender. Cuéntame tu caso y te digo qué te conviene.",
+      "porque": "Desarma una creencia común sin pelearse con ella."
+    },
+    {
+      "id": "venta-paisaje",
+      "categoria": "consejo",
+      "tema": "venta",
+      "texto": "Una propiedad bien puesta se vende; una mal puesta se vuelve parte del paisaje. Si lleva dos meses publicada y sin visitas, el problema casi nunca es el mercado. {cta}",
+      "porque": "Es la caption de captación más directa sin sonar a venta."
+    },
+    {
+      "id": "venta-papeles-antes",
+      "categoria": "requisitos",
+      "tema": "venta",
+      "texto": "Si vas a vender, ordena esto antes de publicar: escrituras, predial al corriente y el régimen de condominio. Juntarlos toma semanas, y siempre hacen falta justo cuando ya hay comprador.",
+      "porque": "Utilidad pura. Es de las que más se guardan y se reenvían."
+    },
+    {
+      "id": "credito-capacidad-primero",
+      "categoria": "consejo",
+      "tema": "credito",
+      "texto": "Antes de buscar propiedad, busca tu capacidad de crédito. Saber cuánto te prestan cambia por completo la lista de opciones y te ahorra visitas que no iban a funcionar. ¿Te ayudo a revisarlo?",
+      "porque": "Invierte el orden con el que la mayoría empieza."
+    },
+    {
+      "id": "credito-gastos-aparte",
+      "categoria": "consejo",
+      "tema": "credito",
+      "texto": "Tu enganche no es lo único que necesitas ahorrar. La escrituración, el avalúo y el notario se pagan aparte, y sorprenden a quien no los tenía contemplados.",
+      "porque": "Previene la sorpresa que más operaciones detiene."
+    },
+    {
+      "id": "requisitos-hipotecario",
+      "categoria": "requisitos",
+      "tema": "credito",
+      "texto": "Requisitos para un crédito hipotecario: identificación oficial, comprobantes de ingresos de los últimos tres meses, historial crediticio sano, enganche comprobable y el avalúo de la propiedad. Júntalos antes y te ahorras semanas de trámite.",
+      "porque": "Checklist completo. Formato que rinde en carrusel."
+    },
+    {
+      "id": "zona-que-la-sostiene",
+      "categoria": "zonas",
+      "tema": "zona",
+      "texto": "{zona} no se explica solo por el precio. Te muestro qué la sostiene: quién vive ahí, qué se está construyendo y cómo se llega. {cta}",
+      "porque": "Contenido de zona sin vender nada. Atrae seguidores locales."
+    },
+    {
+      "id": "zona-tiempo-de-venta",
+      "categoria": "zonas",
+      "tema": "zona",
+      "texto": "Cuando me preguntan por {zona}, lo primero que reviso no es el precio: es cuánto tarda en venderse lo que se publica ahí. Eso dice más del mercado que cualquier lista.",
+      "porque": "Muestra criterio profesional en una sola frase."
+    },
+    {
+      "id": "tendencia-cuanto-tarda",
+      "categoria": "tendencias",
+      "tema": "mercado",
+      "texto": "Lo que más me preguntan últimamente en {zona} no es cuánto cuesta, sino cuánto tarda en rentarse. La respuesta cambia mucho de una calle a otra. ¿Te la busco para tu caso?",
+      "porque": "Tendencia contada desde la experiencia propia, sin inventar cifras."
+    },
+    {
+      "id": "avaluo-precio-alto",
+      "categoria": "avaluo",
+      "tema": "precio",
+      "texto": "Poner un precio alto para después negociar suele salir caro. Los primeros treinta días son cuando más se ve tu propiedad, y si el precio espanta, ese impulso no regresa. {cta}",
+      "porque": "Argumento de captación que el dueño entiende de inmediato."
+    },
+    {
+      "id": "avaluo-comparables",
+      "categoria": "avaluo",
+      "tema": "precio",
+      "texto": "El precio de tu propiedad no lo decide lo que necesitas, lo decide lo que se está vendiendo alrededor. Te puedo mostrar los comparables reales de {zona}.",
+      "porque": "Ofrece una entrega concreta, no una asesoría abstracta."
+    },
+    {
+      "id": "inversion-tres-cosas",
+      "categoria": "consejo",
+      "tema": "inversion",
+      "texto": "Invertir en ladrillo no es solo comprar barato. Es comprar algo que se rente rápido, que se pueda vender después y que no te dé un dolor de cabeza cada mes. ¿Buscas para vivir o para rentar?",
+      "porque": "La pregunta final segmenta al prospecto en la respuesta."
+    },
+    {
+      "id": "inversion-sin-dudas",
+      "categoria": "frase",
+      "tema": "inversion",
+      "texto": "La mejor propiedad no es la más barata, es la que no te deja dudas. Si algo te incomoda en la visita, te va a incomodar todos los días.",
+      "porque": "Frase corta, el formato más publicado. Funciona sola."
+    },
+    {
+      "id": "primera-empieza-banco",
+      "categoria": "consejo",
+      "tema": "primera_vivienda",
+      "texto": "Comprar tu primera propiedad no empieza en el anuncio, empieza en el banco. Ordena tu buró, junta tres meses de comprobantes y ahí sí salimos a buscar. {cta}",
+      "porque": "Le habla al segmento más grande y más perdido."
+    },
+    {
+      "id": "errores-tres-caros",
+      "categoria": "consejo",
+      "tema": "errores",
+      "texto": "Tres cosas que salen caras al comprar: firmar sin revisar el régimen de condominio, no preguntar por el mantenimiento y confiar en fotos tomadas con gran angular. Las tres se resuelven en una visita.",
+      "porque": "Estructura de lista, ideal para carrusel de tres puntos."
+    },
+    {
+      "id": "pregunta-comprar-rentar",
+      "categoria": "pregunta",
+      "tema": "decision",
+      "texto": "¿Comprar o rentar? La respuesta honesta es que depende de cuánto tiempo te vas a quedar. Cuéntame tu caso y te digo qué te conviene.",
+      "porque": "Pregunta de decisión: de las que más responden por mensaje directo."
+    },
+    {
+      "id": "pregunta-donde-vivirias",
+      "categoria": "pregunta",
+      "tema": "aspiracional",
+      "texto": "¿En qué zona te gustaría vivir si el presupuesto no fuera el tema? Te leo, y de paso te digo qué hay cerca dentro de tu rango real.",
+      "porque": "Aspiracional pero aterriza en una conversación útil."
+    },
+    {
+      "id": "operacion-captacion",
+      "categoria": "operacion",
+      "tema": "captacion",
+      "texto": "Nueva propiedad en {zona}. La conozco por dentro, así que en dos minutos te digo si vale la pena que la veas o si mejor te aviso cuando salga otra. {cta}",
+      "porque": "Acompaña la pieza de captación. Filtra en vez de empujar."
+    },
+    {
+      "id": "operacion-captacion-rescate",
+      "categoria": "operacion",
+      "tema": "captacion",
+      "texto": "Tomé una propiedad en {zona} que llevaba meses sin moverse con otra estrategia. A veces no es el inmueble: es cómo se está contando.",
+      "porque": "Captación indirecta. Le habla al dueño frustrado que la está viendo."
+    },
+    {
+      "id": "operacion-cierre",
+      "categoria": "operacion",
+      "tema": "cierre",
+      "texto": "Cerramos otra operación en {zona}. Gracias por la confianza. Cada cierre se logra con trabajo y con gente que decide bien acompañada. Si estás pensando en vender, hablemos.",
+      "porque": "Acompaña la pieza de cierre exitoso. Celebra sin presumir."
+    },
+    {
+      "id": "operacion-entrega",
+      "categoria": "operacion",
+      "tema": "cierre",
+      "texto": "Entregamos llaves esta semana. Lo que no se ve en la foto: dos meses de trámites, un avalúo y muchas preguntas resueltas. Eso es lo que hago. {cta}",
+      "porque": "Muestra el trabajo detrás del resultado."
+    },
+    {
+      "id": "frase-propiedad-perfecta",
+      "categoria": "frase",
+      "tema": "mentalidad",
+      "texto": "No existe la propiedad perfecta. Existe la que se ajusta a cómo vives hoy y a cómo vas a vivir en cinco años.",
+      "porque": "Frase de mentalidad, descansa el feed entre piezas informativas."
+    },
+    {
+      "id": "frase-papeles-antes",
+      "categoria": "frase",
+      "tema": "mentalidad",
+      "texto": "El mejor momento para ordenar tus papeles es antes de que aparezca el comprador.",
+      "porque": "Una línea. Funciona en historia y en frase corta."
+    },
+    {
+      "id": "temporada-diciembre",
+      "categoria": "festividades",
+      "tema": "temporada",
+      "texto": "Diciembre parece mal mes para vender y no lo es: hay menos propiedades publicadas y quien busca en estas fechas busca en serio. {cta}",
+      "porque": "Contenido de temporada con un argumento real detrás."
+    },
+    {
+      "id": "temporada-inicio-ano",
+      "categoria": "festividades",
+      "tema": "temporada",
+      "texto": "Empieza el año con esto resuelto: revisa que tu predial esté al corriente y que tus escrituras estén completas. El día que vendas o heredes, ya está listo.",
+      "porque": "Enero. Utilidad concreta en un momento en que la gente ordena cosas."
+    },
+    {
+      "id": "reel-recorrido",
+      "categoria": "reel",
+      "tema": "recorrido",
+      "texto": "Te llevo a ver una propiedad en {zona} sin edición y sin filtros: lo que ves es lo que hay. ¿Qué te gustaría que revisara en la próxima?",
+      "porque": "Acompaña la idea sin diseño del reel. La pregunta final alimenta el siguiente."
+    },
+    {
+      "id": "compra-luz-emoji",
+      "categoria": "consejo",
+      "tema": "compra",
+      "registro": "con_emojis",
+      "texto": "Si visitas una propiedad de día y las luces están todas prendidas, pregunta por qué 👀 A veces es costumbre, a veces es que entra poca luz natural. {cta}",
+      "porque": "Ejemplo del registro con emoji, para los asesores que sí los usan."
+    },
+    {
+      "id": "venta-lista-emoji",
+      "categoria": "requisitos",
+      "tema": "venta",
+      "registro": "con_emojis",
+      "texto": "¿Vas a vender este año? Junta esto desde ahora 👇🏽 escrituras, predial al corriente, régimen de condominio y una identificación vigente. Con eso el cierre no se atora.",
+      "porque": "Muestra la regla del tono de piel: 👇🏽, no la carita amarilla."
+    }
+  ]
+}

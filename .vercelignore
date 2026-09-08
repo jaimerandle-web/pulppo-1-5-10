@@ -1,0 +1,5 @@
+# El motor del Studio son 61 MB de templates de Polotno con las 8 fuentes de marca
+# embebidas en base64. No hace falta nada de eso para construir la app: lo que se sirve es
+# el bundle ya generado en public/studio/index.html. Sin esta línea, cada deploy sube 61 MB
+# que nadie lee.
+herramientas/

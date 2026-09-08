@@ -1,0 +1,18 @@
+# Bundles y previews GENERADOS por el motor. Se rehacen con
+#   python motor/gen_prototipo_web.py --equipo "<inmobiliaria>" --incluir-todos --salida studio_piloto
+# El que se publica vive versionado en pulppo-1-5-10 (public/studio/index.html), no acá.
+motor/studio_piloto/
+motor/prototipo_web/
+motor/deploy/
+motor/preview/
+motor/preview_cobrand/
+
+# Salidas de corridas de prueba del prototipo. Los `copy_ejemplo*.json` SÍ se versionan:
+# son los fixtures que se le pasan con --copy cuando no hay ANTHROPIC_API_KEY.
+motor/salidas/*_pieza.json
+motor/salidas/viola-prat_*
+
+.DS_Store
+__pycache__/
+*.pyc
+.venv/

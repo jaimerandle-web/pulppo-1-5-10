@@ -1,0 +1,306 @@
+[
+  {
+    "ref": "consejo_5-ventajas_post.json",
+    "categoria": "zonas",
+    "formato": "post",
+    "label": "Zonas — los mejores de (portada)",
+    "dimensiones": "1080x1350",
+    "titular_real": "Los mejores {{lugar}} de {{zona}}.",
+    "blank_spaces": [
+      "bajada",
+      "ciudad",
+      "lugar",
+      "zona"
+    ],
+    "tokens_perfil": [],
+    "nota": "OJO: nombre de archivo engañoso. Verificado 4 ago 2026: este archivo y zonas_los-mejores_post.json están intercambiados. El nombre dice '5-ventajas' pero el contenido es la portada 'Los mejores X de Y'. La metadata de aquí es la correcta; NO renombrar sin actualizar semillas_ideas.json.",
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "consejo_3-pasos_post.json",
+    "categoria": "consejo",
+    "formato": "post",
+    "label": "Consejo — cómo en 3 pasos",
+    "dimensiones": "1080x1350",
+    "blank_spaces": [
+      "paso_1_desc",
+      "paso_1_titulo",
+      "paso_2_desc",
+      "paso_2_titulo",
+      "paso_3_desc",
+      "paso_3_titulo",
+      "tema"
+    ],
+    "tokens_perfil": [
+      "broker.name",
+      "broker.phone"
+    ],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "consejo_requisitos_post.json",
+    "categoria": "requisitos",
+    "formato": "post",
+    "label": "Requisitos — checklist",
+    "dimensiones": "1080x1350",
+    "blank_spaces": [
+      "requisito_1",
+      "requisito_2",
+      "requisito_3",
+      "requisito_4",
+      "requisito_5",
+      "tramite"
+    ],
+    "tokens_perfil": [
+      "broker.name",
+      "broker.phone"
+    ],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "frase_quote_post.json",
+    "categoria": "frase",
+    "formato": "post",
+    "label": "Frase — quote sobre foto",
+    "dimensiones": "1080x1350",
+    "blank_spaces": [
+      "autor",
+      "frase",
+      "tema"
+    ],
+    "tokens_perfil": [
+      "broker.handle"
+    ],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "pregunta_portada_post.json",
+    "categoria": "pregunta",
+    "formato": "post",
+    "label": "Pregunta — portada de enganche",
+    "dimensiones": "1080x1350",
+    "blank_spaces": [
+      "pregunta",
+      "tema"
+    ],
+    "tokens_perfil": [
+      "broker.name",
+      "broker.phone"
+    ],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "dato_declaracion_post.json",
+    "categoria": "dato",
+    "formato": "post",
+    "label": "Dato — declaración número gigante",
+    "dimensiones": "1080x1350",
+    "blank_spaces": [
+      "bajada",
+      "cta",
+      "dato",
+      "tema"
+    ],
+    "tokens_perfil": [],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "zonas_los-mejores_post.json",
+    "categoria": "consejo",
+    "formato": "post",
+    "label": "Consejo — 5 ventajas (lista numerada)",
+    "dimensiones": "1080x1350",
+    "titular_real": "5 ventajas de invertir en {{zona}}.",
+    "nota": "OJO: nombre de archivo engañoso, intercambiado con consejo_5-ventajas_post.json. Contenido real = lista de 5 ventajas.",
+    "blank_spaces": [
+      "ventaja_1",
+      "ventaja_2",
+      "ventaja_3",
+      "ventaja_4",
+      "ventaja_5",
+      "zona"
+    ],
+    "tokens_perfil": [
+      "broker.name",
+      "company.name"
+    ],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "zonas_top5_post.json",
+    "categoria": "zonas",
+    "formato": "post",
+    "label": "Zonas — Top 5",
+    "dimensiones": "1080x1350",
+    "blank_spaces": [
+      "ciudad",
+      "cosa",
+      "lugar_1",
+      "lugar_2",
+      "lugar_3",
+      "lugar_4",
+      "lugar_5",
+      "zona"
+    ],
+    "tokens_perfil": [],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "stories/historia_frase_story.json",
+    "categoria": "frase",
+    "formato": "story",
+    "label": "Historia — frase/tip",
+    "dimensiones": "1080x1920",
+    "blank_spaces": [
+      "frase",
+      "tema"
+    ],
+    "tokens_perfil": [
+      "broker.handle"
+    ],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "stories/historia_pregunta_story.json",
+    "categoria": "pregunta",
+    "formato": "story",
+    "label": "Historia — pregunta enganche",
+    "dimensiones": "1080x1920",
+    "blank_spaces": [
+      "pregunta",
+      "tema"
+    ],
+    "tokens_perfil": [],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "stories/historia_dato_story.json",
+    "categoria": "dato",
+    "formato": "story",
+    "label": "Historia — dato que sorprende",
+    "dimensiones": "1080x1920",
+    "blank_spaces": [
+      "contexto",
+      "dato",
+      "fuente",
+      "tema"
+    ],
+    "tokens_perfil": [],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "stories/historia_zona_story.json",
+    "categoria": "zonas",
+    "formato": "story",
+    "label": "Historia — zona portada",
+    "dimensiones": "1080x1920",
+    "blank_spaces": [
+      "bajada",
+      "ciudad",
+      "zona"
+    ],
+    "tokens_perfil": [],
+    "familia": "contenido_valor"
+  },
+  {
+    "ref": "propiedad/propiedad_datos_story.json",
+    "familia": "propiedad",
+    "categoria": "propiedad",
+    "formato": "story",
+    "label": "Propiedad — ficha con datos y 4 fotos",
+    "dimensiones": "1080x1920",
+    "paginas": 1,
+    "tokens_propiedad": [
+      "address.neighborhood.name",
+      "address.street",
+      "attributes.bathrooms",
+      "attributes.parkings",
+      "attributes.suites",
+      "attributes.totalSurface",
+      "company.logo.pulppoInverted",
+      "listing.operation",
+      "pictures.0.url",
+      "pictures.2.url",
+      "pictures.3.url",
+      "pictures.4.url",
+      "type"
+    ],
+    "blank_spaces": [],
+    "tokens_perfil": [
+      "company.logo.pulppoInverted"
+    ],
+    "nota": "Anuncio de propiedad: foto principal, 3 secundarias y los atributos. Los tokens son rutas al documento de la propiedad, NO blank spaces."
+  },
+  {
+    "ref": "propiedad/propiedad_fotos_story6.json",
+    "familia": "propiedad",
+    "categoria": "propiedad",
+    "formato": "story",
+    "label": "Propiedad — secuencia de 6 con precio",
+    "dimensiones": "1080x1920",
+    "paginas": 6,
+    "tokens_propiedad": [
+      "address.neighborhood.name",
+      "attributes.bathrooms",
+      "attributes.parkings",
+      "attributes.suites",
+      "attributes.totalSurface",
+      "company.logo.pulppoInverted",
+      "listing.operation",
+      "listing.price.price",
+      "pictures.0.url",
+      "pictures.1.url",
+      "pictures.10.url",
+      "pictures.2.url",
+      "pictures.3.url",
+      "pictures.4.url",
+      "pictures.5.url",
+      "pictures.6.url",
+      "pictures.7.url",
+      "pictures.8.url",
+      "pictures.9.url",
+      "type"
+    ],
+    "blank_spaces": [],
+    "tokens_perfil": [
+      "company.logo.pulppoInverted"
+    ],
+    "nota": "Seis páginas: portada, tipo/operación, colonia, mosaico, ficha con precio y cierre. Necesita 11 fotos públicas (las tiene el 80% de las publicadas)."
+  },
+  {
+    "ref": "propiedad/cierre_exitoso_story.json",
+    "familia": "operacion",
+    "categoria": "operacion",
+    "formato": "story",
+    "label": "Cierre exitoso — historia",
+    "dimensiones": "1080x1920",
+    "paginas": 2,
+    "tokens_propiedad": [
+      "company.logo.pulppoInverted",
+      "pictures.0.url"
+    ],
+    "blank_spaces": [],
+    "tokens_perfil": [
+      "company.logo.pulppoInverted"
+    ],
+    "nota": "Dos páginas = dos variantes de diseño. Texto fijo («Cierre Exitoso.» / «¡GRACIAS POR SU CONFIANZA!»): solo necesita la foto y el logo. Cero campos que llenar."
+  },
+  {
+    "ref": "propiedad/cierre_exitoso_post.json",
+    "familia": "operacion",
+    "categoria": "operacion",
+    "formato": "post",
+    "label": "Cierre exitoso — post 3:4",
+    "dimensiones": "1080x1440",
+    "paginas": 2,
+    "tokens_propiedad": [
+      "company.logo.pulppoInverted",
+      "pictures.0.url"
+    ],
+    "blank_spaces": [],
+    "tokens_perfil": [
+      "company.logo.pulppoInverted"
+    ],
+    "nota": "Igual que la historia pero 1080x1440 (3:4). Dos variantes de diseño."
+  }
+]

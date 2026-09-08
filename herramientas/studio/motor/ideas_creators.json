@@ -1,0 +1,243 @@
+{
+  "_nota": "Ideas escritas copiando el formato real de los mensajes que Ale manda al grupo de Diamond House (Pulppo Creators, junio 2026). Esa es la voz que ya funcionó con asesores reales; las mías sonaban a folleto.",
+  "_patron_observado": {
+    "titulo": "«Día N de Pulppo Creators 🐙» + un emoji del tema",
+    "objetivo": "una línea diciendo QUÉ logra hoy, no qué va a publicar",
+    "instruccion": "arranca con 📸 y un verbo: tómate, graba, elige, usa",
+    "plantilla": "texto con [CORCHETES] para que solo rellene y copie",
+    "cierre": "etiquetar a la inmobiliaria y a @pulppomx",
+    "esfuerzo": "siempre dice cuánto cuesta: «¡Menos de 2 min!»",
+    "emojis": "sí, y con tono de piel: 💪🏼 🙌🏽"
+  },
+  "_hallazgo": "Miriam y Mercedes pidieron en el grupo «vas muy rápido, mejor dos por semana». El ritmo objetivo del piloto debería ser 2 por semana, NO uno diario.",
+  "ideas": [
+    {
+      "id": "cr-quien-eres",
+      "titulo": "Que sepan quién eres",
+      "objetivo": "Hoy la idea es que tu audiencia sepa quién eres como asesor inmobiliario.",
+      "instruccion": "📸 Tómate una selfie, elige una foto que te guste de ti o graba un videito.",
+      "plantilla": "Soy [NOMBRE] y como asesor inmobiliario me especializo en {zona}, para vender o rentar tu propiedad o ayudarte a encontrar tu próximo hogar. Si puedo ayudarte con algo, escríbeme con confianza.",
+      "formato": "historia",
+      "esfuerzo": "menos de 2 min",
+      "diseno": null
+    },
+    {
+      "id": "cr-dia-real",
+      "titulo": "Que te vean en acción",
+      "objetivo": "La gente conecta con personas, no con anuncios. Muestra algo real de tu día, sin producción.",
+      "instruccion": "📸 Toma una foto o videito de un momento cualquiera: las llaves de una propiedad, rumbo a una cita, tu cafecito antes de arrancar o tu espacio de trabajo.",
+      "plantilla": "Martes de visitas por {zona} 🏡",
+      "formato": "historia",
+      "esfuerzo": "menos de 2 min",
+      "diseno": null
+    },
+    {
+      "id": "cr-consentida",
+      "titulo": "Presume una propiedad",
+      "objetivo": "Elige una que tengas en venta o renta, de esas que crees que son una joya, y muéstrala.",
+      "instruccion": "📸 Dos formas, la que prefieras: usa la plantilla de Propiedad (eliges cuál y el diseño sale solito 🎨) o grábate mostrándola, como si se la enseñaras a un amigo.",
+      "plantilla": "Mi consentida de la semana: [TIPO] en {zona}",
+      "tip": "Súmale un sticker de encuesta: «¿Qué prefieres? Casa / Depa» para que interactúen.",
+      "formato": "historia",
+      "esfuerzo": "3 min",
+      "diseno": "propiedad/propiedad_datos_story.json"
+    },
+    {
+      "id": "cr-tip-util",
+      "titulo": "Enseña algo útil",
+      "objetivo": "Educar también es vender, sin vender. Un tip rápido para quien compra o vende.",
+      "instruccion": "📸 Escríbelo sobre una foto o grábate diciéndolo a cámara. Elige uno:",
+      "opciones": [
+        "Antes de comprar, pide el predial y el agua de los últimos dos años.",
+        "Visita la zona a distintas horas: el tráfico, el ruido y la seguridad cambian.",
+        "Revisa que las escrituras estén libres de gravamen.",
+        "Pregunta cuánto es el mantenimiento y qué incluye, antes de enamorarte."
+      ],
+      "formato": "historia",
+      "esfuerzo": "menos de 2 min",
+      "diseno": "stories/historia_frase_story.json"
+    },
+    {
+      "id": "cr-pregunta-audiencia",
+      "titulo": "Deja que hable tu audiencia",
+      "objetivo": "Además de generar conversación, te da ideas para tu próximo contenido.",
+      "instruccion": "📸 Usa el sticker de preguntas o de encuesta de Instagram con algo como:",
+      "opciones": [
+        "¿Qué es lo número uno que buscas en tu próxima casa? (caja de preguntas)",
+        "¿Comprar o rentar? (encuesta)",
+        "¿Más espacio o mejor ubicación? (encuesta)"
+      ],
+      "tip": "Responde uno por uno con su nombre. Ahí es donde se abre la conversación.",
+      "formato": "historia",
+      "esfuerzo": "2 min",
+      "diseno": "stories/historia_pregunta_story.json"
+    },
+    {
+      "id": "cr-antes-despues",
+      "titulo": "Antes y después de preparar una propiedad",
+      "objetivo": "Que vean el trabajo que hay detrás de una foto bonita.",
+      "instruccion": "📸 Graba la propiedad como estaba y cómo quedó después de ordenarla y abrir cortinas. Dos tomas, sin edición, con tu voz explicando qué cambiaste.",
+      "formato": "reel",
+      "esfuerzo": "dos tomas de 15 seg",
+      "diseno": null
+    },
+    {
+      "id": "cr-camina-zona",
+      "titulo": "Camina tu zona",
+      "objetivo": "Posicionarte como quien conoce {zona}, no como quien vende ahí.",
+      "instruccion": "📸 Graba caminando y señala tres cosas que un comprador no vería en una visita rápida: dónde se estaciona la gente, qué abre de noche, cómo se pone la calle en hora pico.",
+      "formato": "reel",
+      "esfuerzo": "40 seg de caminata",
+      "diseno": null
+    },
+    {
+      "id": "cr-pregunta-frecuente",
+      "titulo": "Responde lo que más te preguntan",
+      "objetivo": "Si te lo preguntan a ti, se lo están preguntando muchos más.",
+      "instruccion": "📸 Habla a cámara y responde en treinta segundos la duda que más te repitieron esta semana. Empieza con la pregunta textual, sin presentación.",
+      "formato": "reel",
+      "esfuerzo": "30 seg",
+      "diseno": null
+    },
+    {
+      "id": "cr-cierre",
+      "titulo": "Cuenta que cerraste",
+      "objetivo": "Nada genera más confianza que una operación real. No es presumir, es mostrar que trabajas.",
+      "instruccion": "📸 Usa la plantilla de Cierre exitoso con la foto de la propiedad, o graba las llaves en tu mano.",
+      "plantilla": "Cerramos en {zona} 🙌🏽 Gracias por la confianza.",
+      "formato": "historia",
+      "esfuerzo": "menos de 2 min",
+      "diseno": "propiedad/cierre_exitoso_story.json"
+    },
+    {
+      "id": "cr-nueva-captacion",
+      "titulo": "Estrena una captación",
+      "objetivo": "Compartirla el mismo día que la tomas es cuando más se comenta.",
+      "instruccion": "📸 Usa la plantilla de Propiedad: eliges cuál y se arma sola con sus fotos y datos.",
+      "plantilla": "Nueva en {zona} 👀 Escríbeme y te paso los detalles.",
+      "formato": "historia",
+      "esfuerzo": "menos de 2 min",
+      "diseno": "propiedad/propiedad_datos_story.json"
+    },
+    {
+      "id": "cr-error-comun",
+      "titulo": "Un error que ves seguido",
+      "objetivo": "Contar un error común te posiciona como quien ya lo vivió muchas veces.",
+      "instruccion": "📸 Grábate contando el error que más ves y cómo se evita. Que sea uno solo, concreto.",
+      "opciones": [
+        "Poner precio alto para después negociar: los primeros treinta días son los que más se ve tu propiedad.",
+        "Buscar propiedad antes de saber cuánto te presta el banco.",
+        "Firmar sin revisar el régimen de condominio."
+      ],
+      "formato": "reel",
+      "esfuerzo": "30 seg",
+      "diseno": null
+    },
+    {
+      "id": "cr-requisitos",
+      "titulo": "La lista que todos guardan",
+      "objetivo": "Los requisitos de un trámite son de lo más guardado y reenviado.",
+      "instruccion": "📸 Usa la plantilla de Requisitos y elige el trámite. Si prefieres, dilo a cámara y súbelo como historia.",
+      "opciones": [
+        "Requisitos para un crédito hipotecario",
+        "Requisitos para vender tu propiedad",
+        "Requisitos para rentar"
+      ],
+      "formato": "post",
+      "esfuerzo": "5 min",
+      "diseno": "consejo_requisitos_post.json"
+    },
+    {
+      "id": "cr-por-que-zona",
+      "titulo": "Por qué {zona}",
+      "objetivo": "Contenido de zona: atrae vecinos, que son los que recomiendan.",
+      "instruccion": "📸 Usa la plantilla de Zona, o graba tres tomas cortas de lo que más te gusta del lugar.",
+      "plantilla": "{zona}: por qué la gente que llega se queda.",
+      "formato": "historia",
+      "esfuerzo": "3 min",
+      "diseno": "stories/historia_zona_story.json"
+    },
+    {
+      "id": "cr-swipe-consejo",
+      "titulo": "Un carrusel que se guarde",
+      "objetivo": "El carrusel es el formato que más se guarda. Tres ideas, bien separadas.",
+      "instruccion": "📸 Usa la plantilla de carrusel y elige el tema. Los textos vienen escritos; solo ajusta lo que no suene a ti.",
+      "opciones": [
+        "¿En qué se fijan los inquilinos al rentar?",
+        "Cómo elegir entre dos propiedades",
+        "Qué revisar en una visita"
+      ],
+      "formato": "carrusel",
+      "esfuerzo": "8 min",
+      "diseno": "consejo_swipe_post.json"
+    },
+    {
+      "id": "cr-recomendacion-local",
+      "titulo": "Recomienda algo de tu zona",
+      "objetivo": "Contenido local puro. No habla de propiedades y por eso funciona.",
+      "instruccion": "📸 Foto o video de tu lugar favorito en {zona}: dónde desayunas, dónde llevas a un cliente después de una visita.",
+      "plantilla": "Si vives o buscas en {zona}, este lugar tienes que conocerlo.",
+      "formato": "historia",
+      "esfuerzo": "menos de 2 min",
+      "diseno": null
+    },
+    {
+      "id": "cr-detras-de-camaras",
+      "titulo": "El trabajo que no se ve",
+      "objetivo": "Mostrar el esfuerzo detrás de una operación construye confianza mejor que cualquier anuncio.",
+      "instruccion": "📸 Cuenta en una historia algo que hiciste esta semana que nadie ve: papeles, un avalúo, una negociación difícil, veinte llamadas.",
+      "plantilla": "Lo que no se ve de esta semana: [QUÉ HICISTE]",
+      "formato": "historia",
+      "esfuerzo": "menos de 2 min",
+      "diseno": null
+    },
+    {
+      "id": "cr-dm-reactivar",
+      "titulo": "Reactiva a quien ya te visitó",
+      "objetivo": "No es contenido, pero es lo que más rápido se convierte en visita.",
+      "instruccion": "📸 Sin publicar nada: escríbele a quien visitó una propiedad hace más de un mes y no cerró.",
+      "plantilla": "Bajó de precio una en {zona} parecida a la que viste. ¿Te la mando?",
+      "formato": "mensaje directo",
+      "esfuerzo": "5 min",
+      "diseno": null
+    },
+    {
+      "id": "cr-comparar-dos",
+      "titulo": "Pon a votar dos propiedades",
+      "objetivo": "Que elijan entre dos opciones tuyas: interactúan y de paso te dicen qué les gusta.",
+      "instruccion": "📸 Sube dos fotos de propiedades tuyas con un sticker de encuesta.",
+      "plantilla": "¿Cuál te llevas? Opción A / Opción B",
+      "formato": "historia",
+      "esfuerzo": "3 min",
+      "diseno": null
+    },
+    {
+      "id": "cr-frase",
+      "titulo": "Una frase tuya",
+      "objetivo": "Descansa el feed entre piezas informativas y muestra cómo piensas.",
+      "instruccion": "📸 Usa la plantilla de frase, o escríbela sobre una foto de una propiedad tuya.",
+      "opciones": [
+        "La mejor propiedad no es la más barata, es la que no te deja dudas.",
+        "No existe la propiedad perfecta. Existe la que se ajusta a cómo vives hoy.",
+        "El mejor momento para ordenar tus papeles es antes de que aparezca el comprador."
+      ],
+      "formato": "historia",
+      "esfuerzo": "menos de 2 min",
+      "diseno": "stories/historia_frase_story.json"
+    },
+    {
+      "id": "cr-temporada",
+      "titulo": "Aprovecha la temporada",
+      "objetivo": "Contenido de época, pero con un argumento real detrás, no solo la felicitación.",
+      "instruccion": "📸 Escríbelo sobre una foto tuya o de una propiedad.",
+      "opciones": [
+        "Diciembre parece mal mes para vender y no lo es: hay menos propiedades publicadas y quien busca en estas fechas, busca en serio.",
+        "Empieza el año con esto resuelto: predial al corriente y escrituras completas.",
+        "Antes de vacaciones es cuando más se buscan rentas. Si la tuya está lista, publícala ya."
+      ],
+      "formato": "historia",
+      "esfuerzo": "menos de 2 min",
+      "diseno": null
+    }
+  ]
+}

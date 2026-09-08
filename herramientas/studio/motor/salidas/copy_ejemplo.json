@@ -1,0 +1,19 @@
+{
+  "_nota": "Salida de la capa de IA para la idea consejo:0 (broker Viola Prat). Generada siguiendo prompt_personalizacion.md, sin cifras inventadas. Sirve de fixture para probar el pipeline sin ANTHROPIC_API_KEY.",
+  "categoria": "consejo",
+  "formato": "post",
+  "template_ref": "zonas_los-mejores_post.json",
+  "titulo_idea": "5 ventajas de invertir en Polanco",
+  "gancho": "Para posicionarte como la experta de tu zona principal.",
+  "valores_sugeridos": {
+    "zona": "Polanco",
+    "ventaja_1": "Demanda de renta corporativa todo el año.",
+    "ventaja_2": "Inventario nuevo escaso, precio firme.",
+    "ventaja_3": "Oficinas, comercio y restaurantes a pie.",
+    "ventaja_4": "Conexión directa a Reforma y Periférico.",
+    "ventaja_5": "Inquilino solvente y menor rotación.",
+    "bajada": "La zona más sólida de Miguel Hidalgo para invertir."
+  },
+  "caption_sugerida": "Invertir en Polanco no es moda, es estrategia. Te dejo las 5 razones por las que sigue siendo la zona más sólida de la ciudad para poner tu dinero. ¿Cuál te pesa más al decidir?",
+  "campos_a_completar": []
+}
