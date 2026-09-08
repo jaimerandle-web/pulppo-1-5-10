@@ -3,6 +3,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import type { AnalisisData } from '@/lib/analisis';
 import { CIERRES_WIN, DEMANDA_WIN, DESEMPENO_WIN, COMPARAR_OPTS, mesesOpts } from '@/lib/ventanas';
 import { InventarioView, FunnelView, YoyView, AsesoresView, Top10View, RecoView, GlosarioView } from '@/app/analisis/views';
+import PrintRoot from './PrintRoot';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
 const R = 2;
@@ -168,17 +169,13 @@ export default function MBAnalisis({ companyId, name, asesores = [] }: { company
 
             {data && (
                 <div id="mb-reporte" style={{ marginTop: 24 }}>
-                    {/* Al imprimir: carta VERTICAL, solo el reporte, sin cortar secciones a la mitad.
-                        Las tablas anchas se reducen con zoom en vez de desbordarse fuera de la hoja. */}
-                    <style>{`@media print {
-                        body * { visibility: hidden !important; }
-                        #mb-reporte, #mb-reporte * { visibility: visible !important; }
-                        #mb-reporte { position: absolute; left: 0; top: 0; width: 100%; margin: 0 !important; zoom: .74; }
-                        #mb-reporte .sec { break-inside: avoid; page-break-inside: avoid; margin-bottom: 16px !important; }
+                    {/* Al imprimir: carta VERTICAL y sólo el reporte. Lo que hace que NO se corte
+                        (quedarse en el flujo, sin zoom) vive en PrintRoot; aquí sólo va el ajuste
+                        de tipografía de las tablas para que quepan de ancho. */}
+                    <PrintRoot id="mb-reporte" extra={`
+                        #mb-reporte .sec { margin-bottom: 16px !important; }
                         #mb-reporte .banner { break-after: avoid; page-break-after: avoid; }
                         #mb-reporte table { font-size: 8.5px !important; }
-                        #mb-reporte .overflow-x-auto { overflow: visible !important; }
-                        #mb-reporte table.min-w-\\[1080px\\], #mb-reporte [class*="min-w-"] { min-width: 0 !important; }
                         /* Sin esto los encabezados se tocan entre sí y la fila de títulos se lee como
                            una sola palabra ("OFERTASCIERRESVISITA→CIERRE"). El letter-spacing de la
                            pantalla, en 8px y sin aire a los lados, es lo que los pega. */
@@ -187,8 +184,7 @@ export default function MBAnalisis({ companyId, name, asesores = [] }: { company
                         /* La de asesores lleva 18 columnas: necesita más aire que el resto. */
                         #mb-reporte table[class*="min-w-"] { font-size: 7px !important; }
                         #mb-reporte table[class*="min-w-"] th, #mb-reporte table[class*="min-w-"] td { padding-left: 2px !important; padding-right: 2px !important; }
-                        @page { size: letter portrait; margin: 11mm; }
-                    }`}</style>
+                    `} />
 
                     {/* Encabezado del reporte: banner negro con el título de lo que se está viendo. */}
                     <div className="banner" style={{ background: BLK, color: '#fff', borderRadius: R, padding: '22px 26px', marginBottom: 14 }}>

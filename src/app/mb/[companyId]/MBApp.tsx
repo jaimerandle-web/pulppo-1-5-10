@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import type { MBData, MBProp, MBFuera, RespKey } from '@/lib/mb';
 import MBAnalisis from './MBAnalisis';
+import PrintRoot from './PrintRoot';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2; // design system Pulppo: esquinas cuadradas
@@ -279,6 +280,26 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
         const xs = filtered.map((p) => p.respMedMin).filter((x): x is number => x != null).sort((a, b) => a - b);
         return xs.length ? xs[Math.floor(xs.length / 2)] : null;
     }, [filtered]);
+    // Los filtros aplicados, en texto, para que el PDF diga de qué recorte está hablando: en
+    // pantalla se ven en los controles, pero impreso el listado se queda sin contexto.
+    const rangoLbl = !ovr ? 'todo el histórico'
+        : rango === 'Personalizado' ? `${cfrom || '—'} → ${cto || '—'}` : rango.toLowerCase();
+    const filtrosActivos = useMemo(() => {
+        const out: string[] = [];
+        if (q.trim()) out.push(`Búsqueda: “${q.trim()}”`);
+        if (op) out.push(`Operación: ${op}`);
+        if (tipo) out.push(`Tipo: ${tipo}`);
+        if (estado) out.push(`Precio: ${estado}`);
+        if (asesor) out.push(`Asesor: ${asesor}`);
+        if (seg) out.push(SEG_LABEL[seg]);
+        for (const c of COLS) {
+            const v = (colf[c.key] ?? '').trim();
+            if (!v) continue;
+            out.push(c.num ? `${c.label} ${c.key === 'respMedMin' ? '≤' : '≥'} ${v}` : `${c.label} contiene “${v}”`);
+        }
+        return out;
+    }, [q, op, tipo, estado, asesor, seg, colf]);
+
     const onSort = (k: keyof MBProp) => { if (k === sortKey) setDir((x) => (x === 1 ? -1 : 1)); else { setSortKey(k); setDir(TEXT_COLS.includes(k) ? 1 : -1); } };
     const th: CSSProperties = { textAlign: 'left', padding: '8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
     const td: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
@@ -301,74 +322,105 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
                 {CHIP_SEGS.map((s) => <span key={s} onClick={() => setSeg(seg === s ? '' : s)} style={chip(seg === s)}>{SEG_LABEL[s]}</span>)}
                 {seg && !CHIP_SEGS.includes(seg) && <span onClick={() => setSeg('')} style={{ ...chip(true), background: SEA, borderColor: SEA }}>{SEG_LABEL[seg]} ✕</span>}
+                {/* Imprime EXACTAMENTE lo que está en pantalla: el PDF sale del mismo DOM ya
+                    filtrado y ordenado, así que no hay forma de que se desincronice. */}
+                <button onClick={() => window.print()} title="Sale el listado tal como lo tienes filtrado y ordenado"
+                    style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: R, border: `1px solid ${BLK}`, background: '#fff', color: BLK, cursor: 'pointer' }}>
+                    Exportar PDF
+                </button>
             </div>
 
-            <div style={{ background: LGT, padding: '14px 16px', borderRadius: R, marginBottom: 16 }}>
-                <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 17, marginBottom: 2 }}>Funnel comercial</div>
-                <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>
-                    Vistas/leads/visitas/ofertas: <b>{ovr ? rango.toLowerCase() : 'histórico'}</b>.
-                    {fueraFiltrada.length > 0 && <> Incluye <b>{f(fueraFiltrada.length)}</b> {fueraFiltrada.length === 1 ? 'propiedad que ya salió' : 'propiedades que ya salieron'} del inventario
-                        {nFueraCierres > 0 && <> ({f(nFueraCierres)} {nFueraCierres === 1 ? 'cierre' : 'cierres'})</>}: al venderse dejan de estar publicadas, pero su actividad es de este período. Por eso el funnel puede no cuadrar con la suma de la tabla.</>}
-                    {!fueraAplica && fueraSrc.length > 0 && <> Con este filtro sólo se cuenta el inventario publicado, así que <b>ofertas y cierres salen incompletos</b>.</>}
+            <div id="mb-props">
+                <PrintRoot id="mb-props" orientation="landscape" extra={`
+                    #mb-props .print-only { display: block !important; }
+                    #mb-props table { font-size: 7.5px !important; }
+                    #mb-props table th { letter-spacing: 0 !important; }
+                    #mb-props table th, #mb-props table td { padding: 3px !important; }
+                `} />
+
+                {/* Encabezado que sólo existe en el PDF: impreso, el listado se queda sin el
+                    nombre de la inmobiliaria ni los filtros con los que se generó. */}
+                <div className="print-only" style={{ display: 'none', background: BLK, color: '#fff', borderRadius: R, padding: '18px 22px', marginBottom: 14 }}>
+                    <div style={{ width: 40, height: 2, background: YEL, marginBottom: 11 }} />
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1.6px', textTransform: 'uppercase', color: '#c9c9c7' }}>Inventario de la inmobiliaria</div>
+                    <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, margin: '5px 0 0' }}>{d.name}</div>
+                    <div style={{ fontSize: 11, color: YEL, marginTop: 3, fontFamily: 'EB Garamond, serif' }}>
+                        {f(rows.length)} {rows.length === 1 ? 'propiedad' : 'propiedades'} · vistas/leads/visitas/ofertas de {rangoLbl}
+                    </div>
+                    <div style={{ fontSize: 9.5, color: '#9a9a98', marginTop: 10, borderTop: '1px solid rgba(255,255,255,.14)', paddingTop: 8 }}>
+                        Datos en vivo de Pulppo · corte {new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+                        {' · '}{filtrosActivos.length ? <>filtros: {filtrosActivos.join(' · ')}</> : <>sin filtros: todo el inventario publicado</>}
+                        {' · '}orden: {COLS.find((c) => c.key === sortKey)?.label ?? sortKey} {dir === 1 ? '↑' : '↓'}
+                    </div>
                 </div>
-                <Funnel vistas={fn.vistas} leads={fn.leads} respondidos={fn.respondidos} visitas={fn.visitas} ofertas={fn.ofertas} cierres={fn.cierres} respMed={fnRespMed} n={filtered.length} />
-            </div>
 
-            {/* Fila de filtros por columna: va sobre fondo gris claro y con su propio rótulo, para que
-                se lea como "filtros" y no como una fila más de datos (feedback: "no se entiende"). */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: BLK }}>Filtrar por columna</span>
-                <span style={{ fontSize: 11, color: GRY }}>en texto escribe parte de la palabra · en números el mínimo (ej. <b>3</b> = 3 o más)</span>
-                {nFiltrosCol > 0 && (
-                    <span onClick={() => setColf({})} style={{ fontSize: 11, color: SEA, fontWeight: 700, cursor: 'pointer' }}>
-                        limpiar {nFiltrosCol} {nFiltrosCol === 1 ? 'filtro' : 'filtros'} ✕
-                    </span>
-                )}
+                <div style={{ background: LGT, padding: '14px 16px', borderRadius: R, marginBottom: 16 }}>
+                    <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 17, marginBottom: 2 }}>Funnel comercial</div>
+                    <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>
+                        Vistas/leads/visitas/ofertas: <b>{ovr ? rango.toLowerCase() : 'histórico'}</b>.
+                        {fueraFiltrada.length > 0 && <> Incluye <b>{f(fueraFiltrada.length)}</b> {fueraFiltrada.length === 1 ? 'propiedad que ya salió' : 'propiedades que ya salieron'} del inventario
+                            {nFueraCierres > 0 && <> ({f(nFueraCierres)} {nFueraCierres === 1 ? 'cierre' : 'cierres'})</>}: al venderse dejan de estar publicadas, pero su actividad es de este período. Por eso el funnel puede no cuadrar con la suma de la tabla.</>}
+                        {!fueraAplica && fueraSrc.length > 0 && <> Con este filtro sólo se cuenta el inventario publicado, así que <b>ofertas y cierres salen incompletos</b>.</>}
+                    </div>
+                    <Funnel vistas={fn.vistas} leads={fn.leads} respondidos={fn.respondidos} visitas={fn.visitas} ofertas={fn.ofertas} cierres={fn.cierres} respMed={fnRespMed} n={filtered.length} />
+                </div>
+
+                {/* Fila de filtros por columna: va sobre fondo gris claro y con su propio rótulo, para que
+                    se lea como "filtros" y no como una fila más de datos (feedback: "no se entiende"). */}
+                <div className="no-print" style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: BLK }}>Filtrar por columna</span>
+                    <span style={{ fontSize: 11, color: GRY }}>en texto escribe parte de la palabra · en números el mínimo (ej. <b>3</b> = 3 o más)</span>
+                    {nFiltrosCol > 0 && (
+                        <span onClick={() => setColf({})} style={{ fontSize: 11, color: SEA, fontWeight: 700, cursor: 'pointer' }}>
+                            limpiar {nFiltrosCol} {nFiltrosCol === 1 ? 'filtro' : 'filtros'} ✕
+                        </span>
+                    )}
+                </div>
+                <div className="print-wide" style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
+                        <thead>
+                            <tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)} title="Clic para ordenar">{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}<th style={{ ...th, cursor: 'default' }}>Acción</th><th className="no-print" style={{ ...th, textAlign: 'right', cursor: 'default' }}>Reporte</th></tr>
+                            <tr className="no-print">{COLS.map((c) => {
+                                const on = !!(colf[c.key] ?? '').trim();
+                                return (
+                                    <th key={c.key} style={{ padding: '4px 6px', borderBottom: `1px solid ${LGT}`, background: LGT }}>
+                                        <input value={colf[c.key] ?? ''} onChange={(e) => setColf((s) => ({ ...s, [c.key]: e.target.value }))}
+                                            placeholder={c.key === 'respMedMin' ? 'máx. min' : c.num ? 'mín.' : 'contiene…'}
+                                            title={c.key === 'respMedMin' ? '1ª respuesta: muestra las que respondieron en ESE número de minutos o menos'
+                                                : c.num ? `${c.label}: muestra las que sean mayores o iguales a este número` : `${c.label}: muestra las que contengan este texto`}
+                                            style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, padding: '3px 5px', border: `1px solid ${on ? SEA : '#e2e2e2'}`, borderRadius: R, textAlign: c.num ? 'right' : 'left', color: BLK, background: '#fff', fontWeight: on ? 700 : 400 }} />
+                                    </th>
+                                );
+                            })}<th style={{ borderBottom: `1px solid ${LGT}`, background: LGT }} /><th style={{ borderBottom: `1px solid ${LGT}`, background: LGT }} /></tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((p) => (
+                                <tr key={p.id}>
+                                    <td style={td}><Link href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                    <td style={td}>{p.type}</td>
+                                    <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td><td style={{ ...td, color: GRY }}>{p.colonia}</td>
+                                    <td style={{ ...td, textAlign: 'right' }}>{money(p.precio)}</td>
+                                    <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
+                                    <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsCierres)}</td>
+                                    <td style={{ ...td, textAlign: 'right' }}>{p.compite ?? '—'}</td>
+                                    <td style={{ ...td, textAlign: 'right' }}>{f(p.demanda)}</td>
+                                    <td style={td}><span style={{ color: calidadColor(p.calidad), fontWeight: 600 }}>{p.calidad}</span></td>
+                                    <td style={{ ...td, textAlign: 'right', color: GRY }}>{p.dias ?? '—'}</td>
+                                    <td style={{ ...td, textAlign: 'right' }}>{f(p.vistas)}</td>
+                                    <td style={{ ...td, textAlign: 'right' }}>{f(p.leads)}</td>
+                                    <td style={{ ...td, textAlign: 'right', color: p.leads && p.respondidos < p.leads ? RED : BLK }}>{p.leads ? f(p.respondidos) : ''}</td>
+                                    <td style={{ ...td, textAlign: 'right', color: p.respMedMin == null ? GRY : p.respMedMin > 1440 ? RED : BLK }}>{dur(p.respMedMin)}</td>
+                                    <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
+                                    <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
+                                    <td style={td}>{(() => { const t = accionesDe(p); return t.length ? t.map(diagPill) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
+                                    <td className="no-print" style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <div style={{ fontSize: 11, color: GRY, marginTop: 8 }}>{f(rows.length)} de {f(d.nProps)} propiedades</div>
             </div>
-            <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
-                    <thead>
-                        <tr>{COLS.map((c) => <th key={c.key} style={{ ...th, textAlign: c.num ? 'right' : 'left' }} onClick={() => onSort(c.key)} title="Clic para ordenar">{c.label}{sortKey === c.key ? (dir === 1 ? ' ▲' : ' ▼') : ''}</th>)}<th style={{ ...th, cursor: 'default' }}>Acción</th><th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Reporte</th></tr>
-                        <tr>{COLS.map((c) => {
-                            const on = !!(colf[c.key] ?? '').trim();
-                            return (
-                                <th key={c.key} style={{ padding: '4px 6px', borderBottom: `1px solid ${LGT}`, background: LGT }}>
-                                    <input value={colf[c.key] ?? ''} onChange={(e) => setColf((s) => ({ ...s, [c.key]: e.target.value }))}
-                                        placeholder={c.key === 'respMedMin' ? 'máx. min' : c.num ? 'mín.' : 'contiene…'}
-                                        title={c.key === 'respMedMin' ? '1ª respuesta: muestra las que respondieron en ESE número de minutos o menos'
-                                            : c.num ? `${c.label}: muestra las que sean mayores o iguales a este número` : `${c.label}: muestra las que contengan este texto`}
-                                        style={{ width: '100%', boxSizing: 'border-box', fontSize: 11, padding: '3px 5px', border: `1px solid ${on ? SEA : '#e2e2e2'}`, borderRadius: R, textAlign: c.num ? 'right' : 'left', color: BLK, background: '#fff', fontWeight: on ? 700 : 400 }} />
-                                </th>
-                            );
-                        })}<th style={{ borderBottom: `1px solid ${LGT}`, background: LGT }} /><th style={{ borderBottom: `1px solid ${LGT}`, background: LGT }} /></tr>
-                    </thead>
-                    <tbody>
-                        {rows.map((p) => (
-                            <tr key={p.id}>
-                                <td style={td}><Link href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
-                                <td style={td}>{p.type}</td>
-                                <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td><td style={{ ...td, color: GRY }}>{p.colonia}</td>
-                                <td style={{ ...td, textAlign: 'right' }}>{money(p.precio)}</td>
-                                <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
-                                <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsCierres)}</td>
-                                <td style={{ ...td, textAlign: 'right' }}>{p.compite ?? '—'}</td>
-                                <td style={{ ...td, textAlign: 'right' }}>{f(p.demanda)}</td>
-                                <td style={td}><span style={{ color: calidadColor(p.calidad), fontWeight: 600 }}>{p.calidad}</span></td>
-                                <td style={{ ...td, textAlign: 'right', color: GRY }}>{p.dias ?? '—'}</td>
-                                <td style={{ ...td, textAlign: 'right' }}>{f(p.vistas)}</td>
-                                <td style={{ ...td, textAlign: 'right' }}>{f(p.leads)}</td>
-                                <td style={{ ...td, textAlign: 'right', color: p.leads && p.respondidos < p.leads ? RED : BLK }}>{p.leads ? f(p.respondidos) : ''}</td>
-                                <td style={{ ...td, textAlign: 'right', color: p.respMedMin == null ? GRY : p.respMedMin > 1440 ? RED : BLK }}>{dur(p.respMedMin)}</td>
-                                <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
-                                <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
-                                <td style={td}>{(() => { const t = accionesDe(p); return t.length ? t.map(diagPill) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
-                                <td style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-            <div style={{ fontSize: 11, color: GRY, marginTop: 8 }}>{f(rows.length)} de {f(d.nProps)} propiedades</div>
         </div>
     );
 }
