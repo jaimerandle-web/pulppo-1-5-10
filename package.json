@@ -9,6 +9,7 @@
     },
     "dependencies": {
         "@react-oauth/google": "^0.13.5",
+        "@vercel/blob": "^2.8.0",
         "firebase": "^12.15.0",
         "mongodb": "^7.3.0",
         "next": "^16.1.6",

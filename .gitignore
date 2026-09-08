@@ -14,3 +14,6 @@ next-env.d.ts
 .DS_Store
 .vercel
 .env*
+
+# estado local del Centro de Marketing (permisos y envíos)
+.centro/

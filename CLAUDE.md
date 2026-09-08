@@ -28,6 +28,7 @@ App interna de Pulppo (México) que hospeda **dos proyectos** sobre la misma bas
 | `/mb`, `/mb/[companyId]` | Master Brokers | **No mover**: el PDF del Overview imprime estas URLs |
 | `/analisis` | Master Brokers | Entra desde el índice de `/mb`, no desde el menú |
 | `/ficha/[id]` | **compartida** | La abren 1·5·10 (Cartera) y MB. Tiene links públicos con token → **no mover** |
+| `/marketing` | Centro de Marketing | Calendario · Bases · Garantía de renta · Desempeño (`?tab=` entra directo) |
 | `/login` | — | Fuera del middleware |
 
 ## Stack
@@ -128,6 +129,36 @@ src/lib/mb.ts          Motor de Master Brokers (/mb). Ojo con la tabla "Tus zona
 src/lib/ventanas.ts    Opciones de las ventanas de fecha. Vive aparte de analisis.ts porque los
                        formularios son 'use client' y no pueden importar valores de un módulo que
                        importa mongodb (se lo llevarían al bundle del navegador).
+src/lib/centro/        Centro de Marketing (comunicación, /marketing). Es el pegamento que /campanas
+                       no tiene: permisos, calendario, vía de entrega y atribución, sobre CUALQUIER
+                       audiencia (no sólo exclusivas de venta por email).
+                       · tipos.ts     vocabulario: BASE (quién) · TEMA (de qué) · MENSAJE (definición)
+                                      · ENVÍO (la fila real). El permiso se da POR TEMA, no global.
+                       · basesMeta.ts catálogo de bases, SIN mongodb: la UI es 'use client' y no puede
+                                      importar un módulo que importe mongodb (mismo motivo que ventanas.ts).
+                       · bases.ts     las 8 bases leídas en vivo. Trampas resueltas ahí: (1) los tags de
+                                      `contacts` NO están normalizados ('Broker' 32,284 vs 'broker' 29,895,
+                                      'Propietario' 3,734 vs 'propietario' 2,044) → siempre /i o se pierde
+                                      media base; (2) `operation.type` NO existe, venta/renta es
+                                      `listing.operation`; (3) sólo 31% de contacts tiene email vs 94% con
+                                      teléfono → el canal es WhatsApp. El PROPIETARIO no es un contacto
+                                      etiquetado: es `properties.contact` de la renta (97% con teléfono).
+                       · store.ts     permisos y envíos (Mongo es read-only). DOS backends elegidos solos:
+                                      local → .centro/store.json (gitignoreado); Vercel → Blob, si existe
+                                      BLOB_READ_WRITE_TOKEN. En Vercel el FS es EFÍMERO: escribir en disco
+                                      "funciona" y el dato se pierde al siguiente request, que es peor que
+                                      no guardar — por eso sin Blob el store entra en modo lectura y lo
+                                      dice (`esEfimero()` → banner en la UI + 503 en los POST). Para
+                                      prenderlo: Vercel → Storage → Create → Blob; el token se inyecta solo.
+                                      fs/path se importan EN CALIENTE: estáticos hacen que Turbopack trace
+                                      el proyecto entero al bundle serverless (warning de NFT).
+                                      Acá vive el techo de frecuencia (±14d, cruza TODOS los temas).
+src/app/marketing/     La app. El CALENDARIO es el home a propósito: es la única vista donde el anti-spam
+                       se ve (una lista de campañas no muestra que 3 mensajes caen sobre la misma persona
+                       el mismo martes). API en api/marketing/: bases · permisos · plan · envios.
+                       `plan` implementa el flujo de garantía de renta, que son DOS mensajes encadenados
+                       por el permiso: paso 1 al asesor que captó la renta, paso 2 al propietario sólo si
+                       el asesor autorizó. Lo que no pasa el permiso o el techo sale igual, con motivo.
 src/lib/kam.ts         Lookup estático inmobiliaria → KAM (generado del Sheet TARGETS).
 src/lib/access.ts      Allowlist cerrado de emails (hardcodeado; env ALLOWED_EMAILS lo pisa si está seteada).
 src/lib/firebase.ts    Firebase Auth de Pulppo (config JSON en NEXT_PUBLIC_FIREBASE).
@@ -191,9 +222,12 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
 
 - El auto-deploy por push de Git puede quedar bloqueado si el autor del commit no matchea un miembro
   del team de Vercel; el deploy manual por CLI (`npx vercel deploy --prod --yes`) siempre funciona.
-- **La mac de Ale no tiene Node**: aquí no corre `npm run build`, `npm run dev` ni `npx vercel`.
-  El build real lo hace Vercel al pushear → **revisar ahí el resultado**. Para verificar sin Node:
-  lógica de datos con réplicas en Python (`~/Documents/Pulppo/.venv-mongo/bin/python` + `pymongo`,
-  Mongo read-only) y JS puro con `osascript -l JavaScript`. Ver ANALISIS.md §4.
+- ~~La mac de Ale no tiene Node~~ **Desactualizado**: sí lo tiene (v22.23.2, verificado sep-2026).
+  `npm run build` y `npm run dev` corren en local. Para probar rutas protegidas hay que fabricar la
+  cookie de identidad: `cm-user=<email>` + `cm-sig=HMAC-SHA256('user:'+email, AUTH_SECRET ||
+  FICHA_SECRET || 'pulppo-1-5-10-auth').slice(0,32)`. El `.env.local` con `MONGO_URI` no está en el
+  repo (gitignoreado): la URI read-only vive en `~/pulppo-automation/creds/mongo_uri.txt` (con BOM,
+  leerla como utf-8-sig). Para validar lógica de datos aparte sigue sirviendo
+  `~/Documents/Pulppo/.venv-mongo/bin/python` + `pymongo`. Ver ANALISIS.md §4.
 - `/analisis` tiene controles que aún no afectan el output (referencias ACM y "qué te alcanza",
   audiencia, benchmark vs mejores inmobiliarias). Lista en ANALISIS.md §5.

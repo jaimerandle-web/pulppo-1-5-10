@@ -32,6 +32,15 @@ const PROYECTOS: { eyebrow: string; title: string; blurb: string; links: Link[] 
         ]
     },
     {
+        eyebrow: 'Comunicación',
+        title: 'Centro de Marketing',
+        blurb: 'A quién le hablamos, cuándo, con permiso de quién y por cuál vía. El calendario es la pantalla principal porque es la única donde se ve que no estamos spammeando.',
+        links: [
+            { href: '/marketing', label: 'Calendario y bases', hint: 'Ocho bases en vivo + permisos por asesor' },
+            { href: '/marketing?tab=garantia', label: 'Garantía de renta', hint: 'Primer flujo: asesor → propietario' }
+        ]
+    },
+    {
         eyebrow: 'Contenido',
         title: 'Studio',
         blurb: 'Le propone al asesor qué publicar hoy y le entrega la pieza lista para bajar, armada con su perfil, sus zonas y sus operaciones.',
