@@ -50,7 +50,13 @@ function Bar({ v, max, color }: { v: number; max: number; color?: string }) {
 
 export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: number, metric: Metric) => void }) {
     const [section, setSection] = useState<Section>('cierre');
-    const [openOps, setOpenOps] = useState<string | null>(null);
+    // Set, no string: Ale quiere poder abrir varios desgloses al mismo tiempo para comparar.
+    const [openOps, setOpenOps] = useState<Set<string>>(new Set());
+    const toggleOps = (e: string) => setOpenOps((prev) => {
+        const n = new Set(prev);
+        if (n.has(e)) n.delete(e); else n.add(e);
+        return n;
+    });
 
     const tth: CSSProperties = { textAlign: 'left', padding: '7px 8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
     const ttd: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
@@ -59,8 +65,6 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
         <div key={id} onClick={() => setSection(id)} style={{ padding: '9px 12px', borderRadius: R, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', marginBottom: 2, background: section === id ? BLK : 'transparent', color: section === id ? '#fff' : '#555' }}>{label}</div>
     );
 
-    const maxGen = d.general[0]?.value ?? 0;
-    const maxOnb = d.onboarding[0]?.value ?? 0;
     const totalGen = useMemo(() => d.general.reduce((a, r) => a + r.value, 0), [d.general]);
     const nOps = useMemo(() => d.general.reduce((a, r) => a + r.nops, 0), [d.general]);
     const eliteHoy = useMemo(() => d.counts.filter((c) => c.nivel === 'elite').slice(-1)[0]?.n ?? 0, [d.counts]);
@@ -69,19 +73,19 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
     const raceFinal = useMemo(() => d.race.filter((r) => r.mesI === d.month).sort((a, b) => a.rank - b.rank), [d.race, d.month]);
     const maxRace = raceFinal[0]?.value ?? 0;
 
-    // Podio de top 5: alturas relativas al líder, orden visual 3-1-2-4-5 como en la pieza impresa.
+    // Top 5 en orden 1→5. El acomodo de podio (3-1-2) confundía: la lectura natural es de
+    // izquierda a derecha por posición.
     const Podio = ({ rows }: { rows: typeof d.general }) => {
         const top = rows.slice(0, 5);
         if (!top.length) return null;
         const max = top[0].value || 1;
-        const orden = [2, 0, 1, 3, 4].filter((i) => i < top.length);
         return (
             <div style={{ background: BLK, borderRadius: R, padding: '18px 20px 20px', marginBottom: 18 }}>
                 <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.14em', color: GRY, fontWeight: 700 }}>Top 5</div>
                 <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 21, color: '#fff', margin: '3px 0 16px' }}>Inmobiliarias del mes</div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                    {orden.map((i) => {
-                        const r = top[i], h = 40 + Math.round((110 * r.value) / max), lider = i === 0;
+                    {top.map((r, i) => {
+                        const h = 40 + Math.round((110 * r.value) / max), lider = i === 0;
                         return (
                             <div key={`${r.name}-${i}`} style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 11.5, color: '#fff', fontWeight: lider ? 700 : 500, marginBottom: 5, lineHeight: 1.25, minHeight: 29 }}>{r.name ?? '—'}</div>
@@ -98,25 +102,23 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
         );
     };
 
-    const tablaCompanies = (rows: typeof d.general, max: number, vacio: string) => (
+    const tablaCompanies = (rows: typeof d.general, vacio: string) => (
         <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, background: '#fff' }}>
                 <thead><tr>
-                    <th style={{ ...tth, width: 34 }}>#</th>
+                    <th style={{ ...tth, width: 30 }}>#</th>
                     <th style={tth}>Inmobiliaria</th>
                     <th style={{ ...tth, textAlign: 'right' }}>Comisión</th>
                     <th style={{ ...tth, textAlign: 'right' }}>Ops</th>
-                    <th style={{ ...tth, width: '28%' }}>Peso</th>
                 </tr></thead>
                 <tbody>
-                    {rows.length === 0 && <tr><td colSpan={5} style={{ ...ttd, color: GRY, textAlign: 'center', padding: 18 }}>{vacio}</td></tr>}
+                    {rows.length === 0 && <tr><td colSpan={4} style={{ ...ttd, color: GRY, textAlign: 'center', padding: 18 }}>{vacio}</td></tr>}
                     {rows.map((r, i) => (
                         <tr key={`${r.name}-${i}`}>
                             <td style={{ ...ttd, color: GRY, fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{i + 1}</td>
                             <td style={{ ...ttd, fontWeight: i === 0 ? 700 : 500, whiteSpace: 'normal' }}>{r.name ?? '—'}</td>
                             <td style={{ ...ttd, textAlign: 'right', fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{money(r.value)}</td>
                             <td style={{ ...ttd, textAlign: 'right', color: '#777' }}>{f(r.nops)}</td>
-                            <td style={{ ...ttd, whiteSpace: 'normal' }}><Bar v={r.value} max={max} color={i === 0 ? BLK : GRY} /></td>
                         </tr>
                     ))}
                 </tbody>
@@ -136,7 +138,7 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
                 <div style={{ padding: '4px 14px 12px' }}>
                     {rows.length === 0 && <div style={{ fontSize: 11.5, color: GRY, padding: '10px 0' }}>Sin operaciones este mes</div>}
                     {rows.map((b, i) => {
-                        const abierto = openOps === b.email;
+                        const abierto = openOps.has(b.email);
                         const ops = d.ops?.[b.email] ?? [];
                         return (
                             <div key={b.email} style={{ padding: '9px 0', borderBottom: i < rows.length - 1 ? `1px solid ${LGT}` : 'none' }}>
@@ -148,7 +150,7 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 15, whiteSpace: 'nowrap' }}>{money(b.value)}</div>
-                                        <div onClick={() => setOpenOps(abierto ? null : b.email)}
+                                        <div onClick={() => toggleOps(b.email)}
                                             style={{ fontSize: 10, color: c.ink, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                                             {f(b.nops)} {b.nops === 1 ? 'operación' : 'operaciones'} {abierto ? '▲' : '▼'}
                                         </div>
@@ -226,20 +228,38 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
 
                             <Podio rows={d.general} />
 
-                            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 19, marginBottom: 3 }}>Consultoría · top 10</div>
-                            <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>
-                                Inmobiliarias ya graduadas de onboarding. Métrica <b>{d.metric === 'cobrada' ? 'comisión cobrada en el mes' : 'comisión de operaciones cerradas en el mes'}</b>.
+                            <div style={{ fontSize: 11, color: GRY, marginBottom: 10 }}>
+                                Métrica <b>{d.metric === 'cobrada' ? 'comisión cobrada en el mes' : 'comisión de operaciones cerradas en el mes'}</b>.
                             </div>
-                            {tablaCompanies(d.general, maxGen, 'Sin operaciones este mes')}
-
-                            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 19, margin: '20px 0 3px' }}>Onboarding</div>
-                            <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>Sin fecha de integración: todavía no pasan a consultoría.</div>
-                            {tablaCompanies(d.onboarding, maxOnb, 'Sin operaciones este mes')}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 18 }}>
+                                <div>
+                                    <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 19, marginBottom: 2 }}>Consultoría · top 10</div>
+                                    <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>Ya graduadas de onboarding.</div>
+                                    {tablaCompanies(d.general, 'Sin operaciones este mes')}
+                                </div>
+                                <div>
+                                    <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 19, marginBottom: 2 }}>Onboarding · top 10</div>
+                                    <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>Sin fecha de integración todavía.</div>
+                                    {tablaCompanies(d.onboarding, 'Sin operaciones este mes')}
+                                </div>
+                            </div>
 
                             <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 19, margin: '20px 0 3px' }}>Top asesores por nivel</div>
                             <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>
                                 Comisión con split por rol: comprador 50, vendedor 25, productor 25. Si una de las partes es externa, el lado Pulppo se lleva el 100%.
                             </div>
+                            {(() => {
+                                const todos = ORDEN_LVL.flatMap((lv) => d.brokers[lv].map((b) => b.email));
+                                const abiertos = todos.filter((e) => openOps.has(e)).length;
+                                return (
+                                    <div style={{ marginBottom: 8 }}>
+                                        <span onClick={() => setOpenOps(abiertos === todos.length ? new Set() : new Set(todos))}
+                                            style={{ fontSize: 11, fontWeight: 700, color: SEA, cursor: 'pointer' }}>
+                                            {abiertos === todos.length ? 'Cerrar todas las operaciones' : 'Ver todas las operaciones'}
+                                        </span>
+                                    </div>
+                                );
+                            })()}
                             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                                 {ORDEN_LVL.map((lv) => brokerBlock(lv, d.brokers[lv]))}
                             </div>
