@@ -53,12 +53,54 @@ export { BASES } from './basesMeta';
 
 /* ---------------------------- cargadores ---------------------------- */
 
-/** Rentas publicadas por asesor — el "# de rentas captadas" del tablero. */
-async function rentasPorAsesor(): Promise<Map<string, number>> {
+/**
+ * La cartera de renta de cada asesor, que es lo que Ulises necesita ver para
+ * pedirle permiso: cuántas captó, cuántos dueños distintos hay detrás y
+ * cuánta gente sigue buscando rentar con él.
+ *
+ * Rentas y propietarios NO son el mismo número: un dueño puede tener tres
+ * departamentos en el mismo edificio, y en ese caso es UNA conversación.
+ */
+async function carteraRentaPorAsesor(): Promise<Map<string, { rentas: number; propietarios: number }>> {
     const db = await getDb();
     const agg = db.collection('properties').aggregate([
         { $match: { 'listing.operation': 'rent', 'status.last': 'published' } },
-        { $group: { _id: '$agent._id', n: { $sum: 1 } } }
+        { $group: { _id: '$agent._id', rentas: { $sum: 1 }, duenos: { $addToSet: '$contact._id' } } },
+        { $project: { rentas: 1, propietarios: { $size: '$duenos' } } }
+    ]);
+    const out = new Map<string, { rentas: number; propietarios: number }>();
+    for await (const r of agg) {
+        if (r._id) out.set(String(r._id), { rentas: r.rentas as number, propietarios: r.propietarios as number });
+    }
+    return out;
+}
+
+/**
+ * Búsquedas de renta VIVAS por asesor = "leads activos interesados en rentar".
+ *
+ * Dos decisiones de dato que importan:
+ *  · El estado se lee de `status.last`, NO de `cancelledAt`. Ese campo miente:
+ *    da 199,109 búsquedas "sin cancelar" cuando `status.last='cancelled'` son
+ *    175,780 de 211,263. Usar cancelledAt triplicaría el número.
+ *  · Se piden 90 días de frescura. Una búsqueda "searching" de hace dos años
+ *    no es un interesado, es una que nadie cerró (el 83% de las de renta
+ *    terminan canceladas).
+ */
+const VIVAS = ['searching', 'pending', 'visiting', 'offer_done', 'closing'];
+
+async function busquedasRentaPorAsesor(dias = 90): Promise<Map<string, number>> {
+    const db = await getDb();
+    const agg = db.collection('searches').aggregate([
+        {
+            $match: {
+                'filters.operation': 'rent',
+                'status.last': { $in: VIVAS },
+                updatedAt: { $gte: new Date(Date.now() - dias * 864e5) },
+                'contact.phone': { $nin: [null, ''] }
+            }
+        },
+        { $group: { _id: '$agent._id', personas: { $addToSet: '$contact._id' } } },
+        { $project: { n: { $size: '$personas' } } }
     ]);
     const out = new Map<string, number>();
     for await (const r of agg) if (r._id) out.set(String(r._id), r.n as number);
@@ -68,43 +110,61 @@ async function rentasPorAsesor(): Promise<Map<string, number>> {
 async function cargarBrokers(): Promise<BaseResultado> {
     const db = await getDb();
     const q = { status: 'active', type: { $in: ['associate', 'master'] } };
-    const [total, docs, rentas] = await Promise.all([
+    const [total, docs, cartera, busquedas] = await Promise.all([
         db.collection('agents').countDocuments(q),
         db.collection('agents').find(q, {
             projection: {
                 firstName: 1, lastName: 1, email: 1, phone: 1, type: 1, whatsapp: 1,
                 'company.name': 1, 'company._id': 1, 'personal.phone': 1
             }
-        }).limit(LIMITE).toArray(),
-        rentasPorAsesor()
+        }).toArray(),
+        carteraRentaPorAsesor(),
+        busquedasRentaPorAsesor()
     ]);
 
-    const personas: Persona[] = docs.map((a) => ({
-        id: String(a._id),
-        nombre: nombreDe(a),
-        telefono: (a.phone || a.personal?.phone || null) as string | null,
-        email: (a.email || null) as string | null,
-        asesorId: String(a._id), // el broker se autoriza a sí mismo
-        asesor: nombreDe(a),
-        inmobiliaria: (a.company?.name || null) as string | null,
-        extra: {
-            rentas: rentas.get(String(a._id)) ?? 0,
-            rol: a.type === 'master' ? 'Master' : 'Asesor',
-            // Sin WhatsApp vinculado el asesor contesta por fuera: la vía
-            // "desde su WhatsApp" no está disponible para él.
-            whatsapp: a.whatsapp ? 'Sí' : 'No'
-        }
-    }));
-    personas.sort((a, b) => Number(b.extra.rentas) - Number(a.extra.rentas));
+    let personas: Persona[] = docs.map((a) => {
+        const id = String(a._id);
+        const c = cartera.get(id);
+        return {
+            id,
+            nombre: nombreDe(a),
+            telefono: (a.phone || a.personal?.phone || null) as string | null,
+            email: (a.email || null) as string | null,
+            asesorId: id, // el broker se autoriza a sí mismo
+            asesor: nombreDe(a),
+            inmobiliaria: (a.company?.name || null) as string | null,
+            extra: {
+                rentas: c?.rentas ?? 0,
+                propietarios: c?.propietarios ?? 0,
+                busquedas: busquedas.get(id) ?? 0,
+                rol: a.type === 'master' ? 'Master' : 'Asesor',
+                // Sin WhatsApp vinculado el asesor contesta por fuera: la opción
+                // "escriban en mi nombre" no se le puede ofrecer.
+                whatsapp: a.whatsapp ? 'Sí' : 'No'
+            }
+        };
+    });
+
+    // Primero los que más tienen para conversar: es el orden en que Ulises
+    // los va a llamar.
+    personas.sort((a, b) =>
+        (Number(b.extra.rentas) - Number(a.extra.rentas)) ||
+        (Number(b.extra.busquedas) - Number(a.extra.busquedas)));
+    personas = personas.slice(0, LIMITE);
 
     return {
         id: 'brokers', label: 'Brokers', total, personas,
         columnas: [
-            { key: 'rentas', label: 'Rentas vivas' },
-            { key: 'rol', label: 'Rol' },
-            { key: 'whatsapp', label: 'WhatsApp' }
+            { key: 'rentas', label: 'Rentas captadas' },
+            { key: 'propietarios', label: 'Propietarios' },
+            { key: 'busquedas', label: 'Buscan rentar' },
+            { key: 'rol', label: 'Rol' }
         ],
-        notas: ['El asesor sin WhatsApp vinculado no puede usar la vía "desde su WhatsApp".']
+        notas: [
+            'Rentas y propietarios no son el mismo número: un dueño puede tener varias, y ahí es una sola conversación.',
+            '"Buscan rentar" = búsquedas de renta vivas con teléfono, movidas en los últimos 90 días. El estado sale de status.last, no de cancelledAt (ese campo miente: da 199k sin cancelar contra 176k canceladas de verdad).',
+            'El asesor sin WhatsApp vinculado no puede recibir la opción "escriban en mi nombre".'
+        ]
     };
 }
 

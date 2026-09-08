@@ -133,7 +133,12 @@ src/lib/centro/        Centro de Marketing (comunicación, /marketing). Es el pe
                        no tiene: permisos, calendario, vía de entrega y atribución, sobre CUALQUIER
                        audiencia (no sólo exclusivas de venta por email).
                        · tipos.ts     vocabulario: BASE (quién) · TEMA (de qué) · MENSAJE (definición)
-                                      · ENVÍO (la fila real). El permiso se da POR TEMA, no global.
+                                      · ENVÍO (la fila real). El permiso se guarda por la TERNA
+                                      (asesor, tema, DESTINATARIO): un asesor puede dejarnos hablar con
+                                      sus propietarios y no con sus clientes. Su respuesta es una sola
+                                      decisión (ViaId) que fusiona "¿nos deja?" y "¿desde qué número?":
+                                      pulppo | en-mi-nombre | no, más sin-preguntar/pedido que son
+                                      estado nuestro. `autoriza()` es el único chequeo válido.
                        · basesMeta.ts catálogo de bases, SIN mongodb: la UI es 'use client' y no puede
                                       importar un módulo que importe mongodb (mismo motivo que ventanas.ts).
                        · bases.ts     las 8 bases leídas en vivo. Trampas resueltas ahí: (1) los tags de
@@ -143,6 +148,12 @@ src/lib/centro/        Centro de Marketing (comunicación, /marketing). Es el pe
                                       `listing.operation`; (3) sólo 31% de contacts tiene email vs 94% con
                                       teléfono → el canal es WhatsApp. El PROPIETARIO no es un contacto
                                       etiquetado: es `properties.contact` de la renta (97% con teléfono).
+                                      La cartera de renta por asesor (rentas · propietarios · buscan
+                                      rentar) alimenta el pedido de permiso. Rentas ≠ propietarios y la
+                                      brecha es brutal (Aaron Arias: 87 rentas, 6 dueños): son 6
+                                      conversaciones, no 87. "Buscan rentar" sale de `searches` con
+                                      `status.last` en estados vivos — NO de `cancelledAt`, que miente
+                                      (199k "sin cancelar" contra 176k canceladas de verdad).
                        · store.ts     permisos y envíos (Mongo es read-only). DOS backends elegidos solos:
                                       local → .centro/store.json (gitignoreado); Vercel → Blob, si existe
                                       BLOB_READ_WRITE_TOKEN. En Vercel el FS es EFÍMERO: escribir en disco

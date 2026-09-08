@@ -1,5 +1,5 @@
 import { asesoresDe, audienciaRentaNueva } from '@/lib/centro/bases';
-import { envios, estadoPermiso, idEnvio, permisos, personasSaturadas, VENTANA_DIAS } from '@/lib/centro/store';
+import { autoriza, envios, idEnvio, permisos, personasSaturadas, VENTANA_DIAS, viaPermiso } from '@/lib/centro/store';
 import type { Envio, Persona, ViaId } from '@/lib/centro/tipos';
 
 /* ------------------------------------------------------------------ *
@@ -48,15 +48,16 @@ export async function GET(req: Request) {
         });
 
         for (const p of audiencia as Persona[]) {
-            const permiso = estadoPermiso(ps, p.asesorId, TEMA);
+            // El permiso que manda acá es el de PROPIETARIO: el mensaje va al dueño.
+            const permiso = viaPermiso(ps, p.asesorId, TEMA, 'propietario');
 
             if (permiso === 'no') {
-                bloqueados.push({ ...fila(MSG_PROPIETARIO, 'propietarios-renta', p.id, p.nombre, p.asesorId, 'pulppo'), estado: 'bloqueado', motivo: 'El asesor no autorizó garantías' });
+                bloqueados.push({ ...fila(MSG_PROPIETARIO, 'propietarios-renta', p.id, p.nombre, p.asesorId, 'no'), estado: 'bloqueado', motivo: 'El asesor pidió no contactar a sus propietarios' });
                 continue;
             }
 
-            // Sin permiso todavía → el mensaje que sale es al asesor, no al dueño.
-            if (permiso !== 'si') {
+            // Sin respuesta todavía → el mensaje que sale es al asesor, no al dueño.
+            if (!autoriza(permiso)) {
                 if (!p.asesorId) {
                     bloqueados.push({ ...fila(MSG_PROPIETARIO, 'propietarios-renta', p.id, p.nombre, null, 'pulppo'), estado: 'bloqueado', motivo: 'La propiedad no tiene asesor a quién pedirle permiso' });
                     continue;
@@ -75,9 +76,8 @@ export async function GET(req: Request) {
                 continue;
             }
 
-            // Permiso concedido → va al propietario, por la vía que eligió el asesor.
-            const via = (ps.find((x) => x.asesorId === p.asesorId && x.tema === TEMA)?.via || 'pulppo') as ViaId;
-            const e = fila(MSG_PROPIETARIO, 'propietarios-renta', p.id, p.nombre, p.asesorId, via);
+            // Autorizado → va al propietario, por la vía que eligió el asesor.
+            const e = fila(MSG_PROPIETARIO, 'propietarios-renta', p.id, p.nombre, p.asesorId, permiso);
             if (yaProgramado.has(e.id)) continue;
             if (saturadas.has(p.id)) {
                 bloqueados.push({ ...e, estado: 'bloqueado', motivo: `Ya recibe otro mensaje dentro de ±${VENTANA_DIAS} días` });

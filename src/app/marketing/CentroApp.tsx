@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { money } from '@/components/ui';
 import { BASES } from '@/lib/centro/basesMeta';
-import { TEMAS, VIAS, type BaseId, type BaseResultado, type Envio, type Permiso, type PermisoEstado, type ViaId } from '@/lib/centro/tipos';
+import { DESTINATARIOS, RESPUESTAS, TEMAS, VIAS, type BaseId, type BaseResultado, type Destinatario, type Envio, type Permiso, type ViaId } from '@/lib/centro/tipos';
 
 type Tab = 'calendario' | 'bases' | 'garantia' | 'desempeno';
 
@@ -308,31 +308,56 @@ function Bases({ permisos, onCambio }: { permisos: Permiso[]; onCambio: () => vo
     );
 }
 
-/** La base de brokers es distinta: es el registro de permisos, no una lista. */
+/* ---------------------- brokers = registro de permisos ---------------------- *
+ * No es una lista: es el tablero desde el que se pide el permiso. Cada asesor
+ * decide DOS cosas por separado — sus propietarios y sus clientes — porque son
+ * dos relaciones distintas: el dueño ya le confió una captación, el que busca
+ * rentar todavía no le confió nada.
+ * -------------------------------------------------------------------------- */
+
+const COLOR_VIA: Record<ViaId, string> = {
+    'sin-preguntar': 'bg-neutral-100 text-neutral-500',
+    pedido: 'bg-[#FFFBEF] text-[#8a6d00]',
+    pulppo: 'bg-[#EAF3F3] text-sea',
+    'en-mi-nombre': 'bg-[#EAF3F3] text-sea',
+    no: 'bg-[#FBEEEB] text-brand-red'
+};
+
 function TablaPermisos({ filas, permisos, onCambio }: {
     filas: BaseResultado['personas']; permisos: Permiso[]; onCambio: () => void;
 }) {
     const [tema, setTema] = useState(TEMAS[0].id);
-    const estado = (id: string): PermisoEstado =>
-        permisos.find((p) => p.asesorId === id && p.tema === tema)?.estado ?? 'sin-preguntar';
-    const via = (id: string): ViaId | '' =>
-        (permisos.find((p) => p.asesorId === id && p.tema === tema)?.via ?? '') as ViaId | '';
+    const [soloRentas, setSoloRentas] = useState(true);
+    const [marcados, setMarcados] = useState<Set<string>>(new Set());
+    const [msg, setMsg] = useState('');
 
-    async function fijar(asesorId: string, cambio: Partial<{ estado: PermisoEstado; via: ViaId | null }>) {
+    const via = useCallback((id: string, d: Destinatario): ViaId =>
+        permisos.find((p) => p.asesorId === id && p.tema === tema && p.destinatario === d)?.via ?? 'sin-preguntar',
+        [permisos, tema]);
+
+    // El pedido de Ulises va sólo a quien tiene algo que conversar.
+    const visibles = useMemo(
+        () => soloRentas ? filas.filter((p) => Number(p.extra.rentas) > 0) : filas,
+        [filas, soloRentas]);
+
+    const tot = useMemo(() => visibles.reduce((a, p) => ({
+        rentas: a.rentas + Number(p.extra.rentas || 0),
+        propietarios: a.propietarios + Number(p.extra.propietarios || 0),
+        busquedas: a.busquedas + Number(p.extra.busquedas || 0),
+        pendientes: a.pendientes + (via(p.id, 'propietario') === 'sin-preguntar' ? 1 : 0)
+    }), { rentas: 0, propietarios: 0, busquedas: 0, pendientes: 0 }), [visibles, via]);
+
+    async function guardar(body: Record<string, unknown>) {
         const r = await fetch('/api/marketing/permisos', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ asesorId, tema, estado: cambio.estado ?? estado(asesorId), via: cambio.via !== undefined ? cambio.via : (via(asesorId) || null) })
+            body: JSON.stringify({ tema, ...body })
         }).then((x) => x.json());
-        if (r.error) alert(r.error); // no se guardó: mejor decirlo que dejar el select cambiado
+        // Si no se guardó hay que decirlo: dejar el select cambiado sería mentir.
+        if (r.error) alert(r.error); else setMsg(r.fijados ? `${r.fijados} permisos actualizados.` : '');
         onCambio();
     }
 
-    const COLOR: Record<PermisoEstado, string> = {
-        'sin-preguntar': 'bg-neutral-100 text-neutral-500',
-        pedido: 'bg-[#FFFBEF] text-[#8a6d00]',
-        si: 'bg-[#EAF3F3] text-sea',
-        no: 'bg-[#FBEEEB] text-brand-red'
-    };
+    const sinPreguntar = visibles.filter((p) => via(p.id, 'propietario') === 'sin-preguntar');
 
     return (
         <>
@@ -344,53 +369,111 @@ function TablaPermisos({ filas, permisos, onCambio }: {
                         {t.label}
                     </button>
                 ))}
+                <label className="ml-auto flex items-center gap-1.5 text-[11px] text-neutral-600">
+                    <input type="checkbox" checked={soloRentas} onChange={(e) => setSoloRentas(e.target.checked)} />
+                    Sólo con rentas captadas
+                </label>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                <Tarjeta label="Asesores a contactar" valor={visibles.length} destacado />
+                <Tarjeta label="Rentas captadas" valor={tot.rentas} />
+                <Tarjeta label="Propietarios detrás" valor={tot.propietarios} />
+                <Tarjeta label="Buscan rentar" valor={tot.busquedas} />
+            </div>
+
+            {/* El pedido masivo: marcar a quién ya le escribió Ulises. */}
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-[2px] bg-light px-4 py-3 text-[12px]">
+                <b>{tot.pendientes}</b> sin preguntar todavía.
+                <button
+                    disabled={!sinPreguntar.length}
+                    onClick={() => {
+                        if (!confirm(`Marcar como "le preguntamos" a ${sinPreguntar.length} asesores, en los dos permisos?`)) return;
+                        guardar({
+                            asesorIds: sinPreguntar.map((p) => p.id),
+                            destinatarios: ['propietario', 'cliente'], via: 'pedido'
+                        });
+                    }}
+                    className="rounded-[2px] border border-[#212322] px-3 py-1.5 text-[11px] font-bold hover:bg-white disabled:opacity-40">
+                    Marcar como preguntados
+                </button>
+                {marcados.size > 0 && (
+                    <button onClick={() => { guardar({ asesorIds: [...marcados], destinatarios: ['propietario', 'cliente'], via: 'pedido' }); setMarcados(new Set()); }}
+                        className="rounded-[2px] border border-neutral-300 px-3 py-1.5 text-[11px] hover:bg-white">
+                        Marcar los {marcados.size} seleccionados
+                    </button>
+                )}
+                <a href={`/api/marketing/bases?id=brokers&format=csv&soloRentas=${soloRentas ? 1 : 0}`}
+                    className="ml-auto text-[11px] text-sea underline">Bajar lista para Ulises (CSV)</a>
+                {msg && <span className="text-brand-gray">{msg}</span>}
             </div>
 
             <div className="mt-3 overflow-x-auto rounded-[2px] border border-neutral-200">
-                <table className="w-full min-w-[820px] text-[12px]">
+                <table className="w-full min-w-[980px] text-[12px]">
                     <thead className="bg-light text-left text-[10px] uppercase tracking-wide text-brand-gray">
                         <tr>
+                            <th className="w-8 px-3 py-2"></th>
                             <th className="px-3 py-2">Asesor</th>
                             <th className="px-3 py-2">Inmobiliaria</th>
-                            <th className="px-3 py-2">Rentas vivas</th>
-                            <th className="px-3 py-2">¿Podemos contactar a su cliente?</th>
-                            <th className="px-3 py-2">Vía que prefiere</th>
+                            <th className="px-3 py-2 text-right">Rentas</th>
+                            <th className="px-3 py-2 text-right">Propiet.</th>
+                            <th className="px-3 py-2 text-right">Buscan</th>
+                            {DESTINATARIOS.map((d) => (
+                                <th key={d.id} className="px-3 py-2" title={d.hint}>{d.label}</th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {filas.map((p) => {
-                            const st = estado(p.id);
-                            return (
-                                <tr key={p.id} className="border-t border-neutral-100">
-                                    <td className="px-3 py-2 font-bold">{p.nombre}</td>
-                                    <td className="px-3 py-2 text-neutral-500">{p.inmobiliaria || '—'}</td>
-                                    <td className="px-3 py-2 text-neutral-600">{p.extra.rentas ?? 0}</td>
-                                    <td className="px-3 py-2">
-                                        <select value={st} onChange={(e) => fijar(p.id, { estado: e.target.value as PermisoEstado })}
-                                            className={`rounded-[2px] border-0 px-2 py-1 text-[11px] outline-none ${COLOR[st]}`}>
-                                            <option value="sin-preguntar">Sin preguntar</option>
-                                            <option value="pedido">Le preguntamos</option>
-                                            <option value="si">Sí</option>
-                                            <option value="no">No</option>
-                                        </select>
-                                    </td>
-                                    <td className="px-3 py-2">
-                                        <select value={via(p.id)} disabled={st !== 'si'}
-                                            onChange={(e) => fijar(p.id, { via: (e.target.value || null) as ViaId | null })}
-                                            className="rounded-[2px] border border-neutral-200 px-2 py-1 text-[11px] outline-none disabled:opacity-40">
-                                            <option value="">—</option>
-                                            {VIAS.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
-                                        </select>
-                                        {p.extra.whatsapp === 'No' && (
-                                            <span className="ml-2 text-[10px] text-brand-gray">sin WhatsApp vinculado</span>
-                                        )}
-                                    </td>
-                                </tr>
-                            );
-                        })}
+                        {visibles.map((p) => (
+                            <tr key={p.id} className="border-t border-neutral-100">
+                                <td className="px-3 py-2">
+                                    <input type="checkbox" checked={marcados.has(p.id)}
+                                        onChange={(e) => setMarcados((s) => {
+                                            const n = new Set(s);
+                                            if (e.target.checked) n.add(p.id); else n.delete(p.id);
+                                            return n;
+                                        })} />
+                                </td>
+                                <td className="px-3 py-2 font-bold">
+                                    {p.nombre}
+                                    {p.extra.whatsapp === 'No' && (
+                                        <span className="block text-[10px] text-brand-gray">sin WhatsApp vinculado</span>
+                                    )}
+                                </td>
+                                <td className="px-3 py-2 text-neutral-500">{p.inmobiliaria || '—'}</td>
+                                <td className="px-3 py-2 text-right text-neutral-600">{p.extra.rentas ?? 0}</td>
+                                <td className="px-3 py-2 text-right text-neutral-600">{p.extra.propietarios ?? 0}</td>
+                                <td className="px-3 py-2 text-right text-neutral-600">{p.extra.busquedas ?? 0}</td>
+                                {DESTINATARIOS.map((d) => {
+                                    const v = via(p.id, d.id);
+                                    // No se le ofrece "en mi nombre" a quien no tiene WhatsApp
+                                    // vinculado: no hay número desde el cual salir.
+                                    const sinWa = p.extra.whatsapp === 'No';
+                                    return (
+                                        <td key={d.id} className="px-3 py-2">
+                                            <select value={v}
+                                                onChange={(e) => guardar({ asesorId: p.id, destinatario: d.id, via: e.target.value })}
+                                                className={`w-full rounded-[2px] border-0 px-2 py-1 text-[11px] outline-none ${COLOR_VIA[v]}`}>
+                                                <option value="sin-preguntar">Sin preguntar</option>
+                                                <option value="pedido">Le preguntamos</option>
+                                                {RESPUESTAS.map((r) => (
+                                                    <option key={r.id} value={r.id} disabled={r.id === 'en-mi-nombre' && sinWa}>
+                                                        {r.label}{r.id === 'en-mi-nombre' && sinWa ? ' (sin WhatsApp)' : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        ))}
                     </tbody>
                 </table>
             </div>
+
+            <p className="mt-2 text-[11px] text-brand-gray">
+                {VIAS.filter((v) => v.final).map((v) => `${v.label}: ${v.hint}`).join(' · ')}
+            </p>
         </>
     );
 }

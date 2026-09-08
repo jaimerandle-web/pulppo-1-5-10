@@ -20,7 +20,7 @@
  * a persistir sin tocar una línea de código.
  * ------------------------------------------------------------------ */
 
-import type { Envio, Permiso, PermisoEstado, Store, TemaId, ViaId } from './tipos';
+import type { Destinatario, Envio, Permiso, Store, TemaId, ViaId } from './tipos';
 
 // fs/path se importan en caliente y sólo en el camino local: estáticos hacen
 // que Turbopack trace el proyecto entero al bundle serverless.
@@ -86,21 +86,55 @@ export async function permisos(): Promise<Permiso[]> {
     return (await leer()).permisos;
 }
 
-/** Estado del permiso de un asesor para un tema. Sin registro = sin preguntar. */
-export function estadoPermiso(ps: Permiso[], asesorId: string | null, tema: TemaId): PermisoEstado {
+/**
+ * Permiso de un asesor para un tema y un destinatario. Sin registro = sin
+ * preguntar. La clave es la TERNA (asesor, tema, destinatario): un asesor
+ * puede dejarnos hablar con sus propietarios y no con sus clientes.
+ */
+export function viaPermiso(
+    ps: Permiso[], asesorId: string | null, tema: TemaId, destinatario: Destinatario
+): ViaId {
     if (!asesorId) return 'sin-preguntar';
-    return ps.find((p) => p.asesorId === asesorId && p.tema === tema)?.estado ?? 'sin-preguntar';
+    return ps.find((p) => p.asesorId === asesorId && p.tema === tema && p.destinatario === destinatario)?.via
+        ?? 'sin-preguntar';
 }
 
+/** ¿Ya podemos mandar? Sólo con una respuesta real y afirmativa. */
+export const autoriza = (v: ViaId): boolean => v === 'pulppo' || v === 'en-mi-nombre';
+
 export async function fijarPermiso(
-    asesorId: string, tema: TemaId, estado: PermisoEstado, via: ViaId | null, por: string
+    asesorId: string, tema: TemaId, destinatario: Destinatario, via: ViaId, por: string
 ): Promise<Permiso> {
     const s = await leer();
-    const nuevo: Permiso = { asesorId, tema, estado, via, actualizadoEn: new Date().toISOString(), actualizadoPor: por };
-    const i = s.permisos.findIndex((p) => p.asesorId === asesorId && p.tema === tema);
+    const nuevo: Permiso = {
+        asesorId, tema, destinatario, via,
+        actualizadoEn: new Date().toISOString(), actualizadoPor: por
+    };
+    const i = s.permisos.findIndex((p) =>
+        p.asesorId === asesorId && p.tema === tema && p.destinatario === destinatario);
     if (i >= 0) s.permisos[i] = nuevo; else s.permisos.push(nuevo);
     await escribir(s);
     return nuevo;
+}
+
+/** Fija el mismo permiso para muchos asesores de una (el pedido de Ulises). */
+export async function fijarPermisos(
+    asesorIds: string[], tema: TemaId, destinatarios: Destinatario[], via: ViaId, por: string
+): Promise<number> {
+    const s = await leer();
+    const ahora = new Date().toISOString();
+    let n = 0;
+    for (const asesorId of asesorIds) {
+        for (const destinatario of destinatarios) {
+            const nuevo: Permiso = { asesorId, tema, destinatario, via, actualizadoEn: ahora, actualizadoPor: por };
+            const i = s.permisos.findIndex((p) =>
+                p.asesorId === asesorId && p.tema === tema && p.destinatario === destinatario);
+            if (i >= 0) s.permisos[i] = nuevo; else s.permisos.push(nuevo);
+            n++;
+        }
+    }
+    await escribir(s);
+    return n;
 }
 
 /* ------------------------------- envíos ------------------------------- */

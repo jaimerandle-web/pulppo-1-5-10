@@ -35,16 +35,34 @@ export const TEMAS: { id: TemaId; label: string; color: string }[] = [
 ];
 
 /**
- * Las tres formas de gestionar el contacto. No son un detalle de canal:
- * cambian quién aparece como remitente y cuánto podemos medir.
+ * A quién de su cartera nos deja hablarle. Son dos permisos separados
+ * porque son dos relaciones distintas: el propietario le confió una
+ * captación, el que busca rentar todavía no le confió nada.
  */
-export type ViaId = 'pulppo' | 'asesor' | 'reenvio';
+export type Destinatario = 'propietario' | 'cliente';
 
-export const VIAS: { id: ViaId; label: string; hint: string }[] = [
-    { id: 'pulppo', label: 'Le escribe Pulppo', hint: 'Nuestro número. Medimos todo.' },
-    { id: 'asesor', label: 'Desde el WhatsApp del asesor', hint: 'Mejor respuesta, no vemos la conversación.' },
-    { id: 'reenvio', label: 'Se lo pasamos al asesor', hint: 'Él reenvía. No sabemos si lo mandó.' }
+export const DESTINATARIOS: { id: Destinatario; label: string; hint: string }[] = [
+    { id: 'propietario', label: 'Contacto a propietario', hint: 'Dueños de sus rentas captadas' },
+    { id: 'cliente', label: 'Contacto a clientes', hint: 'Sus búsquedas activas de renta' }
 ];
+
+/**
+ * La respuesta del asesor. Las tres primeras son lo que él elige; las dos
+ * de arriba son estado nuestro (todavía no contestó). Merge deliberado de
+ * "¿nos deja?" y "¿desde qué número?": para el asesor es una sola decisión.
+ */
+export type ViaId = 'sin-preguntar' | 'pedido' | 'pulppo' | 'en-mi-nombre' | 'no';
+
+export const VIAS: { id: ViaId; label: string; hint: string; final: boolean }[] = [
+    { id: 'sin-preguntar', label: 'Sin preguntar', hint: 'Todavía no le escribimos', final: false },
+    { id: 'pedido', label: 'Le preguntamos', hint: 'Esperando su respuesta', final: false },
+    { id: 'pulppo', label: 'Pulppo puede contactarlos', hint: 'Nuestro número. Medimos todo.', final: true },
+    { id: 'en-mi-nombre', label: 'Pueden escribir en mi nombre', hint: 'Sale como él. Mejor respuesta, no vemos la conversación.', final: true },
+    { id: 'no', label: 'No contactar', hint: 'Cerrado para este tema', final: true }
+];
+
+/** Las tres opciones que se le ofrecen al asesor, en orden. */
+export const RESPUESTAS = VIAS.filter((v) => v.final);
 
 /** Una persona de cualquier base, ya normalizada. */
 export interface Persona {
@@ -74,15 +92,13 @@ export interface BaseResultado {
 /* --------------------------- estado propio --------------------------- */
 /* Mongo es READ-ONLY: permisos y envíos viven en nuestro store. */
 
-export type PermisoEstado = 'sin-preguntar' | 'pedido' | 'si' | 'no';
-
 export interface Permiso {
     /** Quién autoriza: el asesor (agents._id). */
     asesorId: string;
     tema: TemaId;
-    estado: PermisoEstado;
-    /** Vía que el asesor prefiere para sus clientes. */
-    via: ViaId | null;
+    /** A quién de su cartera: propietario o cliente. Son permisos separados. */
+    destinatario: Destinatario;
+    via: ViaId;
     actualizadoEn: string;
     /** Quién lo fijó: email interno, o 'asesor' si respondió él. */
     actualizadoPor: string;
