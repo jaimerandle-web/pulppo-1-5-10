@@ -186,7 +186,8 @@ function splitByRole(o: Document, amount: number, pulppo: Set<string>): Map<stri
 }
 
 const PROJ_BROKER = {
-    id: 1, payments: 1, 'comission.value': 1, closedAt: 1, 'status.last': 1, 'company._id': 1,
+    id: 1, payments: 1, 'comission.value': 1, closedAt: 1, 'status.last': 1,
+    'company._id': 1, 'company.name': 1,
     'buyer.broker.email': 1, 'seller.broker.email': 1, 'property.agent.email': 1,
 };
 
@@ -202,7 +203,10 @@ export async function brokerValueByMonth(
         : { closedAt: { $gte: start, $lt: end }, 'status.last': { $in: ['closed', 'paying'] } };
 
     for await (const o of db.collection('operations').find(q, { projection: PROJ_BROKER })) {
-        if (isTuhabi(meta, String(((o.company as Document) ?? {})._id))) continue;
+        const co = (o.company as Document) ?? {};
+        // ⚠️ El Python original NO filtraba demos aquí (sólo en el ranking de inmobiliarias),
+        // así que asesores de "Inmobiliaria Demo" salían en el top por nivel. Se corrige.
+        if (isDemo(co.name as string) || isTuhabi(meta, String(co._id))) continue;
         let amt = 0;
         if (metric === 'cobrada') {
             for (const p of ((o.payments as Document[]) ?? [])) {
@@ -226,6 +230,56 @@ export async function brokerValueByMonth(
 }
 
 export interface BrokerRow { email: string; name: string; company: string | null; value: number; nops: number }
+export interface BrokerOp { op: string; inmo: string | null; calle: string | null; comisionDeal: number; parte: number; roles: string }
+
+/** Las operaciones que componen la comisión de un asesor en el mes: qué deal, su rol,
+ *  la comisión del deal completo y la parte que le tocó tras el split. */
+export async function brokerOps(
+    year: number, month: number, metric: Metric, email: string,
+    pulppo: Set<string>, meta?: Map<string, CompanyMeta>,
+): Promise<BrokerOp[]> {
+    const db = await getDb();
+    const [start, end] = monthBounds(year, month);
+    const q = { $or: [{ 'buyer.broker.email': email }, { 'seller.broker.email': email }, { 'property.agent.email': email }] };
+    const rows: BrokerOp[] = [];
+    const cur = db.collection('operations').find(q, {
+        projection: {
+            id: 1, 'company._id': 1, 'company.name': 1, 'comission.value': 1, closedAt: 1,
+            'status.last': 1, payments: 1, 'closeValue.value': 1, 'property.address.street': 1,
+            'buyer.broker.email': 1, 'seller.broker.email': 1, 'property.agent.email': 1,
+        },
+    });
+    for await (const o of cur) {
+        const co = (o.company as Document) ?? {};
+        if (isDemo(co.name as string) || isTuhabi(meta, String(co._id))) continue;
+        let amt = 0;
+        if (metric === 'cobrada') {
+            for (const p of ((o.payments as Document[]) ?? [])) {
+                if (isDate(p.createdAt) && p.createdAt >= start && p.createdAt < end) {
+                    amt += Number(((p.comission as Document) ?? {}).value ?? 0) || 0;
+                }
+            }
+        } else {
+            const ok = isDate(o.closedAt) && (o.closedAt as Date) >= start && (o.closedAt as Date) < end
+                && ['closed', 'paying'].includes(String(((o.status as Document) ?? {}).last));
+            amt = ok ? (Number(((o.comission as Document) ?? {}).value ?? 0) || 0) : 0;
+        }
+        if (amt <= 0) continue;
+        const parte = splitByRole(o, amt, pulppo).get(email) ?? 0;
+        if (parte <= 0) continue;
+        const roles: string[] = [];
+        if ((((o.buyer as Document) ?? {}).broker as Document ?? {})?.email === email) roles.push('comprador');
+        if ((((o.seller as Document) ?? {}).broker as Document ?? {})?.email === email) roles.push('vendedor');
+        if ((((o.property as Document) ?? {}).agent as Document ?? {})?.email === email) roles.push('productor');
+        rows.push({
+            op: String(o.id), inmo: (co.name as string) ?? null,
+            calle: ((((o.property as Document) ?? {}).address as Document) ?? {})?.street as string ?? null,
+            comisionDeal: amt, parte, roles: roles.join(' + '),
+        });
+    }
+    rows.sort((a, b) => b.parte - a.parte);
+    return rows;
+}
 
 export async function topBrokersByLevel(
     year: number, month: number, metric: Metric, am: AgentMaps,
@@ -458,6 +512,7 @@ export async function raceFrames(
 export interface PlusData {
     year: number; month: number; metric: Metric;
     general: CompanyRow[]; onboarding: CompanyRow[];
+    ops: Record<string, BrokerOp[]>;   // email -> desglose (sólo de los que salen en el top)
     brokers: Record<Level, BrokerRow[]>;
     newElite: { name: string; company: string | null }[];
     newPro: { name: string; company: string | null }[];
@@ -472,15 +527,24 @@ export async function fetchPlus(year: number, month: number, metric: Metric = 'c
     const [am, meta] = await Promise.all([agentMaps(), companyMetaMap()]);
     const mov = levelMovement(am);
     const hof = hallOfFame(am);
-    const [general, onboarding, brokers, records, race] = await Promise.all([
-        topCompanies(year, month, metric, meta, false, 10),
+    const [todas, onboarding, brokers, records, race] = await Promise.all([
+        topCompanies(year, month, metric, meta, false, 60),
         topCompanies(year, month, metric, meta, true, 10),
         topBrokersByLevel(year, month, metric, am, meta, 3),
         recordSales(10, meta, am),
         raceFrames(year, metric, meta, am, month, 'company', 10),
     ]);
+    // Consultoría = las ya graduadas. Se piden 60 y se filtra para poder entregar 10 reales
+    // (pedir 10 del total mezclado dejaba menos de 10 de consultoría).
+    const general = todas.filter((r) => !r.onboarding).slice(0, 10);
+    // Desglose de operaciones sólo de los asesores que salen en el top: es una consulta por
+    // asesor y no vale la pena precalcularla para toda la red.
+    const topEmails = LEVELS.flatMap((lv) => brokers[lv].map((b) => b.email));
+    const desglose = await Promise.all(topEmails.map((e) => brokerOps(year, month, metric, e, am.pulppo, meta)));
+    const ops: Record<string, BrokerOp[]> = {};
+    topEmails.forEach((e, i) => { ops[e] = desglose[i]; });
     return {
-        year, month, metric, general, onboarding, brokers,
+        year, month, metric, general, onboarding, brokers, ops,
         newElite: newAtLevel(year, month, 'elite', am),
         newPro: newAtLevel(year, month, 'professional', am),
         counts: mov.counts, flow: mov.flow,
