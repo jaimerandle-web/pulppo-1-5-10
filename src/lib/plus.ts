@@ -38,6 +38,7 @@ export function monthBounds(year: number, month: number): [Date, Date] {
 // ── mapas base ─────────────────────────────────────────────────────
 export interface AgentMaps {
     level: Map<string, string | null>;
+    photo: Map<string, string | null>;
     uidEmail: Map<string, string>;
     name: Map<string, string>;
     company: Map<string, string | null>;
@@ -48,16 +49,18 @@ export interface AgentMaps {
 export async function agentMaps(): Promise<AgentMaps> {
     const db = await getDb();
     const m: AgentMaps = {
-        level: new Map(), uidEmail: new Map(), name: new Map(),
+        level: new Map(), photo: new Map(), uidEmail: new Map(), name: new Map(),
         company: new Map(), hist: new Map(), pulppo: new Set(),
     };
     const cur = db.collection('agents').find({}, {
-        projection: { email: 1, uid: 1, level: 1, firstName: 1, lastName: 1, company: 1, levelHistory: 1 },
+        projection: { email: 1, uid: 1, level: 1, firstName: 1, lastName: 1, company: 1, levelHistory: 1, profilePicture: 1 },
     });
     for await (const a of cur) {
         const e = a.email as string | undefined;
         if (!e) continue;
         m.level.set(e, (a.level as string) ?? null);
+        // 85% de los agents tienen profilePicture; el resto cae a las iniciales en la UI.
+        m.photo.set(e, (a.profilePicture as string) ?? null);
         m.pulppo.add(e);
         if (a.uid) m.uidEmail.set(a.uid as string, e);
         m.name.set(e, `${a.firstName ?? ''} ${a.lastName ?? ''}`.trim());
@@ -229,7 +232,7 @@ export async function brokerValueByMonth(
     return { acc, nops };
 }
 
-export interface BrokerRow { email: string; name: string; company: string | null; value: number; nops: number }
+export interface BrokerRow { email: string; name: string; company: string | null; value: number; nops: number; photo: string | null }
 export interface BrokerOp { op: string; inmo: string | null; calle: string | null; comisionDeal: number; parte: number; roles: string }
 
 /** Las operaciones que componen la comisión de un asesor en el mes: qué deal, su rol,
@@ -292,7 +295,7 @@ export async function topBrokersByLevel(
         if (lv && lv in by) {
             by[lv].push({
                 email: e, name: am.name.get(e) ?? '?', company: am.company.get(e) ?? null,
-                value: v, nops: nops.get(e) ?? 0,
+                value: v, nops: nops.get(e) ?? 0, photo: am.photo.get(e) ?? null,
             });
         }
     }

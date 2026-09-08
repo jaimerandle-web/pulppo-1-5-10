@@ -38,6 +38,16 @@ function Kpi({ label, value, sub, color }: { label: string; value: string; sub?:
     );
 }
 
+/** Avatar del asesor: foto de Mongo si existe (85% la tiene), iniciales si no.
+ *  Circular y con anillo del color del nivel, como en la pieza "Ranking Pulppo". */
+function Avatar({ src, name, color, size = 34 }: { src?: string | null; name: string; color: string; size?: number }) {
+    const ini = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
+    return src
+        ? <img src={src} alt={name} width={size} height={size} loading="lazy"
+            style={{ width: size, height: size, borderRadius: size, objectFit: 'cover', border: `2px solid ${color}`, flexShrink: 0, background: LGT }} />
+        : <span style={{ width: size, height: size, borderRadius: size, border: `2px solid ${color}`, background: LGT, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'EB Garamond, serif', fontSize: size * .42, color: BLK }}>{ini}</span>;
+}
+
 /** Barra proporcional simple. Sin sombras ni degradados: el design system lo prohíbe. */
 function Bar({ v, max, color }: { v: number; max: number; color?: string }) {
     const pct = max > 0 ? Math.max(1, Math.round((100 * v) / max)) : 0;
@@ -142,8 +152,9 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
                         const ops = d.ops?.[b.email] ?? [];
                         return (
                             <div key={b.email} style={{ padding: '9px 0', borderBottom: i < rows.length - 1 ? `1px solid ${LGT}` : 'none' }}>
-                                <div style={{ display: 'flex', gap: 9, alignItems: 'baseline' }}>
-                                    <span style={{ fontFamily: 'EB Garamond, serif', fontSize: 19, color: c.base, width: 16, flexShrink: 0 }}>{i + 1}</span>
+                                <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
+                                    <span style={{ fontFamily: 'EB Garamond, serif', fontSize: 19, color: c.base, width: 14, flexShrink: 0 }}>{i + 1}</span>
+                                    <Avatar src={b.photo} name={b.name} color={c.base} />
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontSize: 12.5, fontWeight: 600 }}>{b.name}</div>
                                         <div style={{ fontSize: 10.5, color: '#777' }}>{b.company ?? '—'}</div>

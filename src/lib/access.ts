@@ -14,6 +14,7 @@ const FALLBACK_EMAILS: string[] = [
     'luis@pulppo.com',
     'leonardoherrera@tuhabi.mx', // externo (Habi)
     'multimediapulppo@pulppo.com',
+    'bibiana@pulppo.com',
     'claudio@pulppo.com'
 ];
 

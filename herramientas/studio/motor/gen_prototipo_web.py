@@ -430,9 +430,21 @@ _CALLEJERO = re.compile(
     r"prolongaci[oó]n|retorno|cerrada|and[aá]dor)\b|\bno\.?\s*\d|#\s*\d", re.I)
 
 
+# `development.name` también trae relleno de formulario en vez de vacío: "N/A" en 22 avisos
+# publicados, más "NA", "Casa", "Urban", "-". Impreso como titular de la pieza se lee como un
+# error del sistema, así que se trata igual que un campo vacío. Ojo: los nombres CORTOS sí son
+# reales en este mercado —AGOR, Bilú, LUMA, FLOW, G25— y no se pueden descartar por longitud.
+_RELLENO = {"n/a", "na", "n.a.", "null", "none", "nulo", "s/n", "sn", "-", "--", "---", ".",
+            "0", "no aplica", "ninguno", "ninguna", "sin nombre", "sin dato", "x", "xx",
+            "pendiente", "por definir", "casa", "departamento", "depto", "terreno", "oficina",
+            "local", "bodega", "edificio"}
+
+
 def nombre_residencial(bruto):
     n = " ".join(str(bruto or "").split())
     if not n or _CALLEJERO.search(n):
+        return ""
+    if n.lower().strip(".,;:") in _RELLENO:
         return ""
     # más de 30 caracteres no cabe en la línea y casi siempre es basura pegada
     if len(n) > 30:
