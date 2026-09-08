@@ -42,7 +42,10 @@ export default function PrintRoot({ id, orientation = 'portrait', extra = '' }:
             #${id} .overflow-x-auto, #${id} .print-wide { overflow: visible !important; }
             #${id} table[class*="min-w-"], #${id} [class*="min-w-"] { min-width: 0 !important; }
             #${id} table { width: 100% !important; table-layout: auto !important; }
-            #${id} table th, #${id} table td { white-space: normal !important; word-break: break-word; }
+            /* \`overflow-wrap\` y NO \`word-break: break-word\`: el segundo parte a media palabra
+               aunque quepa ("CÓDI GO", "ASESO R") y deja los encabezados ilegibles. Así sólo se
+               parte la palabra que por sí sola no entra en su columna. */
+            #${id} table th, #${id} table td { white-space: normal !important; word-break: normal; overflow-wrap: break-word; }
 
             /* Encabezado de tabla repetido en cada hoja y filas que no se parten por la mitad. */
             #${id} thead { display: table-header-group; }
