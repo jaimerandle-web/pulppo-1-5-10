@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { money } from '@/components/ui';
 import { BASES } from '@/lib/centro/basesMeta';
-import { DESTINATARIOS, RESPUESTAS, TEMAS, VIAS, type BaseId, type BaseResultado, type Destinatario, type Envio, type Permiso, type ViaId } from '@/lib/centro/tipos';
+import { BANDAS, DESTINATARIOS, RESPUESTAS, TEMAS, VIAS, type BaseId, type BaseResultado, type Cluster, type Destinatario, type Envio, type FiltroDemanda, type Permiso, type ViaId } from '@/lib/centro/tipos';
 
 type Tab = 'calendario' | 'bases' | 'garantia' | 'desempeno';
 
@@ -210,16 +210,30 @@ function Bases({ permisos, onCambio }: { permisos: Permiso[]; onCambio: () => vo
     const [datos, setDatos] = useState<BaseResultado | null>(null);
     const [cargando, setCargando] = useState(false);
     const [q, setQ] = useState('');
+    const [filtro, setFiltro] = useState<FiltroDemanda>({ operacion: 'rent' });
+
+    const esDemanda = sel === 'compradores';
+    const qs = useMemo(() => {
+        const p = new URLSearchParams({ id: sel });
+        if (esDemanda) {
+            for (const [k, v] of Object.entries(filtro)) {
+                if (v !== undefined && v !== '') p.set(k, String(v));
+            }
+        }
+        return p.toString();
+    }, [sel, esDemanda, filtro]);
 
     useEffect(() => {
         fetch('/api/marketing/bases').then((r) => r.json()).then((d) => setConteos(d.conteos || {}));
     }, []);
 
+    useEffect(() => { setQ(''); }, [sel]);
+
     useEffect(() => {
-        setCargando(true); setDatos(null); setQ('');
-        fetch(`/api/marketing/bases?id=${sel}`).then((r) => r.json())
+        setCargando(true); setDatos(null);
+        fetch(`/api/marketing/bases?${qs}`).then((r) => r.json())
             .then((d) => setDatos(d.error ? null : d)).finally(() => setCargando(false));
-    }, [sel]);
+    }, [qs]);
 
     const filas = useMemo(() => {
         if (!datos) return [];
@@ -260,6 +274,8 @@ function Bases({ permisos, onCambio }: { permisos: Permiso[]; onCambio: () => vo
                             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar…"
                                 className="rounded-[2px] border border-neutral-300 px-3 py-1.5 text-[12px] outline-none focus:border-sea" />
                         </div>
+
+                        {esDemanda && <PanelDemanda filtro={filtro} setFiltro={setFiltro} />}
 
                         {datos.notas.length > 0 && (
                             <ul className="mt-3 space-y-1 rounded-[2px] bg-light px-4 py-3 text-[11px] text-neutral-600">
@@ -304,6 +320,129 @@ function Bases({ permisos, onCambio }: { permisos: Permiso[]; onCambio: () => vo
                     </>
                 )}
             </div>
+        </div>
+    );
+}
+
+/* ------------------------- clusters de demanda ------------------------- *
+ * Mismo modelo que el proyecto de campañas por correo (zona_tipo_precio),
+ * pero en vivo: estado × tipo × banda de presupuesto. Se cuentan PERSONAS
+ * distintas — alguien con tres búsquedas en el mismo cluster es un mensaje.
+ * ---------------------------------------------------------------------- */
+
+type Opciones = { estados: string[]; tipos: string[]; colonias: string[] };
+type Parrilla = { clusters: Cluster[]; personas: number; sinPresupuesto: number };
+
+function PanelDemanda({ filtro, setFiltro }: {
+    filtro: FiltroDemanda; setFiltro: (f: FiltroDemanda) => void;
+}) {
+    const [ops, setOps] = useState<Opciones>({ estados: [], tipos: [], colonias: [] });
+    const [parrilla, setParrilla] = useState<Parrilla | null>(null);
+    const [verClusters, setVerClusters] = useState(true);
+    const op = filtro.operacion || 'rent';
+
+    // Las opciones son las que EXISTEN en la demanda viva, no una lista fija.
+    useEffect(() => {
+        fetch(`/api/marketing/clusters?opciones=1&operacion=${op}`)
+            .then((r) => r.json()).then((d) => setOps(d.estados ? d : { estados: [], tipos: [], colonias: [] }));
+    }, [op]);
+
+    useEffect(() => {
+        if (!verClusters) return;
+        setParrilla(null);
+        const p = new URLSearchParams({ operacion: op });
+        if (filtro.estado) p.set('estado', filtro.estado);
+        if (filtro.colonia) p.set('colonia', filtro.colonia);
+        if (filtro.tipo) p.set('tipo', filtro.tipo);
+        fetch(`/api/marketing/clusters?${p}`).then((r) => r.json())
+            .then((d) => setParrilla(d.error ? null : d));
+    }, [op, filtro.estado, filtro.colonia, filtro.tipo, verClusters]);
+
+    const set = (k: keyof FiltroDemanda, v: string) =>
+        setFiltro({ ...filtro, [k]: v === '' ? undefined : (k === 'banda' ? Number(v) : v) });
+
+    const sel = 'rounded-[2px] border border-neutral-300 px-2 py-1.5 text-[12px] outline-none focus:border-sea';
+
+    return (
+        <div className="mt-4">
+            <div className="flex flex-wrap items-end gap-2">
+                <select value={op} onChange={(e) => setFiltro({ operacion: e.target.value as 'sale' | 'rent' })} className={sel}>
+                    <option value="rent">Buscan rentar</option>
+                    <option value="sale">Buscan comprar</option>
+                </select>
+                <select value={filtro.estado ?? ''} onChange={(e) => set('estado', e.target.value)} className={sel}>
+                    <option value="">Todos los estados</option>
+                    {ops.estados.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select value={filtro.colonia ?? ''} onChange={(e) => set('colonia', e.target.value)} className={sel}>
+                    <option value="">Todas las colonias</option>
+                    {ops.colonias.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select value={filtro.tipo ?? ''} onChange={(e) => set('tipo', e.target.value)} className={sel}>
+                    <option value="">Todos los tipos</option>
+                    {ops.tipos.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select value={filtro.banda ?? ''} onChange={(e) => set('banda', e.target.value)} className={sel}>
+                    <option value="">Todo presupuesto</option>
+                    {BANDAS[op].map((b, i) => <option key={b.label} value={i}>{b.label}</option>)}
+                </select>
+                <button onClick={() => setFiltro({ operacion: op })}
+                    className="rounded-[2px] border border-neutral-300 px-3 py-1.5 text-[12px] hover:bg-light">Limpiar</button>
+                <button onClick={() => setVerClusters((v) => !v)}
+                    className="ml-auto text-[11px] text-sea underline">
+                    {verClusters ? 'Ocultar clusters' : 'Ver clusters'}
+                </button>
+            </div>
+
+            {verClusters && (
+                <div className="mt-3 rounded-[2px] border border-neutral-200 p-4">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <h3 className="text-[14px] font-bold">Clusters · estado × tipo × presupuesto</h3>
+                        {parrilla && (
+                            <p className="text-[11px] text-brand-gray">
+                                {parrilla.clusters.length} celdas · {parrilla.sinPresupuesto.toLocaleString('es-MX')} búsquedas
+                                sin presupuesto declarado quedan fuera de la parrilla
+                            </p>
+                        )}
+                    </div>
+                    {!parrilla && <p className="mt-2 text-[12px] text-brand-gray">Calculando…</p>}
+                    {parrilla && (
+                        <div className="mt-3 max-h-[420px] overflow-auto">
+                            <table className="w-full min-w-[720px] text-[12px]">
+                                <thead className="sticky top-0 bg-white text-left text-[10px] uppercase tracking-wide text-brand-gray">
+                                    <tr>
+                                        <th className="py-1.5 pr-3 text-right">Personas</th>
+                                        <th className="py-1.5 pr-3">Estado</th>
+                                        <th className="py-1.5 pr-3">Tipo</th>
+                                        <th className="py-1.5 pr-3">Presupuesto</th>
+                                        <th className="py-1.5">Colonias que más pesan</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {parrilla.clusters.slice(0, 60).map((c) => (
+                                        <tr key={`${c.estado}|${c.tipo}|${c.bandaIdx}`}
+                                            onClick={() => setFiltro({ operacion: op, estado: c.estado, tipo: c.tipo, banda: c.bandaIdx })}
+                                            className="cursor-pointer border-t border-neutral-100 hover:bg-light"
+                                            title="Clic para ver a esta gente en la tabla de abajo">
+                                            <td className="py-1.5 pr-3 text-right font-bold">{c.personas.toLocaleString('es-MX')}</td>
+                                            <td className="py-1.5 pr-3">{c.estado}</td>
+                                            <td className="py-1.5 pr-3">{c.tipo}</td>
+                                            <td className="py-1.5 pr-3 text-neutral-600">{c.banda}</td>
+                                            <td className="max-w-[320px] truncate py-1.5 text-brand-gray">
+                                                {c.colonias.map((x) => x.name).join(' · ')}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    <p className="mt-2 text-[11px] text-brand-gray">
+                        Clic en una fila para filtrar la tabla de abajo. Las celdas suman más que el total de personas:
+                        quien busca en varias colonias o tipos cae en varios clusters — al programar se deduplica por persona.
+                    </p>
+                </div>
+            )}
         </div>
     );
 }

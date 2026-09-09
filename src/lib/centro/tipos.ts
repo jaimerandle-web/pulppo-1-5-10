@@ -15,6 +15,7 @@
 /** Las bases de datos del centro. El id viaja en la URL. */
 export type BaseId =
     | 'brokers'
+    | 'brokers-inactivos'
     | 'inmobiliarias'
     | 'brokers-externos'
     | 'propietarios-renta'
@@ -22,6 +23,59 @@ export type BaseId =
     | 'inquilinos'
     | 'compradores'
     | 'pulppers';
+
+/* ------------------------- clusters de demanda ------------------------- */
+
+/**
+ * Filtros de la base de compradores. Salen de `searches.filters`, que es lo
+ * que la persona DIJO que busca (a diferencia del lead, que es lo que hizo).
+ */
+export interface FiltroDemanda {
+    operacion?: 'sale' | 'rent';
+    estado?: string;
+    colonia?: string;
+    tipo?: string;
+    /** Índice de banda de presupuesto dentro de BANDAS[operacion]. */
+    banda?: number;
+}
+
+export interface Banda { label: string; min: number; max: number | null }
+
+/**
+ * Bandas de presupuesto, calibradas sobre la distribución real de búsquedas
+ * vivas (sep-2026). Las de venta replican las del proyecto de campañas por
+ * correo (0-5M, 5-10M, 10-15M, 15-20M) partiendo la primera, que era la más
+ * cargada. Las de renta no existían: se cortaron donde la demanda se agrupa.
+ */
+export const BANDAS: Record<'sale' | 'rent', Banda[]> = {
+    sale: [
+        { label: 'Hasta $2M', min: 0, max: 2e6 },
+        { label: '$2M – $5M', min: 2e6, max: 5e6 },
+        { label: '$5M – $10M', min: 5e6, max: 10e6 },
+        { label: '$10M – $15M', min: 10e6, max: 15e6 },
+        { label: '$15M – $20M', min: 15e6, max: 20e6 },
+        { label: '$20M o más', min: 20e6, max: null }
+    ],
+    rent: [
+        { label: 'Hasta $15k', min: 0, max: 15e3 },
+        { label: '$15k – $25k', min: 15e3, max: 25e3 },
+        { label: '$25k – $40k', min: 25e3, max: 40e3 },
+        { label: '$40k – $60k', min: 40e3, max: 60e3 },
+        { label: '$60k – $100k', min: 60e3, max: 100e3 },
+        { label: '$100k o más', min: 100e3, max: null }
+    ]
+};
+
+/** Una celda de la parrilla estado × tipo × banda. */
+export interface Cluster {
+    estado: string;
+    tipo: string;
+    banda: string;
+    bandaIdx: number;
+    personas: number;
+    /** Las colonias que más pesan dentro del cluster, para saber de qué habla. */
+    colonias: { name: string; n: number }[];
+}
 
 /** Temas de conversación. El permiso se otorga por tema. */
 export type TemaId = 'garantia-renta' | 'credito' | 'exclusiva' | 'workshops' | 'resumen-semanal';
