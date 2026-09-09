@@ -47,13 +47,17 @@ _NO_COLEGIO = re.compile(r"\b(militar|medicina|odontolog|universidad|posgrado|id
 # "SITIO PARQUES" es una base de taxis y "Paseo de la Reforma" una avenida: los dos entraban
 # como área verde porque el nombre trae la palabra.
 _VERDE = re.compile(r"^(parque|jard[íi]n|bosque|alameda|arboleda)\b", re.I)
-_NO_VERDE = re.compile(r"\b(sitio|estacionamiento|glorieta|veterinari|funerari)\b", re.I)
+# OJO con el `\b` de cierre: exige un no-carácter DESPUÉS del prefijo, así que `veterinari\b`
+# no matchea "Veterinaria" ni `farmacia\b` matchea "FARMACIAS". Con el cierre puesto se
+# colaban "Animalitos Hospital Veterinaria" como hospital y "FARMACIAS DEL AHORRO" como
+# plaza. Los stems van SIN cierre; sólo las palabras completas lo llevan.
+_NO_VERDE = re.compile(r"\b(sitio|estacionamiento|glorieta|veterinari|funerari)", re.I)
 
 _HOSPITAL = re.compile(r"\b(hospital|centro m[eé]dico)\b", re.I)
-_NO_HOSPITAL = re.compile(r"\b(veterinari|animalit|mascot)\b", re.I)
+_NO_HOSPITAL = re.compile(r"\b(veterinari|animalit|mascot|pet\b)", re.I)
 
 # lo que se colo de salud dentro de shopping
-_NO_TIENDA = re.compile(r"\b(farmacia|veterinari|[oó]ptica|dentista)\b", re.I)
+_NO_TIENDA = re.compile(r"\b(farmacia|veterinari|[oó]ptic|dentist|consultori)", re.I)
 
 # Una tienda de conveniencia no es un argumento de zona en este segmento. Las cadenas de
 # comida rápida SÍ se dejan: Ale eligió cercanía, y si Toks es lo más cerca, es lo más cerca.
@@ -102,25 +106,8 @@ def distancia(km):
     return f"{km:.1f} km".replace(".0 km", " km")
 
 
-def hechos_de_colonia(db, ids_avisos):
-    """{clave: [(nombre, km, rating), …]} ordenado por cercanía, sólo lo que caracteriza."""
-    agg = collections.defaultdict(lambda: {"d": [], "r": [], "n": 0, "nombre": ""})
-    docs = 0
-    for doc in db.propertypois.find({"property": {"$in": ids_avisos}}, {"pois": 1}):
-        docs += 1
-        pois = doc.get("pois") or {}
-        for clave, cat in CATEGORIAS.items():
-            for p in (pois.get(cat) or []):
-                nombre = " ".join(str(p.get("name") or "").split())
-                if not nombre or not _acepta(clave, nombre):
-                    continue
-                a = agg[(clave, p.get("id") or nombre)]
-                a["nombre"], a["n"] = nombre, a["n"] + 1
-                if isinstance(p.get("distance"), (int, float)):
-                    a["d"].append(p["distance"])
-                r = p.get("rating")
-                if isinstance(r, (int, float)) and r > 0:
-                    a["r"].append(r)
+def _resumir(agg, docs):
+    """De los POIs acumulados de una colonia al puñado que la caracteriza."""
     if not docs:
         return {}
     # Con dos avisos o más se exige consenso —el POI lo tiene que ver la mitad— para no
@@ -138,22 +125,66 @@ def hechos_de_colonia(db, ids_avisos):
     return {k: sorted(v, key=lambda x: x[1])[:6] for k, v in out.items()}
 
 
+def _acumular(agg, pois):
+    for clave, cat in CATEGORIAS.items():
+        for p in (pois.get(cat) or []):
+            nombre = " ".join(str(p.get("name") or "").split())
+            if not nombre or not _acepta(clave, nombre):
+                continue
+            a = agg[(clave, p.get("id") or nombre)]
+            a["nombre"], a["n"] = nombre, a["n"] + 1
+            if isinstance(p.get("distance"), (int, float)):
+                a["d"].append(p["distance"])
+            r = p.get("rating")
+            if isinstance(r, (int, float)) and r > 0:
+                a["r"].append(r)
+
+
+def hechos_de_colonia(db, ids_avisos):
+    """{clave: [(nombre, km, rating), …]} — se conserva para probar una colonia sola."""
+    agg = collections.defaultdict(lambda: {"d": [], "r": [], "n": 0, "nombre": ""})
+    docs = 0
+    for doc in db.propertypois.find({"property": {"$in": ids_avisos}}, {"pois": 1}):
+        docs += 1
+        _acumular(agg, doc.get("pois") or {})
+    return _resumir(agg, docs)
+
+
 def hechos_por_zona(db, colonias, filtro_avisos):
     """Un mapa colonia → hechos. Se comparte entre asesores: las colonias se repiten mucho
-    entre los 22 perfiles y duplicarlo por asesor infla el archivo sin ganar nada."""
+    entre los 22 perfiles y duplicarlo por asesor infla el archivo sin ganar nada.
+
+    **Dos consultas, no dos por colonia.** La versión por colonia hacía 2×112 = 224 viajes a
+    Mongo y el build pasaba de 40 s a más de diez minutos. Acá se traen los avisos una vez
+    para armar el mapa aviso→colonia, y los POIs una vez para repartirlos.
+    """
+    colonias = {c for c in colonias if c}
+    de_aviso = {}
+    for p in db.properties.find(filtro_avisos, {"address.neighborhood.name": 1}):
+        col = ((p.get("address") or {}).get("neighborhood") or {}).get("name")
+        if col in colonias:
+            de_aviso[p["_id"]] = col
+    if not de_aviso:
+        return {}
+
+    aggs = collections.defaultdict(
+        lambda: collections.defaultdict(lambda: {"d": [], "r": [], "n": 0, "nombre": ""}))
+    cuenta = collections.Counter()
+    for doc in db.propertypois.find({"property": {"$in": list(de_aviso)}}, {"property": 1,
+                                                                            "pois": 1}):
+        col = de_aviso.get(doc.get("property"))
+        if not col:
+            continue
+        cuenta[col] += 1
+        _acumular(aggs[col], doc.get("pois") or {})
+
     salida = {}
-    for colonia in colonias:
-        if not colonia:
-            continue
-        ids = [p["_id"] for p in db.properties.find(
-            {**filtro_avisos, "address.neighborhood.name": colonia}, {"_id": 1})]
-        if not ids:
-            continue
-        h = hechos_de_colonia(db, ids)
+    for col, agg in aggs.items():
+        h = _resumir(agg, cuenta[col])
         if h:
-            salida[colonia] = {k: [{"nombre": n, "dist": distancia(d), "km": round(d, 3),
-                                    "rating": r} for n, d, r in v]
-                               for k, v in h.items()}
+            salida[col] = {k: [{"nombre": n, "dist": distancia(d), "km": round(d, 3),
+                                "rating": r} for n, d, r in v]
+                           for k, v in h.items()}
     return salida
 
 

@@ -266,7 +266,7 @@
           "resizable": true,
           "contentEditable": true,
           "styleEditable": true,
-          "text": "Top 5 {{cosa}} de {{zona}}.",
+          "text": "Top 5 {{cosa}} en {{zona}}.",
           "placeholder": "",
           "fontSize": 60,
           "fontFamily": "HeldaneTextRegular",
