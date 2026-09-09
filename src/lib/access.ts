@@ -10,6 +10,9 @@ const FALLBACK_EMAILS: string[] = [
     'laura@pulppo.com',
     'sofia.cedillov@pulppo.com',
     'ulises.chavez@pulppo.com',
+    // Ojo: también es agente master activa de "Inmobiliaria Demo". Estar acá es lo que
+    // la mantiene como INTERNA (acceso total); sin esto el login la encerraría en /mb.
+    'anaid.vazquez@pulppo.com',
     'alonso@pulppo.com',
     'luis@pulppo.com',
     'leonardoherrera@tuhabi.mx', // externo (Habi)
