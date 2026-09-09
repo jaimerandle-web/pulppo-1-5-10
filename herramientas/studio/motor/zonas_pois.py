@@ -208,7 +208,11 @@ def tokens_de_zona(h):
     return t
 
 
-# La pieza de desayuno sólo existe donde de verdad hay cinco: es la decisión de Ale del 9-sep,
-# y es la única forma de que "los 5 mejores lugares para desayunar" no invente dos.
+# La pieza de desayuno sólo existe donde de verdad hay tres cafés nombrables. Empezó pidiendo
+# cinco y sólo tres colonias de 107 los tenían —Roma Norte, Juárez e Hipódromo, que además
+# comparten los mismos cinco—, así que Ale bajó el umbral a tres el 9-sep: 24 de 107.
+MIN_DESAYUNO = 3
+
+
 def tiene_desayuno(h):
-    return len((h or {}).get("desayuno") or []) >= 5
+    return len((h or {}).get("desayuno") or []) >= MIN_DESAYUNO

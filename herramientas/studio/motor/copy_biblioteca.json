@@ -469,7 +469,7 @@
       "id": "post-mejores-desayunar",
       "seccion": "post",
       "categoria": "zonas",
-      "template_ref": "zonas_top5_post.json",
+      "template_ref": "zonas_top3_post.json",
       "titulo_idea": "Los mejores lugares para desayunar en {zona}",
       "gancho": "Contenido local puro. Atrae vecinos, que son quienes recomiendan.",
       "valores_sugeridos": {
@@ -478,12 +478,10 @@
         "cosa": "lugares para desayunar",
         "lugar_1": "{desayuno_1}",
         "lugar_2": "{desayuno_2}",
-        "lugar_3": "{desayuno_3}",
-        "lugar_4": "{desayuno_4}",
-        "lugar_5": "{desayuno_5}"
+        "lugar_3": "{desayuno_3}"
       },
       "caption_ref": "zona-que-la-sostiene",
-      "requiere": "desayuno_5"
+      "requiere": "desayuno_3"
     },
     {
       "id": "post-top5-razones",
