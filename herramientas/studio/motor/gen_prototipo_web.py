@@ -16,6 +16,8 @@ import json
 import re
 from pathlib import Path
 
+import zonas_pois
+
 BASE = Path(__file__).resolve().parent
 RAIZ = BASE.parent
 TEMPLATES_DIR = RAIZ / "contenido-valor"
@@ -685,7 +687,13 @@ def construir(email, modo_app=False):
         for fam, url in fuentes.items())
 
     creators = json.loads((BASE / "ideas_creators.json").read_text(encoding="utf-8"))
-    datos = {"broker": broker, "templates": tpl, "ideas": ideas,
+    # Los hechos de zona salen de propertypois y son verificables: reemplazan las
+    # afirmaciones inventadas que se imprimían idénticas para toda colonia.
+    _filtro_zonas = {"status.last": "published", "agent.email": email}
+    _colonias = [c for c in db.properties.distinct(
+        "address.neighborhood.name", _filtro_zonas) if c]
+    hechos = zonas_pois.hechos_por_zona(db, _colonias, _filtro_zonas)
+    datos = {"broker": broker, "templates": tpl, "ideas": ideas, "hechos_zona": hechos,
              "semana": creators["ideas"],
              "sin_diseno": biblio.get("ideas_sin_diseno", []),
              "cobertura": {"activos": 988, "con_foto_pct": 94, "con_inventario": 490,
@@ -1088,12 +1096,43 @@ function sinSeparadoresHuerfanos(t){
     .trim();
 }
 
+/* Hechos verificables de la colonia (propertypois): {colegio}, {parque}, {tienda},
+   {hospital}, {comer_1}…{comer_5}. Reemplazan las afirmaciones inventadas que se imprimían
+   idénticas para toda colonia —"Todo a pie y con la ciudad a diez minutos" salía hasta en
+   Jesús del Monte, que es un suburbio de coche sin metro—.
+   Si la colonia no tiene el hecho, el token queda VACÍO a propósito: el editor lo reporta
+   como campo faltante, que es mejor que rellenarlo con algo que no se puede sostener. */
+function hechosDe(zona){
+  return (D.hechos_zona || {})[zona] || null;
+}
+
+function tokensDeZona(zona){
+  const h = hechosDe(zona), t = {};
+  if(!h) return t;
+  for(const clave of ["colegio", "parque", "tienda", "hospital", "comer", "desayuno"]){
+    const v = h[clave] || [];
+    if(v.length){
+      t[clave] = v[0].nombre + " a " + v[0].dist;
+      t[clave + "_nombre"] = v[0].nombre;
+      t[clave + "_dist"] = v[0].dist;
+    }
+    v.slice(0, 5).forEach((x, i) => { t[clave + "_" + (i+1)] = x.nombre + " · " + x.dist; });
+  }
+  return t;
+}
+
 function rellenar(t){
   if(typeof t !== "string" || t.indexOf("{") < 0) return t;
   const z = zonaPorDefecto();
-  return t.replace(/\{zona\}/g, z.zona || "tu zona")
-          .replace(/\{ciudad\}/g, z.ciudad || "tu ciudad")
-          .replace(/\{cta\}/g, S.alta.cta || "");
+  let out = t.replace(/\{zona\}/g, z.zona || "tu zona")
+             .replace(/\{ciudad\}/g, z.ciudad || "tu ciudad")
+             .replace(/\{cta\}/g, S.alta.cta || "");
+  if(out.indexOf("{") < 0) return out;
+  const h = tokensDeZona(z.zona);
+  // Se sustituye TODO token de hecho, incluso el que la colonia no tiene: dejarlo con las
+  // llaves puestas imprimiría "{colegio}" en la pieza.
+  return out.replace(/\{(colegio|parque|tienda|hospital|comer|desayuno)(_(?:nombre|dist|[1-5]))?\}/g,
+                     (m, base, suf) => h[base + (suf || "")] || "");
 }
 /* Los valores del aviso son de CADA asesora: en el archivo del equipo viven en su perfil
    (B.valores[idea]); en el de una sola asesora vienen en la idea. Se prueban los dos. */
@@ -1165,6 +1204,14 @@ function usaFoto(idea){
 
 /* Recibe el id porque las miniaturas del feed pintan VARIAS ideas seguidas y ninguna está
    "abierta": si se leyera S.ideaAbierta, todas saldrían con la foto de la última que se abrió. */
+/* Una idea puede exigir un hecho que no toda colonia tiene: "los 5 mejores lugares para
+   desayunar" sólo se sostiene donde hay cinco cafés nombrables, y medido son 3 colonias de
+   107. Sin esta compuerta la pieza saldría con dos renglones vacíos. */
+function disponible(idea){
+  if(!idea || !idea.requiere) return true;
+  return !!tokensDeZona(zonaPorDefecto().zona)[idea.requiere];
+}
+
 function fotoDeLaPieza(idIdea){
   const i = IDEAS.find(x => x.id === (idIdea || S.ideaAbierta));
   return i ? fotoElegida(i) : "";
@@ -1570,12 +1617,12 @@ function bloqueStickers(idea){
 
 /* ---------- ideas del día ---------- */
 function storiesDeHoy(){
-  const st = IDEAS.filter(i => i.seccion === "story");
+  const st = IDEAS.filter(i => i.seccion === "story" && disponible(i));
   const n = st.length, k = S.rotacion % n, orden = [];
   for(let j=0;j<3;j++) orden.push(st[(k+j)%n]);
   return orden;
 }
-const postsSugeridos = () => IDEAS.filter(i => i.seccion === "post").slice(0,2);
+const postsSugeridos = () => IDEAS.filter(i => i.seccion === "post" && disponible(i)).slice(0,2);
 // cada clase de evento tiene su propia idea; si no hay, cae a la primera de operación
 const ideaEvento = (clase) => IDEAS.find(i => i.seccion === "operacion" && i.clase === clase)
                            || IDEAS.find(i => i.seccion === "operacion");
@@ -1762,7 +1809,7 @@ function pHoy(){
 
   // FEED: post y carrusel son el mismo momento para el asesor (publicar algo trabajado),
   // así que van juntos y él elige por apetito. El formato se ve en la tarjeta.
-  const feed = IDEAS.filter(x => x.seccion === "post" || x.seccion === "carrusel")
+  const feed = IDEAS.filter(x => (x.seccion === "post" || x.seccion === "carrusel") && disponible(x))
     .slice(0, 3).map(i => {
       const np = (TPL[i.template_ref].pages || []).length;
       const campos = i.tokens.filter(t => !t.includes(".")).length;
@@ -2425,9 +2472,16 @@ def construir_equipo(inmobiliaria, salida, incluir_todos=False):
     face_css = "\n".join(f"@font-face{{font-family:'{f}';src:url({u});font-display:block;}}"
                          for f, u in fuentes.items())
     creators = json.loads((BASE / "ideas_creators.json").read_text(encoding="utf-8"))
+    # Los hechos de zona salen de propertypois y son verificables: reemplazan las
+    # afirmaciones inventadas que se imprimían idénticas para toda colonia.
+    _filtro_zonas = {"status.last": "published",
+                     "company.name": re.compile(re.escape(inmobiliaria), re.I)}
+    _colonias = [c for c in db.properties.distinct(
+        "address.neighborhood.name", _filtro_zonas) if c]
+    hechos = zonas_pois.hechos_por_zona(db, _colonias, _filtro_zonas)
     datos = {"broker": None, "brokers": perfiles, "equipo": inmobiliaria,
              "internos": INTERNOS, "semana": creators["ideas"],
-             "templates": tpl, "ideas": ideas,
+             "templates": tpl, "ideas": ideas, "hechos_zona": hechos,
              "sin_diseno": biblio.get("ideas_sin_diseno", []),
              "cobertura": {"activos": 988, "con_foto_pct": 94,
                            "con_inventario": 490, "con_evento_30d": 169}}
