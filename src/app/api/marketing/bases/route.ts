@@ -1,7 +1,6 @@
-import { BASES, cargarBase } from '@/lib/centro/bases';
-import { contarBases } from '@/lib/centro/bases';
+import { BASES, cargarBase, contarBases } from '@/lib/centro/bases';
 import { permisos, viaPermiso } from '@/lib/centro/store';
-import { DESTINATARIOS, VIAS, type BaseId, type TemaId } from '@/lib/centro/tipos';
+import { DESTINATARIOS, VIAS, type BaseId, type FiltroDemanda, type TemaId } from '@/lib/centro/tipos';
 
 // Bases del Centro de Marketing.
 //   GET                        → conteos de todas (para el menú)
@@ -23,7 +22,18 @@ export async function GET(req: Request) {
         if (!BASES.some((b) => b.id === id)) {
             return Response.json({ error: `Base desconocida: "${id}"` }, { status: 404 });
         }
-        const datos = await cargarBase(id);
+        // Filtros de demanda (sólo los usa `compradores`): estado · colonia ·
+        // tipo · banda de presupuesto, para armar clusters.
+        const p = url.searchParams;
+        const banda = p.get('banda');
+        const filtro: FiltroDemanda = {
+            operacion: (p.get('operacion') as 'sale' | 'rent') || undefined,
+            estado: p.get('estado') || undefined,
+            colonia: p.get('colonia') || undefined,
+            tipo: p.get('tipo') || undefined,
+            banda: banda !== null && banda !== '' ? Number(banda) : undefined
+        };
+        const datos = await cargarBase(id, filtro);
 
         if (url.searchParams.get('format') === 'csv') {
             const tema = (url.searchParams.get('tema') || 'garantia-renta') as TemaId;

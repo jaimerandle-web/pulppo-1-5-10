@@ -10,6 +10,7 @@ import type { BaseId } from './tipos';
 
 export const BASES: { id: BaseId; label: string; blurb: string }[] = [
     { id: 'brokers', label: 'Brokers', blurb: 'Asesores activos de la red. Acá vive el registro de permisos.' },
+    { id: 'brokers-inactivos', label: 'Brokers inactivos', blurb: 'Dados de baja. No reciben nada del programa: son otra conversación.' },
     { id: 'inmobiliarias', label: 'Inmobiliarias', blurb: 'Las agencias activas de la red.' },
     { id: 'propietarios-renta', label: 'Propietarios de renta', blurb: 'Dueño de cada propiedad en renta publicada. La audiencia de garantías.' },
     { id: 'propietarios', label: 'Propietarios', blurb: 'Contactos etiquetados como propietario.' },
