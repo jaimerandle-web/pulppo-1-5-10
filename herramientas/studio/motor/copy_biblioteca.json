@@ -45,7 +45,7 @@
       "valores_sugeridos": {
         "zona": "{zona}",
         "ciudad": "{ciudad}",
-        "bajada": "Todo a pie y con la ciudad a diez minutos."
+        "bajada": "{colegio} · {parque}"
       },
       "caption_sugerida": "{zona} no se explica solo por el precio. Te muestro por qué la gente que llega se queda."
     },
@@ -72,11 +72,11 @@
       "gancho": "La pieza que más te posiciona como referencia de tu zona principal.",
       "valores_sugeridos": {
         "zona": "{zona}",
-        "ventaja_1": "Demanda de renta constante todo el año.",
-        "ventaja_2": "Inventario nuevo escaso, precio firme.",
-        "ventaja_3": "Oficinas, comercio y restaurantes a pie.",
-        "ventaja_4": "Buena conexión a las vías principales.",
-        "ventaja_5": "Inquilino solvente y menor rotación."
+        "ventaja_1": "{colegio_1}",
+        "ventaja_2": "{parque_1}",
+        "ventaja_3": "{tienda_1}",
+        "ventaja_4": "{hospital_1}",
+        "ventaja_5": "{comer_1}"
       },
       "caption_sugerida": "Invertir en {zona} no es moda, es estrategia. Te dejo las 5 razones por las que sigue siendo la zona más sólida de la ciudad. ¿Cuál te pesa más al decidir?"
     },
@@ -108,7 +108,7 @@
         "zona": "{zona}",
         "ciudad": "{ciudad}",
         "lugar": "rincones",
-        "bajada": "La zona que mejor conozco, en cinco paradas."
+        "bajada": "{parque}, {tienda} y {comer}."
       },
       "caption_sugerida": "{zona} no se entiende solo por sus precios. Te llevo por los rincones que le dan valor a la zona y que casi nadie menciona en una visita. ¿Cuál te falta conocer?"
     },
@@ -264,7 +264,7 @@
       "valores_sugeridos": {
         "zona": "{zona}",
         "ciudad": "{ciudad}",
-        "bajada": "Servicios a pie, buena conexión y oferta que no se satura."
+        "bajada": "{colegio_nombre}, {parque_nombre} y {tienda_nombre}."
       },
       "caption_ref": "zona-que-la-sostiene"
     },
@@ -278,7 +278,7 @@
       "valores_sugeridos": {
         "zona": "{zona}",
         "ciudad": "{ciudad}",
-        "bajada": "Lo bueno, lo caro y lo que conviene revisar antes."
+        "bajada": "{tienda} y {hospital}."
       },
       "caption_ref": "zona-tiempo-de-venta"
     },
@@ -447,19 +447,43 @@
       "caption_ref": "compra-mantenimiento"
     },
     {
-      "id": "post-mejores-desayunar",
+      "id": "post-mejores-comer",
       "seccion": "post",
       "categoria": "zonas",
-      "template_ref": "consejo_5-ventajas_post.json",
+      "template_ref": "zonas_top5_post.json",
       "titulo_idea": "Los mejores lugares para desayunar en {zona}",
       "gancho": "Contenido local puro. Atrae vecinos, que son quienes recomiendan.",
       "valores_sugeridos": {
         "zona": "{zona}",
         "ciudad": "{ciudad}",
-        "lugar": "lugares para desayunar",
-        "bajada": "La zona que mejor conozco, también en fin de semana."
+        "cosa": "lugares para comer",
+        "lugar_1": "{comer_1}",
+        "lugar_2": "{comer_2}",
+        "lugar_3": "{comer_3}",
+        "lugar_4": "{comer_4}",
+        "lugar_5": "{comer_5}"
       },
       "caption_ref": "zona-que-la-sostiene"
+    },
+    {
+      "id": "post-mejores-desayunar",
+      "seccion": "post",
+      "categoria": "zonas",
+      "template_ref": "zonas_top5_post.json",
+      "titulo_idea": "Los mejores lugares para desayunar en {zona}",
+      "gancho": "Contenido local puro. Atrae vecinos, que son quienes recomiendan.",
+      "valores_sugeridos": {
+        "zona": "{zona}",
+        "ciudad": "{ciudad}",
+        "cosa": "lugares para desayunar",
+        "lugar_1": "{desayuno_1}",
+        "lugar_2": "{desayuno_2}",
+        "lugar_3": "{desayuno_3}",
+        "lugar_4": "{desayuno_4}",
+        "lugar_5": "{desayuno_5}"
+      },
+      "caption_ref": "zona-que-la-sostiene",
+      "requiere": "desayuno_5"
     },
     {
       "id": "post-top5-razones",
@@ -472,11 +496,11 @@
         "zona": "{zona}",
         "ciudad": "{ciudad}",
         "cosa": "razones para mudarte",
-        "lugar_1": "Llegas a todo caminando.",
-        "lugar_2": "Buena conexión a las vías principales.",
-        "lugar_3": "Oferta escolar cerca.",
-        "lugar_4": "Comercio de barrio, no solo plazas.",
-        "lugar_5": "Se rentan rápido, así que conserva valor."
+        "lugar_1": "{colegio_1}",
+        "lugar_2": "{parque_1}",
+        "lugar_3": "{tienda_1}",
+        "lugar_4": "{hospital_1}",
+        "lugar_5": "{comer_1}"
       },
       "caption_ref": "zona-que-la-sostiene"
     },
