@@ -1274,15 +1274,45 @@ function tamanoAjustado(c, txt){
   return t;
 }
 
+/* Un numeral sin su renglón no se dibuja.
+
+   Las listas numeradas traen los "01".."05" como texto FIJO de la plantilla, no como tokens:
+   cuando la colonia no da los cinco lugares, el número quedaba puesto con la línea en blanco
+   al lado. Se emparejan por `y` —el numeral y su texto comparten renglón— y si el renglón
+   resolvió vacío, el numeral se va con él. Es más seguro que confiar en el filtro de la
+   lista: la ruta #png/<idea> pinta cualquier pieza por id y se salta ese filtro. */
+function resuelto(c, mapa){
+  const nom = c.name || "", expr = nom.includes("{{") ? nom : null;
+  return (expr || c.text || "").replace(/\{\{([^}]+)\}\}/g, (m, tk) => mapa[tk.trim()] || "");
+}
+
+function renglonesVacios(children, mapa){
+  const vacios = new Set();
+  for(const c of children){
+    if(c.type !== "text") continue;
+    const nom = c.name || "";
+    const tieneToken = nom.includes("{{") || String(c.text || "").includes("{{");
+    if(tieneToken && !resuelto(c, mapa).trim()) vacios.add(Math.round(c.y || 0));
+  }
+  return vacios;
+}
+
+function esNumeral(c){
+  return c.type === "text" && !String(c.name || "").includes("{{")
+      && /^\s*\d{1,2}\s*$/.test(String(c.text || ""));
+}
+
 function renderTemplate(ref, escala, marcarTokens, iPag, vals, idIdea){
   const t = TPL[ref]; if(!t) return {html:"", w:1080, h:1350};
   const pg = t.pages[Math.min(iPag||0, t.pages.length-1)] || {children:[]};
   const W = typeof pg.width === "number" ? pg.width : (t.width || 1080);
   const H = typeof pg.height === "number" ? pg.height : (t.height || 1350);
   const mapa = tokensMapa(vals);
+  const _vacios = renglonesVacios(pg.children, mapa);
   let out = `<div class="lienzo" style="width:${W}px;height:${H}px;background:${pg.background||"white"};transform:scale(${escala})">`;
 
   for(const c of pg.children){
+    if(esNumeral(c) && _vacios.has(Math.round(c.y || 0))) continue;
     const x=c.x||0, y=c.y||0, w=c.width||0, h=c.height||0, rot=c.rotation||0, op=(c.opacity==null?1:c.opacity);
     const pos = `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;opacity:${op};transform:rotate(${rot}deg);`;
     const nom = c.name || "";
@@ -1421,6 +1451,7 @@ async function pintarPagina(ref, iPag, vals, idIdea){
   const W = typeof pg.width === "number" ? pg.width : (t.width || 1080);
   const H = typeof pg.height === "number" ? pg.height : (t.height || 1350);
   const mapa = tokensMapa(vals);
+  const _vacios = renglonesVacios(pg.children, mapa);
 
   const cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
@@ -1429,6 +1460,7 @@ async function pintarPagina(ref, iPag, vals, idIdea){
   ctx.fillRect(0, 0, W, H);
 
   for(const c of pg.children){
+    if(esNumeral(c) && _vacios.has(Math.round(c.y || 0))) continue;
     const x = c.x||0, y = c.y||0, w = c.width||0, h = c.height||0;
     const nom = c.name || "";
     const expr = nom.includes("{{") ? nom : null;
