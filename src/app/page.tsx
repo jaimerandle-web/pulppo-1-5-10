@@ -41,6 +41,17 @@ const PROYECTOS: { eyebrow: string; title: string; blurb: string; links: Link[] 
         ]
     },
     {
+        eyebrow: 'Portales',
+        title: 'Avisos destacados',
+        blurb: 'Qué inventario vale destacar en inmuebles24 y qué le falta al resto para calificar. Por inmobiliaria y por KAM, con metas por cuenta y la lista de lugares mal asignados.',
+        links: [
+            // Igual que Studio: HTML estático servido desde public/ con los datos embebidos,
+            // protegido por el mismo middleware. Se regenera con datos_herramienta.py +
+            // build_herramienta.py (repo de análisis de portales) y se vuelve a copiar acá.
+            { href: '/avisos.html', label: 'Qué destacar', hint: '86 inmobiliarias · 4,203 avisos de venta' }
+        ]
+    },
+    {
         eyebrow: 'Contenido',
         title: 'Studio',
         blurb: 'Le propone al asesor qué publicar hoy y le entrega la pieza lista para bajar, armada con su perfil, sus zonas y sus operaciones.',

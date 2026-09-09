@@ -242,3 +242,27 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
   `~/Documents/Pulppo/.venv-mongo/bin/python` + `pymongo`. Ver ANALISIS.md §4.
 - `/analisis` tiene controles que aún no afectan el output (referencias ACM y "qué te alcanza",
   audiencia, benchmark vs mejores inmobiliarias). Lista en ANALISIS.md §5.
+
+## Avisos destacados (portales) — `/avisos.html`
+
+Herramienta de optimización de avisos en inmuebles24: por inmobiliaria y por KAM, qué inventario
+califica para un lugar destacado, qué le falta al resto, metas por cuenta y los lugares que hoy
+están mal asignados.
+
+**Es HTML estático con los datos embebidos**, igual que Studio: vive en `public/avisos.html` y lo
+protege el mismo middleware (allowlist interno; los master brokers no lo ven). No consulta Mongo
+en vivo — la foto se regenera y se vuelve a copiar:
+
+```bash
+cd ~/Documents/Pulppo/Análisis\ de\ Portales/analisis/optimizacion-avisos
+~/Documents/Pulppo/1-5-10/dashboard/.venv/bin/python datos_herramienta.py   # lee Mongo → JSON
+~/Documents/Pulppo/1-5-10/dashboard/.venv/bin/python build_herramienta.py   # JSON → HTML
+cp herramienta.html ~/Documents/Pulppo/1-5-10/pulppo-1-5-10/public/avisos.html
+```
+
+El doc canónico del criterio (filtros, puntaje, precios por tier y trampas de la base) es
+`SPEC_SCORING.md` en ese mismo repo de análisis. Dos cosas de ahí que importan si se toca esto:
+
+- El costo por aviso sale del tipo **crudo** `portals.inmuebles24.type`, no del tier del scoring:
+  `OFFLINE` (no publicado en i24) y `GRATIS_COMBO` cuestan **$0** y son el 27% de los publicados.
+- Sólo el Súper Destacado mueve leads (**1.26×**); el Destacado mide 0.97× con IC [0.90, 1.04].
