@@ -982,6 +982,45 @@ table.datos td:last-child{text-align:right;font-variant-numeric:tabular-nums;fon
   .escena{gap:28px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* ---------- estados del perfil en vivo ----------
+   Con el perfil pedido al servidor aparece una espera que el archivo estático no tenía: los
+   datos venían dentro. Se resuelve con el esqueleto de la pantalla que va a llegar y no con
+   un spinner, para que el contenido no salte cuando entra. Todo con los tokens de marca
+   (--tinta, --papel, --acento, --display, --cuerpo), así hereda el modo oscuro solo. */
+.cargando{padding:24px 20px}
+.cargando .marca{display:flex;align-items:center;gap:10px;margin-bottom:28px}
+.cargando .punto{width:9px;height:9px;border-radius:50%;background:var(--acento);
+  animation:pulso 1.1s ease-in-out infinite}
+.cargando .punto:nth-child(2){animation-delay:.15s}
+.cargando .punto:nth-child(3){animation-delay:.3s}
+.cargando .et{font-family:var(--etiq);font-size:12px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--gris)}
+@keyframes pulso{0%,100%{opacity:.25;transform:scale(.82)}50%{opacity:1;transform:scale(1)}}
+.hueso{background:var(--gris-claro);border-radius:8px;position:relative;overflow:hidden}
+.hueso::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.42),transparent);
+  animation:barrido 1.5s infinite}
+@keyframes barrido{100%{transform:translateX(100%)}}
+.hueso.t{height:34px;width:62%;margin-bottom:12px}
+.hueso.s{height:16px;width:84%;margin-bottom:26px}
+.hueso.card{height:188px;margin-bottom:14px}
+.hueso.fila{height:56px;margin-bottom:10px}
+/* Quien no quiere movimiento no lo tiene: queda el bloque gris, que ya comunica la espera */
+@media (prefers-reduced-motion:reduce){
+  .cargando .punto{animation:none;opacity:.7}
+  .hueso::after{animation:none;display:none}
+}
+/* el tropiezo: título en display, explicación en cuerpo, y una salida clara */
+.tropiezo{padding:56px 24px;max-width:34rem;margin:0 auto;text-align:left}
+.tropiezo h1{font-family:var(--display);font-size:30px;line-height:1.18;margin:0 0 10px;
+  color:var(--tinta)}
+.tropiezo p{font-family:var(--cuerpo);font-size:15px;line-height:1.55;color:var(--gris);
+  margin:0 0 22px}
+.tropiezo .filete{width:120px;height:3px;background:var(--acento);margin:0 0 22px}
+.tropiezo button{font-family:var(--cuerpo-b);font-size:15px;background:var(--tinta);
+  color:var(--papel);border:0;border-radius:10px;padding:13px 22px;min-height:44px;
+  cursor:pointer}
+
 </style>
 
 <div class="tope">
@@ -1027,6 +1066,10 @@ window.addEventListener("unhandledrejection", e => mostrarFalla("promesa: " + (e
 
 const D = /*__DATOS__*/;
 const TPL = D.templates, IDEAS = D.ideas, SIN_DIS = D.sin_diseno || [], SEMANA = D.semana || [];
+/* El selector de "¿Quién eres?" es SÓLO para el interno que revisa. En modo en vivo el
+   bundle no trae a nadie, así que la lista se pide aparte y llega con nombre y correo y
+   nada más: ni celular ni operaciones. */
+let EQUIPO = D.brokers || [];
 // B (el perfil del asesor) llega inline en la versión local, o por fetch con ?b=<token>
 // en la versión de equipo. Así el bundle pesado —fuentes y templates— se cachea una sola
 // vez y cada asesor solo baja ~20 KB con lo suyo.
@@ -1695,10 +1738,10 @@ function pFuera(){
 }
 
 function pQuienEres(){
-  const lista = (D.brokers || []).map((b, k) => `<button class="quien" data-quien="${k}">
+  const lista = EQUIPO.map((b, k) => `<button class="quien" data-quien="${k}">
       ${b.foto ? `<img src="${esc(b.foto)}" alt="">` : '<span class="sinfoto"></span>'}
       <span class="n"><b>${esc(b.nombre)}</b>
-      <i>${esc(b.zonas.slice(0,2).map(z => z.zona).join(" · ") || "sin zonas")}</i></span>
+      <i>${esc(((b.zonas || []).slice(0,2).map(z => z.zona).join(" · ")) || b.email || "")}</i></span>
     </button>`).join("");
   return `<div class="pad">
     <h2 class="pant">¿Quién eres?</h2>
@@ -2138,7 +2181,7 @@ function abrirIdea(id){
 }
 
 document.addEventListener("click", e => {
-  const t = e.target.closest("[data-ir],[data-idea],[data-foto],[data-formato],[data-zona],[data-zonas-mas],[data-campo],[data-guardar],[data-copiar],[data-pag],[data-quien],[data-copiar-txt],[data-abrir-tpl],#rotar,#otraidea");
+  const t = e.target.closest("[data-ir],[data-idea],[data-foto],[data-formato],[data-zona],[data-zonas-mas],[data-campo],[data-guardar],[data-copiar],[data-pag],[data-quien],[data-recargar],[data-copiar-txt],[data-abrir-tpl],#rotar,#otraidea");
   if(!t) return;
 
   if(t.dataset.copiarTxt){
@@ -2151,9 +2194,22 @@ document.addEventListener("click", e => {
     if(i) return abrirIdea(i.id);
     return;
   }
+  if(t.dataset.recargar !== undefined){ return location.reload(); }
   if(t.dataset.quien){
-    B = D.brokers[Number(t.dataset.quien)];
-    try { localStorage.setItem("studio.quien", B.email); } catch(e) {}
+    const elegido = EQUIPO[Number(t.dataset.quien)];
+    if(!elegido) return;
+    try { localStorage.setItem("studio.quien", elegido.email); } catch(e) {}
+    if(D.en_vivo){
+      // en vivo el selector sólo trae nombre y correo: el perfil hay que ir a pedirlo
+      perfilEnVivo(elegido.email).then(r => {
+        if(!r.perfil){ S.pantalla = "fuera"; return pintar(); }
+        B = r.perfil;
+        S.alta.zonas = B.zonas.map(z => z.zona);
+        pintarPie(); S.pantalla = "alta1"; pintar();
+      }).catch(() => { S.pantalla = "fuera"; pintar(); });
+      return;
+    }
+    B = elegido;
     S.alta.zonas = B.zonas.map(z => z.zona);   // su inventario entero viene marcado
     pintarPie(); S.pantalla = "alta1"; return pintar();
   }
@@ -2371,7 +2427,98 @@ function emailDeSesion(){
   try { return m ? decodeURIComponent(m[1]).trim().toLowerCase() : ""; } catch(e){ return ""; }
 }
 
+/* El perfil EN VIVO. El bundle ya no trae los datos de nadie: los pide al abrir.
+
+   Arregla dos cosas que el archivo estático no podía. (1) Caducaba: entre el 21 y el 31 de
+   agosto hubo 6 cierres en Diamond House que nunca aparecieron, porque el archivo seguía
+   diciendo que no había pasado nada hasta que alguien lo regeneraba a mano. (2) Filtraba:
+   llevaba los 22 perfiles con celular y operaciones al dispositivo de quien abriera el link,
+   y "ver código fuente" alcanzaba para leerlos.
+
+   Los tokens se le mandan al endpoint porque son metadata de las PLANTILLAS —qué campo pide
+   cada pieza—, no datos del asesor: viven en el bundle sin filtrar nada. El servidor los
+   resuelve contra el aviso del evento y filtra las rutas contra su propia allowlist. */
+/* Los estados van DENTRO de #vista, no reemplazando el body: `pintar()` escribe en #vista y
+   lee #tabs y #barra-tit, así que borrar el shell dejaba la app sin dónde pintar y la pantalla
+   se quedaba clavada en el esqueleto. Además así conserva la barra de marca. */
+function enVista(html){
+  const v = document.getElementById("vista");
+  if(!v){ document.body.innerHTML = html; return; }
+  v.innerHTML = html;
+  const tabs = document.getElementById("tabs");
+  if(tabs) tabs.hidden = true;
+}
+
+/* El esqueleto de "Hoy": mismos bloques que va a haber, así el contenido no salta. */
+function pCargando(){
+  return `<div class="cargando">
+    <div class="marca"><span class="punto"></span><span class="punto"></span><span class="punto"></span>
+      <span class="et">Preparando tus piezas</span></div>
+    <div class="hueso t"></div><div class="hueso s"></div>
+    <div class="hueso card"></div>
+    <div class="hueso fila"></div><div class="hueso fila"></div><div class="hueso fila"></div>
+  </div>`;
+}
+
+function pTropiezo(titulo, texto){
+  return `<div class="tropiezo"><div class="filete"></div>
+    <h1>${esc(titulo)}</h1><p>${esc(texto)}</p>
+    <button data-recargar>Volver a intentar</button></div>`;
+}
+
+async function perfilEnVivo(comoEmail){
+  const tokens = {};
+  for(const i of IDEAS){
+    if(i.seccion === "operacion" && i.clase) tokens[i.id] = {clase: i.clase, tokens: i.tokens || []};
+  }
+  const q = comoEmail ? "?email=" + encodeURIComponent(comoEmail) : "";
+  const r = await fetch("/api/studio/perfil" + q, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({tokens})
+  });
+  if(!r.ok) throw new Error("perfil " + r.status);
+  return await r.json();          // {perfil, interno}
+}
+
+/* El equipo, sólo para el interno que revisa. Es el selector de "¿Quién eres?": el asesor
+   nunca lo ve —entra directo a lo suyo— y el endpoint lo rechaza si no es de la allowlist. */
+async function equipoEnVivo(){
+  try {
+    const r = await fetch("/api/studio/equipo");
+    if(!r.ok) return [];
+    return (await r.json()).equipo || [];
+  } catch(e) { return []; }
+}
+
 async function arrancar(){
+  if(!B && D.en_vivo){
+    enVista(pCargando());
+    // Quién es interno lo decide el SERVIDOR, no el archivo: así la allowlist del equipo
+    // Pulppo no viaja al dispositivo de cada asesor. El `como` se manda siempre y el
+    // endpoint lo ignora si quien pregunta no es interno.
+    let guardado = null;
+    try { guardado = localStorage.getItem("studio.quien"); } catch(e) {}
+    const como = (new URLSearchParams(location.search).get("como") || "") || guardado || "";
+    let interno = false;
+    try {
+      const r = await perfilEnVivo(como);
+      B = r.perfil; interno = !!r.interno;
+    } catch(e) {
+      enVista(pTropiezo("No pudimos cargar tus piezas",
+        "Fue al pedir tus datos, no es tu conexión. Intenta de nuevo; si sigue igual, avísanos."));
+      return;
+    }
+    if(!B){
+      // pasó la puerta pero no es asesor activo con inmobiliaria; el interno sin elegir a
+      // nadie todavía ve el selector
+      if(interno){ EQUIPO = await equipoEnVivo(); S.pantalla = "quien"; pintar(); return; }
+      S.pantalla = "fuera"; pintar(); return;
+    }
+    S.alta.zonas = B.zonas.map(z => z.zona);   // su inventario entero viene marcado
+    pintarPie();
+    if(!desdeHash()) pintar();
+    return;
+  }
   if(!B && D.brokers){
     // Tres caminos: el asesor entra directo a lo suyo; el equipo interno ve el selector
     // para probar; cualquier otro se queda afuera — el bundle tiene data de UN equipo y no
@@ -2431,7 +2578,7 @@ arrancar();
 """
 
 
-def construir_equipo(inmobiliaria, salida, incluir_todos=False):
+def construir_equipo(inmobiliaria, salida, incluir_todos=False, en_vivo=False):
     """Piloto: UN solo archivo con los perfiles del equipo adentro. El asesor abre el
     link general y elige su nombre. Sin tokens, sin fetch (funciona hasta abriendo el
     archivo local) y sin repartir 21 links. El control de acceso es el allowlist de la
@@ -2511,8 +2658,15 @@ def construir_equipo(inmobiliaria, salida, incluir_todos=False):
     _colonias = [c for c in db.properties.distinct(
         "address.neighborhood.name", _filtro_zonas) if c]
     hechos = zonas_pois.hechos_por_zona(db, _colonias, _filtro_zonas)
-    datos = {"broker": None, "brokers": perfiles, "equipo": inmobiliaria,
-             "internos": INTERNOS, "semana": creators["ideas"],
+    # En modo en vivo el archivo sale SIN los perfiles: es lo que cierra la fuga. Se conserva
+    # el conteo para el reporte de la consola, pero al HTML no llega ninguno.
+    publicados = perfiles
+    if en_vivo:
+        perfiles = []
+    datos = {"broker": None, "brokers": perfiles, "en_vivo": en_vivo,
+             "equipo": inmobiliaria,
+             # en modo en vivo el servidor decide quién es interno; la lista no viaja
+             "internos": [] if en_vivo else INTERNOS, "semana": creators["ideas"],
              "templates": tpl, "ideas": ideas, "hechos_zona": hechos,
              "sin_diseno": biblio.get("ideas_sin_diseno", []),
              "cobertura": {"activos": 988, "con_foto_pct": 94,
@@ -2552,7 +2706,7 @@ body{background:var(--superficie)}
     salida = Path(salida); salida.mkdir(parents=True, exist_ok=True)
     out = salida / "index.html"
     out.write_text(html, encoding="utf-8")
-    return out, perfiles, omitidos, dudosos
+    return out, publicados, omitidos, dudosos
 
 
 def main():
@@ -2561,12 +2715,15 @@ def main():
     ap.add_argument("--app", action="store_true", help="modo app (sin explicación ni riel)")
     ap.add_argument("--equipo", help="genera un link por asesor de esa inmobiliaria")
     ap.add_argument("--salida", default="studio_piloto")
+    ap.add_argument("--en-vivo", action="store_true",
+                    help="el bundle NO lleva los perfiles: los pide a /api/studio/perfil")
     ap.add_argument("--incluir-todos", action="store_true",
                     help="no filtrar a quienes no tienen inventario publicado")
     a = ap.parse_args()
 
     if a.equipo:
-        out, perfiles, omit, dud = construir_equipo(a.equipo, BASE / a.salida, a.incluir_todos)
+        out, perfiles, omit, dud = construir_equipo(a.equipo, BASE / a.salida,
+                                                    a.incluir_todos, a.en_vivo)
         sf = [p for p in perfiles if not p["foto"]]
         print(f"✓ {out.relative_to(BASE.parent)}  ({out.stat().st_size/1024/1024:.1f} MB)")
         print(f"  {len(perfiles)} asesores de {a.equipo}, un solo link para todos")

@@ -2,6 +2,7 @@
 #   python motor/gen_prototipo_web.py --equipo "<inmobiliaria>" --incluir-todos --salida studio_piloto
 # El que se publica vive versionado en pulppo-1-5-10 (public/studio/index.html), no acá.
 motor/studio_piloto/
+motor/studio_vivo/
 motor/prototipo_web/
 motor/deploy/
 motor/preview/
