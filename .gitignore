@@ -17,3 +17,6 @@ next-env.d.ts
 
 # estado local del Centro de Marketing (permisos y envíos)
 .centro/
+
+# respuestas de qué destacar (store local, ver lib/portales/seleccion.ts)
+.portales/

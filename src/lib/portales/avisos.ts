@@ -54,6 +54,8 @@ const NOMBRE_TIER: Record<string, string> = {
     DEST: 'Destacado', SIMPLE: 'Simple', GRATIS: 'Gratis', OFFLINE: 'Apagado en i24',
 };
 const PAGADOS = new Set(['SD_ZD', 'SD', 'DEST_ZD', 'DEST']);
+// Comercial no compite por lugares destacados: el criterio es residencial de venta.
+const COMERCIAL = new Set(['Bodega', 'Nave', 'Local', 'Oficina', 'Edificio']);
 const COSTO_SUBIR = PRECIO.HOME_COMBO - PRECIO.SIMPLE_COMBO;   // $508: el Simple ya se pagaba
 const LIFT_SD = 0.26, MESES_PROY = 6, LEAD_A_CIERRE = 0.00566;
 
@@ -66,6 +68,10 @@ export type Aviso = {
     demanda: number; competencia: number; tension: number;
     precioVsZona: number | null; leadsMes: number; base: number;
     puntos: number; estado: string; falta: string;
+    /** Todas las etiquetas que aplican. Un aviso puede tener varias a la vez. */
+    tags: string[];
+    /** false para renta y terreno: nunca compiten por un lugar destacado. */
+    destacable: boolean;
     leadsExtra: number; comisionEsperada: number; roi: number;
     exclusiva: boolean; p1510: boolean;
 };
@@ -319,13 +325,15 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
         if (op === 'rent') rentas += 1;
         if (op === 'sale') { ventaViva += 1; if (esTerreno) terrenosVenta += 1; }
 
-        // la tabla analiza venta no-terreno: lo demás no compite por lugares destacados
-        if (op !== 'sale' || esTerreno) continue;
+        // Renta y terreno ENTRAN a la tabla —Ale los quiere ver, no borrados— pero con su
+        // etiqueta y marcados como no destacables: no compiten por un lugar pagado.
+        const destacable = op === 'sale' && !esTerreno && !COMERCIAL.has(tipo.split(' ')[0]);
 
         const c = coords(p.address);
         const precio = Number(p.listing?.value);
-        if (!c || !Number.isFinite(precio) || precio <= 0) continue;
-        const [lon, lat] = c;
+        if (!Number.isFinite(precio) || precio <= 0) continue;
+        const [lon, lat] = c ?? [0, 0];
+        const conGeo = c !== null;
         const colonia = p.address?.neighborhood?.name ?? null;
         const colKey = colonia ? String(colonia).toLowerCase().trim() : null;
         const dLat = RADIO_KM / 111;
@@ -333,7 +341,7 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
 
         // ── competencia: mismo tipo y operación, ±25% de precio, a 1.5 km
         let competencia = 0;
-        porVecinos(M.gMls, op, lat, lon, (i) => {
+        if (conGeo) porVecinos(M.gMls, op, lat, lon, (i) => {
             if (M.mlsTipo[i] !== tipo) return;
             if (M.mlsPre[i] < precio * 0.75 || M.mlsPre[i] > precio * 1.25) return;
             if (Math.abs(M.mlsLat[i] - lat) > dLat || Math.abs(M.mlsLon[i] - lon) > dLon) return;
@@ -346,7 +354,7 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
             const tp = M.bTipos[i];
             return !(tp.size && !tp.has(tipo));
         };
-        porVecinos(M.gBusq, op, lat, lon, (i) => {
+        if (conGeo) porVecinos(M.gBusq, op, lat, lon, (i) => {
             if (!calza(i)) return;
             if (Math.abs(M.bLat[i] - lat) > dLat || Math.abs(M.bLon[i] - lon) > dLon) return;
             personas.add(M.bPersona[i]);
@@ -384,7 +392,7 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
             leadsExtra: 0, comisionEsperada: 0, roi: 0,
             exclusiva: !!p.contract?.exclusive?.start,
             p1510: !!p.contract?.exclusive?.pulppo,
-            valor: 0,
+            tags: [], destacable, valor: 0,
         });
     }
 
@@ -405,25 +413,35 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
         let i = 0; while (i < ref.length && ref[i] < f.valor) i++;
         f.puntos = Math.round((ref.length ? i / ref.length : 0) * 70 + ptsComision(f.comisionPct) + 15);
 
-        // ── el estado dice QUÉ HACER, no si "califica"
-        if (f.competencia === 0) f.estado = 'ya_visible';
-        else if (f.precioVsZona !== null && f.precioVsZona > UMBRAL_CARO) f.estado = 'precio';
-        else if (f.demanda === 0) f.estado = 'revisar';
-        else if (f.videos < 1) f.estado = 'video';
-        else if (f.fotos < 15) f.estado = 'fotos';
-        else if (f.calidad !== null && f.calidad < UMBRAL_CALIDAD) f.estado = 'calidad';
-        else if ((f.comisionPct ?? 0) < 4) f.estado = 'comision';
-        else f.estado = 'ok';
+        // ── Las ETIQUETAS. Un aviso puede tener varias a la vez: puede estar caro Y sin
+        // video. Por eso son una lista y no un solo cubo — así el asesor ve todo lo que
+        // tiene que resolver, no sólo lo primero que apareció.
+        const tags: string[] = [];
+        if (f.operacion === 'rent') tags.push('renta');
+        if (f.tipo.startsWith('Terreno')) tags.push('terreno');
+        if (!f.destacable && !tags.length) tags.push('comercial');
+        if (f.competencia === 0) tags.push('poca oferta');
+        if (f.demanda === 0) tags.push('no hay demanda');
+        if (f.precioVsZona !== null && f.precioVsZona > UMBRAL_CARO) tags.push('precio caro');
+        if (f.videos < 1) tags.push('falta video o tour');
+        if (f.fotos < 15) tags.push('faltan fotos');
+        if (f.calidad !== null && f.calidad < UMBRAL_CALIDAD) tags.push('calidad i24 baja');
+        if ((f.comisionPct ?? 0) < 4) tags.push('comisión baja');
+        // "destacar" sólo si no le falta nada Y puede competir por un lugar
+        if (!tags.length && f.destacable) tags.push('destacar');
+        f.tags = tags;
+        // el estado de una palabra se conserva para los filtros y el resumen
+        f.estado = tags[0] ?? 'destacar';
 
         const pend: string[] = [];
-        if (f.estado === 'precio' && f.precioVsZona)
+        if (tags.includes('precio caro') && f.precioVsZona)
             pend.push(`bajar ${Math.round((1 - UMBRAL_CARO / f.precioVsZona) * 100)}%`);
         if (f.fotos < 15) pend.push(`faltan ${15 - f.fotos} fotos`);
         if (f.videos < 1) pend.push('falta video o tour');
         if (f.calidad !== null && f.calidad < UMBRAL_CALIDAD) pend.push(`calidad i24 ${f.calidad}/100`);
         if ((f.comisionPct ?? 0) < 4) pend.push(`comisión ${f.comisionPct ?? 0}%`);
-        if (f.estado === 'revisar') pend.push('nadie busca esto aquí');
-        if (f.estado === 'ya_visible') pend.push('sin competencia: ya se ve');
+        if (tags.includes('no hay demanda')) pend.push('nadie busca esto aquí');
+        if (tags.includes('poca oferta')) pend.push('sin competencia: ya se ve');
         f.falta = pend.join(' · ') || 'nada';
 
         // valor de destacarlo: leads extra a 6 meses y comisión esperada
@@ -433,9 +451,11 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
     }
     filas.sort((a, b) => b.puntos - a.puntos);
 
+    // cuenta por ETIQUETA: un aviso con dos problemas suma en las dos
     const estados: Record<string, number> = {};
-    for (const f of filas) estados[f.estado] = (estados[f.estado] ?? 0) + 1;
-    const ARREGLABLES = new Set(['video', 'fotos', 'calidad', 'precio', 'comision']);
+    for (const f of filas) for (const t of f.tags) estados[t] = (estados[t] ?? 0) + 1;
+    const ARREGLABLES = new Set(['falta video o tour', 'faltan fotos', 'calidad i24 baja',
+                                 'precio caro', 'comisión baja']);
 
     const d: DatosInmo = {
         inmobiliaria: inmo, kam: getKam(inmo),
@@ -451,7 +471,8 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
                 costo: cuentaTier.get(t)!.n * PRECIO_TIER[t],
             })),
         estados,
-        comisionArreglable: filas.filter((f) => ARREGLABLES.has(f.estado))
+        comisionArreglable: filas
+            .filter((f) => f.destacable && f.tags.some((t) => ARREGLABLES.has(t)))
             .reduce((s, f) => s + f.comision, 0),
         leadsAno,
         avisos: filas.map(({ valor: _valor, ...r }) => r),
