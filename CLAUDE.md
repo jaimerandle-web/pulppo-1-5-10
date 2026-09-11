@@ -243,26 +243,47 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
 - `/analisis` tiene controles que aún no afectan el output (referencias ACM y "qué te alcanza",
   audiencia, benchmark vs mejores inmobiliarias). Lista en ANALISIS.md §5.
 
-## Avisos destacados (portales) — `/avisos.html`
+## Avisos destacados (portales)
 
-Herramienta de optimización de avisos en inmuebles24: por inmobiliaria y por KAM, qué inventario
-califica para un lugar destacado, qué le falta al resto, metas por cuenta y los lugares que hoy
-están mal asignados.
+Por inmobiliaria: qué inventario califica para un lugar destacado en inmuebles24, qué le falta
+al resto, cuánto cuesta su mezcla de hoy y qué hacer con cada aviso.
 
-**Es HTML estático con los datos embebidos**, igual que Studio: vive en `public/avisos.html` y lo
-protege el mismo middleware (allowlist interno; los master brokers no lo ven). No consulta Mongo
-en vivo — la foto se regenera y se vuelve a copiar:
+| Ruta | Qué es |
+|---|---|
+| `/portales/avisos` | **En vivo**, calcula contra Mongo en cada consulta. Es la buena. |
+| `/avisos.html` | Estático (foto del 19-ago). Se queda **sólo** por la vista de KAM, las metas por cuenta y las zonas para captar, que aún no se portan. |
 
-```bash
-cd ~/Documents/Pulppo/Análisis\ de\ Portales/analisis/optimizacion-avisos
-~/Documents/Pulppo/1-5-10/dashboard/.venv/bin/python datos_herramienta.py   # lee Mongo → JSON
-~/Documents/Pulppo/1-5-10/dashboard/.venv/bin/python build_herramienta.py   # JSON → HTML
-cp herramienta.html ~/Documents/Pulppo/1-5-10/pulppo-1-5-10/public/avisos.html
+**Motor:** `src/lib/portales/avisos.ts` + `src/app/api/avisos/route.ts`.
+
+```
+GET /api/avisos              → índice de inmobiliarias con su KAM
+GET /api/avisos?inmo=NOMBRE  → el análisis completo de esa cuenta
+...&refresh=1                → salta el caché
 ```
 
-El doc canónico del criterio (filtros, puntaje, precios por tier y trampas de la base) es
-`SPEC_SCORING.md` en ese mismo repo de análisis. Dos cosas de ahí que importan si se toca esto:
+**Rendimiento.** El mercado (26,590 avisos del MLS de i24 + 92,000 búsquedas + 9,447
+propiedades) se carga **en paralelo**, una vez por instancia, y se cachea 1 h: ~19 s en frío.
+Cada inmobiliaria son 2–6 s gracias a una **rejilla espacial de 1.5 km** partida por operación;
+sin ella el barrido completo eran 12 s por cuenta. En serie la carga eran 80 s — no paralelizar
+rompía el `maxDuration` de 60 s.
 
-- El costo por aviso sale del tipo **crudo** `portals.inmuebles24.type`, no del tier del scoring:
-  `OFFLINE` (no publicado en i24) y `GRATIS_COMBO` cuestan **$0** y son el 27% de los publicados.
-- Sólo el Súper Destacado mueve leads (**1.26×**); el Destacado mide 0.97× con IC [0.90, 1.04].
+**Cuatro cosas que hay que saber antes de tocarlo:**
+
+1. 🔴 **No filtrar el MLS por `publishedAt >= 90 días`.** SPEC_SCORING lo pide y está mal: ese
+   filtro deja el mercado en **911 de 26,590** avisos (mata el 96.6%). En `mls`, `publishedAt`
+   es la primera publicación, no actividad reciente. `status.last != cancelled` ya basta.
+2. **El costo sale del tipo CRUDO** `portals.inmuebles24.type`, no del tier del scoring:
+   `OFFLINE` y `GRATIS_COMBO` cuestan **$0** y son el 27% de los avisos publicados.
+3. **`demanda` se deduplica por persona** (`contact._id`) y el fallback por nombre de colonia
+   no es opcional: sólo 82% de las búsquedas traen coordenadas, y las que no vienen como
+   `[null, null]`, no ausentes.
+4. **Sólo el Súper Destacado mueve leads** (1.26× intra-aviso). El Destacado mide 0.97× con
+   IC [0.90, 1.04].
+
+**Límite conocido:** el percentil del puntaje se calcula **dentro de la cuenta**, no contra la
+red — calcular la red entera en vivo son minutos. Sirve para ordenar el inventario de una
+inmobiliaria, no para comparar puntajes entre ellas. Se resuelve cuando el motor de asignación
+guarde `demanda` y `competencia` con fecha (ver `PROPUESTA_MOTOR.md` en el repo de análisis).
+
+El doc canónico del criterio es `SPEC_SCORING.md` en
+`~/Documents/Pulppo/Análisis de Portales/analisis/optimizacion-avisos/`.

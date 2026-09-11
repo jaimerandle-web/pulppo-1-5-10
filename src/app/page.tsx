@@ -45,10 +45,11 @@ const PROYECTOS: { eyebrow: string; title: string; blurb: string; links: Link[] 
         title: 'Avisos destacados',
         blurb: 'Qué inventario vale destacar en inmuebles24 y qué le falta al resto para calificar. Por inmobiliaria y por KAM, con metas por cuenta y la lista de lugares mal asignados.',
         links: [
-            // Igual que Studio: HTML estático servido desde public/ con los datos embebidos,
-            // protegido por el mismo middleware. Se regenera con datos_herramienta.py +
-            // build_herramienta.py (repo de análisis de portales) y se vuelve a copiar acá.
-            { href: '/avisos.html', label: 'Qué destacar', hint: '86 inmobiliarias · 4,203 avisos de venta' }
+            // En vivo: cada consulta calcula contra Mongo (lib/portales/avisos.ts).
+            { href: '/portales/avisos', label: 'Qué destacar', hint: 'En vivo · elige la inmobiliaria' },
+            // El estático se queda mientras se portan las vistas que aún no están en la
+            // versión viva: cartera por KAM, metas por cuenta y zonas para captar.
+            { href: '/avisos.html', label: 'Vista de KAM y metas', hint: 'Foto del 19-ago · pendiente de portar' }
         ]
     },
     {
