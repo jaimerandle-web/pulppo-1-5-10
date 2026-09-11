@@ -10,15 +10,16 @@ import type { PortalesView } from '@/lib/portales/view';
 import type { PulseView } from '@/lib/portales/pulse';
 import type { HistoricoView } from '@/lib/portales/historico';
 import type { PeriodoView } from '@/lib/portales/periodo';
+import type { CalidadView } from '@/lib/portales/calidad';
 import PortalesApp, { type Section } from './PortalesApp';
 import Presentacion, { SECCIONES, type SeccionP } from './Presentacion';
 
-type Vista = 'costo' | 'pulso' | 'historico' | 'periodo';
-type Datos = { costo?: PortalesView; pulso?: PulseView; historico?: HistoricoView; periodo?: PeriodoView };
+type Vista = 'costo' | 'pulso' | 'historico' | 'periodo' | 'calidad';
+type Datos = { calidadQ?: string; costo?: PortalesView; pulso?: PulseView; historico?: HistoricoView; periodo?: PeriodoView; calidad?: CalidadView };
 
 const DE_SECCION: Record<Section, Vista | null> = {
     costo: 'costo', funnel: 'costo', deal: 'costo',
-    pulso: 'pulso', historico: 'historico', comoleer: null,
+    calidad: 'calidad', pulso: 'pulso', historico: 'historico', comoleer: null,
 };
 
 const BLK = '#212322', GRY = '#B7B7B7', LGT = '#F3F3F3';
@@ -61,7 +62,10 @@ export default function PortalesShell() {
         setCargando(v); setErr(null);
         fetch(`/api/portales?view=${v}${q}${refresh ? '&refresh=1' : ''}`)
             .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(j.error ?? r.statusText))))
-            .then((j) => { setD((p) => ({ ...p, [v]: j })); setAt((p) => ({ ...p, [v]: j.cacheAt ?? Date.now() })); })
+            .then((j) => {
+                setD((p) => ({ ...p, [v]: j, ...(v === 'calidad' ? { calidadQ: q } : {}) }));
+                setAt((p) => ({ ...p, [v]: j.cacheAt ?? Date.now() }));
+            })
             .catch((e) => setErr(String(e)))
             .finally(() => setCargando(null));
     }, []);
@@ -74,8 +78,11 @@ export default function PortalesShell() {
     // Las demás, perezosas: sólo al entrar a su sección.
     useEffect(() => {
         const v = DE_SECCION[section];
-        if (v && v !== 'costo' && !d[v] && cargando !== v) cargar(v);
-    }, [section, d, cargando, cargar]);
+        if (!v || v === 'costo' || cargando === v) return;
+        // Calidad usa el MISMO rango y filtro que costo, así que se repide cuando cambian.
+        if (v === 'calidad') { if (d.calidadQ !== qCosto) cargar('calidad', qCosto); return; }
+        if (!d[v]) cargar(v);
+    }, [section, d, cargando, cargar, qCosto]);
     // El periodo sólo si está prendido en presentación.
     useEffect(() => {
         if (modo === 'presentacion' && secs.has('periodo') && cargando !== 'periodo') cargar('periodo', qPeriodo);
@@ -153,7 +160,7 @@ export default function PortalesShell() {
     const vistaActual = DE_SECCION[section];
     return (
         <PortalesApp
-            d={d.costo} pulso={d.pulso ?? null} hist={d.historico ?? null}
+            d={d.costo} pulso={d.pulso ?? null} hist={d.historico ?? null} calidad={d.calidad ?? null}
             section={section} setSection={setSection}
             cacheAt={(vistaActual && at[vistaActual]) ?? null}
             cargando={cargando !== null}

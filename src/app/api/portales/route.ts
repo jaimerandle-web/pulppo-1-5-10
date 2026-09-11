@@ -3,6 +3,7 @@ import { portalesView, type Operacion } from '@/lib/portales/view';
 import { pulseView } from '@/lib/portales/pulse';
 import { historicoView } from '@/lib/portales/historico';
 import { periodoView } from '@/lib/portales/periodo';
+import { calidadView } from '@/lib/portales/calidad';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ const TTL = 10 * 60 * 1000;
 // crece sin freno. Se tira la más vieja.
 const MAX = 40;
 
-const VISTAS = ['costo', 'pulso', 'historico', 'periodo'] as const;
+const VISTAS = ['costo', 'pulso', 'historico', 'periodo', 'calidad'] as const;
 type Vista = (typeof VISTAS)[number];
 const MES = /^\d{4}-(0[1-9]|1[0-2])$/;
 const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
     const opParam = u.searchParams.get('operacion') ?? 'todas';
     const operacion = (['todas', 'sale', 'rent'].includes(opParam) ? opParam : 'todas') as Operacion;
 
-    if (vista === 'costo' && (desde || hasta)) {
+    if ((vista === 'costo' || vista === 'calidad') && (desde || hasta)) {
         if (!MES.test(desde) || !MES.test(hasta))
             return NextResponse.json({ error: 'el rango de costo va en meses completos (YYYY-MM)' }, { status: 400 });
         if (desde > hasta)
@@ -54,6 +55,8 @@ export async function GET(req: Request) {
     try {
         const data = vista === 'costo'
                 ? await portalesView(desde && hasta ? { desde, hasta, operacion } : { months, operacion })
+            : vista === 'calidad'
+                ? await calidadView(desde && hasta ? { desde, hasta, operacion } : { months, operacion })
             : vista === 'pulso' ? await pulseView()
             : vista === 'historico' ? await historicoView()
             : await periodoView(desde, hasta);

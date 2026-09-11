@@ -8,6 +8,7 @@ import { useMemo, type CSSProperties } from 'react';
 import type { PortalesView, Portal, PortalMes } from '@/lib/portales/view';
 import type { PulseView } from '@/lib/portales/pulse';
 import type { HistoricoView } from '@/lib/portales/historico';
+import type { CalidadView } from '@/lib/portales/calidad';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2;
@@ -21,7 +22,7 @@ const MESL: Record<string, string> = {
 };
 const mesLargo = (mk: string) => `${MESL[mk.slice(5)]} ${mk.slice(0, 4)}`;
 
-export type Section = 'costo' | 'funnel' | 'deal' | 'pulso' | 'historico' | 'comoleer';
+export type Section = 'costo' | 'funnel' | 'deal' | 'calidad' | 'pulso' | 'historico' | 'comoleer';
 
 /** Mini-barras horizontales para una serie semanal. Sin librería: son 8 divs. */
 function Spark({ vals, color = BLK }: { vals: number[]; color?: string }) {
@@ -70,8 +71,8 @@ function Aviso({ tono = 'nota', children }: { tono?: 'nota' | 'alerta'; children
     );
 }
 
-export default function PortalesApp({ d, pulso, hist, section, setSection, cacheAt, onRefresh, cargando, controles, onPresentar }: {
-    d: PortalesView; pulso: PulseView | null; hist: HistoricoView | null;
+export default function PortalesApp({ d, pulso, hist, calidad, section, setSection, cacheAt, onRefresh, cargando, controles, onPresentar }: {
+    d: PortalesView; pulso: PulseView | null; hist: HistoricoView | null; calidad: CalidadView | null;
     section: Section; setSection: (s: Section) => void;
     cacheAt: number | null; onRefresh: () => void; cargando: boolean;
     controles?: React.ReactNode; onPresentar?: () => void;
@@ -120,6 +121,7 @@ export default function PortalesApp({ d, pulso, hist, section, setSection, cache
                 {nav('costo', 'Costo y retorno')}
                 {nav('funnel', 'Calidad del funnel')}
                 {nav('deal', 'Deal MercadoLibre')}
+                {nav('calidad', 'Calidad del lead')}
                 {nav('historico', 'Histórico y año vs año')}
                 <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.6px', color: GRY, fontWeight: 700, padding: '14px 8px 5px' }}>Semanal · adelantado</div>
                 {nav('pulso', 'Pulso de la semana')}
@@ -333,6 +335,8 @@ export default function PortalesApp({ d, pulso, hist, section, setSection, cache
                                         <th style={tth}>Visitas</th>
                                         <th style={tth}>Tasa visita</th>
                                         <th style={tth}>Lead→cierre</th>
+                                        <th style={tth}>Ciclo</th>
+                                        <th style={tth}>Ticket</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -351,6 +355,8 @@ export default function PortalesApp({ d, pulso, hist, section, setSection, cache
                                                 <td style={ttd}>{f0(r.visitas)}</td>
                                                 <td style={{ ...ttd, fontWeight: 700 }}>{pc(r.tasaVisita)}</td>
                                                 <td style={ttd}>{r.l2c == null ? '—' : `${r.l2c}%`}</td>
+                                                <td style={ttd}>{r.cicloDias == null ? '—' : `${r.cicloDias} d`}</td>
+                                                <td style={ttd}>{money(r.ticket)}</td>
                                             </tr>
                                         );
                                     })}
@@ -367,7 +373,12 @@ export default function PortalesApp({ d, pulso, hist, section, setSection, cache
                         </Aviso>
                         <div style={{ marginTop: 12 }}>
                             <Aviso>
-                                El <b>lead→cierre</b> de los últimos ~3 meses está inmaduro por construcción:
+                                El <b>ciclo</b> es la mediana de días entre el primer lead de ESE portal y el
+                            cierre; el <b>ticket</b> es el valor de cierre promedio, no la comisión. Si un
+                            cierre quedó atribuido a un portal del que el comprador nunca tuvo un lead, no
+                            entra al ciclo: se cuenta aparte (en {cerrado.label}, {' '}
+                            {d.portales.reduce((a, p) => a + (fila(p, cerrado.key)?.cierresSinLead ?? 0), 0)} cierres).
+                            El <b>lead→cierre</b> de los últimos ~3 meses está inmaduro por construcción:
                                 el ciclo de venta va de 43 a 144 días, así que la cohorte reciente todavía no
                                 terminó de cerrar. <b>Atención</b> (&lt;1 h y sin responder) cuenta sólo leads
                                 que entraron entre 9:00 y 20:59 de México — sin ese filtro, los de madrugada
@@ -438,6 +449,121 @@ export default function PortalesApp({ d, pulso, hist, section, setSection, cache
                         </Aviso>
                     </>
                 )}
+
+                {/* ═══════════ CALIDAD DEL LEAD ═══════════ */}
+                {section === 'calidad' && (!calidad ? (
+                    <div style={{ color: GRY, fontSize: 13 }}>Calculando la calidad del lead…</div>
+                ) : (
+                    <>
+                        <h1 style={{ fontFamily: 'EB Garamond, serif', fontSize: 28, fontWeight: 400, margin: '0 0 4px' }}>
+                            Calidad del lead por portal
+                        </h1>
+                        <div style={{ fontSize: 12.5, color: '#666', marginBottom: 14 }}>
+                            Qué proporción del volumen de cada portal termina descartado y por qué.
+                            Mes de referencia: <b>{mesLargo(calidad.mesCerrado)}</b>.
+                        </div>
+
+                        <Aviso tono="alerta">
+                            <b>El descarte madura.</b> Un lead de esta semana casi no ha tenido tiempo de
+                            cancelarse, así que el mes en curso <b>siempre</b> se ve más limpio de lo que va a
+                            terminar siendo. No leas la última columna como una mejora.
+                        </Aviso>
+
+                        <div style={{ overflowX: 'auto', margin: '16px 0' }}>
+                            <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 780 }}>
+                                <thead>
+                                    <tr>
+                                        <th style={tth0}>Portal</th>
+                                        <th style={tth}>Leads</th>
+                                        <th style={tth}>Descartados</th>
+                                        <th style={tth}>Era broker</th>
+                                        <th style={tth}>No responde</th>
+                                        <th style={tth}>Incontactable</th>
+                                        <th style={tth}>Perdido</th>
+                                        <th style={tth}>Broker por tag</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {calidad.portales.map((p) => {
+                                        const r = p.rows.find((x) => x.mes === calidad.mesCerrado);
+                                        if (!r || !r.leads) return null;
+                                        return (
+                                            <tr key={p.key}>
+                                                <td style={ttd0}>{p.canal}</td>
+                                                <td style={ttd}>{f0(r.leads)}</td>
+                                                <td style={{ ...ttd, fontWeight: 700, color: (r.pctDescartado ?? 0) >= 60 ? RED : BLK }}>{pc(r.pctDescartado)}</td>
+                                                <td style={{ ...ttd, color: (r.pctBroker ?? 0) >= 20 ? RED : BLK }}>{pc(r.pctBroker)}</td>
+                                                <td style={ttd}>{pc(r.pctNoResponde)}</td>
+                                                <td style={ttd}>{pc(r.pctIncontactable)}</td>
+                                                <td style={ttd}>{pc(r.pctPerdido)}</td>
+                                                <td style={{ ...ttd, color: (r.pctBrokerTag ?? 0) >= 30 ? RED : GRY }}>{pc(r.pctBrokerTag)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <Aviso>
+                            <b>«Era broker» y «broker por tag» no son lo mismo.</b> El primero es el motivo que
+                            escribió el asesor al descartar. El segundo es la etiqueta del contacto en la base,
+                            y aplica al contacto exista o no un descarte. Cuando los dos están altos, el portal
+                            te está mandando colegas, no clientes.
+                        </Aviso>
+
+                        <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, fontWeight: 400, margin: '26px 0 10px' }}>
+                            Descartados mes a mes
+                        </h2>
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 620 }}>
+                                <thead>
+                                    <tr>
+                                        <th style={tth0}>Portal</th>
+                                        {calidad.meses.map((m) => <th key={m.key} style={tth}>{m.label}{m.parcial ? '*' : ''}</th>)}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {calidad.portales.map((p) => (
+                                        <tr key={p.key}>
+                                            <td style={ttd0}>{p.canal}</td>
+                                            {calidad.meses.map((m) => {
+                                                const r = p.rows.find((x) => x.mes === m.key);
+                                                return (
+                                                    <td key={m.key} style={{ ...ttd, color: m.parcial ? GRY : BLK }}>
+                                                        {r && r.leads ? pc(r.pctDescartado) : '—'}
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>* mes en curso: el descarte todavía no madura, se ve artificialmente bajo.</div>
+
+                        <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, fontWeight: 400, margin: '26px 0 10px' }}>
+                            Por qué descartan, portal por portal
+                        </h2>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 12 }}>
+                            {calidad.motivos.filter((m) => m.filas.length).map((m) => (
+                                <div key={m.canal} style={{ border: `1px solid ${LGT}`, borderRadius: R, padding: '11px 13px' }}>
+                                    <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 7 }}>{m.canal}</div>
+                                    {m.filas.map((f) => (
+                                        <div key={f.motivo} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11.5, padding: '2px 0', color: '#555' }}>
+                                            <span>{f.motivo}</span>
+                                            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: BLK }}>{f.pct}%</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                        <div style={{ marginTop: 14 }}>
+                            <Aviso>
+                                Los porcentajes son sobre los descartes CON motivo de ese portal, no sobre sus
+                                leads. Si una búsqueda tuvo leads de dos portales, cuenta en los dos.
+                            </Aviso>
+                        </div>
+                    </>
+                ))}
 
                 {/* ═══════════ PULSO SEMANAL ═══════════ */}
                 {section === 'pulso' && (!pulso ? (

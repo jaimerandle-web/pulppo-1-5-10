@@ -34,6 +34,10 @@ export interface PortalMes {
     cierresCoh: number; l2c: number | null;
     // rezagado
     cierres: number; comision: number; regalia: number; ticket: number | null;
+    /** Mediana de días entre el PRIMER lead de ese portal y el cierre. null = sin dato. */
+    cicloDias: number | null;
+    /** Cierres del mes cuyo comprador nunca tuvo un lead de ese portal (llegó por otro lado). */
+    cierresSinLead: number;
     // costo — null = s/d, NO 0
     inversion: number | null;
     cpl: number | null; cpv: number | null; cpa: number | null; roi: number | null;
@@ -195,23 +199,65 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
     const bset = await brokerContacts(allc);
 
     // ── cierres del mes por buyer.source (rezagado) ────────────────
-    interface Atras { n: number; comision: number; regalia: number; gmv: number }
+    interface Atras { n: number; comision: number; regalia: number; gmv: number; dias: number[]; sinLead: number }
     const back = new Map<string, Atras>();
-    for (const k of KEYS) for (const mk of mkeys) back.set(ck(k, mk), { n: 0, comision: 0, regalia: 0, gmv: 0 });
+    for (const k of KEYS) for (const mk of mkeys)
+        back.set(ck(k, mk), { n: 0, comision: 0, regalia: 0, gmv: 0, dias: [], sinLead: 0 });
+    // Se guardan los cierres para, después, medir el ciclo con UNA consulta de leads en vez de
+    // una por operación.
+    const cierresCiclo: Array<{ cell: string; canal: string; cid: string; cerr: Date }> = [];
     const curO = db.collection('operations').find(
         { 'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: A, $lt: B }, ...NOTP,
           ...(oper === 'todas' ? {} : { 'property.listing.operation': oper }) },
-        { projection: { 'buyer.source': 1, closedAt: 1, 'comission.value': 1, 'pulppoComission.value': 1, 'closeValue.value': 1 } });
+        { projection: { 'buyer.source': 1, 'buyer.contact._id': 1, closedAt: 1, 'comission.value': 1, 'pulppoComission.value': 1, 'closeValue.value': 1 } });
     for await (const o of curO) {
         const cl = o.closedAt;
         if (!isDate(cl)) continue;
-        const r = back.get(ck(classifySource(dig(o, 'buyer', 'source') as string), mesKey(cl)));
+        const canal = classifySource(dig(o, 'buyer', 'source') as string);
+        const cell = ck(canal, mesKey(cl));
+        const r = back.get(cell);
         if (!r) continue;
         r.n += 1;
         r.comision += num(dig(o, 'comission', 'value'));
         r.regalia += num(dig(o, 'pulppoComission', 'value'));
         r.gmv += num(dig(o, 'closeValue', 'value'));
+        const bc = dig(o, 'buyer', 'contact', '_id');
+        if (bc != null) cierresCiclo.push({ cell, canal, cid: String(bc), cerr: cl });
+        else r.sinLead += 1;
     }
+
+    // ── ciclo de venta: del PRIMER lead de ese portal al cierre ─────
+    // Se mide contra el lead más antiguo DE ESE MISMO PORTAL anterior al cierre. Si el
+    // comprador nunca tuvo uno (llegó por otro lado y la atribución lo puso ahí), no se
+    // inventa un cero: se cuenta aparte en `cierresSinLead`, que por sí solo dice algo.
+    if (cierresCiclo.length) {
+        const cids = [...new Set(cierresCiclo.map((x) => x.cid))]
+            .map(oid).filter((o): o is NonNullable<typeof o> => !!o);
+        const primerLead = new Map<string, Date>();   // `${cid}|${canal}` → fecha más antigua
+        for (let i = 0; i < cids.length; i += 3000) {
+            const cur = db.collection('leads').find(
+                { 'contact._id': { $in: cids.slice(i, i + 3000) } },
+                { projection: { 'contact._id': 1, source: 1, createdAt: 1 }, batchSize: 10000 });
+            for await (const l of cur) {
+                const ca = l.createdAt;
+                if (!isDate(ca)) continue;
+                const key = `${String(dig(l, 'contact', '_id'))}|${classifySource(l.source as string)}`;
+                const pv = primerLead.get(key);
+                if (!pv || ca < pv) primerLead.set(key, ca);
+            }
+        }
+        for (const x of cierresCiclo) {
+            const t0 = primerLead.get(`${x.cid}|${x.canal}`);
+            const r = back.get(x.cell)!;
+            if (t0 && t0 <= x.cerr) r.dias.push(Math.round((x.cerr.getTime() - t0.getTime()) / 86400000));
+            else r.sinLead += 1;
+        }
+    }
+    const mediana = (xs: number[]): number | null => {
+        if (!xs.length) return null;
+        const v = [...xs].sort((a, b) => a - b), m = v.length >> 1;
+        return v.length % 2 ? v[m] : Math.round((v[m - 1] + v[m]) / 2);
+    };
 
     // ── inversión (Sheet) + deal MeLi ──────────────────────────────
     const inv = await inversionMeses(mkeys);
@@ -262,7 +308,10 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
                 cierresCoh: c.clo.size,
                 l2c: u ? Math.round((100 * c.clo.size) / u * 100) / 100 : null,
                 cierres: bk.n, comision: Math.round(bk.comision), regalia: Math.round(bk.regalia),
+                // Ticket = valor de cierre promedio (GMV ÷ cierres), no la comisión.
                 ticket: bk.n ? Math.round(bk.gmv / bk.n) : null,
+                cicloDias: mediana(bk.dias),
+                cierresSinLead: bk.sinLead,
                 inversion: invm,
                 cpl: invm !== null && n ? Math.round(invm / n) : null,
                 cpv: invm !== null && vis ? Math.round(invm / vis) : null,
