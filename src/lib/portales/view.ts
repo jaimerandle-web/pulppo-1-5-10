@@ -68,10 +68,34 @@ function secuencia(months: number, hoy: { y: number; m: number }): Array<[number
     return out.reverse();
 }
 
-export async function portalesView(months = 6, now = Date.now()): Promise<PortalesView> {
+/** Secuencia de meses de 'YYYY-MM' a 'YYYY-MM', ambos incluidos. */
+function secuenciaEntre(desde: string, hasta: string): Array<[number, number]> {
+    const [y0, m0] = desde.split('-').map(Number);
+    const [y1, m1] = hasta.split('-').map(Number);
+    const out: Array<[number, number]> = [];
+    let y = y0, m = m0;
+    // Tope de 24 meses: más allá el recorrido de leads no cabe en una sola petición.
+    while ((y < y1 || (y === y1 && m <= m1)) && out.length < 24) {
+        out.push([y, m]); [y, m] = m === 12 ? [y + 1, 1] : [y, m + 1];
+    }
+    return out;
+}
+
+export interface RangoMeses { desde?: string; hasta?: string; months?: number }
+
+/**
+ * Scorecard por portal.
+ *
+ * ⚠️ El rango es de MESES COMPLETOS a propósito, no de días sueltos: la inversión vive en el
+ * Sheet por mes, así que un rango "del 3 al 19" no tendría denominador y CPL/CPA/ROI saldrían
+ * inventados. Para contar leads en un rango libre de fechas está `periodo.ts`, que no toca costo.
+ */
+export async function portalesView(opts: number | RangoMeses = 6, now = Date.now()): Promise<PortalesView> {
     const db = await getDb();
     const hoy = hoyMx(now);
-    const seq = secuencia(months, hoy);
+    const o: RangoMeses = typeof opts === 'number' ? { months: opts } : opts;
+    const seq = o.desde && o.hasta ? secuenciaEntre(o.desde, o.hasta) : secuencia(o.months ?? 6, hoy);
+    if (!seq.length) throw new Error('rango de meses vacío');
     const mkeys = seq.map(([y, m]) => `${y}-${String(m).padStart(2, '0')}`);
     const meses = seq.map(([y, m]) => ({
         key: `${y}-${String(m).padStart(2, '0')}`,
@@ -79,7 +103,11 @@ export async function portalesView(months = 6, now = Date.now()): Promise<Portal
         parcial: y === hoy.y && m === hoy.m,
     }));
     const A = monthWindow(seq[0][0], seq[0][1])[0];
-    const B = new Date(utc(hoy.y, hoy.m, hoy.d).getTime() + 86400000);
+    // Fin del rango: el cierre del último mes pedido, o mañana si ese mes sigue corriendo.
+    // Sin el mínimo, un rango que termina en un mes pasado seguiría barriendo hasta hoy.
+    const finUltimo = monthWindow(seq[seq.length - 1][0], seq[seq.length - 1][1])[1];
+    const manana = new Date(utc(hoy.y, hoy.m, hoy.d).getTime() + 86400000);
+    const B = new Date(Math.min(finUltimo.getTime(), manana.getTime()));
 
     // ── celdas canal × mes ─────────────────────────────────────────
     interface Celda {

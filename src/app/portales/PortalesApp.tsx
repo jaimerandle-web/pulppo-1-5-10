@@ -70,10 +70,11 @@ function Aviso({ tono = 'nota', children }: { tono?: 'nota' | 'alerta'; children
     );
 }
 
-export default function PortalesApp({ d, pulso, hist, section, setSection, cacheAt, onRefresh, cargando }: {
+export default function PortalesApp({ d, pulso, hist, section, setSection, cacheAt, onRefresh, cargando, controles, onPresentar }: {
     d: PortalesView; pulso: PulseView | null; hist: HistoricoView | null;
     section: Section; setSection: (s: Section) => void;
     cacheAt: number | null; onRefresh: () => void; cargando: boolean;
+    controles?: React.ReactNode; onPresentar?: () => void;
 }) {
     const meses = d.meses;
     const ultimo = meses[meses.length - 1];
@@ -139,6 +140,21 @@ export default function PortalesApp({ d, pulso, hist, section, setSection, cache
 
             {/* ── contenido ── */}
             <div style={{ flex: 1, padding: '24px 28px', maxWidth: 1180, minWidth: 0 }}>
+
+                {(controles || onPresentar) && (
+                    <div style={{ display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap', paddingBottom: 14, marginBottom: 16, borderBottom: `1px solid ${LGT}` }}>
+                        {controles}
+                        <div style={{ flex: 1 }} />
+                        {onPresentar && (
+                            <button onClick={onPresentar}
+                                title="El reporte de un solo portal, sin datos de los demás, listo para proyectar o exportar"
+                                style={{ padding: '7px 13px', borderRadius: R, border: `1px solid ${BLK}`, background: '#fff', color: BLK, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                Modo presentación
+                            </button>
+                        )}
+                    </div>
+                )}
+
 
                 {d.sinInversion.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
