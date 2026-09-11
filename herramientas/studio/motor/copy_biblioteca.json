@@ -68,7 +68,7 @@
       "seccion": "post",
       "categoria": "consejo",
       "template_ref": "zonas_los-mejores_post.json",
-      "titulo_idea": "5 ventajas de invertir en {zona}",
+      "titulo_idea": "Lo que tienes a un paso en {zona}",
       "gancho": "La pieza que más te posiciona como referencia de tu zona principal.",
       "valores_sugeridos": {
         "zona": "{zona}",
@@ -260,7 +260,7 @@
       "seccion": "story",
       "categoria": "zonas",
       "template_ref": "stories/historia_zona_story.json",
-      "titulo_idea": "{zona} en tres razones",
+      "titulo_idea": "{zona}: tres lugares a la mano",
       "gancho": "Contenido de zona: atrae seguidores locales sin vender nada.",
       "valores_sugeridos": {
         "zona": "{zona}",
@@ -274,7 +274,7 @@
       "seccion": "story",
       "categoria": "zonas",
       "template_ref": "stories/historia_zona_story.json",
-      "titulo_idea": "Lo que nadie te cuenta de {zona}",
+      "titulo_idea": "{zona}: los servicios que importan",
       "gancho": "Promete información de adentro. Es de lo que más se abre.",
       "valores_sugeridos": {
         "zona": "{zona}",
@@ -453,7 +453,7 @@
       "seccion": "post",
       "categoria": "zonas",
       "template_ref": "zonas_top5_post.json",
-      "titulo_idea": "Los mejores lugares para desayunar en {zona}",
+      "titulo_idea": "Los mejores lugares para comer en {zona}",
       "gancho": "Contenido local puro. Atrae vecinos, que son quienes recomiendan.",
       "valores_sugeridos": {
         "zona": "{zona}",
@@ -472,7 +472,7 @@
       "seccion": "post",
       "categoria": "zonas",
       "template_ref": "zonas_top3_post.json",
-      "titulo_idea": "Los mejores lugares para desayunar en {zona}",
+      "titulo_idea": "Top 3 lugares para desayunar en {zona}",
       "gancho": "Contenido local puro. Atrae vecinos, que son quienes recomiendan.",
       "valores_sugeridos": {
         "zona": "{zona}",
@@ -490,7 +490,7 @@
       "seccion": "post",
       "categoria": "zonas",
       "template_ref": "zonas_top5_post.json",
-      "titulo_idea": "Top 5 razones para mudarte a {zona}",
+      "titulo_idea": "Top 5 lugares en {zona}",
       "gancho": "Formato de lista con la zona como protagonista.",
       "valores_sugeridos": {
         "zona": "{zona}",

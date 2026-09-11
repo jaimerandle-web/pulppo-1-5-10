@@ -110,7 +110,7 @@
     "formato": "post",
     "label": "Consejo — 5 ventajas (lista numerada)",
     "dimensiones": "1080x1350",
-    "titular_real": "5 ventajas de invertir en {{zona}}.",
+    "titular_real": "{{titular}}  (lo pone cada idea; la plantilla ya no lo fija)",
     "nota": "OJO: nombre de archivo engañoso, intercambiado con consejo_5-ventajas_post.json. Contenido real = lista de 5 ventajas.",
     "blank_spaces": [
       "ventaja_1",
