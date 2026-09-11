@@ -129,7 +129,7 @@
           "resizable": true,
           "contentEditable": true,
           "styleEditable": true,
-          "text": "5 ventajas de invertir en {{zona}}.",
+          "text": "{{titular}}",
           "placeholder": "",
           "fontSize": 75,
           "fontFamily": "HeldaneTextRegular",
@@ -151,7 +151,9 @@
           "backgroundCornerRadius": 0.5,
           "backgroundPadding": 0.5,
           "curveEnabled": false,
-          "curvePower": 0.5
+          "curvePower": 0.5,
+          "autofit": true,
+          "minFontSize": 48
         },
         {
           "id": "t005",

@@ -76,7 +76,8 @@
         "ventaja_2": "{parque_1}",
         "ventaja_3": "{tienda_1}",
         "ventaja_4": "{hospital_1}",
-        "ventaja_5": "{comer_1}"
+        "ventaja_5": "{comer_1}",
+        "titular": "Lo que tienes a un paso en {zona}"
       },
       "caption_sugerida": "Invertir en {zona} no es moda, es estrategia. Te dejo las 5 razones por las que sigue siendo la zona más sólida de la ciudad. ¿Cuál te pesa más al decidir?"
     },
@@ -442,7 +443,8 @@
         "ventaja_2": "Qué se está construyendo a dos calles.",
         "ventaja_3": "El monto del mantenimiento y qué cubre.",
         "ventaja_4": "Estacionamiento asignado o de calle.",
-        "ventaja_5": "Cuánto tarda en venderse lo que se publica ahí."
+        "ventaja_5": "Cuánto tarda en venderse lo que se publica ahí.",
+        "titular": "5 cosas que revisar antes de comprar en {zona}"
       },
       "caption_ref": "compra-mantenimiento"
     },
