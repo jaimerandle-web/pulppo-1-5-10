@@ -33,10 +33,21 @@ export default function PortalesShell() {
     const [secs, setSecs] = useState<Set<SeccionP>>(new Set(['volumen', 'mezcla', 'atencion', 'embudo']));
 
     // Rango de MESES para todo lo que lleva costo (ver view.ts: la inversión es mensual).
-    const [desde, setDesde] = useState(() => {
-        const d = new Date(hoy); d.setUTCMonth(d.getUTCMonth() - 5); return mesKey(d);
-    });
+    //
+    // Hay DOS estados a propósito: el BORRADOR (lo que estás tecleando) y lo APLICADO (lo que
+    // se consultó). Antes la consulta salía en cuanto tocabas un input: cambiar "desde" y luego
+    // "hasta" disparaba dos consultas de 20 s, la primera de un rango que nunca quisiste, y
+    // mientras tanto la pantalla seguía mostrando los números viejos sin avisar. Ahora nada se
+    // mueve hasta que le das Aplicar.
+    const iniDesde = useMemo(() => { const d = new Date(hoy); d.setUTCMonth(d.getUTCMonth() - 5); return mesKey(d); }, [hoy]);
+    const [desde, setDesde] = useState(iniDesde);
     const [hasta, setHasta] = useState(() => mesKey(hoy));
+    const [oper, setOper] = useState<'todas' | 'sale' | 'rent'>('todas');
+    const [bDesde, setBDesde] = useState(iniDesde);
+    const [bHasta, setBHasta] = useState(() => mesKey(hoy));
+    const [bOper, setBOper] = useState<'todas' | 'sale' | 'rent'>('todas');
+    const sucio = bDesde !== desde || bHasta !== hasta || bOper !== oper;
+    const aplicar = () => { setDesde(bDesde); setHasta(bHasta); setOper(bOper); };
     // Rango de FECHAS exactas, sólo para contar leads.
     const [pDesde, setPDesde] = useState(() => iso(new Date(hoy.getTime() - 29 * 86400000)));
     const [pHasta, setPHasta] = useState(() => iso(hoy));
@@ -55,7 +66,7 @@ export default function PortalesShell() {
             .finally(() => setCargando(null));
     }, []);
 
-    const qCosto = `&desde=${desde}&hasta=${hasta}`;
+    const qCosto = `&desde=${desde}&hasta=${hasta}&operacion=${oper}`;
     const qPeriodo = `&desde=${pDesde}&hasta=${pHasta}`;
 
     // La vista de costo se recarga cuando cambia el rango de meses.
@@ -73,12 +84,28 @@ export default function PortalesShell() {
 
     const inp: React.CSSProperties = { padding: '6px 8px', border: `1px solid ${LGT}`, borderRadius: 2, fontSize: 12, fontFamily: 'inherit', color: BLK };
 
+    const OPS: Array<['todas' | 'sale' | 'rent', string]> = [['todas', 'Todo'], ['sale', 'Venta'], ['rent', 'Renta']];
     const controles = (
         <>
             <label style={{ fontSize: 11, color: GRY, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px' }}>Meses</label>
-            <input type="month" value={desde} max={hasta} onChange={(e) => setDesde(e.target.value)} style={inp} />
+            <input type="month" value={bDesde} max={bHasta} onChange={(e) => setBDesde(e.target.value)} style={inp} />
             <span style={{ color: GRY, fontSize: 12 }}>a</span>
-            <input type="month" value={hasta} min={desde} max={mesKey(hoy)} onChange={(e) => setHasta(e.target.value)} style={inp} />
+            <input type="month" value={bHasta} min={bDesde} max={mesKey(hoy)} onChange={(e) => setBHasta(e.target.value)} style={inp} />
+            <span style={{ display: 'inline-flex', border: `1px solid ${LGT}`, borderRadius: 2, overflow: 'hidden', marginLeft: 4 }}>
+                {OPS.map(([k, lbl]) => (
+                    <button key={k} onClick={() => setBOper(k)} style={{
+                        padding: '6px 11px', border: 'none', cursor: 'pointer', fontSize: 11.5, fontFamily: 'inherit',
+                        fontWeight: bOper === k ? 700 : 400,
+                        background: bOper === k ? BLK : '#fff', color: bOper === k ? '#fff' : '#555',
+                    }}>{lbl}</button>
+                ))}
+            </span>
+            <button onClick={aplicar} disabled={!sucio || !!cargando} style={{
+                padding: '6px 13px', borderRadius: 2, border: `1px solid ${sucio ? BLK : LGT}`,
+                background: sucio && !cargando ? BLK : '#fff', color: sucio && !cargando ? '#fff' : GRY,
+                fontSize: 11.5, fontWeight: 700, cursor: sucio && !cargando ? 'pointer' : 'default', fontFamily: 'inherit',
+            }}>{cargando === 'costo' ? 'Consultando…' : 'Aplicar'}</button>
+            {sucio && !cargando && <span style={{ fontSize: 11, color: '#8A6D00' }}>sin aplicar</span>}
         </>
     );
 

@@ -48,6 +48,8 @@ export interface Portal {
 }
 
 export interface PortalesView {
+    /** Filtro aplicado. Si no es 'todas', el costo viene en null a propósito (ver `invDe`). */
+    operacion: Operacion;
     meses: Array<{ key: string; label: string; parcial: boolean }>;
     portales: Portal[];
     notaMeli: string;
@@ -81,7 +83,8 @@ function secuenciaEntre(desde: string, hasta: string): Array<[number, number]> {
     return out;
 }
 
-export interface RangoMeses { desde?: string; hasta?: string; months?: number }
+export type Operacion = 'todas' | 'sale' | 'rent';
+export interface RangoMeses { desde?: string; hasta?: string; months?: number; operacion?: Operacion }
 
 /**
  * Scorecard por portal.
@@ -94,6 +97,7 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
     const db = await getDb();
     const hoy = hoyMx(now);
     const o: RangoMeses = typeof opts === 'number' ? { months: opts } : opts;
+    const oper: Operacion = o.operacion ?? 'todas';
     const seq = o.desde && o.hasta ? secuenciaEntre(o.desde, o.hasta) : secuencia(o.months ?? 6, hoy);
     if (!seq.length) throw new Error('rango de meses vacío');
     const mkeys = seq.map(([y, m]) => `${y}-${String(m).padStart(2, '0')}`);
@@ -123,7 +127,8 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
 
     // ── 1 pasada de leads ──────────────────────────────────────────
     const curL = db.collection('leads').find(
-        { createdAt: { $gte: A, $lt: B }, ...NOT },
+        { createdAt: { $gte: A, $lt: B }, ...NOT,
+          ...(oper === 'todas' ? {} : { 'property.listing.operation': oper }) },
         { projection: { source: 1, createdAt: 1, answeredAt: 1, 'contact._id': 1, 'property.listing.operation': 1 } });
     for await (const l of curL) {
         const ca = l.createdAt;
@@ -194,7 +199,8 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
     const back = new Map<string, Atras>();
     for (const k of KEYS) for (const mk of mkeys) back.set(ck(k, mk), { n: 0, comision: 0, regalia: 0, gmv: 0 });
     const curO = db.collection('operations').find(
-        { 'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: A, $lt: B }, ...NOTP },
+        { 'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: A, $lt: B }, ...NOTP,
+          ...(oper === 'todas' ? {} : { 'property.listing.operation': oper }) },
         { projection: { 'buyer.source': 1, closedAt: 1, 'comission.value': 1, 'pulppoComission.value': 1, 'closeValue.value': 1 } });
     for await (const o of curO) {
         const cl = o.closedAt;
@@ -215,6 +221,11 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
 
     /** Inversión del canal en el mes. null = no sé (mostrar s/d), 0 sólo si es gratis real. */
     const invDe = (mk: string, k: string): number | null => {
+        // ⚠️ Los portales NO facturan por operación: se paga el aviso, no la venta o la renta.
+        // Con el filtro puesto, el denominador correcto no existe — dividir la inversión total
+        // entre los leads de venta daría un CPL inflado (y entre los de renta, otro). Se
+        // devuelve null y la UI dice por qué, en vez de imprimir un número que parece real.
+        if (oper !== 'todas') return null;
         if (GRATIS.has(k)) return 0;
         const im: InversionMes | undefined = inv[mk];
         // MeLi no se lee del Sheet: es base fija + 6% del deal (conciliado si lo hay).
@@ -273,6 +284,7 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
     const cerrado = mkeys[mkeys.length - 2] ?? mkeys[mkeys.length - 1];
 
     return {
+        operacion: oper,
         meses, portales, notaMeli: NOTA_MELI,
         sinInversion: mkeys.filter((mk) => inv[mk]?.faltante),
         deal: deals.get(cerrado) ?? null,

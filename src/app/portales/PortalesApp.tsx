@@ -156,7 +156,18 @@ export default function PortalesApp({ d, pulso, hist, section, setSection, cache
                 )}
 
 
-                {d.sinInversion.length > 0 && (
+                {d.operacion !== 'todas' && (
+                    <div style={{ marginBottom: 16 }}>
+                        <Aviso tono="alerta">
+                            Estás viendo <b>sólo {d.operacion === 'sale' ? 'venta' : 'renta'}</b>. Los leads,
+                            las visitas, los cierres y el funnel ya están filtrados, pero{' '}
+                            <b>el costo se apaga a propósito</b>: los portales cobran por el aviso, no por la
+                            operación, así que no existe una inversión "de venta" o "de renta" que dividir.
+                            Repartirla daría un CPL inventado. Para costo y ROI, vuelve a «Todo».
+                        </Aviso>
+                    </div>
+                )}
+                {d.sinInversion.length > 0 && d.operacion === 'todas' && (
                     <div style={{ marginBottom: 16 }}>
                         <Aviso tono="alerta">
                             <b>Falta cargar la inversión de {d.sinInversion.map(mesLargo).join(' y ')} en el Sheet.</b>{' '}
@@ -242,6 +253,8 @@ export default function PortalesApp({ d, pulso, hist, section, setSection, cache
                             Inversión mes a mes
                         </h2>
                         <div style={{ fontSize: 11.5, color: '#666', marginBottom: 10 }}>
+                            Cada fila es la inversión de ese portal en ese mes. Abajo, el total del mes y el
+                            CPL global (inversión total ÷ leads de los portales que sí tienen costo cargado).
                             Se corrigió un error de la versión anterior: la tabla a mano tenía el i24 de julio
                             copiado hacia marzo–junio. Aquí cada mes trae su número real.
                         </div>
@@ -264,10 +277,29 @@ export default function PortalesApp({ d, pulso, hist, section, setSection, cache
                                         </tr>
                                     ))}
                                     <tr>
-                                        <td style={{ ...ttd0, fontWeight: 700, borderTop: `1px solid ${BLK}` }}>CPL de i24</td>
+                                        <td style={{ ...ttd0, fontWeight: 700, borderTop: `1px solid ${BLK}` }}>Total del mes</td>
                                         {meses.map((m) => {
-                                            const r = fila(d.portales.find((x) => x.key === 'i24')!, m.key);
-                                            return <td key={m.key} style={{ ...ttd, fontWeight: 700, borderTop: `1px solid ${BLK}` }}>{money(r?.cpl)}</td>;
+                                            const suma = pagados.reduce((a, p) => {
+                                                const r = fila(p, m.key);
+                                                return r?.inversion == null ? a : a + r.inversion;
+                                            }, 0);
+                                            return <td key={m.key} style={{ ...ttd, fontWeight: 700, borderTop: `1px solid ${BLK}` }}>{money(suma)}</td>;
+                                        })}
+                                    </tr>
+                                    <tr>
+                                        <td style={{ ...ttd0, fontWeight: 700 }}>CPL global</td>
+                                        {meses.map((m) => {
+                                            // Global de verdad: suma de la inversión de los portales CON dato,
+                                            // dividida entre los leads de ESOS MISMOS portales. Meter en el
+                                            // divisor los leads de un portal cuya inversión no conocemos
+                                            // abarataría el CPL con leads que nadie pagó.
+                                            let inv = 0, lds = 0;
+                                            for (const p of pagados) {
+                                                const r = fila(p, m.key);
+                                                if (!r || r.inversion == null) continue;
+                                                inv += r.inversion; lds += r.leads;
+                                            }
+                                            return <td key={m.key} style={{ ...ttd, fontWeight: 700 }}>{lds ? money(inv / lds) : '—'}</td>;
                                         })}
                                     </tr>
                                 </tbody>

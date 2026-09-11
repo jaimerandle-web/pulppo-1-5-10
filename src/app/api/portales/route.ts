@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { portalesView } from '@/lib/portales/view';
+import { portalesView, type Operacion } from '@/lib/portales/view';
 import { pulseView } from '@/lib/portales/pulse';
 import { historicoView } from '@/lib/portales/historico';
 import { periodoView } from '@/lib/portales/periodo';
@@ -33,6 +33,8 @@ export async function GET(req: Request) {
     const desde = u.searchParams.get('desde') ?? '';
     const hasta = u.searchParams.get('hasta') ?? '';
     const months = Math.min(Math.max(Number(u.searchParams.get('months') ?? 6), 1), 24);
+    const opParam = u.searchParams.get('operacion') ?? 'todas';
+    const operacion = (['todas', 'sale', 'rent'].includes(opParam) ? opParam : 'todas') as Operacion;
 
     if (vista === 'costo' && (desde || hasta)) {
         if (!MES.test(desde) || !MES.test(hasta))
@@ -44,14 +46,14 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'el periodo va en fechas YYYY-MM-DD' }, { status: 400 });
     }
 
-    const key = `${vista}|${desde}|${hasta}|${months}`;
+    const key = `${vista}|${desde}|${hasta}|${months}|${operacion}`;
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < TTL && u.searchParams.get('refresh') !== '1') {
         return NextResponse.json({ ...(hit.data as object), cacheAt: hit.at });
     }
     try {
         const data = vista === 'costo'
-                ? await portalesView(desde && hasta ? { desde, hasta } : { months })
+                ? await portalesView(desde && hasta ? { desde, hasta, operacion } : { months, operacion })
             : vista === 'pulso' ? await pulseView()
             : vista === 'historico' ? await historicoView()
             : await periodoView(desde, hasta);
