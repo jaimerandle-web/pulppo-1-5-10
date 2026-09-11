@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import type { MBData, MBProp, MBFuera, RespKey } from '@/lib/mb';
 import MBAnalisis from './MBAnalisis';
+import MBDestacados from './MBDestacados';
 import PrintRoot from './PrintRoot';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
@@ -34,7 +35,7 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 // minutos → texto corto legible
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
-type Section = 'overview' | 'props' | 'analisis' | 'comoleer';
+type Section = 'overview' | 'props' | 'destacados' | 'analisis' | 'comoleer';
 type Seg = '' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre'
     | 'sinVideo' | 'pocasFotos' | 'sinAmenidades' | 'sinAcm' | 'sinTour' | 'conErrores';
 const SEG_TEST: Record<string, (p: MBProp) => boolean> = {
@@ -490,7 +491,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{d.name}</div>
                     <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{f(d.nProps)} propiedades publicadas</div>
                 </div>
-                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{nav('destacados', 'Destacados')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 <div style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
 
@@ -769,6 +770,20 @@ export default function MBApp({ d }: { d: MBData }) {
                         <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 30, margin: '0 0 3px' }}>Tu inventario</h1>
                         <div style={sub}>El funnel se recalcula con tus filtros. Haz clic en un encabezado para <b>ordenar</b> y usa la fila gris para <b>filtrar por columna</b>; abre el reporte de cada propiedad desde su código. <b>vs. oferta</b> y <b>vs. cierres</b> comparan tu $/m² contra la <b>mediana</b> de tus comparables (no el promedio). Vistas = sitios de Pulppo + Inmuebles24.</div>
                         <PropTable d={d} seg={seg} setSeg={setSeg} />
+                    </div>
+                )}
+
+                {section === 'destacados' && (
+                    <div>
+                        <div style={eyebrow}>Destacados</div><div style={accent} />
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
+                            ¿Cuáles quieres destacar en inmuebles24?
+                        </div>
+                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 660 }}>
+                            Todos tus avisos con lo que le falta a cada uno. Marca los que quieras
+                            destacar y guarda: la respuesta queda registrada con tu nombre y la fecha.
+                        </div>
+                        <MBDestacados nombre={d.name} />
                     </div>
                 )}
 
