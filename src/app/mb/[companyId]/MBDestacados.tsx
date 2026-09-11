@@ -6,18 +6,25 @@ import type { Aviso, DatosInmo } from '@/lib/portales/avisos';
 /* ------------------------------------------------------------------ *
  * /mb/[companyId] → Destacados
  *
- * TODOS los avisos de la inmobiliaria con sus etiquetas, y la columna donde ella
- * marca cuáles quiere destacar. No se filtra ninguno: renta, terreno y comercial
- * aparecen con su etiqueta y el checkbox deshabilitado, porque no compiten por un
- * lugar pagado pero tampoco deben desaparecer de la vista.
+ * TODOS los avisos de la inmobiliaria con sus etiquetas, y la columna donde ella marca
+ * cuáles quiere destacar. No se filtra ninguno.
  *
- * Las etiquetas son MÚLTIPLES por aviso a propósito: uno puede estar caro Y sin
- * video, y el asesor necesita ver las dos cosas para saber qué resolver.
+ * Las etiquetas son MÚLTIPLES por aviso a propósito: uno puede estar caro Y sin video, y
+ * el asesor necesita ver las dos cosas para saber qué resolver.
  *
- * ⚠️ La primera consulta del día arma el mercado (26,590 avisos del MLS de i24 +
- * 92,000 búsquedas guardadas) y puede tardar un minuto; después queda cacheado una
- * hora y cada cuenta responde en segundos. Por eso el estado de carga dice qué está
- * pasando en vez de dejar un spinner mudo.
+ * Se puede marcar CUALQUIER aviso, incluidos renta, terreno y comercial. La recomendación
+ * sigue siendo no destacarlos —rinden muy por debajo del residencial de venta— pero la
+ * decisión es de la inmobiliaria, no del tablero.
+ *
+ * NO se muestra cuánto gasta Pulppo en portal: esta vista la ve la inmobiliaria.
+ *
+ * Tampoco se muestra el tier actual del aviso. `portals.inmuebles24.type` llega como
+ * OFFLINE cuando la API de i24 no devuelve la información (bug de su API key) aunque la
+ * propiedad esté publicada, así que la columna mentía. Se trata como Simple.
+ *
+ * ⚠️ La primera consulta del DÍA arma el mercado (26,590 avisos del MLS de i24 + 92,000
+ * búsquedas guardadas) y puede tardar un minuto; después queda listo el resto del día. Si
+ * nadie entra, no se genera nada.
  * ------------------------------------------------------------------ */
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
@@ -109,10 +116,11 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
     function descargar() {
         if (!d) return;
         const filas2 = d.avisos.map((a) => [a.id, marcados.has(a.id) ? 'DESTACAR' : '', a.tipo,
-            a.operacion, a.colonia ?? '', a.precio, a.comisionPct ?? '', a.demanda, a.competencia,
-            a.tierNombre, a.tags.join(' | '), a.falta]);
+            a.operacion, a.colonia ?? '', a.precio,
+            a.comisionPct != null ? `${a.comisionPct}%` : '', a.demanda, a.competencia,
+            a.tags.join(' | '), a.falta]);
         const csv = [['ID', 'Respuesta', 'Tipo', 'Operación', 'Colonia', 'Precio', '% comisión',
-                      'Buscando', 'Competencia', 'Tier hoy', 'Etiquetas', 'Qué le falta'], ...filas2]
+                      'Buscando', 'Competencia', 'Etiquetas', 'Qué le falta'], ...filas2]
             .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
         const el = document.createElement('a');
         el.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
@@ -125,6 +133,9 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
         position: 'sticky', top: 0, background: '#fff', borderBottom: `1px solid #e8e8e8` };
     const td: CSSProperties = { padding: '6px 7px', borderBottom: '1px solid #f2f2f0', fontSize: 12 };
     const num: CSSProperties = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
+    // el % de comisión es corto: columna angosta para que no coma espacio
+    const thPct: CSSProperties = { ...th, width: 46, textAlign: 'right' };
+    const numPct: CSSProperties = { ...num, width: 46, whiteSpace: 'nowrap' };
 
     if (error) return (
         <div style={{ borderLeft: `3px solid ${RED}`, background: LGT, padding: 14, borderRadius: R }}>
@@ -136,28 +147,13 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
             Calculando <b>{nombre}</b> en vivo — demanda, competencia y precio contra su colonia.
             <div style={{ color: GRY, fontSize: 11.5, marginTop: 6 }}>
                 La primera consulta del día arma el mercado (26,590 avisos del MLS de i24 y 92,000
-                búsquedas guardadas) y puede tardar un minuto. Después queda listo por una hora.
+                búsquedas guardadas) y puede tardar un minuto. Después queda listo por el resto del día.
             </div>
         </div>
     );
 
     return (
         <div>
-            {/* ── el cuadre ── */}
-            <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', alignItems: 'baseline',
-                          border: '1px solid #e8e8e8', borderRadius: R, padding: '18px 20px' }}>
-                {[[String(d.avisos.length), 'avisos en total'],
-                  [String(porTag['destacar']?.length ?? 0), 'listos para destacar'],
-                  [String(d.destacados), 'destacados hoy'],
-                  [money(d.gastoMes), 'al mes en portal'],
-                  [String(marcados.size), 'marcados por ellos']].map(([n, l]) => (
-                    <div key={l}>
-                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 27, lineHeight: 1 }}>{n}</div>
-                        <div style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.6px', color: GRY, marginTop: 5 }}>{l}</div>
-                    </div>
-                ))}
-            </div>
-
             {/* ── barra de respuesta ── */}
             <div style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', gap: 10,
                           flexWrap: 'wrap', alignItems: 'center', background: '#fff',
@@ -209,9 +205,10 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
 
             <div style={{ borderLeft: `3px solid ${SEA}`, background: LGT, padding: 11, marginTop: 12,
                           fontSize: 11.5, lineHeight: 1.5, borderRadius: R }}>
-                Están <b>todos</b> los avisos, ninguno se filtró. Un aviso puede traer varias etiquetas
-                —puede estar caro <i>y</i> sin video—. Los de <b>renta</b>, <b>terreno</b> y{' '}
-                <b>comercial</b> no compiten por un lugar destacado: por eso no se pueden marcar.
+                Están <b>todos</b> los avisos, ninguno se filtró. Un aviso puede traer varias
+                etiquetas —puede estar caro <i>y</i> sin video—. En <b>renta</b>, <b>terreno</b> y{' '}
+                <b>comercial</b> la recomendación es <b>no destacarlos</b> (rinden muy por debajo
+                del residencial de venta), pero puedes marcarlos si lo consideras.
             </div>
 
             {/* ── la tabla ── */}
@@ -221,38 +218,39 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
                     <thead>
                         <tr>
                             <th style={{ ...th, textAlign: 'center' }}>Destacar</th>
-                            {['ID', 'Asesor', 'Colonia', 'Tipo', 'Precio', '% com', 'Buscando',
-                              'Compet.', 'Puntaje', 'Tier hoy', 'Etiquetas', 'Qué le falta']
-                                .map((h) => <th key={h} style={th}>{h}</th>)}
+                            {['ID', 'Asesor', 'Colonia', 'Tipo', 'Precio', '%', 'Buscando',
+                              'Compet.', 'Puntaje', 'Etiquetas', 'Qué le falta']
+                                .map((h) => <th key={h} style={h === '%' ? thPct : th}>{h}</th>)}
                         </tr>
                     </thead>
                     <tbody>
                         {filas.map((a) => (
                             <tr key={a.id} style={{ background: marcados.has(a.id) ? 'rgba(246,190,0,.10)' : undefined }}>
                                 <td style={{ ...td, textAlign: 'center' }}>
-                                    <input type="checkbox" checked={marcados.has(a.id)} disabled={!a.destacable}
+                                    {/* Se puede marcar CUALQUIERA. Renta, terreno y comercial
+                                        siguen con la recomendación de no destacarlos, pero la
+                                        decisión es de la inmobiliaria, no del tablero. */}
+                                    <input type="checkbox" checked={marcados.has(a.id)}
                                         onChange={() => { setMarcados((p) => { const n = new Set(p);
-                                            n.has(a.id) ? n.delete(a.id) : n.add(a.id); return n; }); setSucio(true); }}
+                                            if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; }); setSucio(true); }}
                                         title={a.destacable ? 'Marcar para destacar'
-                                            : 'Renta, terreno o comercial: no compite por lugar destacado'}
-                                        style={{ width: 15, height: 15, accentColor: YEL,
-                                                 opacity: a.destacable ? 1 : .25 }} />
+                                            : 'Se puede marcar, pero la recomendación es no destacarlo'}
+                                        style={{ width: 15, height: 15, accentColor: YEL }} />
                                 </td>
-                                <td style={{ ...td, fontWeight: 700 }}>{a.id}</td>
-                                <td style={td}>{a.broker}</td>
-                                <td style={td}>{a.colonia ?? '—'}</td>
-                                <td style={td}>{a.tipo}</td>
-                                <td style={num}>{money(a.precio)}</td>
-                                <td style={num}>{a.comisionPct ?? '—'}</td>
+                                <td style={{ ...td, fontWeight: 700, whiteSpace: 'nowrap' }}>{a.id}</td>
+                                <td style={{ ...td, whiteSpace: 'nowrap' }}>{a.broker}</td>
+                                <td style={{ ...td, whiteSpace: 'nowrap' }}>{a.colonia ?? '—'}</td>
+                                <td style={{ ...td, whiteSpace: 'nowrap' }}>{a.tipo}</td>
+                                <td style={{ ...num, whiteSpace: 'nowrap' }}>{money(a.precio)}</td>
+                                <td style={numPct}>{a.comisionPct != null ? `${a.comisionPct}%` : '—'}</td>
                                 <td style={num}>{a.demanda}</td>
                                 <td style={num}>{a.competencia}</td>
                                 <td style={{ ...num, fontWeight: 700 }}>{a.puntos}</td>
-                                <td style={{ ...td, whiteSpace: 'nowrap' }}>{a.tierNombre}</td>
                                 <td style={td}>
                                     <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                                         {a.tags.map((t) => (
                                             <span key={t} style={{ ...colorTag(t), fontSize: 10, fontWeight: 700,
-                                                padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap' }}>{t}</span>
+                                                padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap' }}>{t}</span>
                                         ))}
                                     </span>
                                 </td>

@@ -23,8 +23,11 @@
 import { getDb } from '../data';
 import { getKam } from '../kam';
 
-const TTL_MERCADO = 60 * 60 * 1000;     // el mercado se mueve despacio: 1 h
-const TTL_INMO = 10 * 60 * 1000;        // lo de una cuenta, 10 min (igual que /api/data)
+// Se recalcula UNA VEZ AL DÍA y sólo si alguien entra: si nadie abre la herramienta, no se
+// genera nada. Una vez calculado queda listo el resto del día, así que el KAM y la
+// inmobiliaria ven lo mismo aunque entren a horas distintas.
+const TTL_MERCADO = 24 * 60 * 60 * 1000;
+const TTL_INMO = 24 * 60 * 60 * 1000;
 const VENTANA_DEMANDA = 180;            // días de búsquedas guardadas
 const VENTANA_COMPETENCIA = 90;         // días de antigüedad del aviso rival
 const RADIO_KM = 1.5;
@@ -32,26 +35,31 @@ const UMBRAL_CARO = 1.30;               // veces la mediana de su colonia y tipo
 const UMBRAL_CALIDAD = 95;              // escala real de i24, 0–100
 const MIN_COMPARABLES = 5;              // avisos para poder calcular la mediana de colonia
 
-/** Precio de lista por tipo CRUDO de i24. GRATIS y OFFLINE no cuestan nada. */
+// ⚠️ `OFFLINE` NO significa que el aviso esté apagado. Es un bug conocido de i24: cuando su
+// API no devuelve la información del aviso (problema de API key de su lado) el tipo llega como
+// OFFLINE aunque la propiedad SÍ esté publicada. Se trata como Simple, que es lo que realmente
+// es. Consecuencia: el gasto de la red es MAYOR de lo que se calculaba tratándolos como $0
+// (2,223 avisos × $15 = $33,345/mes que no se estaban contando).
+/** Precio de lista por tipo CRUDO de i24. GRATIS no cuesta; OFFLINE es Simple (ver arriba). */
 const PRECIO: Record<string, number> = {
     HOME_COMBO_ZONA_DEMAND: 785, HOME_ZONA_DEMAND: 785,
     HOME_COMBO: 523, HOME: 523,
     DESTACADO_COMBO_ZONA_DEMAND: 420, DESTACADO_ZONA_DEMAND: 420,
     DESTACADO_COMBO: 315, DESTACADO: 315,
     SIMPLE_COMBO: 15, SIMPLE: 15,
-    GRATIS_COMBO: 0, GRATIS: 0, OFFLINE: 0,
+    GRATIS_COMBO: 0, GRATIS: 0, OFFLINE: 15,
 };
 /** Precio por tier ya normalizado, para el desglose de "lo que tiene contratado hoy". */
 const PRECIO_TIER: Record<string, number> = {
-    SD_ZD: 785, SD: 523, DEST_ZD: 420, DEST: 315, SIMPLE: 15, GRATIS: 0, OFFLINE: 0,
+    SD_ZD: 785, SD: 523, DEST_ZD: 420, DEST: 315, SIMPLE: 15, GRATIS: 0,
 };
 /** Lift por tier. Se usa para DESCONTAR el boost que el aviso ya trae, no para proyectar. */
 const LIFT: Record<string, number> = {
-    SD_ZD: 1.329, SD: 1.26, DEST_ZD: 1.023, DEST: 0.97, SIMPLE: 1, GRATIS: 1, OFFLINE: 1,
+    SD_ZD: 1.329, SD: 1.26, DEST_ZD: 1.023, DEST: 0.97, SIMPLE: 1, GRATIS: 1,
 };
 const NOMBRE_TIER: Record<string, string> = {
     SD_ZD: 'Súper Destacado ZD', SD: 'Súper Destacado', DEST_ZD: 'Destacado ZD',
-    DEST: 'Destacado', SIMPLE: 'Simple', GRATIS: 'Gratis', OFFLINE: 'Apagado en i24',
+    DEST: 'Destacado', SIMPLE: 'Simple', GRATIS: 'Gratis',
 };
 const PAGADOS = new Set(['SD_ZD', 'SD', 'DEST_ZD', 'DEST']);
 // Comercial no compite por lugares destacados: el criterio es residencial de venta.
@@ -104,8 +112,7 @@ function tierDe(raw: unknown): string {
     if (t.startsWith('HOME')) return zd ? 'SD_ZD' : 'SD';
     if (t.startsWith('DESTACADO')) return zd ? 'DEST_ZD' : 'DEST';
     if (t.startsWith('GRATIS')) return 'GRATIS';
-    if (t === 'OFFLINE') return 'OFFLINE';
-    return 'SIMPLE';
+    return 'SIMPLE';                       // incluye OFFLINE: ver la nota de PRECIO
 }
 
 function mediana(v: number[]): number | null {
@@ -464,7 +471,7 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
         destacados: [...cuentaTier].filter(([t]) => PAGADOS.has(t))
             .reduce((s, [, v]) => s + v.n, 0),
         gastoMes, gratis,
-        tiers: ['SD_ZD', 'SD', 'DEST_ZD', 'DEST', 'SIMPLE', 'GRATIS', 'OFFLINE']
+        tiers: ['SD_ZD', 'SD', 'DEST_ZD', 'DEST', 'SIMPLE', 'GRATIS']
             .filter((t) => cuentaTier.has(t))
             .map((t) => ({
                 tier: NOMBRE_TIER[t], n: cuentaTier.get(t)!.n, venta: cuentaTier.get(t)!.venta,
