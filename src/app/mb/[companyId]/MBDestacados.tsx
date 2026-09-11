@@ -112,37 +112,46 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
         return f;
     }, [d, filtro, q]);
 
-    /**
-     * Guardar NUNCA falla desde el punto de vista de quien responde.
-     *
-     * El servidor necesita un Blob de Vercel para persistir (Mongo es read-only) y puede no
-     * estar configurado. Antes eso deshabilitaba el botón con un mensaje técnico: la
-     * inmobiliaria no tiene por qué leer eso ni perder su trabajo por una variable de entorno.
-     * Ahora se guarda SIEMPRE en el navegador —inmediato y sin dependencias— y además se
-     * intenta en el servidor para que quede compartido. La leyenda dice cuál de las dos pasó.
-     */
-    async function guardar() {
-        if (!d) return;
-        setGuardando(true); setError('');
-        const cuando = new Date();
+    /** Escribe en el navegador. Es síncrono y no puede fallar por red. */
+    function guardarLocal(ids: Set<string>, n: string) {
         try {
-            localStorage.setItem(LS_KEY(d.inmobiliaria), JSON.stringify(
-                { ids: [...marcados], nota, fecha: cuando.toISOString() }));
-        } catch { /* modo incógnito o storage lleno: no es motivo para detener el guardado */ }
-        try {
-            const r = await fetch('/api/avisos/seleccion', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inmo: d.inmobiliaria, ids: [...marcados], nota }),
-            });
-            const j = await r.json();
-            if (!r.ok) throw new Error(j.error ?? '');
-            setAviso(`Guardado · ${j.seleccion.ids.length} avisos · ${j.seleccion.por}`
-                + ` · ${new Date(j.seleccion.fecha).toLocaleString('es-MX')}`);
+            localStorage.setItem(LS_KEY(nombre), JSON.stringify(
+                { ids: [...ids], nota: n, fecha: new Date().toISOString() }));
+            return true;
         } catch {
-            // el servidor no pudo: la respuesta ya está a salvo en el navegador
-            setAviso(`Guardado en este navegador · ${marcados.size} avisos · `
-                + `${cuando.toLocaleString('es-MX')}. Descarga el CSV para compartirlo.`);
-        } finally { setSucio(false); setGuardando(false); }
+            return false;   // incógnito o storage lleno
+        }
+    }
+
+    /**
+     * Guardar confirma DE INMEDIATO.
+     *
+     * La escritura en el navegador es síncrona, así que la respuesta ya está a salvo antes de
+     * que salga cualquier petición. La confirmación se pinta en ese momento —no después del
+     * viaje al servidor, que puede tardar o no existir— y si el servidor además la acepta, la
+     * leyenda se actualiza para decir que quedó compartida.
+     */
+    function guardar() {
+        if (!d) return;
+        const cuando = new Date();
+        const ok = guardarLocal(marcados, nota);
+        setSucio(false);
+        setAviso(ok
+            ? `Guardado · ${marcados.size} avisos · ${cuando.toLocaleString('es-MX')}`
+            : `No se pudo guardar en este navegador. Descarga el CSV.`);
+        setGuardando(true);
+        fetch('/api/avisos/seleccion', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inmo: d.inmobiliaria, ids: [...marcados], nota }),
+        })
+            .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+            .then(({ ok: sirvio, j }) => {
+                if (!sirvio) return;
+                setAviso(`Guardado y compartido · ${j.seleccion.ids.length} avisos`
+                    + ` · ${j.seleccion.por} · ${new Date(j.seleccion.fecha).toLocaleString('es-MX')}`);
+            })
+            .catch(() => { /* quedó en el navegador, que es lo que importa */ })
+            .finally(() => setGuardando(false));
     }
 
     /** Respaldo que no depende del servidor. */
@@ -197,7 +206,8 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
                         <span style={{ color: GRY }}> · {money(marcados.size * 508)}/mes extra si todos suben a Súper Destacado</span>
                     )}
                 </span>
-                <input value={nota} onChange={(e) => { setNota(e.target.value); setSucio(true); }}
+                <input value={nota}
+                    onChange={(e) => { setNota(e.target.value); guardarLocal(marcados, e.target.value); setSucio(true); }}
                     placeholder="Nota (opcional): por qué esta selección…"
                     style={{ flex: 1, minWidth: 200, fontSize: 12, padding: '6px 9px',
                              border: '1px solid #d8d8d6', borderRadius: R }} />
@@ -210,7 +220,11 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
                 </button>
             </div>
             {aviso && !sucio && <div style={{ color: SEA, fontSize: 11.5, marginTop: 8 }}>{aviso}</div>}
-            {sucio && <div style={{ color: '#8a6a00', fontSize: 11.5, marginTop: 8 }}>Hay cambios sin guardar.</div>}
+            {sucio && (
+                <div style={{ color: '#8a6a00', fontSize: 11.5, marginTop: 8 }}>
+                    Cambios guardados en este navegador. Dale <b>Guardar</b> para dejarlos registrados.
+                </div>
+            )}
 
             {/* ── filtros por etiqueta ── */}
             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 14, alignItems: 'center' }}>
@@ -257,8 +271,13 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
                                         siguen con la recomendación de no destacarlos, pero la
                                         decisión es de la inmobiliaria, no del tablero. */}
                                     <input type="checkbox" checked={marcados.has(a.id)}
-                                        onChange={() => { setMarcados((p) => { const n = new Set(p);
-                                            if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; }); setSucio(true); }}
+                                        onChange={() => setMarcados((p) => {
+                                            const n = new Set(p);
+                                            if (n.has(a.id)) n.delete(a.id); else n.add(a.id);
+                                            guardarLocal(n, nota);   // al momento, sin esperar al botón
+                                            setSucio(true);
+                                            return n;
+                                        })}
                                         title={a.destacable ? 'Marcar para destacar'
                                             : 'Se puede marcar, pero la recomendación es no destacarlo'}
                                         style={{ width: 15, height: 15, accentColor: YEL }} />
