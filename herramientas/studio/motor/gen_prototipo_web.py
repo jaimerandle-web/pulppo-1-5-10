@@ -1586,6 +1586,35 @@ async function pintarPagina(ref, iPag, vals, idIdea){
   return cv;
 }
 
+/* Sube las páginas de una pieza y devuelve sus URLs públicas.
+
+   Es el paso que falta entre "descargar" y "publicar": la API de Instagram no recibe bytes,
+   recibe una URL que Meta va a buscar. Y la pide en **JPEG** — el PNG que se descarga no le
+   sirve—, por eso acá se re-exporta el mismo canvas a JPEG en vez de reusar el File de
+   `archivosDePieza`, que existe para bajar y para la hoja de compartir nativa.
+
+   Calidad 0.92: sobre una pieza de 1080x1350 la diferencia con 1.0 no se ve y el archivo
+   baja a la mitad, lo que importa porque Meta descarga la imagen desde su lado. */
+async function subirPieza(idea){
+  await fuentesListas();
+  const ref = refDe(idea);
+  const nPag = (TPL[ref].pages || []).length;
+  const urls = [];
+  for(let p = 0; p < nPag; p++){
+    const cv = await pintarPagina(ref, p, S.valores, idea.id);
+    const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.92));
+    const r = await fetch("/api/studio/imagen", {
+      method: "POST", headers: {"Content-Type": "image/jpeg"}, body: blob
+    });
+    if(!r.ok){
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d.error || ("subida " + r.status));
+    }
+    urls.push((await r.json()).url);
+  }
+  return urls;
+}
+
 /* Pinta todas las páginas y las devuelve como File, listas para compartir o bajar. */
 async function archivosDePieza(idea){
   await fuentesListas();          // activa TODAS las familias de los templates, no sólo las que el DOM ya pidió
