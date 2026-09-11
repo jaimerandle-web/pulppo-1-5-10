@@ -36,8 +36,15 @@ const ORDEN = ['destacar', 'falta video o tour', 'faltan fotos', 'calidad i24 ba
 /** Las que NO impiden destacar: son trabajo, no descarte. */
 const ARREGLABLES = new Set(['falta video o tour', 'faltan fotos', 'calidad i24 baja',
                              'precio caro', 'comisión baja']);
+const LS_KEY = (inmo: string) => `destacados:${inmo}`;
 const money = (n?: number | null) =>
     n == null || !Number.isFinite(n) ? '—' : `$${Math.round(n).toLocaleString('en-US')}`;
+/** El % de comisión viene con muchos decimales (4.3478260869565215). Máximo 4 dígitos. */
+const pct = (n?: number | null) => {
+    if (n == null || !Number.isFinite(n)) return '—';
+    const r = Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(2);
+    return `${parseFloat(r)}%`;                 // parseFloat quita los ceros de cola
+};
 
 function colorTag(t: string): CSSProperties {
     if (t === 'destacar') return { background: 'rgba(82,153,153,.18)', color: SEA };
@@ -54,7 +61,6 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
     const [nota, setNota] = useState('');
     const [guardando, setGuardando] = useState(false);
     const [aviso, setAviso] = useState('');
-    const [efimero, setEfimero] = useState(false);
     const [sucio, setSucio] = useState(false);
 
     useEffect(() => {
@@ -68,14 +74,25 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
             .then((r) => r.json())
             .then((j) => {
                 if (!vivo) return;
-                setEfimero(!!j.efimero);
                 setMarcados(new Set<string>(j.seleccion?.ids ?? []));
                 setNota(j.seleccion?.nota ?? '');
                 if (j.seleccion) setAviso(
                     `Última respuesta: ${j.seleccion.ids.length} avisos · ${j.seleccion.por}`
                     + ` · ${new Date(j.seleccion.fecha).toLocaleDateString('es-MX')}`);
             })
-            .catch(() => { /* sin respuesta previa */ });
+            .catch(() => { /* sin respuesta previa en el servidor */ })
+            .finally(() => {
+                // lo guardado en este navegador manda si el servidor no tenía nada
+                try {
+                    const local = localStorage.getItem(LS_KEY(nombre));
+                    if (!local) return;
+                    const j = JSON.parse(local) as { ids: string[]; nota?: string; fecha: string };
+                    setMarcados((prev) => (prev.size ? prev : new Set(j.ids)));
+                    setNota((prev) => prev || (j.nota ?? ''));
+                    setAviso((prev) => prev || `Guardado en este navegador · ${j.ids.length} avisos`
+                        + ` · ${new Date(j.fecha).toLocaleString('es-MX')}`);
+                } catch { /* dato corrupto: se ignora */ }
+            });
         return () => { vivo = false; };
     }, [nombre]);
 
@@ -95,21 +112,37 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
         return f;
     }, [d, filtro, q]);
 
+    /**
+     * Guardar NUNCA falla desde el punto de vista de quien responde.
+     *
+     * El servidor necesita un Blob de Vercel para persistir (Mongo es read-only) y puede no
+     * estar configurado. Antes eso deshabilitaba el botón con un mensaje técnico: la
+     * inmobiliaria no tiene por qué leer eso ni perder su trabajo por una variable de entorno.
+     * Ahora se guarda SIEMPRE en el navegador —inmediato y sin dependencias— y además se
+     * intenta en el servidor para que quede compartido. La leyenda dice cuál de las dos pasó.
+     */
     async function guardar() {
         if (!d) return;
         setGuardando(true); setError('');
+        const cuando = new Date();
+        try {
+            localStorage.setItem(LS_KEY(d.inmobiliaria), JSON.stringify(
+                { ids: [...marcados], nota, fecha: cuando.toISOString() }));
+        } catch { /* modo incógnito o storage lleno: no es motivo para detener el guardado */ }
         try {
             const r = await fetch('/api/avisos/seleccion', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ inmo: d.inmobiliaria, ids: [...marcados], nota }),
             });
             const j = await r.json();
-            if (!r.ok) throw new Error(j.error ?? 'No se pudo guardar');
-            setAviso(`Guardado: ${j.seleccion.ids.length} avisos · ${j.seleccion.por}`
+            if (!r.ok) throw new Error(j.error ?? '');
+            setAviso(`Guardado · ${j.seleccion.ids.length} avisos · ${j.seleccion.por}`
                 + ` · ${new Date(j.seleccion.fecha).toLocaleString('es-MX')}`);
-            setSucio(false);
-        } catch (e) { setError(String((e as Error).message)); }
-        finally { setGuardando(false); }
+        } catch {
+            // el servidor no pudo: la respuesta ya está a salvo en el navegador
+            setAviso(`Guardado en este navegador · ${marcados.size} avisos · `
+                + `${cuando.toLocaleString('es-MX')}. Descarga el CSV para compartirlo.`);
+        } finally { setSucio(false); setGuardando(false); }
     }
 
     /** Respaldo que no depende del servidor. */
@@ -117,7 +150,7 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
         if (!d) return;
         const filas2 = d.avisos.map((a) => [a.id, marcados.has(a.id) ? 'DESTACAR' : '', a.tipo,
             a.operacion, a.colonia ?? '', a.precio,
-            a.comisionPct != null ? `${a.comisionPct}%` : '', a.demanda, a.competencia,
+            pct(a.comisionPct), a.demanda, a.competencia,
             a.tags.join(' | '), a.falta]);
         const csv = [['ID', 'Respuesta', 'Tipo', 'Operación', 'Colonia', 'Precio', '% comisión',
                       'Buscando', 'Competencia', 'Etiquetas', 'Qué le falta'], ...filas2]
@@ -170,19 +203,12 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
                              border: '1px solid #d8d8d6', borderRadius: R }} />
                 <button onClick={descargar} style={{ fontSize: 11.5, padding: '7px 12px', cursor: 'pointer',
                     border: '1px solid #d8d8d6', background: '#fff', borderRadius: R }}>Descargar CSV</button>
-                <button onClick={guardar} disabled={guardando || efimero}
+                <button onClick={guardar} disabled={guardando}
                     style={{ fontSize: 11.5, fontWeight: 700, padding: '7px 16px', borderRadius: R,
-                             border: 'none', background: efimero ? '#e9e9e7' : YEL, color: BLK,
-                             cursor: efimero ? 'not-allowed' : 'pointer' }}>
+                             border: 'none', background: YEL, color: BLK, cursor: 'pointer' }}>
                     {guardando ? 'Guardando…' : 'Guardar'}
                 </button>
             </div>
-            {efimero && (
-                <div style={{ borderLeft: `3px solid ${RED}`, background: LGT, padding: 10, marginTop: 8, fontSize: 11.5, borderRadius: R }}>
-                    <b>El guardado está apagado en este ambiente.</b> Falta crear el Blob del proyecto
-                    en Vercel (Storage → Create → Blob). Mientras tanto usa <b>Descargar CSV</b>.
-                </div>
-            )}
             {aviso && !sucio && <div style={{ color: SEA, fontSize: 11.5, marginTop: 8 }}>{aviso}</div>}
             {sucio && <div style={{ color: '#8a6a00', fontSize: 11.5, marginTop: 8 }}>Hay cambios sin guardar.</div>}
 
@@ -242,7 +268,7 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
                                 <td style={{ ...td, whiteSpace: 'nowrap' }}>{a.colonia ?? '—'}</td>
                                 <td style={{ ...td, whiteSpace: 'nowrap' }}>{a.tipo}</td>
                                 <td style={{ ...num, whiteSpace: 'nowrap' }}>{money(a.precio)}</td>
-                                <td style={numPct}>{a.comisionPct != null ? `${a.comisionPct}%` : '—'}</td>
+                                <td style={numPct}>{pct(a.comisionPct)}</td>
                                 <td style={num}>{a.demanda}</td>
                                 <td style={num}>{a.competencia}</td>
                                 <td style={{ ...num, fontWeight: 700 }}>{a.puntos}</td>
