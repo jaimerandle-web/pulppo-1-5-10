@@ -16,6 +16,12 @@ import type { Aviso, DatosInmo } from '@/lib/portales/avisos';
  * ------------------------------------------------------------------ */
 
 type Fila = { inmobiliaria: string; kam: string; venta: number; destacados: number };
+type Cuenta = Fila & { respondio: boolean; marcados: number; respondioPor: string | null; respondioEl: string | null };
+type Resumen = {
+    inmobiliaria: string; ventaViva: number; avisos: number; pagados: number;
+    malPuestos: number; costoMalPuesto: number; banca: number; listos: number;
+    sinVideo: number; caros: number; gastoMes: number; leadsAno: number;
+};
 
 // Las etiquetas, en el orden en que se leen. Un aviso puede traer varias.
 const ORDEN = ['destacar', 'falta video o tour', 'faltan fotos', 'calidad i24 baja',
@@ -49,6 +55,10 @@ export default function AvisosLive() {
     const [guardado, setGuardado] = useState('');
     const [efimero, setEfimero] = useState(false);
     const [sucio, setSucio] = useState(false);
+    // vista de cartera del KAM: se llena cuenta por cuenta, porque el cálculo es caro
+    const [cuentas, setCuentas] = useState<Cuenta[] | null>(null);
+    const [resumenes, setResumenes] = useState<Record<string, Resumen>>({});
+    const [avance, setAvance] = useState(0);
 
     useEffect(() => {
         fetch('/api/avisos')
@@ -128,6 +138,33 @@ export default function AvisosLive() {
         a.click();
     }
 
+    // Al elegir KAM se carga su cartera y se van pidiendo los resúmenes de una en una.
+    // De una en una a propósito: cada cuenta puede tardar segundos y en paralelo saturarían
+    // la instancia. Como el resultado se cachea 24 h, esto se paga una vez al día.
+    useEffect(() => {
+        if (!kam) { setCuentas(null); setResumenes({}); setAvance(0); return; }
+        let vivo = true;
+        setCuentas(null); setResumenes({}); setAvance(0);
+        fetch(`/api/avisos?kam=${encodeURIComponent(kam)}`)
+            .then((r) => r.json())
+            .then(async (j) => {
+                if (!vivo) return;
+                setCuentas(j.cuentas);
+                for (const c of j.cuentas as Cuenta[]) {
+                    if (!vivo) return;
+                    try {
+                        const r = await fetch(`/api/avisos?resumen=${encodeURIComponent(c.inmobiliaria)}`);
+                        const res = await r.json();
+                        if (!vivo) return;
+                        if (!res.error) setResumenes((p) => ({ ...p, [c.inmobiliaria]: res }));
+                    } catch { /* una cuenta que falla no detiene a las demás */ }
+                    setAvance((n) => n + 1);
+                }
+            })
+            .catch(() => { /* sin cartera */ });
+        return () => { vivo = false; };
+    }, [kam]);
+
     const kams = useMemo(
         () => [...new Set(lista.map((l) => l.kam))].filter(Boolean).sort(), [lista]);
     const visibles = useMemo(
@@ -191,6 +228,68 @@ export default function AvisosLive() {
                     </button>
                 )}
             </div>
+
+            {/* ── cartera del KAM: el seguimiento del flujo de Destacados ── */}
+            {kam && cuentas && !inmo && (
+                <Bloque titulo={`Cartera de ${kam}`}>
+                    <p className="text-xs leading-relaxed text-neutral-500">
+                        {cuentas.length} cuentas con inventario de venta. El cálculo de cada una es
+                        caro, así que la tabla se llena de una en una — y como se cachea un día,
+                        esto se paga una vez.{' '}
+                        {avance < cuentas.length && <b>Calculando {avance + 1} de {cuentas.length}…</b>}
+                    </p>
+                    <div className="mt-3 overflow-auto rounded-[2px] border border-neutral-200">
+                        <table className="w-full text-[12px]">
+                            <thead className="bg-white">
+                                <tr className="border-b border-neutral-200 text-left text-[9.5px] uppercase tracking-wider text-brand-gray">
+                                    {['Inmobiliaria', '¿Respondió?', 'Marcados', 'De venta',
+                                      'Lugares pagados', 'Mal puestos', '$ mal puesto', 'En banca',
+                                      'Listos', 'Sin video'].map((h) => (
+                                        <th key={h} className="whitespace-nowrap px-2 py-2">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {cuentas.map((c) => {
+                                    const r = resumenes[c.inmobiliaria];
+                                    return (
+                                        <tr key={c.inmobiliaria}
+                                            onClick={() => abrir(c.inmobiliaria)}
+                                            className="cursor-pointer border-b border-neutral-100 hover:bg-light">
+                                            <td className="whitespace-nowrap px-2 py-1.5 font-bold">{c.inmobiliaria}</td>
+                                            <td className="whitespace-nowrap px-2 py-1.5">
+                                                {c.respondio ? (
+                                                    <span className="rounded-full bg-sea/20 px-2 py-0.5 text-[10px] font-bold text-sea">
+                                                        sí · {new Date(c.respondioEl!).toLocaleDateString('es-MX')}
+                                                    </span>
+                                                ) : (
+                                                    <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[10px] font-bold text-neutral-500">
+                                                        pendiente
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums">{c.respondio ? c.marcados : '—'}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums">{c.venta}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums">{r ? r.pagados : '…'}</td>
+                                            <td className="px-2 py-1.5 text-right font-bold tabular-nums">{r ? r.malPuestos : '…'}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums">{r ? money(r.costoMalPuesto) : '…'}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums">{r ? r.banca : '…'}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums">{r ? r.listos : '…'}</td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums">{r ? r.sinVideo : '…'}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p className="mt-3 text-[11px] leading-relaxed text-brand-gray">
+                        <b>Mal puestos</b> = tienen lugar pagado y su etiqueta dice que no deberían
+                        (renta, terreno, comercial, poca oferta, sin demanda o precio caro).
+                        <b> En banca</b> = califican para destacarse y están en Simple. Mover unos por
+                        otros no cuesta un peso. Click en una cuenta para abrir su detalle.
+                    </p>
+                </Bloque>
+            )}
 
             {cargando === 'lista' && <Aviso texto="Cargando el índice de inmobiliarias…" />}
             {cargando === 'inmo' && (

@@ -13,7 +13,12 @@ const nextConfig: NextConfig = {
         return [
             { source: '/evaluar', destination: '/1-5-10/evaluar', permanent: false },
             { source: '/evaluar/:id', destination: '/1-5-10/evaluar/:id', permanent: false },
-            { source: '/campanas', destination: '/1-5-10/campanas', permanent: false }
+            { source: '/campanas', destination: '/1-5-10/campanas', permanent: false },
+            // La herramienta de avisos dejó de ser un HTML estático con los datos embebidos
+            // (se quedaba semanas atrás) y ahora se calcula en vivo. Se conserva la URL que el
+            // equipo tiene marcada.
+            { source: '/avisos.html', destination: '/portales/avisos', permanent: false },
+            { source: '/avisos', destination: '/portales/avisos', permanent: false }
         ];
     }
 };

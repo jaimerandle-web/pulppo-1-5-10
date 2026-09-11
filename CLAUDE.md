@@ -250,8 +250,19 @@ al resto, cuánto cuesta su mezcla de hoy y qué hacer con cada aviso.
 
 | Ruta | Qué es |
 |---|---|
-| `/portales/avisos` | **En vivo**, calcula contra Mongo en cada consulta. Es la buena. |
-| `/avisos.html` | Estático (foto del 19-ago). Se queda **sólo** por la vista de KAM, las metas por cuenta y las zonas para captar, que aún no se portan. |
+| `/portales/avisos` | La herramienta. En vivo, dos vistas: **cartera del KAM** e **inmobiliaria**. |
+| `/avisos.html`, `/avisos` | Redirigen ahí (sostienen los bookmarks del equipo). El HTML estático se borró. |
+| `/mb/{companyId}` → Destacados | La misma data, del lado de la inmobiliaria: marca cuáles quiere destacar. Piloto en Casane. |
+
+**La vista del KAM es el seguimiento del flujo de Destacados**: por cuenta muestra si ya
+respondió, cuántos marcó, cuántos lugares tiene mal puestos y cuántos esperan en banca. Se llena
+**de una en una** (`?resumen=`) porque cada cuenta cuesta segundos; como se cachea 24 h, se paga
+una vez al día.
+
+```
+GET /api/avisos?kam=NOMBRE       → cuentas del KAM + si respondieron (store de selección)
+GET /api/avisos?resumen=NOMBRE   → el resumen de una cuenta (reusa el cálculo cacheado)
+```
 
 **Motor:** `src/lib/portales/avisos.ts` + `src/app/api/avisos/route.ts`.
 

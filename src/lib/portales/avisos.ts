@@ -489,6 +489,38 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
     return d;
 }
 
+/**
+ * Resumen de una cuenta para la vista del KAM. Reusa el cálculo completo, que ya viene
+ * cacheado por 24 h — la primera vez que alguien abre la cuenta paga el costo y el resto del
+ * día es instantáneo, para el KAM y para la inmobiliaria por igual.
+ */
+export type ResumenInmo = {
+    inmobiliaria: string; kam: string;
+    ventaViva: number; avisos: number; pagados: number;
+    malPuestos: number; costoMalPuesto: number; banca: number;
+    listos: number; sinVideo: number; caros: number;
+    gastoMes: number; leadsAno: number;
+};
+
+export async function resumenDe(inmo: string): Promise<ResumenInmo> {
+    const d = await datosDe(inmo);
+    // "mal puesto" = tiene lugar pagado y su etiqueta dice que no debería
+    const NO_VA = new Set(['renta', 'terreno', 'comercial', 'poca oferta',
+                           'no hay demanda', 'precio caro']);
+    const pagados = d.avisos.filter((a) => PAGADOS.has(a.tier));
+    const mal = pagados.filter((a) => a.tags.some((t) => NO_VA.has(t)));
+    return {
+        inmobiliaria: d.inmobiliaria, kam: d.kam,
+        ventaViva: d.ventaViva, avisos: d.avisos.length, pagados: pagados.length,
+        malPuestos: mal.length, costoMalPuesto: mal.reduce((s2, a) => s2 + a.costo, 0),
+        banca: d.avisos.filter((a) => !PAGADOS.has(a.tier) && a.tags.includes('destacar')).length,
+        listos: d.estados['destacar'] ?? 0,
+        sinVideo: d.estados['falta video o tour'] ?? 0,
+        caros: d.estados['precio caro'] ?? 0,
+        gastoMes: d.gastoMes, leadsAno: d.leadsAno,
+    };
+}
+
 // ───────────────────────────────────────── el índice de inmobiliarias
 type Fila = { inmobiliaria: string; kam: string; venta: number; destacados: number };
 let cacheLista: { l: Fila[]; ts: number } | null = null;
