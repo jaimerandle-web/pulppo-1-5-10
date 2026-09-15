@@ -201,10 +201,11 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
                           flexWrap: 'wrap', alignItems: 'center', background: '#fff',
                           border: '1px solid #e8e8e8', borderRadius: R, padding: 12, marginTop: 14 }}>
                 <span style={{ fontSize: 12.5 }}>
+                    {/* Sin costo a la vista: a la inmobiliaria se le pregunta QUÉ quiere
+                        destacar, no cuánto va a pagar. Poner el precio junto al contador
+                        ancla la respuesta en el gasto y no en el inventario — y además el
+                        número era una proyección (todos a Súper Destacado), no su factura. */}
                     <b>{marcados.size}</b> marcados
-                    {marcados.size > 0 && (
-                        <span style={{ color: GRY }}> · {money(marcados.size * 508)}/mes extra si todos suben a Súper Destacado</span>
-                    )}
                 </span>
                 <input value={nota}
                     onChange={(e) => { setNota(e.target.value); guardarLocal(marcados, e.target.value); setSucio(true); }}
