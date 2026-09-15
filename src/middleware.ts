@@ -30,7 +30,12 @@ export async function middleware(req: NextRequest) {
     if (validId && company) {
         const p = req.nextUrl.pathname;
         const ownPanel = p === `/mb/${company}` || p.startsWith(`/mb/${company}/`);
-        const mbApi = p.startsWith('/api/mb-analisis') || p.startsWith('/api/mb-metrics');
+        // `/api/avisos` es la pestaña Destacados de su propio panel: sin esto la inmobiliaria
+        // veía "No se pudo calcular. No autorizado" justo en la herramienta hecha para ella.
+        // La ruta ya no depende de este filtro para estar protegida: `lib/portales/acceso.ts`
+        // recalcula contra Mongo que sólo pueda pedir SU inmobiliaria.
+        const mbApi = p.startsWith('/api/mb-analisis') || p.startsWith('/api/mb-metrics')
+            || p.startsWith('/api/avisos');
         // El titular de la inmobiliaria también es asesor: publica contenido igual que su
         // equipo. Sin esto tenía perfil dentro del bundle de Studio y ninguna ruta que lo
         // llevara a él. /inicio es el menú donde elige entre las dos herramientas que ya

@@ -6,11 +6,17 @@
 // Si no hay dónde persistir (Vercel sin Blob) el POST responde 503 y lo dice, en vez de
 // aceptar la respuesta y perderla en el siguiente request.
 import { leer, guardar, esEfimero, type Seleccion } from '@/lib/portales/seleccion';
+import { alcanceDeAvisos, puedeVer } from '@/lib/portales/acceso';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
     const inmo = new URL(req.url).searchParams.get('inmo');
+    const alcance = await alcanceDeAvisos();
+    if (!alcance) return Response.json({ error: 'Sin sesión' }, { status: 401 });
+    // sin `inmo` esto devuelve la selección de TODAS las inmobiliarias
+    if (!inmo && !alcance.interno) return Response.json({ error: 'No autorizado' }, { status: 403 });
+    if (inmo && !puedeVer(alcance, inmo)) return Response.json({ error: 'No autorizado' }, { status: 403 });
     const todo = await leer();
     return Response.json({
         seleccion: inmo ? (todo[inmo] ?? null) : todo,
@@ -19,6 +25,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+    const alcance = await alcanceDeAvisos();
+    if (!alcance) return Response.json({ error: 'Sin sesión' }, { status: 401 });
     if (esEfimero()) {
         return Response.json({
             error: 'No hay dónde guardar: falta configurar Vercel Blob en el proyecto '
@@ -30,6 +38,8 @@ export async function POST(req: Request) {
         if (!body.inmo || !Array.isArray(body.ids)) {
             return Response.json({ error: 'Falta `inmo` o `ids`' }, { status: 400 });
         }
+        // el POST ESCRIBE: sin esto una inmobiliaria sobrescribía la respuesta de otra
+        if (!puedeVer(alcance, body.inmo)) return Response.json({ error: 'No autorizado' }, { status: 403 });
         // quién respondió sale de la cookie de identidad, no del cliente
         const cookie = req.headers.get('cookie') ?? '';
         const por = decodeURIComponent(
