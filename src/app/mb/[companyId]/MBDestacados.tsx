@@ -290,7 +290,11 @@ export default function MBDestacados({ nombre }: { nombre: string }) {
                                 <td style={numPct}>{pct(a.comisionPct)}</td>
                                 <td style={num}>{a.demanda}</td>
                                 <td style={num}>{a.competencia}</td>
-                                <td style={{ ...num, fontWeight: 700 }}>{a.puntos}</td>
+                                {/* sin puntaje = no compite por un lugar pagado. Un número ahí
+                                    se leería como recomendación y el aviso está descartado. */}
+                                <td style={{ ...num, fontWeight: 700 }}>
+                                    {a.puntos ?? <span style={{ opacity: 0.35, fontWeight: 400 }}>—</span>}
+                                </td>
                                 <td style={td}>
                                     <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                                         {a.tags.map((t) => (

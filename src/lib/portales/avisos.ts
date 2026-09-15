@@ -75,7 +75,12 @@ export type Aviso = {
     fotos: number; videos: number; calidad: number | null;
     demanda: number; competencia: number; tension: number;
     precioVsZona: number | null; leadsMes: number; base: number;
-    puntos: number; estado: string; falta: string;
+    /** null cuando el aviso NO compite: el spec es explícito en que el puntaje sólo ordena
+     *  a los que pasaron los filtros. Un puntaje en un aviso descartado se lee como una
+     *  recomendación que se contradice sola. */
+    puntos: number | null; estado: string; falta: string;
+    /** pasa los filtros duros del spec §3 → compite por un lugar pagado */
+    compite: boolean;
     /** Todas las etiquetas que aplican. Un aviso puede tener varias a la vez. */
     tags: string[];
     /** false para renta y terreno: nunca compiten por un lugar destacado. */
@@ -395,7 +400,7 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
             fotos, videos, calidad, demanda, competencia,
             tension: demanda / (competencia + 1),
             precioVsZona, leadsMes, base,
-            puntos: 0, estado: '', falta: '',
+            puntos: null, estado: '', falta: '', compite: false,
             leadsExtra: 0, comisionEsperada: 0, roi: 0,
             exclusiva: !!p.contract?.exclusive?.start,
             p1510: !!p.contract?.exclusive?.pulppo,
@@ -416,10 +421,13 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
     const ptsComision = (c: number | null) =>
         c == null ? 0 : c >= 5 ? 15 : c >= 4 ? 10 : c >= 3 ? 2 : 0;
 
-    for (const f of filas) {
-        let i = 0; while (i < ref.length && ref[i] < f.valor) i++;
-        f.puntos = Math.round((ref.length ? i / ref.length : 0) * 70 + ptsComision(f.comisionPct) + 15);
+    // ── Los FILTROS DUROS del spec §3. No describen un defecto del aviso: describen el
+    // mercado o el tipo. No hay nada que arreglar y no compiten por un lugar pagado.
+    // Van separados de los ARREGLABLES porque mezclarlos era el origen de la confusión:
+    // "poca oferta" caía en el mismo saco que "faltan fotos", y bloqueaba igual.
+    const BLOQUEANTES = new Set(['renta', 'terreno', 'comercial', 'no hay demanda', 'poca oferta']);
 
+    for (const f of filas) {
         // ── Las ETIQUETAS. Un aviso puede tener varias a la vez: puede estar caro Y sin
         // video. Por eso son una lista y no un solo cubo — así el asesor ve todo lo que
         // tiene que resolver, no sólo lo primero que apareció.
@@ -437,6 +445,19 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
         // "destacar" sólo si no le falta nada Y puede competir por un lugar
         if (!tags.length && f.destacable) tags.push('destacar');
         f.tags = tags;
+
+        // ── Las DOS ETAPAS del spec §1: primero se decide quién compite, y sólo a ésos se
+        // les da puntaje. Antes se puntuaba a todos y la etiqueta se ponía después, así que
+        // un aviso descartado salía con 98 puntos y sin recomendación — el motor parecía
+        // contradecirse. Medido en Casane: el #1 de 116 era un aviso que no competía.
+        f.compite = f.destacable && !tags.some((t) => BLOQUEANTES.has(t));
+        if (f.compite) {
+            let i = 0; while (i < ref.length && ref[i] < f.valor) i++;
+            f.puntos = Math.round((ref.length ? i / ref.length : 0) * 70
+                                  + ptsComision(f.comisionPct) + 15);
+        } else {
+            f.puntos = null;
+        }
         // el estado de una palabra se conserva para los filtros y el resumen
         f.estado = tags[0] ?? 'destacar';
 
@@ -456,7 +477,9 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
         f.comisionEsperada = Math.round(f.leadsExtra * LEAD_A_CIERRE * f.comision);
         f.roi = +(f.comisionEsperada / (COSTO_SUBIR * MESES_PROY)).toFixed(2);
     }
-    filas.sort((a, b) => b.puntos - a.puntos);
+    // los que compiten van primero y ordenados por puntaje; el resto queda abajo, que es
+    // donde corresponde a algo que no va a ocupar un lugar pagado
+    filas.sort((a, b) => Number(b.compite) - Number(a.compite) || (b.puntos ?? -1) - (a.puntos ?? -1));
 
     // cuenta por ETIQUETA: un aviso con dos problemas suma en las dos
     const estados: Record<string, number> = {};
