@@ -35,7 +35,7 @@ export async function middleware(req: NextRequest) {
         // La ruta ya no depende de este filtro para estar protegida: `lib/portales/acceso.ts`
         // recalcula contra Mongo que sólo pueda pedir SU inmobiliaria.
         const mbApi = p.startsWith('/api/mb-analisis') || p.startsWith('/api/mb-metrics')
-            || p.startsWith('/api/avisos');
+            || p.startsWith('/api/avisos') || p.startsWith('/api/mb-desempeno');
         // El titular de la inmobiliaria también es asesor: publica contenido igual que su
         // equipo. Sin esto tenía perfil dentro del bundle de Studio y ninguna ruta que lo
         // llevara a él. /inicio es el menú donde elige entre las dos herramientas que ya

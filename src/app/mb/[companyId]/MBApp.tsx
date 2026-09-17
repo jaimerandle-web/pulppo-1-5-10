@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { MBData, MBProp, MBFuera, RespKey } from '@/lib/mb';
 import MBAnalisis from './MBAnalisis';
 import MBDestacados from './MBDestacados';
+import MBDesempeno from './MBDesempeno';
 import PrintRoot from './PrintRoot';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
@@ -35,11 +36,15 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 // minutos → texto corto legible
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
-type Section = 'overview' | 'props' | 'destacados' | 'analisis' | 'comoleer';
+type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'analisis' | 'comoleer';
 
 // La pestaña Destacados es un PILOTO con una sola cuenta: sólo aparece en Casane. Cuando se
 // abra al resto, basta agregar su companyId acá (o quitar el gate).
 const CON_DESTACADOS = new Set(['649083c1c7528092d68c84c4']);
+// Desempeño es otro PILOTO de una sola cuenta: sólo Andina Real Estate. Ojo con el id —
+// existe otra compañía llamada sólo "andina" (`6a545c24ecc8f755fefe2a7d`, creada el
+// 2026-07-13) que es un duplicado VACÍO. Ésta es la buena.
+const CON_DESEMPENO = new Set(['62b4b39abd1764a48e09f01f']);
 type Seg = '' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre'
     | 'sinVideo' | 'pocasFotos' | 'sinAmenidades' | 'sinAcm' | 'sinTour' | 'conErrores';
 const SEG_TEST: Record<string, (p: MBProp) => boolean> = {
@@ -495,7 +500,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{d.name}</div>
                     <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{f(d.nProps)} propiedades publicadas</div>
                 </div>
-                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{CON_DESEMPENO.has(d.companyId) && nav('desempeno', 'Desempeño')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 <div style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
 
@@ -788,6 +793,20 @@ export default function MBApp({ d }: { d: MBData }) {
                             destacar y guarda: la respuesta queda registrada con tu nombre y la fecha.
                         </div>
                         <MBDestacados nombre={d.name} />
+                    </div>
+                )}
+
+                {section === 'desempeno' && CON_DESEMPENO.has(d.companyId) && (
+                    <div>
+                        <div style={eyebrow}>Desempeño</div><div style={accent} />
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
+                            ¿Qué está pasando con tus leads?
+                        </div>
+                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 660 }}>
+                            Leads por asesor y mes, y qué tanto avanzan: respuesta, visita, oferta y
+                            cierre. Del año en curso, leído en vivo.
+                        </div>
+                        <MBDesempeno companyId={d.companyId} />
                     </div>
                 )}
 
