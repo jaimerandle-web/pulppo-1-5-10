@@ -438,7 +438,17 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
     // mercado o el tipo. No hay nada que arreglar y no compiten por un lugar pagado.
     // Van separados de los ARREGLABLES porque mezclarlos era el origen de la confusión:
     // "poca oferta" caía en el mismo saco que "faltan fotos", y bloqueaba igual.
-    const BLOQUEANTES = new Set(['renta', 'terreno', 'comercial', 'no hay demanda', 'poca oferta']);
+    // `poca oferta` ya no existe: se desdobló en tres, y las tres NO se tratan igual.
+    // Siguiendo el propio diagnóstico de esa partición:
+    //   · sin datos del mercado   → el MLS no cubre la zona. No se puede evaluar, así que
+    //                               tampoco se puede recomendar: bloquea.
+    //   · nadie más vende esto    → unicidad real. Es el filtro §3 del spec: bloquea.
+    //   · precio fuera de su zona → hay comparables, el precio se salió de la banda. Eso es
+    //                               ARREGLABLE (mediana 2.2× el mercado local), así que NO
+    //                               bloquea: el aviso compite, se puntúa, y su pendiente es
+    //                               la conversación de precio.
+    const BLOQUEANTES = new Set(['renta', 'terreno', 'comercial', 'no hay demanda',
+                                 'sin datos del mercado', 'nadie más vende esto aquí']);
 
     for (const f of filas) {
         // ── Las ETIQUETAS. Un aviso puede tener varias a la vez: puede estar caro Y sin
@@ -507,7 +517,8 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
     // cuenta por ETIQUETA: un aviso con dos problemas suma en las dos
     const estados: Record<string, number> = {};
     for (const f of filas) for (const t of f.tags) estados[t] = (estados[t] ?? 0) + 1;
-    const ARREGLABLES = new Set(['falta video o tour', 'faltan fotos', 'calidad i24 baja',
+    const ARREGLABLES = new Set(['precio fuera de su zona',
+                                 'falta video o tour', 'faltan fotos', 'calidad i24 baja',
                                  'precio caro', 'comisión baja']);
 
     const d: DatosInmo = {

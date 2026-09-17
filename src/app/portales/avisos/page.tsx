@@ -285,7 +285,9 @@ export default function AvisosLive() {
                     </div>
                     <p className="mt-3 text-[11px] leading-relaxed text-brand-gray">
                         <b>Mal puestos</b> = tienen lugar pagado y su etiqueta dice que no deberían
-                        (renta, terreno, comercial, poca oferta, sin demanda o precio caro).
+                        (renta, terreno, comercial, sin demanda, precio caro, o nadie más vende
+                        eso en la zona). Los que no se pueden evaluar —el MLS no cubre su zona—
+                        NO cuentan aquí: recomendar sobre lo que no se puede medir sería inventar.
                         <b> En banca</b> = califican para destacarse y están en Simple. Mover unos por
                         otros no cuesta un peso. Click en una cuenta para abrir su detalle.
                     </p>
