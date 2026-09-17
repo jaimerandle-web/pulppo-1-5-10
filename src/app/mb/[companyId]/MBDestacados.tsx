@@ -31,7 +31,8 @@ const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = 
 const R = 2;
 
 const ORDEN = ['destacar', 'falta video o tour', 'faltan fotos', 'calidad i24 baja',
-               'precio caro', 'comisión baja', 'no hay demanda', 'poca oferta',
+               'precio caro', 'comisión baja', 'no hay demanda', 'precio fuera de su zona',
+               'nadie más vende esto aquí', 'sin datos del mercado',
                'terreno', 'renta', 'comercial'];
 /** Las que NO impiden destacar: son trabajo, no descarte. */
 const ARREGLABLES = new Set(['falta video o tour', 'faltan fotos', 'calidad i24 baja',

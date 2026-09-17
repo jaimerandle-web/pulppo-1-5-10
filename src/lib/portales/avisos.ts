@@ -34,6 +34,8 @@ const RADIO_KM = 1.5;
 const UMBRAL_CARO = 1.30;               // veces la mediana de su colonia y tipo
 const UMBRAL_CALIDAD = 95;              // escala real de i24, 0–100
 const MIN_COMPARABLES = 5;              // avisos para poder calcular la mediana de colonia
+// Debajo de esto, el MLS no cubre la zona y no se puede concluir nada del aviso.
+const MIN_MERCADO = 5;
 
 // ⚠️ `OFFLINE` NO significa que el aviso esté apagado. Es un bug conocido de i24: cuando su
 // API no devuelve la información del aviso (problema de API key de su lado) el tipo llega como
@@ -74,6 +76,10 @@ export type Aviso = {
     tier: string; tierNombre: string; costo: number;
     fotos: number; videos: number; calidad: number | null;
     demanda: number; competencia: number; tension: number;
+    /** avisos de CUALQUIER tipo a 1.5 km: si son pocos, el MLS no cubre la zona */
+    mercadoCerca: number;
+    /** avisos del MISMO tipo y operación a 1.5 km, sin mirar precio */
+    mismoTipoCerca: number;
     precioVsZona: number | null; leadsMes: number; base: number;
     /** null cuando el aviso NO compite: el spec es explícito en que el puntaje sólo ordena
      *  a los que pasaron los filtros. Un puntaje en un aviso descartado se lee como una
@@ -352,11 +358,18 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
         const dLon = RADIO_KM / (111 * Math.max(Math.cos(lat * Math.PI / 180), 0.2));
 
         // ── competencia: mismo tipo y operación, ±25% de precio, a 1.5 km
-        let competencia = 0;
+        // Se cuentan TRES cosas, no una. `competencia == 0` por sí sola no distingue entre
+        // "no hay mercado que ver" y "mi precio está fuera del rango de la zona", y son
+        // conclusiones opuestas. Auditado el 17-sep-2026 sobre los 348 avisos con lugar pagado
+        // y competencia cero: 47% eran zonas que el MLS no cubre y 42% avisos a 2.2× el
+        // mercado local (extremos de 13×). Ninguno era "ya se ve sin pagar".
+        let competencia = 0, mercadoCerca = 0, mismoTipoCerca = 0;
         if (conGeo) porVecinos(M.gMls, op, lat, lon, (i) => {
-            if (M.mlsTipo[i] !== tipo) return;
-            if (M.mlsPre[i] < precio * 0.75 || M.mlsPre[i] > precio * 1.25) return;
             if (Math.abs(M.mlsLat[i] - lat) > dLat || Math.abs(M.mlsLon[i] - lon) > dLon) return;
+            mercadoCerca++;
+            if (M.mlsTipo[i] !== tipo) return;
+            mismoTipoCerca++;
+            if (M.mlsPre[i] < precio * 0.75 || M.mlsPre[i] > precio * 1.25) return;
             competencia++;
         });
         // ── demanda: personas distintas cuya búsqueda calza (geo o nombre de colonia)
@@ -397,7 +410,7 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
             tipo, operacion: op, precio, comisionPct, comision,
             colonia, municipio: p.address?.city?.name ?? null,
             tier, tierNombre: NOMBRE_TIER[tier], costo,
-            fotos, videos, calidad, demanda, competencia,
+            fotos, videos, calidad, demanda, competencia, mercadoCerca, mismoTipoCerca,
             tension: demanda / (competencia + 1),
             precioVsZona, leadsMes, base,
             puntos: null, estado: '', falta: '', compite: false,
@@ -435,7 +448,12 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
         if (f.operacion === 'rent') tags.push('renta');
         if (f.tipo.startsWith('Terreno')) tags.push('terreno');
         if (!f.destacable && !tags.length) tags.push('comercial');
-        if (f.competencia === 0) tags.push('poca oferta');
+        // `competencia == 0` se desdobla en tres cosas distintas (ver la nota del cálculo)
+        if (f.competencia === 0) {
+            if (f.mercadoCerca < MIN_MERCADO) tags.push('sin datos del mercado');
+            else if (f.mismoTipoCerca > 0) tags.push('precio fuera de su zona');
+            else tags.push('nadie más vende esto aquí');
+        }
         if (f.demanda === 0) tags.push('no hay demanda');
         if (f.precioVsZona !== null && f.precioVsZona > UMBRAL_CARO) tags.push('precio caro');
         if (f.videos < 1) tags.push('falta video o tour');
@@ -469,7 +487,12 @@ export async function datosDe(inmo: string, forzar = false): Promise<DatosInmo> 
         if (f.calidad !== null && f.calidad < UMBRAL_CALIDAD) pend.push(`calidad i24 ${f.calidad}/100`);
         if ((f.comisionPct ?? 0) < 4) pend.push(`comisión ${f.comisionPct ?? 0}%`);
         if (tags.includes('no hay demanda')) pend.push('nadie busca esto aquí');
-        if (tags.includes('poca oferta')) pend.push('sin competencia: ya se ve');
+        if (tags.includes('sin datos del mercado'))
+            pend.push('el MLS no cubre esta zona: no se puede evaluar');
+        if (tags.includes('precio fuera de su zona'))
+            pend.push(`hay ${f.mismoTipoCerca} comparables cerca, ninguno a su precio`);
+        if (tags.includes('nadie más vende esto aquí'))
+            pend.push('no hay avisos de su tipo en la zona');
         f.falta = pend.join(' · ') || 'nada';
 
         // valor de destacarlo: leads extra a 6 meses y comisión esperada
@@ -528,8 +551,11 @@ export type ResumenInmo = {
 export async function resumenDe(inmo: string): Promise<ResumenInmo> {
     const d = await datosDe(inmo);
     // "mal puesto" = tiene lugar pagado y su etiqueta dice que no debería
-    const NO_VA = new Set(['renta', 'terreno', 'comercial', 'poca oferta',
-                           'no hay demanda', 'precio caro']);
+    // Lo que NO debería tener lugar pagado. Ojo: `sin datos del mercado` NO entra —
+    // significa que el MLS no cubre la zona, no que el aviso esté mal. Recomendar quitarle
+    // el boost a algo que no podemos evaluar sería inventar.
+    const NO_VA = new Set(['renta', 'terreno', 'comercial', 'no hay demanda',
+                           'precio caro', 'precio fuera de su zona']);
     const pagados = d.avisos.filter((a) => PAGADOS.has(a.tier));
     const mal = pagados.filter((a) => a.tags.some((t) => NO_VA.has(t)));
     return {

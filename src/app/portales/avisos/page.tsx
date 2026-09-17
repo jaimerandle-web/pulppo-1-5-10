@@ -25,7 +25,8 @@ type Resumen = {
 
 // Las etiquetas, en el orden en que se leen. Un aviso puede traer varias.
 const ORDEN = ['destacar', 'falta video o tour', 'faltan fotos', 'calidad i24 baja',
-               'precio caro', 'comisión baja', 'no hay demanda', 'poca oferta',
+               'precio caro', 'comisión baja', 'no hay demanda', 'precio fuera de su zona',
+               'nadie más vende esto aquí', 'sin datos del mercado',
                'terreno', 'renta', 'comercial'];
 /** Las que NO impiden destacar: son trabajo, no descarte. */
 const ARREGLABLES = new Set(['falta video o tour', 'faltan fotos', 'calidad i24 baja',
