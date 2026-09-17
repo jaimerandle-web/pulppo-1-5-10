@@ -9,9 +9,9 @@
 //
 //  · Sólo el Súper Destacado mueve leads: 1.26× medido intra-aviso. El Destacado da 0.97×
 //    con IC [0.90, 1.04] — o sea nada.
-//  · El COSTO sale del tipo CRUDO de i24, no del tier del scoring: `OFFLINE` (no publicado)
-//    y `GRATIS_COMBO` cuestan $0 y son el 27% de los avisos publicados de la red. Cobrarlos
-//    a $15 infla el gasto.
+//  · El COSTO sale del tipo CRUDO de i24, no del tier del scoring. Ojo con `OFFLINE`: NO es
+//    un aviso apagado sino un bug de la API key de i24, así que se cobra como Simple ($15).
+//    `GRATIS`/`GRATIS_COMBO` sí son $0.
 //  · `demanda` se deduplica por persona (`contact._id`), y el fallback por nombre de colonia
 //    NO es opcional: sólo 82% de las búsquedas traen coordenadas y las que no vienen como
 //    [null, null], no ausentes.

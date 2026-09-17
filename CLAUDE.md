@@ -295,8 +295,11 @@ rompía el `maxDuration` de 60 s.
 1. 🔴 **No filtrar el MLS por `publishedAt >= 90 días`.** SPEC_SCORING lo pide y está mal: ese
    filtro deja el mercado en **911 de 26,590** avisos (mata el 96.6%). En `mls`, `publishedAt`
    es la primera publicación, no actividad reciente. `status.last != cancelled` ya basta.
-2. **El costo sale del tipo CRUDO** `portals.inmuebles24.type`, no del tier del scoring:
-   `OFFLINE` y `GRATIS_COMBO` cuestan **$0** y son el 27% de los avisos publicados.
+2. 🔴 **`OFFLINE` no es un aviso apagado.** Es un bug conocido de i24: cuando su API key falla,
+   la propiedad queda marcada `OFFLINE` aunque **sí** esté publicada, y se cobra como **Simple
+   ($15)**. Contarla en $0 subestimaba el gasto de la red en ~**$33,345/mes**. `GRATIS` y
+   `GRATIS_COMBO` sí son $0. El costo siempre sale del tipo CRUDO `portals.inmuebles24.type`,
+   no del tier del scoring.
 3. **`demanda` se deduplica por persona** (`contact._id`) y el fallback por nombre de colonia
    no es opcional: sólo 82% de las búsquedas traen coordenadas, y las que no vienen como
    `[null, null]`, no ausentes.
