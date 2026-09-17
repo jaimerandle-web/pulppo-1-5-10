@@ -49,7 +49,7 @@ export function GlosarioView({ d, mb = false }: { d: AnalisisData; mb?: boolean 
                 ))}
             </div>
             <p className="mb-1.5 text-[11px] font-semibold" style={{ color: SOFT }}>Glosario de términos</p>
-            <div className="grid grid-cols-2 gap-x-6">
+            <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
                 {terms.filter(([term]) => !mb || !term.includes('Destacado')).map(([term, def]) => (
                     <div key={term} className="border-b border-neutral-100 py-1.5">
                         <p className="text-[11px] font-bold">{term}</p>
@@ -84,7 +84,8 @@ export function InventarioView({ d, referencias, cortes, mb = false }: { d: Anal
         <div className="mt-2 pl-6">
             {has('Por zona') && <>
                 <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Tus zonas principales: cuánto inventario tienes, la competencia de la zona y qué tan competitivo es tu <b>precio $/m²</b> contra lo que se pide y lo que se vende. <span style={{ color: GRAY }}>Demanda = búsquedas de {d.demandaLabel} · leads de {d.leadsLabel}.</span></p>
-                <table className="w-full border-collapse text-[11px]">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] border-collapse text-[11px]">
                     <thead>
                         <tr className="border-b" style={{ borderColor: SOFT }}>
                             {cols.map((h, i) => (
@@ -108,6 +109,7 @@ export function InventarioView({ d, referencias, cortes, mb = false }: { d: Anal
                         ))}
                     </tbody>
                 </table>
+                </div>
                 <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
                     Oferta zona = propiedades publicadas en la colonia ({d.ofertaLabel}). <b>Siempre mediana, nunca promedio</b> (un solo anuncio con precio absurdo movería el promedio): a cada propiedad tuya se le calcula su $/m² contra la <b>mediana de sus comparables</b> (misma colonia, tipo, tamaño ±30% y recámaras) y de esas diferencias se muestra la <b>mediana de la zona</b>. <b>vs. oferta</b> = contra lo que se <b>pide</b> hoy (MLS completo + red Pulppo, con filtro de extremos); <b>vs. cierres</b> = contra lo que se <b>vendió</b> ({d.cierresLabel}, solo cierres Pulppo). El número entre paréntesis es cuántas de tus propiedades encontraron cierres comparables. <b style={{ color: RED }}>+</b> más caro · <b style={{ color: SEA }}>−</b> más barato. — = sin comparables suficientes.
                 </p>
@@ -170,7 +172,8 @@ export function PrecioView({ d }: { d: AnalisisData }) {
             <p className="mb-2 text-[11px]" style={{ color: SOFT }}>
                 Solo inventario en <b>venta</b> ({d.nSale} props), por precio vs. mercado (ACM) y calidad de ficha. En cada celda: # de propiedades y su <b>L/L</b> (leads por propiedad).
             </p>
-            <table className="w-full border-collapse text-[11px]">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-[11px]">
                 <thead>
                     <tr>
                         <th></th>
@@ -195,6 +198,7 @@ export function PrecioView({ d }: { d: AnalisisData }) {
                     ))}
                 </tbody>
             </table>
+            </div>
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>
                 Taxonomía del ACM: óptimo (≤+5%) · no competitivo (+5% a +20%) · fuera de mercado (&gt;+20%). Sin referencia = sin ACM confiable (sin estimación o ACM atípico); su L/L no se muestra porque no es comparable.
             </p>
@@ -415,7 +419,8 @@ export function DestacadosView({ d }: { d: AnalisisData }) {
                 );
             })}
             <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Qué tanto rinde destacar — venta vs. renta <span style={{ color: GRAY }}>(L/L = leads por aviso al mes)</span></p>
-            <table className="w-full border-collapse text-[11px]">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-[11px]">
                 <thead>
                     <tr className="border-b" style={{ borderColor: SOFT }}>
                         {['Nivel de aviso', 'L/L Venta', 'L/L Renta'].map((h, i) => (
@@ -433,6 +438,7 @@ export function DestacadosView({ d }: { d: AnalisisData }) {
                     ))}
                 </tbody>
             </table>
+            </div>
             <p className="mt-1 text-[9px]" style={{ color: GRAY }}>Nivel reconstruido del historial de cada aviso; leads (únicos) atribuidos al nivel que tenía el aviso cuando llegó el contacto. L/L = leads ÷ aviso-meses en ese nivel (— si &lt;3 aviso-meses).</p>
             {de.reading && <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>{de.reading}</p>}
 
@@ -452,7 +458,8 @@ export function YoyView({ d }: { d: AnalisisData }) {
     return (
         <div className="mt-2 pl-6">
             <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}><b>{d.compLabels.b}</b> vs. <b>{d.compLabels.a}</b>. <span style={{ color: GRAY }}>Inventario = foto al cierre del período; leads/cierres/comisión = lo que pasó dentro del período. La calidad de ficha es la de hoy, aplicada a las propiedades que estaban activas en cada período.</span></p>
-            <table className="w-full border-collapse text-[11px]">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-[11px]">
                 <thead>
                     <tr className="border-b" style={{ borderColor: SOFT }}>
                         {['Métrica', d.compLabels.a, d.compLabels.b, 'Variación'].map((h, i) => (
@@ -479,6 +486,7 @@ export function YoyView({ d }: { d: AnalisisData }) {
                     })}
                 </tbody>
             </table>
+            </div>
             <p className="mb-1.5 mt-4 text-[11px]" style={{ color: SOFT }}>Mix de cierres <span style={{ color: GRAY }}>(<b style={{ color: SEA_D }}>venta</b> · <b style={{ color: SEA }}>renta</b>)</span></p>
             {d.yoyMix.map((m) => {
                 const tot = m.sale + m.rent || 1;
@@ -722,7 +730,8 @@ export function Top10View({ d }: { d: AnalisisData }) {
     return (
         <div className="mt-2 pl-6">
             <p className="mb-1.5 text-[11px]" style={{ color: SOFT }}>Alta demanda en su zona pero pocos o cero leads, con un freno claro y fácil de arreglar. Prioriza estas.</p>
-            <table className="w-full border-collapse text-[11px]">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-[11px]">
                 <thead>
                     <tr className="border-b" style={{ borderColor: SOFT }}>
                         {['#', 'Código', 'Zona', 'Precio', 'vs. mercado', 'Leads', 'Demanda', 'Qué cambiar'].map((h, i) => (
@@ -747,6 +756,7 @@ export function Top10View({ d }: { d: AnalisisData }) {
                     ))}
                 </tbody>
             </table>
+            </div>
             <p className="mt-2 text-[9px]" style={{ color: GRAY }}>Demanda = búsquedas de la colonia en la ventana elegida. Vs. mercado = precio ÷ ACM.</p>
             <p className="mt-3 border-l-2 px-3 py-2 text-[11px] leading-relaxed" style={{ borderColor: YEL, background: '#F3F3F3', color: SOFT }}>
                 Estas <b>{d.top10.length}</b> propiedades tienen <b>{f0(demTot)}</b> búsquedas de compradores detrás

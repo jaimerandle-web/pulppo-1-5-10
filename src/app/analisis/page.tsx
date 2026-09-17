@@ -173,7 +173,7 @@ export default function AnalisisGeneral() {
     useEffect(() => { setData(null); }, [inmo, asesor, operacion, ventDemanda, ventCierres, referencias, desempeno, desempenoMes, comparar, mlsGeneral]);
 
     return (
-        <div className="mx-auto max-w-[1400px] px-5 py-6">
+        <div className="mx-auto max-w-[1400px] px-3 py-4 sm:px-5 sm:py-6">
             {/* print: aislar solo la hoja de preview */}
             {/* Impresión: carta VERTICAL, solo la hoja del reporte, sin cortar secciones. Las tablas
                 anchas se reducen con zoom en vez de desbordarse fuera de la página. */}
@@ -210,9 +210,9 @@ export default function AnalisisGeneral() {
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
                 {/* ---------------- CONFIGURADOR ---------------- */}
-                <div className="flex flex-col gap-4">
+                <div className="flex min-w-0 flex-col gap-4">
                     <Card title="1 · Inmobiliaria" hint={`${allInmos.length || '—'} inmobiliarias con inventario publicado`}>
                         <div className="flex flex-col gap-3">
                             <Field label="KAM (filtro opcional)">
@@ -318,7 +318,7 @@ export default function AnalisisGeneral() {
                             <Field label="Enfoque">
                                 <Chips options={['Precio', 'Ficha', 'Diversificar canales', 'Visibilidad']} value={recoEnfoque} onChange={setRecoEnfoque} />
                             </Field>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <Field label="Tono">
                                     <Select value={recoTono} onChange={setRecoTono} options={['Directivo', 'Sugerente']} />
                                 </Field>
@@ -357,8 +357,8 @@ export default function AnalisisGeneral() {
                         </div>
                     </div>
 
-                    <div id="preview-sheet" className="mx-auto max-w-[8.5in] rounded-[2px] border border-neutral-200 bg-white p-10">
-                        <div className="banner -mx-10 -mt-10 mb-5 px-10 py-7" style={{ background: SOFT, color: '#fff' }}>
+                    <div id="preview-sheet" className="mx-auto min-w-0 max-w-[8.5in] rounded-[2px] border border-neutral-200 bg-white p-4 sm:p-10">
+                        <div className="banner -mx-4 -mt-4 mb-5 px-4 py-5 sm:-mx-10 sm:-mt-10 sm:px-10 sm:py-7" style={{ background: SOFT, color: '#fff' }}>
                             <div className="mb-3 h-0.5 w-10" style={{ background: YEL }} />
                             <p className="text-[10px] font-bold uppercase tracking-[1.6px]" style={{ color: '#c9c9c7' }}>
                                 {data?.asesorFiltro ? 'Desempeño del asesor' : 'Desempeño de la inmobiliaria'}
