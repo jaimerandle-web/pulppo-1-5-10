@@ -5,6 +5,7 @@ import type { MBData, MBProp, MBFuera, RespKey } from '@/lib/mb';
 import MBAnalisis from './MBAnalisis';
 import MBDestacados from './MBDestacados';
 import MBDesempeno from './MBDesempeno';
+import MB1510 from './MB1510';
 import PrintRoot from './PrintRoot';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
@@ -36,7 +37,7 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 // minutos → texto corto legible
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
-type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'analisis' | 'comoleer';
+type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'p1510' | 'analisis' | 'comoleer';
 
 // La pestaña Destacados es un PILOTO con una sola cuenta: sólo aparece en Casane. Cuando se
 // abra al resto, basta agregar su companyId acá (o quitar el gate).
@@ -45,9 +46,16 @@ const CON_DESTACADOS = new Set(['649083c1c7528092d68c84c4']);
 // existe otra compañía llamada sólo "andina" (`6a545c24ecc8f755fefe2a7d`, creada el
 // 2026-07-13) que es un duplicado VACÍO. Ésta es la buena.
 const CON_DESEMPENO = new Set(['62b4b39abd1764a48e09f01f']);
-type Seg = '' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre'
+type Seg = '' | 'p1510' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre'
     | 'sinVideo' | 'pocasFotos' | 'sinAmenidades' | 'sinAcm' | 'sinTour' | 'conErrores';
+// El reporte tiene dos versiones. Master Brokers abre la SIMPLE, que esconde Difusión y la
+// referencia de $/m². Las exclusivas del programa 1·5·10 abren la LARGA: es el reporte que
+// justifica la exclusiva, y esconderle secciones al titular que la firmó no tiene sentido.
+const urlFicha = (p: MBProp) =>
+    `/ficha/${p.id}?${p.p1510 ? '' : 'v=simple&'}token=${p.token}`;
+
 const SEG_TEST: Record<string, (p: MBProp) => boolean> = {
+    p1510: (p) => p.p1510,
     sinleads: (p) => p.leads === 0,
     caroSinLeads: (p) => p.leads === 0 && (p.estado === 'Fuera de mercado' || p.estado === 'No competitivo'),
     visitasSinOferta: (p) => p.visitas > 0 && p.ofertas === 0,
@@ -66,12 +74,18 @@ const SEG_TEST: Record<string, (p: MBProp) => boolean> = {
 // cada hueco de ficha del overview abre el listado ya filtrado
 const FALTA_SEG: Record<string, Seg> = { video: 'sinVideo', fotos: 'pocasFotos', amenidades: 'sinAmenidades', acm: 'sinAcm', tour: 'sinTour' };
 const SEG_LABEL: Record<string, string> = {
+    p1510: 'Exclusivas 1·5·10',
     sinleads: 'Sin leads', caroSinLeads: 'Caro sin leads', visitasSinOferta: 'Visitas sin oferta', mas12: '+12 meses', respLenta: 'Respuesta lenta',
     muchasVisitas: 'Muchas visitas, 0 ofertas', altaDemanda: 'Alta demanda, sin leads', ofertasSinCierre: 'Ofertas sin cierre',
     sinVideo: 'Sin video', pocasFotos: 'Menos de 8 fotos', sinAmenidades: 'Sin amenidades', sinAcm: 'Sin ACM',
     sinTour: 'Sin tour virtual', conErrores: 'Con errores de captura'
 };
-const CHIP_SEGS: Seg[] = ['sinleads', 'caroSinLeads', 'visitasSinOferta', 'mas12', 'respLenta'];
+// Los segmentos que SÍ son un problema: alimentan el bloque "necesitan tu atención".
+const ATENCION_SEGS: Seg[] = ['sinleads', 'caroSinLeads', 'visitasSinOferta', 'mas12', 'respLenta'];
+// La fila de filtros de Propiedades incluye además 1·5·10, que NO es una alerta sino lo
+// contrario: es la exclusiva del programa. Contarla como atención inflaría el titular del
+// overview con propiedades que están bien.
+const CHIP_SEGS: Seg[] = ['p1510', ...ATENCION_SEGS];
 
 // Qué hacer con esta propiedad. Además de precio y ficha (que ya venían), acciones de DESEMPEÑO:
 // lo que el asesor puede cambiar mañana sin tocar el precio ni volver a fotografiar.
@@ -406,7 +420,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                         <tbody>
                             {rows.map((p) => (
                                 <tr key={p.id}>
-                                    <td style={td}><Link href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                    <td style={td}><Link href={urlFicha(p)} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
                                     <td style={td}>{p.type}</td>
                                     <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td><td style={{ ...td, color: GRY }}>{p.colonia}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{money(p.precio)}</td>
@@ -423,7 +437,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                     <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
                                     <td style={td}>{(() => { const t = accionesDe(p); return t.length ? t.map(diagPill) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
-                                    <td className="no-print" style={{ ...td, textAlign: 'right' }}><a href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
+                                    <td className="no-print" style={{ ...td, textAlign: 'right' }}><a href={urlFicha(p)} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
                                 </tr>
                             ))}
                         </tbody>
@@ -480,7 +494,7 @@ export default function MBApp({ d }: { d: MBData }) {
     // Los bloques de propiedades van de MAYOR a MENOR volumen: lo que más pesa, primero.
     const porVolumen = <T,>(xs: T[], segOf: (x: T) => string) =>
         [...xs].sort((a, b) => cnt(SEG_TEST[segOf(b)]) - cnt(SEG_TEST[segOf(a)]));
-    const chipSegsOrd = porVolumen(CHIP_SEGS, (s) => s as string);
+    const chipSegsOrd = porVolumen(ATENCION_SEGS, (s) => s as string);
     const redflagsOrd = porVolumen(REDFLAGS, (r) => r.seg as string);
 
     const tth: CSSProperties = { textAlign: 'left', padding: '7px 8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
@@ -500,7 +514,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{d.name}</div>
                     <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{f(d.nProps)} propiedades publicadas</div>
                 </div>
-                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{CON_DESEMPENO.has(d.companyId) && nav('desempeno', 'Desempeño')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{CON_DESEMPENO.has(d.companyId) && nav('desempeno', 'Desempeño')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 <div style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
 
@@ -510,7 +524,7 @@ export default function MBApp({ d }: { d: MBData }) {
                         <div style={eyebrow}>Overview</div><div style={accent} />
                         <div style={{ background: BLK, color: '#fff', borderRadius: R, padding: '26px 28px' }}>
                             <div style={{ width: 44, height: 2, background: YEL, marginBottom: 14 }} />
-                            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1.15 }}><b style={{ color: YEL }}>{f(cnt((p) => CHIP_SEGS.some((s) => SEG_TEST[s](p))))}</b> propiedades necesitan tu atención.</div>
+                            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1.15 }}><b style={{ color: YEL }}>{f(cnt((p) => ATENCION_SEGS.some((s) => SEG_TEST[s](p))))}</b> propiedades necesitan tu atención.</div>
                             <div style={{ color: '#c9c9c7', fontSize: 13, marginTop: 8, maxWidth: 620 }}>De {f(d.nProps)} publicadas. Prioriza por demanda desperdiciada, precio fuera de mercado y limpieza de cartera. Haz clic en un bloque para verlas.</div>
                             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
                                 {chipSegsOrd.map((s) => (
@@ -731,7 +745,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                 <tbody>
                                     {topOpp.map((p) => (
                                         <tr key={p.id}>
-                                            <td style={ttd}><Link href={`/ficha/${p.id}?v=simple&token=${p.token}`} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                            <td style={ttd}><Link href={urlFicha(p)} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
                                             <td style={{ ...ttd, color: GRY }}>{p.colonia}</td><td style={ttd}>{p.op}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{money(p.precio)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
@@ -807,6 +821,20 @@ export default function MBApp({ d }: { d: MBData }) {
                             cierre. Del año en curso, leído en vivo.
                         </div>
                         <MBDesempeno companyId={d.companyId} />
+                    </div>
+                )}
+
+                {section === 'p1510' && (
+                    <div>
+                        <div style={eyebrow}>Exclusivas 1·5·10</div><div style={accent} />
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
+                            El programa de exclusivas de Pulppo
+                        </div>
+                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 660 }}>
+                            Qué gana una propiedad por entrar al programa, cómo le va a las tuyas y
+                            dónde das de alta las siguientes.
+                        </div>
+                        <MB1510 props={d.props} urlFicha={urlFicha} />
                     </div>
                 )}
 

@@ -55,6 +55,8 @@ export interface MBProp {
     respMedMin: number | null; oppScore: number; diag: string[]; tier: string;
     // Token de la ficha: los master brokers (externos) no pasan el middleware con la URL pelada
     // —los rebota a su overview—, así que la liga tiene que ir firmada. Ver src/lib/token.ts.
+    /** exclusiva del programa 1·5·10 (`contract.exclusive.pulppo`). Abre el reporte LARGO. */
+    p1510: boolean;
     token: string;
     // qué le falta a la ficha (para los insights de calidad del overview)
     fotos: number; video: boolean; tour: boolean; amenidades: number;
@@ -208,7 +210,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const db = await getDb();
     const props = await db.collection('properties').find(
         { 'company._id': cid, 'status.last': 'published' },
-        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, 'attributes.suites': 1, address: 1, agent: 1, publishedAt: 1, createdAt: 1, 'status.history': 1, company: 1, 'portals.inmuebles24.type': 1, 'files.type': 1, 'contract.url': 1, 'contact.phone': 1, 'contact.email': 1 } }
+        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, 'attributes.suites': 1, address: 1, agent: 1, publishedAt: 1, createdAt: 1, 'status.history': 1, company: 1, 'portals.inmuebles24.type': 1, 'files.type': 1, 'contract.url': 1, 'contract.exclusive.pulppo': 1, 'contact.phone': 1, 'contact.email': 1 } }
     ).toArray();
     if (!props.length) return null;
     const name = (dig(props[0], 'company', 'name') as string) ?? 'Inmobiliaria';
@@ -590,6 +592,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag,
             tier: TIER[dig(p, 'portals', 'inmuebles24', 'type') as string] ?? 'Simple',
             fotos, video, tour, amenidades, errores, sugerencia,
+            p1510: dig(p, 'contract', 'exclusive', 'pulppo') != null,
             token: fichaTokens.get(hex) ?? ''
         };
     });

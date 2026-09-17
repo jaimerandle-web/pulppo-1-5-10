@@ -393,6 +393,12 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const title = (dig(P, 'listing', 'title') as string) ?? '';
     const desc = (dig(P, 'listing', 'description') as string) ?? (dig(P, 'listing', 'extra', 'description') as string) ?? '';
     const words = desc.trim() ? desc.trim().split(/\s+/).length : 0;
+    // Ale, 17-sep: el mínimo va en CARACTERES y son 400. Medido sobre 6,000 publicadas, la
+    // descripción mediana tiene 833 caracteres (131 palabras) y sólo el 1% queda por debajo
+    // de 400 — o sea, este piso casi nunca se va a marcar. Lo que de verdad pinta amarillo es
+    // el TECHO de 200 palabras, que agarra al 20%.
+    const chars = desc.trim().length;
+    const MIN_CHARS = 400;
     const zonaOk = !!(col && strip(col) && strip(col).split(/\s+/).some((w) => w.length > 3 && title.toLowerCase().includes(w.toLowerCase())));
     const tipoOk = !!(typ && title.toLowerCase().includes(typ.toLowerCase()));
     const opOk = /venta|renta/i.test(title);
@@ -671,7 +677,16 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
         cand.push({
             w: 43, title: 'Simplificar la descripción', who: 'Marketing', when: 'Esta semana',
             detail: `Tiene ${words} palabras. Una descripción muy larga confunde al comprador y entierra lo que sí importa.`,
-            umbral: 'Umbral: entre 40 y 200 palabras.'
+            umbral: 'Umbral: máximo 200 palabras.'
+        });
+    }
+    // El piso de caracteres necesita su propia recomendación: sin esto la salud del anuncio
+    // marcaba "corta" en amarillo y no había ninguna tarjeta que dijera qué hacer al respecto.
+    if (chars > 0 && chars < MIN_CHARS) {
+        cand.push({
+            w: 43, title: 'Ampliar la descripción', who: 'Marketing', when: 'Esta semana',
+            detail: `Tiene ${chars} caracteres. Con tan poco texto el anuncio no alcanza a explicar la propiedad ni a posicionarse en las búsquedas.`,
+            umbral: `Umbral: mínimo ${MIN_CHARS} caracteres.`
         });
     }
     if (zonaComp >= 20) {
@@ -703,7 +718,10 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
         rowH('Calidad del anuncio', q != null ? `${q.toFixed(0)}/100` : '—', q != null && q >= 85 ? 'ok' : 'warn'),
         rowH('Valuación', `${money(val)} vs estimado ${money(acm)}`, vstat, (dval != null ? `${dval >= 0 ? '+' : ''}${dval.toFixed(0)}% · ` : '') + vnote),
         rowH('Título', esc(title.slice(0, 60)) || '—', tipoOk && opOk && zonaOk ? 'ok' : 'warn', tcheck),
-        rowH('Descripción', `${words} palabras`, words >= 40 && words <= 200 ? 'ok' : 'warn', words >= 40 && words <= 200 ? 'longitud adecuada' : 'revisar extensión'),
+        rowH('Descripción', `${chars} caracteres · ${words} palabras`,
+            chars >= MIN_CHARS && words <= 200 ? 'ok' : 'warn',
+            chars < MIN_CHARS ? `corta: el mínimo son ${MIN_CHARS} caracteres`
+                : words > 200 ? 'larga: más de 200 palabras' : 'longitud adecuada'),
         rowH('Ubicación', 'completa', 'ok', ''),
         rowH('Multimedia', mm, pics >= 12 && video ? 'ok' : 'warn'),
         // La categoría (destacado / dónde se publica) solo va en la ficha completa 1·5·10, no en la general.
