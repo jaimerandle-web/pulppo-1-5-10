@@ -104,7 +104,7 @@ export default function Presentacion({
                     <>
                         <H>Leads mes a mes</H>
                         <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
-                            <thead><tr><th style={th0}>Mes</th><th style={th}>Leads</th><th style={th}>Contactos únicos</th><th style={th}>Visitas</th></tr></thead>
+                            <thead><tr><th style={th0}>Mes</th><th style={th}>Leads</th><th style={th}>Leads únicos</th><th style={th}>Visitas</th></tr></thead>
                             <tbody>
                                 {rows.map((r, i) => (
                                     <tr key={r.mes}>
@@ -162,7 +162,7 @@ export default function Presentacion({
                     <>
                         <H>De lead a visita y a cierre</H>
                         <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
-                            <thead><tr><th style={th0}>Mes</th><th style={th}>Únicos</th><th style={th}>Visitas</th><th style={th}>Tasa de visita</th><th style={th}>Cierres del mes</th></tr></thead>
+                            <thead><tr><th style={th0}>Mes</th><th style={th}>Leads únicos</th><th style={th}>Visitas</th><th style={th}>Tasa de visita</th><th style={th}>Cierres del mes</th></tr></thead>
                             <tbody>
                                 {rows.map((r, i) => (
                                     <tr key={r.mes}>
@@ -228,7 +228,7 @@ export default function Presentacion({
                             return (
                                 <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
                                     <tbody>
-                                        {[['Leads', f0(f.leads)], ['Contactos únicos', f0(f.unicos)],
+                                        {[['Leads', f0(f.leads)], ['Leads únicos', f0(f.unicos)],
                                           ['Promedio por día', String(f.porDia)], ['% venta', pc(f.pctVenta)],
                                           ['Respondidos <1 h', pc(f.lt60)], ['Sin responder', pc(f.sinResponder)]].map(([k, v]) => (
                                             <tr key={k}>

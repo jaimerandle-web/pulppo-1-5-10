@@ -327,8 +327,8 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                                     <tr>
                                         <th style={tth0}>Portal</th>
                                         <th style={tth}>Leads</th>
-                                        <th style={tth}>Personas</th>
-                                        <th style={tth}>Leads/persona</th>
+                                        <th style={tth}>Leads únicos</th>
+                                        <th style={tth}>Leads x único</th>
                                         <th style={tth}>% venta</th>
                                         <th style={tth}>% broker</th>
                                         <th style={tth}>&lt;1 h</th>
@@ -847,6 +847,10 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                             Cómo leer esto
                         </h1>
                         {[
+                            ['Lead único = una persona',
+                             'Si alguien escribe tres veces son 3 leads y 1 lead único. El embudo son tres pasos: leads → leads únicos → visitas, y la tasa de visita sale sobre los únicos, no sobre los leads. La columna "leads x único" dice cuánto mensaje repetido manda cada portal. El CPL sí va sobre leads: es lo que le compras al portal.'],
+                            ['Una visita sólo cuenta si fue DESPUÉS del lead',
+                             'Antes se acreditaba al portal cualquier visita del historial del contacto, aunque hubiera ocurrido meses antes de que el lead entrara. Eso casi duplicaba la tasa. Si comparas contra un reporte anterior a septiembre 2026, la diferencia es ésta y no una caída del negocio.'],
                             ['Las dos atribuciones no se suman',
                              'El «adelantado» es la cohorte del mes: leads que entraron y qué pasó con ellos — contesta qué tan bueno era lo que entró. El «rezagado» son las operaciones cerradas en el mes por buyer.source, vengan de leads de cualquier mes — contesta qué cobramos. De ahí salen regalía, ticket y ROI. Sumarlos es el error más común con estos números.'],
                             ['s/d no es cero',
