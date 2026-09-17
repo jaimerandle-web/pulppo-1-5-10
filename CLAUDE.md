@@ -260,9 +260,21 @@ respondió, cuántos marcó, cuántos lugares tiene mal puestos y cuántos esper
 una vez al día.
 
 ```
+GET /api/avisos?recap=1          → consolidado de la red (SÓLO con lo que ya está en caché)
 GET /api/avisos?kam=NOMBRE       → cuentas del KAM + si respondieron (store de selección)
 GET /api/avisos?resumen=NOMBRE   → el resumen de una cuenta (reusa el cálculo cacheado)
 ```
+
+**El recap de la portada no dispara cálculos.** Calcular las ~173 cuentas de un jalón son
+minutos y no cabe en el `maxDuration` de 60 s, así que se arma con las cuentas que ya están
+cacheadas y dice sobre cuántas está hecho. "Completar la red" las pide de a una; como el caché
+dura 24 h, el primero que lo corre en el día lo deja listo para todos.
+
+🔴 **`competencia == 0` NO es una sola cosa.** Auditado el 17-sep-2026 sobre los 348 avisos con
+lugar pagado y competencia cero: **47%** estaban en zonas que el MLS no cubre (<5 avisos de
+cualquier tipo a 1.5 km) y **42%** tenían comparables cerca pero a **2.2× su precio** de mediana
+(extremos de 13×). Se desdobla en tres etiquetas, y `sin datos del mercado` **no entra** al
+conteo de "mal puestos": recomendar sobre lo que no se puede evaluar sería inventar.
 
 **Motor:** `src/lib/portales/avisos.ts` + `src/app/api/avisos/route.ts`.
 

@@ -581,6 +581,72 @@ export async function resumenDe(inmo: string): Promise<ResumenInmo> {
     };
 }
 
+/**
+ * Recap de la red. Se arma SÓLO con las cuentas que ya están en caché — no dispara cálculos.
+ *
+ * Calcular las 145 cuentas de un jalón son minutos y no cabe en una petición (`maxDuration`
+ * 60 s). Así que el recap se construye con lo que ya se calculó y dice sobre cuántas cuentas
+ * está hecho; la portada las va pidiendo de a una y el recap se completa solo. Como el caché
+ * dura 24 h, el primero que entra en el día lo llena y los demás lo encuentran listo.
+ */
+export type Recap = {
+    cuentasCalculadas: number; cuentasTotales: number;
+    avisos: number; pagados: number; gastoMes: number;
+    malPuestos: number; costoMalPuesto: number;
+    noEvaluables: number; costoNoEvaluable: number;
+    banca: number;
+    porMotivo: { motivo: string; n: number; costo: number }[];
+    porKam: { kam: string; cuentas: number; pagados: number; malPuestos: number;
+              costo: number; noEvaluables: number; banca: number }[];
+};
+
+/** Etiquetas que dicen que ese aviso NO debería tener un lugar pagado. */
+const NO_VA = new Set(['renta', 'terreno', 'comercial', 'no hay demanda',
+                       'precio caro', 'precio fuera de su zona', 'nadie más vende esto aquí']);
+
+export async function recapRed(): Promise<Recap> {
+    const total = (await listaInmobiliarias()).length;
+    const motivo = new Map<string, { n: number; costo: number }>();
+    const kam = new Map<string, { cuentas: number; pagados: number; malPuestos: number;
+                                  costo: number; noEvaluables: number; banca: number }>();
+    let avisos = 0, pagados = 0, gastoMes = 0, malPuestos = 0, costoMalPuesto = 0;
+    let noEvaluables = 0, costoNoEvaluable = 0, banca = 0, cuentas = 0;
+
+    for (const { d } of cacheInmo.values()) {
+        if (Date.now() - (cacheInmo.get(d.inmobiliaria)?.ts ?? 0) > TTL_INMO) continue;
+        cuentas++;
+        avisos += d.avisos.length; gastoMes += d.gastoMes;
+        const k = kam.get(d.kam) ?? { cuentas: 0, pagados: 0, malPuestos: 0, costo: 0,
+                                      noEvaluables: 0, banca: 0 };
+        k.cuentas++;
+        for (const a of d.avisos) {
+            const esPagado = PAGADOS.has(a.tier);
+            if (esPagado) { pagados++; k.pagados++; }
+            if (esPagado && a.tags.includes('sin datos del mercado')) {
+                noEvaluables++; costoNoEvaluable += a.costo; k.noEvaluables++;
+                continue;                      // no se recomienda nada sobre lo que no se ve
+            }
+            if (esPagado) {
+                const mal = a.tags.filter((t) => NO_VA.has(t));
+                if (mal.length) {
+                    malPuestos++; costoMalPuesto += a.costo; k.malPuestos++; k.costo += a.costo;
+                    // se cuenta por el PRIMER motivo para no inflar el total
+                    const m = motivo.get(mal[0]) ?? { n: 0, costo: 0 };
+                    m.n++; m.costo += a.costo; motivo.set(mal[0], m);
+                }
+            } else if (a.tags.includes('destacar')) { banca++; k.banca++; }
+        }
+        kam.set(d.kam, k);
+    }
+    return {
+        cuentasCalculadas: cuentas, cuentasTotales: total,
+        avisos, pagados, gastoMes, malPuestos, costoMalPuesto,
+        noEvaluables, costoNoEvaluable, banca,
+        porMotivo: [...motivo].map(([m, v]) => ({ motivo: m, ...v })).sort((a, b) => b.costo - a.costo),
+        porKam: [...kam].map(([k, v]) => ({ kam: k, ...v })).sort((a, b) => b.costo - a.costo),
+    };
+}
+
 // ───────────────────────────────────────── el índice de inmobiliarias
 type Fila = { inmobiliaria: string; kam: string; venta: number; destacados: number };
 let cacheLista: { l: Fila[]; ts: number } | null = null;

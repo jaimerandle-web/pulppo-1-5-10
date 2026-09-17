@@ -7,7 +7,7 @@
 // El mercado (MLS de i24 + búsquedas guardadas) se carga una vez por instancia y se cachea
 // una hora: son ~6 s. Con el caché caliente, una inmobiliaria tarda entre 0.3 y 0.8 s. Por eso
 // la primera visita después de un arranque en frío es lenta y las siguientes no.
-import { datosDe, listaInmobiliarias, getMercado, resumenDe } from '@/lib/portales/avisos';
+import { datosDe, listaInmobiliarias, getMercado, resumenDe, recapRed } from '@/lib/portales/avisos';
 import { leer as leerSeleccion } from '@/lib/portales/seleccion';
 import { alcanceDeAvisos, puedeVer } from '@/lib/portales/acceso';
 
@@ -45,6 +45,8 @@ export async function GET(req: Request) {
                 })),
             });
         }
+        // ?recap=1 → el consolidado de la red, armado con lo que ya está en caché
+        if (url.searchParams.get('recap')) return Response.json(await recapRed());
         const resumen = url.searchParams.get('resumen');
         if (resumen) {
             if (!puedeVer(alcance, resumen)) return Response.json({ error: 'No autorizado' }, { status: 403 });

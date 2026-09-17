@@ -17,6 +17,15 @@ import type { Aviso, DatosInmo } from '@/lib/portales/avisos';
 
 type Fila = { inmobiliaria: string; kam: string; venta: number; destacados: number };
 type Cuenta = Fila & { respondio: boolean; marcados: number; respondioPor: string | null; respondioEl: string | null };
+type Recap = {
+    cuentasCalculadas: number; cuentasTotales: number;
+    avisos: number; pagados: number; gastoMes: number;
+    malPuestos: number; costoMalPuesto: number;
+    noEvaluables: number; costoNoEvaluable: number; banca: number;
+    porMotivo: { motivo: string; n: number; costo: number }[];
+    porKam: { kam: string; cuentas: number; pagados: number; malPuestos: number;
+              costo: number; noEvaluables: number; banca: number }[];
+};
 type Resumen = {
     inmobiliaria: string; ventaViva: number; avisos: number; pagados: number;
     malPuestos: number; costoMalPuesto: number; banca: number; listos: number;
@@ -60,6 +69,9 @@ export default function AvisosLive() {
     const [cuentas, setCuentas] = useState<Cuenta[] | null>(null);
     const [resumenes, setResumenes] = useState<Record<string, Resumen>>({});
     const [avance, setAvance] = useState(0);
+    // recap de la red: se arma con lo que ya está en caché y se completa solo
+    const [recap, setRecap] = useState<Recap | null>(null);
+    const [completando, setCompletando] = useState(false);
 
     useEffect(() => {
         fetch('/api/avisos')
@@ -71,6 +83,27 @@ export default function AvisosLive() {
             .catch((e) => setError(String(e.message ?? e)))
             .finally(() => setCargando(null));
     }, []);
+
+    const traerRecap = () => fetch('/api/avisos?recap=1').then((r) => r.json())
+        .then((j) => { if (!j.error) setRecap(j); }).catch(() => {});
+
+    useEffect(() => { traerRecap(); }, [lista]);
+
+    /**
+     * Completa el recap pidiendo las cuentas que faltan, de una en una. Cada una tarda
+     * segundos y se cachea 24 h, así que el primero que lo corre en el día lo deja listo
+     * para todos. Se puede cerrar la pestaña: lo ya calculado queda del lado del servidor.
+     */
+    async function completarRecap() {
+        setCompletando(true);
+        try {
+            for (const l of lista) {
+                try { await fetch(`/api/avisos?resumen=${encodeURIComponent(l.inmobiliaria)}`); }
+                catch { /* una cuenta que falla no detiene a las demás */ }
+                await traerRecap();
+            }
+        } finally { setCompletando(false); }
+    }
 
     function abrir(nombre: string) {
         setInmo(nombre); setD(null); setFiltro(null); setCargando('inmo'); setError('');
@@ -229,6 +262,113 @@ export default function AvisosLive() {
                     </button>
                 )}
             </div>
+
+            {/* ── recap de la red: lo primero que se ve al entrar ── */}
+            {!kam && !inmo && recap && (
+                <>
+                    <Bloque titulo="Dónde está el dinero mal puesto">
+                        <div className="flex flex-wrap items-baseline gap-x-8 gap-y-3">
+                            <Dato n={String(recap.malPuestos)} l="lugares que no deberían estarlo" />
+                            <Dato n={money(recap.costoMalPuesto)} l="al mes en esos lugares" />
+                            <Dato n={String(recap.banca)} l="califican y están en Simple" />
+                            <Dato n={String(recap.pagados)} l="lugares pagados en total" />
+                        </div>
+                        <p className="mt-4 max-w-[78ch] text-xs leading-relaxed text-neutral-500">
+                            Intercambiar unos por otros <b>no cuesta un peso</b>: los lugares ya
+                            están comprados. Calculado sobre <b>{recap.cuentasCalculadas} de{' '}
+                            {recap.cuentasTotales}</b> cuentas
+                            {recap.cuentasCalculadas < recap.cuentasTotales && (
+                                <> — el resto no se ha calculado hoy.{' '}
+                                    <button onClick={completarRecap} disabled={completando}
+                                        className="font-bold text-sea underline disabled:opacity-50">
+                                        {completando ? 'Calculando…' : 'Completar la red'}
+                                    </button>
+                                    {completando && ' (tarda varios minutos; puedes seguir trabajando)'}
+                                </>
+                            )}
+                        </p>
+
+                        <div className="mt-5 grid gap-6 md:grid-cols-2">
+                            <div>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-brand-gray">Por qué no deberían tenerlo</p>
+                                <table className="mt-2 w-full text-[12px]">
+                                    <tbody>
+                                        {recap.porMotivo.map((m) => (
+                                            <tr key={m.motivo} className="border-b border-neutral-100">
+                                                <td className="py-1.5">{m.motivo}</td>
+                                                <td className="py-1.5 text-right tabular-nums">{m.n}</td>
+                                                <td className="py-1.5 text-right tabular-nums font-bold">{money(m.costo)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-brand-gray">Por KAM</p>
+                                <table className="mt-2 w-full text-[12px]">
+                                    <thead>
+                                        <tr className="text-left text-[9px] uppercase text-brand-gray">
+                                            <th className="py-1">KAM</th><th className="py-1 text-right">Cuentas</th>
+                                            <th className="py-1 text-right">Mal puestos</th>
+                                            <th className="py-1 text-right">$/mes</th>
+                                            <th className="py-1 text-right">Banca</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {recap.porKam.map((k) => (
+                                            <tr key={k.kam} className="cursor-pointer border-b border-neutral-100 hover:bg-light"
+                                                onClick={() => setKam(k.kam)}>
+                                                <td className="py-1.5 font-bold">{k.kam}</td>
+                                                <td className="py-1.5 text-right tabular-nums">{k.cuentas}</td>
+                                                <td className="py-1.5 text-right tabular-nums">{k.malPuestos}</td>
+                                                <td className="py-1.5 text-right tabular-nums font-bold">{money(k.costo)}</td>
+                                                <td className="py-1.5 text-right tabular-nums">{k.banca}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {recap.noEvaluables > 0 && (
+                            <p className="mt-5 max-w-[78ch] rounded-[2px] border-l-[3px] border-neutral-300 bg-light p-3 text-xs leading-relaxed">
+                                Aparte hay <b>{recap.noEvaluables} lugares</b> ({money(recap.costoNoEvaluable)}/mes)
+                                sobre avisos que <b>no se pueden evaluar</b>: el MLS no cubre su zona
+                                — menos de 5 avisos de cualquier tipo a 1.5 km. No se recomienda nada
+                                sobre ellos, y por eso no están en el conteo de arriba.
+                            </p>
+                        )}
+                    </Bloque>
+
+                    <Bloque titulo="Cómo leer esto">
+                        <div className="max-w-[78ch] space-y-3 text-xs leading-relaxed text-neutral-600">
+                            <p>
+                                <b>Sólo el Súper Destacado mueve leads</b>: 1.26× medido comparando el
+                                mismo aviso antes y después. El Destacado da 0.97× con intervalo
+                                [0.90, 1.04] — o sea nada. Por eso el criterio empuja todo el
+                                presupuesto a Súper Destacado.
+                            </p>
+                            <p>
+                                <b>&ldquo;Precio fuera de su zona&rdquo; no es lo mismo que caro.</b> Significa
+                                que sí hay avisos comparables cerca, pero ninguno en su rango de
+                                precio. Auditado en septiembre: esos avisos están a <b>2.2× la mediana
+                                de su zona</b>, con casos de 13×. Es una conversación de precio, no de
+                                visibilidad.
+                            </p>
+                            <p>
+                                <b>Renta, terreno y comercial no compiten</b> por un lugar destacado.
+                                La regla que lo impide está apagada en el motor de producción, así que
+                                hoy sí se les asignan lugares.
+                            </p>
+                            <p>
+                                Los datos se recalculan <b>una vez al día</b> y sólo si alguien entra.
+                                El <b>puntaje</b> ordena el inventario dentro de cada cuenta; no sirve
+                                para comparar puntajes entre inmobiliarias.
+                            </p>
+                        </div>
+                    </Bloque>
+                </>
+            )}
 
             {/* ── cartera del KAM: el seguimiento del flujo de Destacados ── */}
             {kam && cuentas && !inmo && (
