@@ -28,6 +28,8 @@ export interface PortalMes {
     mes: string;
     // adelantado
     leads: number; unicos: number;
+    /** Leads por persona: 1.31 = ese portal manda 1.31 mensajes por contacto distinto. */
+    dedup: number | null;
     pctVenta: number | null; pctBroker: number | null;
     lt60: number | null; sinResponder: number | null;
     visitas: number; tasaVisita: number | null;
@@ -299,6 +301,10 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
             return {
                 mes: mk,
                 leads: n, unicos: u,
+                // El embudo se lee leads → leads únicos → visitas, y los % van sobre PERSONAS
+                // (decisión de Ale, 17-sep-2026). `dedup` deja ver cuánto mensaje repetido
+                // trae cada portal, que antes quedaba escondido dentro del denominador.
+                dedup: u ? Math.round((n / u) * 100) / 100 : null,
                 pctVenta: n ? r1((100 * c.venta) / n) : null,
                 pctBroker: u ? r1((100 * nb) / u) : null,
                 lt60: c.baseLab ? r1((100 * c.lt60) / c.baseLab) : null,

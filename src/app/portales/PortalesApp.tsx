@@ -327,7 +327,8 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                                     <tr>
                                         <th style={tth0}>Portal</th>
                                         <th style={tth}>Leads</th>
-                                        <th style={tth}>Únicos</th>
+                                        <th style={tth}>Personas</th>
+                                        <th style={tth}>Leads/persona</th>
                                         <th style={tth}>% venta</th>
                                         <th style={tth}>% broker</th>
                                         <th style={tth}>&lt;1 h</th>
@@ -348,6 +349,7 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                                                 <td style={ttd0}>{p.canal}</td>
                                                 <td style={ttd}>{f0(r.leads)}</td>
                                                 <td style={ttd}>{f0(r.unicos)}</td>
+                                                <td style={{ ...ttd, color: (r.dedup ?? 0) >= 1.5 ? RED : GRY }}>{r.dedup == null ? '—' : `${r.dedup}×`}</td>
                                                 <td style={ttd}>{pc(r.pctVenta)}</td>
                                                 <td style={{ ...ttd, color: (r.pctBroker ?? 0) >= 15 ? RED : BLK }}>{pc(r.pctBroker)}</td>
                                                 <td style={ttd}>{pc(r.lt60)}</td>
