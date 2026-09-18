@@ -12,7 +12,7 @@
  * Por eso los beneficios y el botón de alta se muestran SIEMPRE, arriba, tenga o no tenga.
  */
 import type { MBProp } from '@/lib/mb';
-import { BENEFICIOS, ACCESOS, MEDIDO_EN } from '@/lib/p1510';
+import { BENEFICIOS, ESCALERA, ACCESOS, MEDIDO_EN } from '@/lib/p1510';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
 const R = 2;
@@ -83,39 +83,57 @@ export default function MB1510({ props, urlFicha }: {
 
     return (
         <div>
-            {/* ---- por qué conviene: los números de la red, tenga o no tenga ---- */}
-            <div style={{ background: BLK, color: '#fff', borderRadius: R, padding: '24px 26px' }}>
-                <div style={{ width: 44, height: 2, background: YEL, marginBottom: 14 }} />
-                <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, maxWidth: 640 }}>
-                    A los seis meses ya se vendió <b style={{ color: YEL }}>casi el triple</b> de
-                    exclusivas del programa que de avisos normales.
-                </div>
-                <div style={{ display: 'grid', gap: 12, marginTop: 20,
-                              gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
-                    {BENEFICIOS.map((b) => (
-                        <div key={b.clave} style={{ background: '#2c2e2d', borderRadius: R, padding: '14px 15px' }}>
-                            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: .8,
-                                          color: '#9d9d9b' }}>{b.titulo}</div>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 7 }}>
-                                <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 30, lineHeight: 1,
-                                              color: YEL }}>{b.programa}</div>
-                                <div style={{ fontSize: 11, color: '#9d9d9b' }}>
-                                    vs {b.resto} · <b style={{ color: '#fff' }}>{b.factor}</b>
-                                </div>
-                            </div>
-                            <div style={{ fontSize: 11, color: '#c9c9c7', marginTop: 8, lineHeight: 1.45 }}>
-                                {b.lectura}
-                            </div>
+            {/* ---- por qué conviene: los números de la red, tenga o no tenga ----
+                 Va sobre fondo CLARO y no sobre el bloque negro que tenía antes. El problema
+                 no era sólo el contraste: la cifra, su comparación y el multiplicador estaban
+                 apretados en la misma línea y competían entre sí. Acá cada uno tiene su
+                 renglón —cifra, multiplicador, comparación— y se lee en tres saltos. */}
+            <div style={{ display: 'grid', gap: 0, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
+                {BENEFICIOS.map((b, i) => (
+                    <div key={b.clave} style={{ padding: i === 0 ? '0 22px 0 0' : '0 22px',
+                                                borderLeft: i === 0 ? undefined : `1px solid ${LGT}` }}>
+                        <div style={{ fontSize: 10.5, letterSpacing: 1.1, textTransform: 'uppercase',
+                                      fontWeight: 700, color: GRY, marginBottom: 13 }}>{b.titulo}</div>
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 52, lineHeight: .92,
+                                      letterSpacing: -.5, fontVariantNumeric: 'tabular-nums' }}>{b.programa}</div>
+                        <div style={{ display: 'inline-block', marginTop: 12, padding: '3px 9px',
+                                      borderRadius: R, background: YEL, color: BLK,
+                                      fontSize: 11.5, fontWeight: 700 }}>{b.factor}</div>
+                        <div style={{ marginTop: 12, paddingTop: 11, borderTop: `1px solid ${LGT}`,
+                                      fontSize: 12.5, color: '#6f6f6d' }}>
+                            Fuera del programa: <b style={{ color: BLK }}>{b.resto}</b>
                         </div>
-                    ))}
-                </div>
-                <div style={{ fontSize: 10, color: '#8a8a88', marginTop: 16, lineHeight: 1.5, maxWidth: 680 }}>
-                    Toda la red, sólo propiedades en venta, medido el {MEDIDO_EN}. La ventaja se
-                    sostiene a todos los plazos: 17% contra 7% a los 90 días, y 77% contra 31% al año.
-                    Se compara dentro de la misma ventana de tiempo, así que no es que lleven más
-                    publicadas.
-                </div>
+                    </div>
+                ))}
             </div>
+
+            {/* La escalera de plazos es la respuesta al "¿no será que llevan más tiempo
+                publicadas?": la ventana es la misma para los dos lados, así que el reclamo no
+                aplica por construcción. Va en chico, de apoyo, no como gráfica principal. */}
+            <div style={{ marginTop: 22, paddingTop: 16, borderTop: `1px solid ${LGT}`,
+                          display: 'flex', flexWrap: 'wrap', gap: 28, alignItems: 'baseline' }}>
+                <div style={{ fontSize: 11.5, color: '#6f6f6d', maxWidth: 230, lineHeight: 1.5 }}>
+                    Y se sostiene a todos los plazos — cuántas de cada 100 publicadas ya se
+                    vendieron:
+                </div>
+                {ESCALERA.map((e) => (
+                    <div key={e.plazo}>
+                        <div style={{ fontSize: 10, letterSpacing: .8, textTransform: 'uppercase',
+                                      color: GRY, marginBottom: 4 }}>{e.plazo}</div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7,
+                                      fontVariantNumeric: 'tabular-nums' }}>
+                            <b style={{ fontSize: 17 }}>{e.programa}%</b>
+                            <span style={{ fontSize: 12, color: GRY }}>vs {e.resto}%</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <p style={{ fontSize: 11, color: GRY, margin: '16px 0 0', lineHeight: 1.6, maxWidth: '76ch' }}>
+                Toda la red, sólo propiedades en venta, medido el {MEDIDO_EN}. Los plazos se
+                comparan dentro de la misma ventana de tiempo, así que no es que las del programa
+                lleven más publicadas.
+            </p>
 
             {/* ---- ligas de trámite ---- */}
             <div style={{ display: 'grid', gap: 10, marginTop: 16,

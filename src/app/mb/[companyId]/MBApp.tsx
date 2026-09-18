@@ -827,10 +827,10 @@ export default function MBApp({ d }: { d: MBData }) {
                 {section === 'p1510' && (
                     <div>
                         <div style={eyebrow}>Exclusivas 1·5·10</div><div style={accent} />
-                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
-                            El programa de exclusivas de Pulppo
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 28, lineHeight: 1.15, marginBottom: 4, maxWidth: 700 }}>
+                            Una exclusiva 1·5·10 cierra 3 veces más seguido que un aviso normal.
                         </div>
-                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 660 }}>
+                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 22, maxWidth: 660 }}>
                             Qué gana una propiedad por entrar al programa, cómo le va a las tuyas y
                             dónde das de alta las siguientes.
                         </div>
