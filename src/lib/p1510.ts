@@ -18,9 +18,20 @@
 // mediana contra 184 del resto: 13% más tiempo, contra una tasa de cierre 3 veces mayor. La
 // diferencia de edad no alcanza ni de lejos para explicarla.
 //
-// **Lo que NO se muestra, a propósito.** Las 1·5·10 tardan MÁS en venderse: 126 días medianos
-// contra 106 del resto. Presentar "vende más rápido" sería falso. Lo que dice el dato es que
-// cierran mucho más seguido, no antes.
+// 🔴 **Por qué NO se usa "tiempo promedio de venta".** Es la métrica que pide todo el mundo y
+// está rota: sólo se puede calcular sobre las que YA se vendieron, y del resto sólo vende el
+// 16%. Ese 16% es la crema —las fáciles— así que comparar su velocidad contra el 48% que vende
+// el programa mide selección, no desempeño, y el sesgo va EN CONTRA de 1·5·10. Los números:
+//   promedio  155 vs 155 días  (idéntico)
+//   mediana   130 vs 106       (favorece al resto)
+//   p90       317 vs 346       (favorece al programa)
+// Ninguno dice nada. La versión sana es fijar la ventana y preguntar cuánto del total ya se
+// vendió a ese plazo — así el "es que llevan más tiempo publicadas" no aplica por construcción:
+//   a 90 días   17% vs 7%   (2.4x)
+//   a 6 meses   44% vs 16%  (2.8x)   ← el que se muestra
+//   a 1 año     77% vs 31%  (2.5x)
+// Denominador = avisos con al menos esa antigüedad, para no contar como "no vendida" una que
+// apenas lleva un mes publicada. n del programa: 126 / 79 / 52.
 
 /** Un beneficio medido: el número del programa, el del resto y qué tanto los separa. */
 export interface Beneficio {
@@ -39,11 +50,12 @@ export const MEDIDO_EN = '17 de septiembre de 2026';
 export const BENEFICIOS: Beneficio[] = [
     {
         clave: 'cierre',
-        titulo: 'Tasa de cierre',
-        programa: '48%',
+        titulo: 'Vendidas en 6 meses',
+        programa: '44%',
         resto: '16%',
-        factor: '3x',
-        lectura: 'De cada 100 exclusivas 1·5·10, 48 terminan vendidas. Fuera del programa, 16.',
+        factor: '2.8x',
+        lectura: 'De cada 100 exclusivas 1·5·10 publicadas, 44 ya se vendieron al medio año. '
+               + 'Fuera del programa, 16.',
     },
     {
         clave: 'leads',

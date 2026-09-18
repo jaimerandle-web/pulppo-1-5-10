@@ -87,8 +87,8 @@ export default function MB1510({ props, urlFicha }: {
             <div style={{ background: BLK, color: '#fff', borderRadius: R, padding: '24px 26px' }}>
                 <div style={{ width: 44, height: 2, background: YEL, marginBottom: 14 }} />
                 <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, maxWidth: 640 }}>
-                    Una exclusiva del programa cierra <b style={{ color: YEL }}>3 veces</b> más seguido
-                    que un aviso normal.
+                    A los seis meses ya se vendió <b style={{ color: YEL }}>casi el triple</b> de
+                    exclusivas del programa que de avisos normales.
                 </div>
                 <div style={{ display: 'grid', gap: 12, marginTop: 20,
                               gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
@@ -110,8 +110,10 @@ export default function MB1510({ props, urlFicha }: {
                     ))}
                 </div>
                 <div style={{ fontSize: 10, color: '#8a8a88', marginTop: 16, lineHeight: 1.5, maxWidth: 680 }}>
-                    Toda la red, sólo propiedades en venta, medido el {MEDIDO_EN}. No es que se vendan
-                    más rápido —de hecho tardan un poco más— sino que llegan a cerrarse mucho más seguido.
+                    Toda la red, sólo propiedades en venta, medido el {MEDIDO_EN}. La ventaja se
+                    sostiene a todos los plazos: 17% contra 7% a los 90 días, y 77% contra 31% al año.
+                    Se compara dentro de la misma ventana de tiempo, así que no es que lleven más
+                    publicadas.
                 </div>
             </div>
 
