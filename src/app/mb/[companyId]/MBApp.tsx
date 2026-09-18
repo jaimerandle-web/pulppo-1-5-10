@@ -51,7 +51,10 @@ const CON_DESTACADOS = new Set(['649083c1c7528092d68c84c4']);
 // Desempeño es otro PILOTO de una sola cuenta: sólo Andina Real Estate. Ojo con el id —
 // existe otra compañía llamada sólo "andina" (`6a545c24ecc8f755fefe2a7d`, creada el
 // 2026-07-13) que es un duplicado VACÍO. Ésta es la buena.
-const CON_DESEMPENO = new Set(['62b4b39abd1764a48e09f01f']);
+const CON_DESEMPENO = new Set([
+    '62b4b39abd1764a48e09f01f',   // Andina Real Estate
+    '62bf49012367c77fc24d9220',   // Diamond House
+]);
 type Seg = '' | 'p1510' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre'
     | 'sinVideo' | 'pocasFotos' | 'sinAmenidades' | 'sinAcm' | 'sinTour' | 'conErrores';
 // El reporte tiene dos versiones. Master Brokers abre la SIMPLE, que esconde Difusión y la

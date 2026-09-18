@@ -28,7 +28,6 @@ const tdN: CSSProperties = { ...td, textAlign: 'right', fontVariantNumeric: 'tab
 export default function MBDesempeno({ companyId }: { companyId: string }) {
     const [d, setD] = useState<Desempeno | null>(null);
     const [err, setErr] = useState('');
-    const [tipo, setTipo] = useState<Tipo | 'todos'>('todos');
     const anio = new Date().getFullYear();
 
     useEffect(() => {
@@ -40,6 +39,18 @@ export default function MBDesempeno({ companyId }: { companyId: string }) {
             .catch(() => vivo && setErr('No se pudo calcular'));
         return () => { vivo = false; };
     }, [companyId, anio]);
+
+    if (err) return <p style={{ fontSize: 13, color: '#A52003' }}>{err}</p>;
+    if (!d) return <p style={{ fontSize: 13, color: GRY }}>Calculando el año en vivo…</p>;
+    return <MBDesempenoVista d={d} />;
+}
+
+/**
+ * La vista, separada de la carga: recibe el desempeño ya resuelto. Así se puede renderizar del
+ * lado del servidor para revisarla, sin depender de que el navegador hidrate.
+ */
+export function MBDesempenoVista({ d }: { d: Desempeno }) {
+    const [tipo, setTipo] = useState<Tipo | 'todos'>('todos');
 
     // El filtro de tipo se aplica ACÁ y no en el servidor: son 178 celdas, cambiar de
     // venta/renta no vale un viaje de segundos.
@@ -89,9 +100,6 @@ export default function MBDesempeno({ companyId }: { companyId: string }) {
         const t = d?.totales.cierres ?? {};
         return tipo === 'todos' ? Object.values(t).reduce((s, n) => s + n, 0) : (t[tipo] ?? 0);
     }, [d, tipo]);
-
-    if (err) return <p style={{ fontSize: 13, color: '#A52003' }}>{err}</p>;
-    if (!d) return <p style={{ fontSize: 13, color: GRY }}>Calculando el año en vivo…</p>;
 
     const maxMes = Math.max(1, ...porAsesor.flatMap((a) => a.mes.slice(0, ultimoMes)));
 

@@ -13,7 +13,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { MBProp } from '@/lib/mb';
-import { BENEFICIOS, ESCALERA, ACCESOS, MEDIDO_EN } from '@/lib/p1510';
+import { BENEFICIOS, ACCESOS, MEDIDO_EN } from '@/lib/p1510';
 import type { Historial } from '@/lib/historial1510';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
@@ -284,32 +284,8 @@ export default function MB1510({ props, companyId, urlFicha }: {
                 ))}
             </div>
 
-            {/* La escalera de plazos es la respuesta al "¿no será que llevan más tiempo
-                publicadas?": la ventana es la misma para los dos lados, así que el reclamo no
-                aplica por construcción. Va en chico, de apoyo, no como gráfica principal. */}
-            <div style={{ marginTop: 22, paddingTop: 16, borderTop: `1px solid ${LGT}`,
-                          display: 'flex', flexWrap: 'wrap', gap: 28, alignItems: 'baseline' }}>
-                <div style={{ fontSize: 11.5, color: '#6f6f6d', maxWidth: 230, lineHeight: 1.5 }}>
-                    Y se sostiene a todos los plazos — cuántas de cada 100 publicadas ya se
-                    vendieron:
-                </div>
-                {ESCALERA.map((e) => (
-                    <div key={e.plazo}>
-                        <div style={{ fontSize: 10, letterSpacing: .8, textTransform: 'uppercase',
-                                      color: GRY, marginBottom: 4 }}>{e.plazo}</div>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7,
-                                      fontVariantNumeric: 'tabular-nums' }}>
-                            <b style={{ fontSize: 17 }}>{e.programa}%</b>
-                            <span style={{ fontSize: 12, color: GRY }}>vs {e.resto}%</span>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
             <p style={{ fontSize: 11, color: GRY, margin: '16px 0 0', lineHeight: 1.6, maxWidth: '76ch' }}>
-                Toda la red, sólo propiedades en venta, medido el {MEDIDO_EN}. Los plazos se
-                comparan dentro de la misma ventana de tiempo, así que no es que las del programa
-                lleven más publicadas.
+                Toda la red, sólo propiedades en venta, medido el {MEDIDO_EN}.
             </p>
 
             {/* ---- ligas de trámite ---- */}

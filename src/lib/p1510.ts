@@ -59,7 +59,14 @@ export const BENEFICIOS: Beneficio[] = [
     { clave: 'visitas', titulo: 'Reciben visitas', programa: '80%', resto: '27%', factor: '3 veces más' },
 ];
 
-/** Cuánto del total ya se vendió a cada plazo. Denominador: avisos con al menos esa antigüedad. */
+/**
+ * Cuánto del total ya se vendió a cada plazo. Denominador: avisos con al menos esa antigüedad.
+ *
+ * **Ya NO se muestra en pantalla** (Ale, 18-sep: cargaba el panel). Se conserva porque es la
+ * prueba dura contra el "¿no será que las 1·5·10 llevan más tiempo publicadas?": la ventana es
+ * la misma para los dos lados, así que el reclamo no aplica por construcción. Si alguien
+ * cuestiona el 3x, la respuesta está acá.
+ */
 export const ESCALERA = [
     { plazo: '90 días', programa: 17, resto: 7 },
     { plazo: '6 meses', programa: 44, resto: 16 },
