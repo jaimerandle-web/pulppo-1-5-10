@@ -11,9 +11,10 @@
  * publicada, así que para la mayoría ESA es la pantalla, y su trabajo es que den de alta.
  * Por eso los beneficios y el botón de alta se muestran SIEMPRE, arriba, tenga o no tenga.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { MBProp } from '@/lib/mb';
 import { BENEFICIOS, ESCALERA, ACCESOS, MEDIDO_EN } from '@/lib/p1510';
+import type { Historial } from '@/lib/historial1510';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
 const R = 2;
@@ -55,7 +56,10 @@ const th: React.CSSProperties = { padding: '6px 8px', textAlign: 'left', fontSiz
 // requisitos OBJETIVOS que le faltan a cada una. El veredicto con % de aceptación lo sigue
 // dando el evaluador, propiedad por propiedad.
 const RESIDENCIAL = new Set(['Casa', 'Departamento', 'Casa en condominio', 'PH']);
-const COMISION_META = 5;        // mismo umbral que sComision en elegibilidad.ts
+const COMISION_META = 5;        // mismo umbral que sComision en elegibilidad.ts.
+// El programa pide 5% **+ IVA**; `contract.comission` guarda el % SIN IVA, así que el
+// umbral se compara contra 5 pero la etiqueta tiene que decirlo completo o el broker
+// cree que ya cumple.
 const SOBREPRECIO = 10;         // % sobre la zona a partir del cual cuenta como "fuera de precio"
 const FOTOS_MIN = 12;           // mismo umbral que el gate de material del evaluador
 
@@ -68,7 +72,7 @@ interface Falta { k: string; texto: string; duro: boolean }
 function faltantes(p: MBProp): Falta[] {
     const out: Falta[] = [];
     if (p.comision != null && p.comision < COMISION_META) {
-        out.push({ k: 'com', texto: `Comisión al ${COMISION_META}% (hoy ${pctCom(p.comision)})`, duro: true });
+        out.push({ k: 'com', texto: `Comisión al ${COMISION_META}% + IVA (hoy ${pctCom(p.comision)})`, duro: true });
     } else if (p.comision == null) {
         out.push({ k: 'com', texto: 'Comisión sin registrar', duro: true });
     }
@@ -114,8 +118,123 @@ function Embudo({ p, max }: { p: MBProp; max: number }) {
     );
 }
 
-export default function MB1510({ props, urlFicha }: {
+/**
+ * Historial en el programa: TODAS sus exclusivas, no sólo las vivas. Se pide aparte porque
+ * `mb.ts` sólo trae publicadas, y para muchas cuentas el pasado es más grande que el presente
+ * (Diamond House: 26 exclusivas, 20 ya vendidas; Andina: 5 de 5 vendidas).
+ */
+function Historico({ companyId }: { companyId: string }) {
+    const [h, setH] = useState<Historial | null>(null);
+    const [err, setErr] = useState('');
+
+    useEffect(() => {
+        let vivo = true;
+        setH(null); setErr('');
+        fetch(`/api/mb-1510?company=${companyId}`)
+            .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+            .then(({ ok, j }) => { if (vivo) ok ? setH(j) : setErr(j.error || 'No se pudo calcular'); })
+            .catch(() => vivo && setErr('No se pudo calcular'));
+        return () => { vivo = false; };
+    }, [companyId]);
+
+    if (err) return <p style={{ fontSize: 12.5, color: RED }}>{err}</p>;
+    if (!h) return <p style={{ fontSize: 12.5, color: GRY }}>Leyendo tu historial…</p>;
+    return <HistoricoVista h={h} />;
+}
+
+/**
+ * La vista, separada de la carga a propósito: recibe los datos ya resueltos. Así se puede
+ * renderizar del lado del servidor para revisarla, sin depender de que el navegador hidrate.
+ */
+export function HistoricoVista({ h }: { h: Historial }) {
+    if (!h.props.length) return null;
+
+    const vendidas = h.props.filter((x) => x.estado === 'vendida');
+    const vivas = h.props.filter((x) => x.estado === 'publicada');
+    const leads = h.props.reduce((a, x) => a + x.leads, 0);
+    const cerradas = vendidas.length, total = h.props.length;
+
+    return (
+        <>
+            <div style={{ marginTop: 34, paddingTop: 22, borderTop: `2px solid ${BLK}` }}>
+                <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, lineHeight: 1.2 }}>
+                    Tu historial en el programa
+                </div>
+                <p style={{ fontSize: 12.5, color: '#6f6f6d', margin: '7px 0 0',
+                            maxWidth: '72ch', lineHeight: 1.6 }}>
+                    Todas las exclusivas 1·5·10 que has tenido, no sólo las que siguen publicadas.
+                </p>
+            </div>
+
+            <div style={{ display: 'grid', gap: 10, marginTop: 16,
+                          gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))' }}>
+                {[['Entraron al programa', f(total)],
+                  ['Ya se vendieron', f(cerradas)],
+                  ['Siguen publicadas', f(vivas.length)],
+                  ['Días en venderse', h.medianaDiasVenta != null ? f(h.medianaDiasVenta) : '—'],
+                  ['Leads acumulados', f(leads)]].map(([k, v]) => (
+                    <div key={k} style={{ border: `1px solid ${LGT}`, borderRadius: R, padding: '10px 12px' }}>
+                        <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: .8,
+                                      color: GRY }}>{k}</div>
+                        <div style={{ fontSize: 22, fontWeight: 700,
+                                      fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+                    </div>
+                ))}
+            </div>
+
+            <p style={{ fontSize: 11, color: GRY, margin: '10px 0 0', lineHeight: 1.6, maxWidth: '76ch' }}>
+                «Días en venderse» es la mediana de las que ya cerraron, contada desde que se
+                publicaron{cerradas > 0 && cerradas < 4 ? ` — con ${cerradas === 1 ? 'una sola venta' : `sólo ${cerradas} ventas`} tómalo como referencia, no como promedio` : ''}.
+            </p>
+
+            <div style={{ overflowX: 'auto', marginTop: 16 }}>
+                <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse' }}>
+                    <thead>
+                        <tr><th style={th}>Código</th><th style={th}>Propiedad</th>
+                            <th style={th}>Estado</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Precio</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Leads</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Visitas</th></tr>
+                    </thead>
+                    <tbody>
+                        {h.props.map((x) => (
+                            <tr key={x.id}>
+                                <td style={{ ...td, whiteSpace: 'nowrap', fontWeight: 700 }}>{x.code}</td>
+                                <td style={td}>
+                                    <div>{x.tipo} · {x.colonia}</div>
+                                    <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{x.asesor}</div>
+                                </td>
+                                <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                                    {x.estado === 'vendida' ? (
+                                        <span style={{ color: SEA, fontWeight: 700 }}>
+                                            Vendida{x.diasVenta != null && (
+                                                <span style={{ color: GRY, fontWeight: 400 }}> · {f(x.diasVenta)} días</span>)}
+                                        </span>
+                                    ) : x.estado === 'publicada' ? (
+                                        <span style={{ color: '#6f6f6d' }}>
+                                            Publicada{x.mesesVivos != null && (
+                                                <span style={{ color: GRY }}> · {x.mesesVivos} meses</span>)}
+                                        </span>
+                                    ) : <span style={{ color: GRY }}>Fuera del programa</span>}
+                                </td>
+                                <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap',
+                                             fontVariantNumeric: 'tabular-nums' }}>{money(x.precio)}</td>
+                                <td style={{ ...td, textAlign: 'right',
+                                             fontVariantNumeric: 'tabular-nums' }}>{f(x.leads)}</td>
+                                <td style={{ ...td, textAlign: 'right',
+                                             fontVariantNumeric: 'tabular-nums' }}>{x.visitas || '—'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </>
+    );
+}
+
+export default function MB1510({ props, companyId, urlFicha }: {
     props: MBProp[];
+    companyId: string;
     urlFicha: (p: MBProp) => string;
 }) {
     const mias = props.filter((p) => p.p1510);
@@ -288,6 +407,8 @@ export default function MB1510({ props, urlFicha }: {
                     </div>
                 </>
             )}
+
+            <Historico companyId={companyId} />
 
             {/* ---- candidatas a exclusiva ---- */}
             {candidatas.length > 0 && (

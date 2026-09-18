@@ -33,9 +33,9 @@ h1, h2, h3, h4 {
    nunca colapsaba: 230 de barra + el mínimo de `main` no caben. Las tablas NO eran el
    problema, ésas ya viven dentro de su propio contenedor con scroll.
 
-   Debajo de 860px la barra pasa a ser una franja horizontal arriba y el menú se vuelve una
-   fila deslizable, que es la única forma de que 7 pestañas quepan sin apilarse en 7 renglones
-   y empujar el contenido fuera de la pantalla.
+   Debajo de 860px la barra pasa a ser una franja horizontal pegada arriba y el menú se
+   pliega detrás de un botón. Primero se probó una fila deslizable, pero con 7 pestañas las
+   últimas quedan fuera de pantalla sin que nada avise que existen.
    --------------------------------------------------------------------------------------- */
 @media (max-width: 860px) {
   .mb-shell { display: block !important; }
@@ -43,27 +43,30 @@ h1, h2, h3, h4 {
   .mb-side {
     width: auto !important;
     height: auto !important;
-    position: static !important;
+    position: sticky !important;
+    top: 0;
+    z-index: 20;
+    background: #fff;
     border-right: 0 !important;
     border-bottom: 1px solid #F3F3F3;
-    padding: 14px 14px 10px !important;
+    padding: 12px 14px !important;
   }
 
-  /* la fila de pestañas se desliza; el resto de la página no */
+  /* El menú se pliega detrás del botón: son 7 pestañas y en una fila deslizable las
+     últimas quedan fuera de pantalla sin que nada avise que están ahí. */
+  .mb-burger { display: flex !important; }
   .mb-nav {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    margin: 0 -14px;
-    padding: 2px 14px 4px;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #F3F3F3;
   }
-  .mb-nav::-webkit-scrollbar { display: none; }
-  .mb-nav > div { white-space: nowrap; margin-bottom: 0 !important; flex: 0 0 auto; }
+  .mb-nav.abierto { display: flex; }
+  .mb-nav > div { margin-bottom: 0 !important; }
 
   .mb-main { padding: 20px 14px 50px !important; }
-
-  /* el pie de "Borrador · datos en vivo" no aporta nada en una pantalla chica */
   .mb-side-pie { display: none !important; }
 }
+

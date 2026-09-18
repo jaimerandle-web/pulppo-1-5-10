@@ -38,6 +38,12 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
 type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'p1510' | 'analisis' | 'comoleer';
+// El botón de menú en celular muestra en qué sección estás; sin esto sólo dice "Menú" y te
+// pierdes al navegar.
+const SECTION_LABEL: Record<Section, string> = {
+    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño',
+    p1510: '1·5·10', analisis: 'Generador de análisis', comoleer: 'Cómo leer esto',
+};
 
 // La pestaña Destacados es un PILOTO con una sola cuenta: sólo aparece en Casane. Cuando se
 // abra al resto, basta agregar su companyId acá (o quitar el gate).
@@ -451,6 +457,8 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
 
 export default function MBApp({ d }: { d: MBData }) {
     const [section, setSection] = useState<Section>('overview');
+    // sólo se ve en celular (el CSS esconde el botón arriba de 860px)
+    const [menuAbierto, setMenuAbierto] = useState(false);
     const [seg, setSeg] = useState<Seg>('');
     const goSeg = (s: Seg) => { setSeg(s); setSection('props'); };
     const h2: CSSProperties = { fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 22, margin: '0 0 3px' };
@@ -458,7 +466,7 @@ export default function MBApp({ d }: { d: MBData }) {
     const eyebrow: CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: GRY };
     const accent: CSSProperties = { width: 52, height: 2, background: YEL, margin: '9px 0 12px' };
     const nav = (id: Section, label: string) => (
-        <div key={id} onClick={() => setSection(id)} style={{ padding: '9px 12px', borderRadius: R, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', marginBottom: 2, background: section === id ? BLK : 'transparent', color: section === id ? '#fff' : '#555' }}>{label}</div>
+        <div key={id} onClick={() => { setSection(id); setMenuAbierto(false); }} style={{ padding: '9px 12px', borderRadius: R, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', marginBottom: 2, background: section === id ? BLK : 'transparent', color: section === id ? '#fff' : '#555' }}>{label}</div>
     );
 
     const cnt = (fn2: (p: MBProp) => boolean) => d.props.filter(fn2).length;
@@ -514,7 +522,15 @@ export default function MBApp({ d }: { d: MBData }) {
                     <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{d.name}</div>
                     <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{f(d.nProps)} propiedades publicadas</div>
                 </div>
-                <div className="mb-nav">
+                <button className="mb-burger" onClick={() => setMenuAbierto((x) => !x)}
+                    aria-expanded={menuAbierto} aria-label="Menú"
+                    style={{ display: 'none', width: '100%', alignItems: 'center', gap: 10,
+                             background: 'none', border: `1px solid ${LGT}`, borderRadius: R,
+                             padding: '9px 12px', cursor: 'pointer', font: 'inherit', color: BLK }}>
+                    <span style={{ fontSize: 15, lineHeight: 1 }}>{menuAbierto ? '✕' : '☰'}</span>
+                    <span style={{ fontSize: 13.5, fontWeight: 600 }}>{SECTION_LABEL[section]}</span>
+                </button>
+                <div className={`mb-nav${menuAbierto ? ' abierto' : ''}`}>
                     {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{CON_DESEMPENO.has(d.companyId) && nav('desempeno', 'Desempeño')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 </div>
                 <div className="mb-side-pie" style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
@@ -836,7 +852,7 @@ export default function MBApp({ d }: { d: MBData }) {
                             Qué gana una propiedad por entrar al programa, cómo le va a las tuyas y
                             dónde das de alta las siguientes.
                         </div>
-                        <MB1510 props={d.props} urlFicha={urlFicha} />
+                        <MB1510 props={d.props} companyId={d.companyId} urlFicha={urlFicha} />
                     </div>
                 )}
 

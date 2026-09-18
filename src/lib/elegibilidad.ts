@@ -1,4 +1,7 @@
-// Evaluador de elegibilidad 1·5·10: ¿vale la pena meter una propiedad al programa y superdestacarla?
+// Evaluador de elegibilidad 1·5·10: ¿conviene convertir esta propiedad a exclusiva del programa?
+// El veredicto es sobre CONVERTIRLA, no sobre pautarla: si además conviene pagarle un lugar
+// destacado en el portal es otra pregunta, la contesta el motor de portales y se mide distinto
+// (valor = P(venta 6m) × regalía). Mezclarlas daba dos respuestas a la misma pregunta.
 // Da un % de aceptación (precio competitivo vs mix ACM·oferta·cierres + calidad del aviso + comisión +
 // demanda de zona) sobre gates intrínsecos (venta · residencial; ser desarrollo NO descalifica: solo
 // dispara un disclaimer de "posible rechazo") y requisitos de material
@@ -41,6 +44,9 @@ export interface EvalResult {
     base: number; baseLvl: string; scope: string;
     lev: string[];
 }
+
+// `contract.comission` viene en float crudo (3.4799999999999995): sin esto se imprime entero.
+const redondo = (n: number) => (Math.round(n * 100) / 100).toLocaleString('es-MX');
 
 export async function computeEval(id: string, opts: { withBase?: boolean } = {}): Promise<EvalResult | null> {
     const db = await getDb();
@@ -174,9 +180,9 @@ export async function computeEval(id: string, opts: { withBase?: boolean } = {})
     const faltaMat = mat.filter((x) => !x.ok).map((x) => x.k);
     const banda = !okIntr ? 'No aplica' : score >= 75 ? 'Alta' : score >= 55 ? 'Media' : 'Baja';
     const bandaTxt = !okIntr ? 'No cumple un requisito intrínseco del programa.'
-        : score >= 75 ? 'Buena candidata: vale la pena invertir y superdestacarla.'
+        : score >= 75 ? 'Buena candidata: conviértela a exclusiva 1·5·10.'
             : score >= 55 ? 'Candidata media: conviene mejorar precio/aviso antes de invertir.'
-                : 'Candidata baja: hoy no conviene superdestacarla.';
+                : 'Candidata baja: hoy no conviene convertirla; primero precio y aviso.';
 
     let base = 0, baseLvl = '';
     if (opts.withBase !== false) { try { const a = await buildAudience(code); if (a) { base = a.count; baseLvl = a.level; } } catch { /* opcional */ } }
@@ -189,9 +195,9 @@ export async function computeEval(id: string, opts: { withBase?: boolean } = {})
     if (q != null && q < 85) lev.push(`Mejorar la calidad del aviso (${q.toFixed(0)}/100).`);
     if (!(tipoOk && opOk && zonaOk)) lev.push(`Completar el título: falta ${[['tipo', tipoOk], ['operación', opOk], ['zona', zonaOk]].filter(([, o]) => !o).map(([x]) => x).join(', ')}.`);
     if (!descOk) lev.push(`Ajustar la descripción (${words} palabras; ideal 40–200).`);
-    if ((comm ?? 0) < 5) lev.push(`Negociar la comisión a 5%${comm != null ? ` (actual ${comm}%)` : ''}.`);
+    if ((comm ?? 0) < 5) lev.push(`Negociar la comisión a 5% + IVA${comm != null ? ` (actual ${redondo(comm)}%)` : ''}.`);
     if (faltaMat.length) lev.push(`Completar material para activar: falta ${faltaMat.join(', ').toLowerCase()}.`);
-    if (!lev.length) lev.push('Lista para superdestacar: precio, aviso, comisión y material en orden.');
+    if (!lev.length) lev.push('Lista para convertir: precio, aviso, comisión y material en orden.');
 
     return {
         id: String(P._id), code, title: (dig(P, 'listing', 'title') as string) ?? code, typ, op, col, city, street,
@@ -254,8 +260,8 @@ export function renderScorecard(r: EvalResult): string {
   <div class="sec"><div class="eyebrow">¿Aplica al programa?</div><div class="accent"></div>
     <div class="grid2">
       <div><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Requisitos intrínsecos</div>${r.intr.map((x) => gate(x.k, x.ok)).join('')}</div>
-      <div><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Material (para activar y superdestacar)</div>${r.mat.map((x) => gate(x.k, x.ok, x.v)).join('')}
-        <div style="margin-top:8px;font-size:11px;color:${r.okMat ? SEA : '#A5700a'}">${r.okMat ? '✓ Material completo: lista para activar.' : `Requiere material antes de superdestacar: falta ${esc(r.faltaMat.join(', ').toLowerCase())}.`}</div>
+      <div><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Material (para activar)</div>${r.mat.map((x) => gate(x.k, x.ok, x.v)).join('')}
+        <div style="margin-top:8px;font-size:11px;color:${r.okMat ? SEA : '#A5700a'}">${r.okMat ? '✓ Material completo: lista para activar.' : `Requiere material antes de activarla: falta ${esc(r.faltaMat.join(', ').toLowerCase())}.`}</div>
       </div>
     </div>
   </div>

@@ -1,6 +1,11 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+    // Sólo afecta a `next dev`. Las rutas protegidas se prueban a través de un proxy local
+    // que inyecta la cookie de identidad, y sin esto Next bloquea sus propios recursos de
+    // desarrollo por venir de otro origen: la página pinta pero NO hidrata, así que ningún
+    // clic ni useEffect corre y parece que la app está rota cuando no lo está.
+    allowedDevOrigins: ['127.0.0.1', 'localhost'],
     // /inventario sirve el reporte estático self-contained (public/inventario.html).
     // Queda detrás del login por el middleware (la ruta no está en la allowlist del matcher).
     async rewrites() {

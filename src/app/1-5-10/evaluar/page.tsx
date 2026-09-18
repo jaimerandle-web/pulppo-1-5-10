@@ -47,7 +47,7 @@ export default function EvaluarBuscador() {
             </header>
 
             <p className="mb-4 text-sm text-neutral-600">
-                Evalúa si una propiedad tiene la salud para entrar al programa y valer la inversión de superdestacarla:
+                Evalúa si conviene convertir una propiedad a exclusiva 1·5·10 y qué le falta para entrar:
                 <b> precio competitivo</b> (mix ACM · oferta · cierres), <b>calidad del aviso</b>, <b>comisión</b> y
                 <b> demanda de zona</b>. Requiere venta y residencial; si es desarrollo hay posible rechazo (se revisa caso a caso); el material (foto+video+tour) se marca aparte.
                 Puedes pegar <b>uno o varios códigos</b> (uno por línea o separados por coma).
