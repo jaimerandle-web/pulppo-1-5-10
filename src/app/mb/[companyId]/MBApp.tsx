@@ -503,8 +503,8 @@ export default function MBApp({ d }: { d: MBData }) {
     const dfn = (t: string, dd: string) => <div key={t} style={{ padding: '5px 0', borderBottom: `1px solid ${LGT}`, fontSize: 11.5, lineHeight: 1.4 }}><b>{t}</b> — {dd}</div>;
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Nunito Sans', sans-serif", color: BLK }}>
-            <aside style={{ width: 230, borderRight: `1px solid ${LGT}`, padding: '22px 14px', position: 'sticky', top: 0, height: '100vh' }}>
+        <div className="mb-shell" style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Nunito Sans', sans-serif", color: BLK }}>
+            <aside className="mb-side" style={{ width: 230, borderRight: `1px solid ${LGT}`, padding: '22px 14px', position: 'sticky', top: 0, height: '100vh' }}>
                 <div style={{ padding: '0 8px 16px' }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/pulppo-wordmark-black.png" alt="Pulppo" style={{ height: 22, display: 'block' }} />
@@ -514,11 +514,13 @@ export default function MBApp({ d }: { d: MBData }) {
                     <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{d.name}</div>
                     <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{f(d.nProps)} propiedades publicadas</div>
                 </div>
-                {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{CON_DESEMPENO.has(d.companyId) && nav('desempeno', 'Desempeño')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
-                <div style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
+                <div className="mb-nav">
+                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{CON_DESEMPENO.has(d.companyId) && nav('desempeno', 'Desempeño')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                </div>
+                <div className="mb-side-pie" style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
 
-            <main style={{ flex: 1, minWidth: 0, padding: '30px 34px 60px', maxWidth: 1260 }}>
+            <main className="mb-main" style={{ flex: 1, minWidth: 0, padding: '30px 34px 60px', maxWidth: 1260 }}>
                 {section === 'overview' && (
                     <div>
                         <div style={eyebrow}>Overview</div><div style={accent} />

@@ -24,3 +24,46 @@ h1, h2, h3, h4 {
   font-family: var(--font-serif);
   font-weight: 400;
 }
+
+/* ---------------------------------------------------------------------------------------
+   Master Brokers en celular.
+
+   El armazón de /mb es `aside` de 230px fijos + `main` en flex. En una pantalla de 390 eso
+   daba un `scrollWidth` de 602 —la página entera se arrastraba de lado— porque la barra
+   nunca colapsaba: 230 de barra + el mínimo de `main` no caben. Las tablas NO eran el
+   problema, ésas ya viven dentro de su propio contenedor con scroll.
+
+   Debajo de 860px la barra pasa a ser una franja horizontal arriba y el menú se vuelve una
+   fila deslizable, que es la única forma de que 7 pestañas quepan sin apilarse en 7 renglones
+   y empujar el contenido fuera de la pantalla.
+   --------------------------------------------------------------------------------------- */
+@media (max-width: 860px) {
+  .mb-shell { display: block !important; }
+
+  .mb-side {
+    width: auto !important;
+    height: auto !important;
+    position: static !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #F3F3F3;
+    padding: 14px 14px 10px !important;
+  }
+
+  /* la fila de pestañas se desliza; el resto de la página no */
+  .mb-nav {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: 0 -14px;
+    padding: 2px 14px 4px;
+  }
+  .mb-nav::-webkit-scrollbar { display: none; }
+  .mb-nav > div { white-space: nowrap; margin-bottom: 0 !important; flex: 0 0 auto; }
+
+  .mb-main { padding: 20px 14px 50px !important; }
+
+  /* el pie de "Borrador · datos en vivo" no aporta nada en una pantalla chica */
+  .mb-side-pie { display: none !important; }
+}

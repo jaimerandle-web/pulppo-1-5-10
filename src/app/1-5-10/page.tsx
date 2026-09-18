@@ -70,7 +70,7 @@ export default function Home() {
                     <img src="/pulppo-icon.png" alt="Pulppo" className="h-9 w-9" />
                     <h1 className="text-3xl sm:text-4xl">Pulppo · 1 · 5 · 10</h1>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-neutral-500">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
                     <span>Datos live desde Mongo (cache 10 min)</span>
                     <a href="/" className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
                         ← Herramientas

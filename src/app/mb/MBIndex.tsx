@@ -57,24 +57,24 @@ export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
 
     return (
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 28px 60px', fontFamily: "'Nunito Sans', sans-serif", color: BLK }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
                     <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: GRY }}>Master Brokers · Índice</div>
                     <div style={{ width: 52, height: 2, background: YEL, margin: '9px 0 12px' }} />
                     <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 32, margin: 0 }}>Tus inmobiliarias</h1>
                     <div style={{ fontSize: 12, color: GRY, marginTop: 2 }}>Filtra por KAM y abre la herramienta de cada inmobiliaria. Abre la de cada una en otra pestaña.</div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <a href="/" style={navLink}>← Herramientas</a>
                     {/* /analisis corre el mismo motor que esta herramienta, pero configurable para el KAM. */}
                     <a href="/analisis" style={navLink}>🧭 Análisis general</a>
                 </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, margin: '20px 0 16px' }}>
-                <div style={{ flex: 1, background: LGT, padding: '13px 16px', borderRadius: R }}><div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1 }}>{f(filtered.length)}</div><div style={{ fontSize: 11, marginTop: 5, fontWeight: 600 }}>inmobiliarias</div></div>
-                <div style={{ flex: 1, background: LGT, padding: '13px 16px', borderRadius: R }}><div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1 }}>{f(totProps)}</div><div style={{ fontSize: 11, marginTop: 5, fontWeight: 600 }}>propiedades publicadas</div></div>
-                <div style={{ flex: 1, background: LGT, padding: '13px 16px', borderRadius: R }}><div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1 }}>{f(totLeads)}</div><div style={{ fontSize: 11, marginTop: 5, fontWeight: 600 }}>leads · 30 días</div></div>
+            <div style={{ display: 'flex', gap: 12, margin: '20px 0 16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 150px', background: LGT, padding: '13px 16px', borderRadius: R }}><div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1 }}>{f(filtered.length)}</div><div style={{ fontSize: 11, marginTop: 5, fontWeight: 600 }}>inmobiliarias</div></div>
+                <div style={{ flex: '1 1 150px', background: LGT, padding: '13px 16px', borderRadius: R }}><div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1 }}>{f(totProps)}</div><div style={{ fontSize: 11, marginTop: 5, fontWeight: 600 }}>propiedades publicadas</div></div>
+                <div style={{ flex: '1 1 150px', background: LGT, padding: '13px 16px', borderRadius: R }}><div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1 }}>{f(totLeads)}</div><div style={{ fontSize: 11, marginTop: 5, fontWeight: 600 }}>leads · 30 días</div></div>
             </div>
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>

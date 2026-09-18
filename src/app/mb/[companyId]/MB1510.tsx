@@ -11,6 +11,7 @@
  * publicada, así que para la mayoría ESA es la pantalla, y su trabajo es que den de alta.
  * Por eso los beneficios y el botón de alta se muestran SIEMPRE, arriba, tenga o no tenga.
  */
+import { useMemo } from 'react';
 import type { MBProp } from '@/lib/mb';
 import { BENEFICIOS, ESCALERA, ACCESOS, MEDIDO_EN } from '@/lib/p1510';
 
@@ -38,6 +39,52 @@ const mediana = (v: number[]) => {
 const td: React.CSSProperties = { padding: '8px 8px', fontSize: 12, borderBottom: `1px solid ${LGT}`, verticalAlign: 'top' };
 const th: React.CSSProperties = { padding: '6px 8px', textAlign: 'left', fontSize: 11, fontWeight: 700,
     color: GRY, borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap' };
+
+// ---------------------------------------------------------------------------------------
+// Candidatas a exclusiva.
+//
+// **Por qué NO usa el evaluador de /1-5-10/evaluar.** `computeEval()` hace entre 6 y 8
+// consultas pesadas POR PROPIEDAD —cierres con $lookup, oferta contra el MLS, velocidad de
+// zona, búsquedas—. Sobre una cartera de 337 avisos son más de 2,000 consultas: no cabe en
+// una carga de página. Acá se usa lo que `mb.ts` YA trajo en bloque, sin una sola consulta
+// extra.
+//
+// **Y por eso esto NO inventa un puntaje.** Sería fácil armar una cifra propia y tendríamos
+// dos autoridades distintas contestando la misma pregunta, que es justo el problema a evitar.
+// Esto es un FILTRO PREVIO: aplica los gates del programa (venta · residencial) y lista los
+// requisitos OBJETIVOS que le faltan a cada una. El veredicto con % de aceptación lo sigue
+// dando el evaluador, propiedad por propiedad.
+const RESIDENCIAL = new Set(['Casa', 'Departamento', 'Casa en condominio', 'PH']);
+const COMISION_META = 5;        // mismo umbral que sComision en elegibilidad.ts
+const SOBREPRECIO = 10;         // % sobre la zona a partir del cual cuenta como "fuera de precio"
+const FOTOS_MIN = 12;           // mismo umbral que el gate de material del evaluador
+
+// `contract.comission` viene en float crudo: sin esto la etiqueta imprime "hoy 3.4799999999999995%".
+const pctCom = (n: number) => `${(Math.round(n * 100) / 100).toLocaleString('es-MX')}%`;
+
+interface Falta { k: string; texto: string; duro: boolean }
+
+/** Qué le falta para entrar al programa. `duro` = requisito, no mejora opcional. */
+function faltantes(p: MBProp): Falta[] {
+    const out: Falta[] = [];
+    if (p.comision != null && p.comision < COMISION_META) {
+        out.push({ k: 'com', texto: `Comisión al ${COMISION_META}% (hoy ${pctCom(p.comision)})`, duro: true });
+    } else if (p.comision == null) {
+        out.push({ k: 'com', texto: 'Comisión sin registrar', duro: true });
+    }
+    if (p.vsOferta != null && p.vsOferta > SOBREPRECIO) {
+        out.push({ k: 'precio', texto: `Precio ${Math.round(p.vsOferta)}% arriba de su zona`, duro: true });
+    }
+    if (p.fotos < FOTOS_MIN) out.push({ k: 'fotos', texto: `${p.fotos} fotos (mínimo ${FOTOS_MIN})`, duro: false });
+    if (!p.video) out.push({ k: 'video', texto: 'Falta video', duro: false });
+    if (!p.tour) out.push({ k: 'tour', texto: 'Falta tour virtual', duro: false });
+    return out;
+}
+
+/** Señal de que el mercado la quiere: gente buscando en su zona y leads que ya trae. */
+function potencial(p: MBProp): number {
+    return p.leads * 3 + p.visitas * 6 + Math.min(p.demanda, 120);
+}
 
 /** Embudo compacto: leads → visitas → ofertas → cierres, a escala común de toda la tabla. */
 function Embudo({ p, max }: { p: MBProp; max: number }) {
@@ -80,6 +127,17 @@ export default function MB1510({ props, urlFicha }: {
     const medLeads = mediana(mias.map((p) => p.leads));
     const sinLeads = mias.filter((p) => !p.leads).length;
     const maxEmbudo = Math.max(1, ...mias.map((p) => p.leads));
+
+    // Candidatas: pasan los gates del programa, no están ya dentro, y el mercado da alguna
+    // señal. Sin la señal de mercado la lista sería «todo tu inventario residencial en venta»,
+    // que no ayuda a decidir por cuál empezar.
+    const candidatas = useMemo(() => props
+        .filter((p) => !p.p1510 && p.op === 'Venta' && RESIDENCIAL.has(p.type)
+                       && (p.leads > 0 || p.visitas > 0 || p.demanda > 0))
+        .map((p) => ({ p, falta: faltantes(p), pot: potencial(p) }))
+        .sort((a, b) => b.pot - a.pot), [props]);
+    const TOPE = 15;
+    const listadas = candidatas.slice(0, TOPE);
 
     return (
         <div>
@@ -228,6 +286,79 @@ export default function MB1510({ props, urlFicha }: {
                             </tbody>
                         </table>
                     </div>
+                </>
+            )}
+
+            {/* ---- candidatas a exclusiva ---- */}
+            {candidatas.length > 0 && (
+                <>
+                    <div style={{ marginTop: 34, paddingTop: 22, borderTop: `2px solid ${BLK}` }}>
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, lineHeight: 1.2 }}>
+                            Propiedades con potencial para convertir en exclusiva
+                        </div>
+                        <p style={{ fontSize: 12.5, color: '#6f6f6d', margin: '7px 0 0',
+                                    maxWidth: '72ch', lineHeight: 1.6 }}>
+                            De tu inventario en venta, las que el programa acepta por tipo y que ya
+                            tienen movimiento. Ordenadas por la señal del mercado: leads y visitas que
+                            ya traen, más gente buscando en su zona. La columna de la derecha es lo que
+                            habría que resolver para meterlas.
+                        </p>
+                    </div>
+
+                    <div style={{ overflowX: 'auto', marginTop: 16 }}>
+                        <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr><th style={th}>Código</th><th style={th}>Propiedad</th>
+                                    <th style={{ ...th, textAlign: 'right' }}>Precio</th>
+                                    <th style={th}>Potencial de venta</th>
+                                    <th style={th}>Qué le falta para entrar</th></tr>
+                            </thead>
+                            <tbody>
+                                {listadas.map(({ p, falta }) => (
+                                    <tr key={p.id}>
+                                        <td style={{ ...td, whiteSpace: 'nowrap', fontWeight: 700 }}>{p.code}</td>
+                                        <td style={td}>
+                                            <div>{p.type} · {p.colonia}</div>
+                                            <div style={{ fontSize: 10, color: GRY, marginTop: 2 }}>{p.asesor}</div>
+                                        </td>
+                                        <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap',
+                                                     fontVariantNumeric: 'tabular-nums' }}>{money(p.precio)}</td>
+                                        <td style={{ ...td, fontSize: 11.5, color: '#6f6f6d' }}>
+                                            <b style={{ color: BLK }}>{f(p.leads)}</b> leads
+                                            {p.visitas > 0 && <> · <b style={{ color: BLK }}>{f(p.visitas)}</b> visitas</>}
+                                            {p.demanda > 0 && <><br />{f(p.demanda)} buscando en la zona</>}
+                                        </td>
+                                        <td style={td}>
+                                            {falta.length === 0 ? (
+                                                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999,
+                                                               background: '#e8f2f2', color: SEA, fontWeight: 700 }}>
+                                                    Lista para proponerla
+                                                </span>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                                    {falta.map((x) => (
+                                                        <span key={x.k} style={{ fontSize: 10.5, padding: '2px 7px',
+                                                            borderRadius: 999,
+                                                            background: x.duro ? '#fbeceb' : LGT,
+                                                            color: x.duro ? RED : '#6f6f6d' }}>{x.texto}</span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p style={{ fontSize: 11, color: GRY, marginTop: 12, lineHeight: 1.6, maxWidth: '78ch' }}>
+                        {candidatas.length > TOPE
+                            ? `Se muestran las ${TOPE} de mayor potencial, de ${f(candidatas.length)} que califican por tipo. `
+                            : ''}
+                        En rojo van los requisitos del programa y en gris el material, que se puede
+                        completar después. Esta lista es un filtro previo: el veredicto con porcentaje
+                        de aceptación lo da el evaluador, propiedad por propiedad.
+                    </p>
                 </>
             )}
         </div>

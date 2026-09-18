@@ -129,7 +129,7 @@ export function demoData(): MBData {
             calidad, dias, mesesPub: dias / 30,
             vistas, leads, respondidos, visitas, ofertas, cierres, respMedMin,
             oppScore: demandaZona / (1 + leads), diag, tier: 'SIMPLE',
-            fotos, video, tour, amenidades, errores, sugerencia, p1510: false, token: '',
+            fotos, video, tour, amenidades, errores, sugerencia, p1510: false, comision: 4, token: '',
         });
     }
 
