@@ -8,7 +8,8 @@
 // Devuelve nombre, correo y foto: lo mínimo para pintar la lista. NADA de celular ni
 // operaciones — justo lo que el archivo estático filtraba.
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@/lib/companyAccess';
+import { currentUser, asesorDeEmail, masterCompanyForEmail } from '@/lib/companyAccess';
+import { tieneStudio } from '@/lib/studioPiloto';
 import { getDb } from '@/lib/data';
 
 const FILTRO_ACTIVOS = {
@@ -20,6 +21,16 @@ const FILTRO_ACTIVOS = {
 export async function GET(req: NextRequest) {
     const u = await currentUser();
     if (!u) return NextResponse.json({ error: 'sin sesión' }, { status: 401 });
+    // Mismo corte que /api/studio/perfil: Studio es de UNA inmobiliaria y las cookies viejas
+    // duran 90 días, así que la barrera se recalcula acá contra Mongo.
+    if (u && !u.internal) {
+        const suya = (await masterCompanyForEmail(u.email))
+            ?? (await asesorDeEmail(u.email))?.companyId ?? null;
+        if (!tieneStudio(suya)) {
+            return NextResponse.json({ error: 'Studio no está disponible para tu inmobiliaria' },
+                { status: 403 });
+        }
+    }
     // la lista de un equipo completo no es de un asesor: sólo interno
     if (!u.internal) return NextResponse.json({ error: 'no autorizado' }, { status: 403 });
 

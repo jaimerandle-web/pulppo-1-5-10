@@ -1,3 +1,4 @@
+import { tieneStudio } from '@/lib/studioPiloto';
 import { NextRequest, NextResponse } from 'next/server';
 import { isAllowed } from '@/lib/access';
 import { fichaToken, userToken } from '@/lib/token';
@@ -41,12 +42,18 @@ export async function middleware(req: NextRequest) {
         // equipo. Sin esto tenía perfil dentro del bundle de Studio y ninguna ruta que lo
         // llevara a él. /inicio es el menú donde elige entre las dos herramientas que ya
         // son suyas; no le abre nada nuevo.
-        const suyoTambien = p === '/inicio' || p === '/studio' || p.startsWith('/studio/')
-            || p.startsWith('/api/studio');
+        // 🔴 Studio es de UNA inmobiliaria. Antes pasaba CUALQUIER master broker, y el menú
+        // /inicio se lo ofrecía: María Carrera (9 SQUARE) acabó en el Studio de Diamond House
+        // en vez de su panel. Ver lib/studioPiloto.ts.
+        const conStudio = tieneStudio(company);
+        const suyoTambien = conStudio && (p === '/inicio' || p === '/studio'
+            || p.startsWith('/studio/') || p.startsWith('/api/studio'));
         if (ownPanel || mbApi || suyoTambien) return NextResponse.next();
         if (p.startsWith('/api')) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         const url = req.nextUrl.clone();
-        url.pathname = '/inicio';
+        // Sin Studio, /inicio no es su menú (sólo tendría una tarjeta) y además mandarlo ahí
+        // era un BUCLE: no está en `suyoTambien`, así que /inicio redirigía a /inicio.
+        url.pathname = conStudio ? '/inicio' : `/mb/${company}`;
         url.search = '';
         return NextResponse.redirect(url);
     }

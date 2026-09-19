@@ -1,5 +1,7 @@
 'use client';
 
+import { tieneStudio } from '@/lib/studioPiloto';
+
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -43,14 +45,20 @@ export default function InicioMaster() {
         router.push('/login');
     }
 
+    // 🔴 Studio es de UNA inmobiliaria (lib/studioPiloto.ts). Este menú se hizo para el titular
+    // de esa cuenta, que tiene dos herramientas; al resto le ofrecía una que no es suya. El
+    // middleware ya no los deja entrar acá, pero la tarjeta se esconde igual: una opción que
+    // rebota es peor que no mostrarla.
+    const conStudio = tieneStudio(company);
+
     const opciones = [
-        {
+        ...(conStudio ? [{
             href: '/studio/index.html',
             eyebrow: 'Contenido',
             title: 'Studio',
             blurb: 'Qué publicar hoy y la pieza lista para bajar, armada con tu perfil, tus zonas y tus operaciones.',
             cta: 'Ver lo de hoy'
-        },
+        }] : []),
         {
             href: company ? `/mb/${company}` : '/login',
             eyebrow: 'Tu inmobiliaria',

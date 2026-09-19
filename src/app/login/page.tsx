@@ -50,7 +50,8 @@ function LoginContent() {
                 const d = await res.json().catch(() => ({}));
                 // Asesor → Studio; master broker → panel de su inmobiliaria; equipo interno → dashboard.
                 // el master elige entre su panel y Studio; el asesor entra directo a Studio
-                if (res.ok) router.push(d.asesorId ? '/studio/index.html' : (d.companyId ? '/inicio' : '/'));
+                // el destino lo decide el servidor: acá no se sabe qué inmobiliaria tiene Studio
+                if (res.ok) router.push(d.destino || (d.companyId ? `/mb/${d.companyId}` : '/'));
                 else setError(d.error || 'No se pudo ingresar');
             } catch (err: unknown) {
                 setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión con Google.');

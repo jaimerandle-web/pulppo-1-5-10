@@ -29,7 +29,13 @@ export async function masterCompanyForEmail(email?: string | null): Promise<stri
 // Acceso de asesores (type:'associate') a Studio. Gemelo de masterCompanyForEmail: mismo criterio
 // —agente activo, con company— pero devuelve el _id del AGENTE, no el de la company: el asesor se ve
 // a sí mismo, no a su inmobiliaria. Un master NO cae acá (se resuelve antes como master broker).
-export async function asesorIdForEmail(email?: string | null): Promise<string | null> {
+/**
+ * El asesor y SU INMOBILIARIA. La company hace falta porque Studio es de una sola cuenta
+ * (ver `lib/studioPiloto.ts`): sin ella, cualquiera de los ~988 asesores de la red aterrizaba
+ * en el Studio de Diamond House.
+ */
+export async function asesorDeEmail(email?: string | null):
+    Promise<{ id: string; companyId: string | null } | null> {
     const mail = (email || '').trim().toLowerCase();
     if (!mail) return null;
     const db = await getDb();
@@ -41,10 +47,15 @@ export async function asesorIdForEmail(email?: string | null): Promise<string | 
             'company._id': { $exists: true },
             $or: [{ email: mail }, { 'personal.email': mail }]
         },
-        { projection: { _id: 1 }, collation: { locale: 'en', strength: 2 } }
+        { projection: { _id: 1, 'company._id': 1 }, collation: { locale: 'en', strength: 2 } }
     );
-    const id = (doc as { _id?: unknown } | null)?._id;
-    return id ? String(id) : null;
+    const d = doc as { _id?: unknown; company?: { _id?: unknown } } | null;
+    if (!d?._id) return null;
+    return { id: String(d._id), companyId: d.company?._id ? String(d.company._id) : null };
+}
+
+export async function asesorIdForEmail(email?: string | null): Promise<string | null> {
+    return (await asesorDeEmail(email))?.id ?? null;
 }
 
 export interface CurrentUser {

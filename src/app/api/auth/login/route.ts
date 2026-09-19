@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { isAllowed } from '@/lib/access';
 import { userToken } from '@/lib/token';
-import { asesorIdForEmail, masterCompanyForEmail } from '@/lib/companyAccess';
+import { asesorDeEmail, masterCompanyForEmail } from '@/lib/companyAccess';
+import { tieneStudio } from '@/lib/studioPiloto';
 
 // POST /api/auth/login { idToken } — SOLO Google: verifica el idToken de Firebase
 // contra Google (accounts:lookup) y recién ahí valida allowlist + setea cookies.
@@ -32,10 +33,21 @@ export async function POST(req: NextRequest) {
     const companyId = internal ? null : await masterCompanyForEmail(mail);
     // Tercer tipo: asesor (type:'associate'). Solo se prueba si no es interno ni master, así que
     // ni el equipo ni los master brokers cambian de comportamiento. Único acceso: /studio.
-    const asesorId = internal || companyId ? null : await asesorIdForEmail(mail);
+    const asesor = internal || companyId ? null : await asesorDeEmail(mail);
+    // 🔴 Studio es de UNA inmobiliaria (ver lib/studioPiloto.ts). Sin este corte, un asesor de
+    // cualquiera de las otras cuentas caía en el Studio de Diamond House, que no es su
+    // herramienta. Se le niega el acceso con un mensaje, en vez de dejarlo en una pantalla
+    // que no le sirve.
+    const asesorId = asesor && tieneStudio(asesor.companyId) ? asesor.id : null;
     if (!internal && !companyId && !asesorId) {
         return Response.json({ error: 'Tu email no tiene acceso. Pedí que te agreguen al equipo.' }, { status: 403 });
     }
+    // A dónde entra cada quien. El menú /inicio sólo tiene sentido para quien tiene DOS
+    // herramientas —el titular de la inmobiliaria del Studio—; al resto lo mandaba a elegir
+    // entre su panel y una herramienta ajena.
+    const destino = internal ? '/'
+        : companyId ? (tieneStudio(companyId) ? '/inicio' : `/mb/${companyId}`)
+            : '/studio/index.html';
 
     const store = await cookies();
     const opts = { httpOnly: false, sameSite: 'lax' as const, secure: true, path: '/', maxAge: 60 * 60 * 24 * 90 };
@@ -51,7 +63,7 @@ export async function POST(req: NextRequest) {
     // (currentAsesorId) se recalcula server-side y no confía en esta cookie.
     if (asesorId) store.set('cm-asesor', asesorId, opts);
     else store.delete('cm-asesor');
-    return Response.json({ ok: true, email: mail, companyId, asesorId });
+    return Response.json({ ok: true, email: mail, companyId, asesorId, destino });
 }
 
 // DELETE limpia la sesión.

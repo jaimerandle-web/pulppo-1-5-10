@@ -9,7 +9,8 @@
 // Los internos (allowlist) sí pueden, con `?email=`, porque necesitan probar el archivo del
 // piloto con la cuenta de cualquier asesora.
 import { NextRequest, NextResponse } from 'next/server';
-import { currentUser } from '@/lib/companyAccess';
+import { currentUser, asesorDeEmail, masterCompanyForEmail } from '@/lib/companyAccess';
+import { tieneStudio } from '@/lib/studioPiloto';
 import { perfilDeAsesor } from '@/lib/studio/perfil';
 
 // Lo que el cliente manda: por cada idea de operación, su clase y los tokens que su
@@ -28,6 +29,20 @@ export async function POST(req: NextRequest) {
     // el interno puede pedir el de otro para probar; el asesor, sólo el suyo
     const pedido = (req.nextUrl.searchParams.get('email') || '').trim().toLowerCase();
     const email = u.internal && pedido ? pedido : u.email;
+
+    // 🔴 Barrera real del piloto. El middleware ya no deja entrar a /studio a quien no es de la
+    // inmobiliaria del Studio, pero las cookies duran 90 días: quien inició sesión ANTES de este
+    // corte sigue teniéndolas. Acá se recalcula contra Mongo, que es lo único que no se puede
+    // falsificar desde el navegador. Los internos quedan fuera del corte porque prueban el
+    // piloto con la cuenta de cualquier asesora.
+    if (!u.internal) {
+        const suya = (await masterCompanyForEmail(email))
+            ?? (await asesorDeEmail(email))?.companyId ?? null;
+        if (!tieneStudio(suya)) {
+            return NextResponse.json({ error: 'Studio no está disponible para tu inmobiliaria' },
+                { status: 403 });
+        }
+    }
 
     let cuerpo: Cuerpo = {};
     try {
