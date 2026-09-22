@@ -1,8 +1,10 @@
 // Acceso de Master Brokers (usuarios externos) al panel de SU inmobiliaria.
-// Regla: un email externo entra SOLO si es un agente `type:'master'` activo con company._id; y solo
-// puede ver los datos de esa company. Los internos (allowlist) mantienen acceso total.
+// Regla: un email externo entra si es un agente `type:'master'` activo con company._id —o si la
+// app se lo concede a mano (`masterExtra.ts`), para quien en Pulppo sigue como `associate`— y sólo
+// puede ver los datos de ESA company. Los internos (allowlist) mantienen acceso total.
 // Este módulo toca Mongo → se usa en server components y API routes (Node), NUNCA en el middleware (Edge).
 import { cookies } from 'next/headers';
+import { masterExtra } from './masterExtra';
 import { getDb } from './data';
 import { isAllowed } from './access';
 import { userToken } from './token';
@@ -23,7 +25,9 @@ export async function masterCompanyForEmail(email?: string | null): Promise<stri
         { projection: { 'company._id': 1 }, collation: { locale: 'en', strength: 2 } }
     );
     const id = (doc as { company?: { _id?: unknown } } | null)?.company?._id;
-    return id ? String(id) : null;
+    // Mongo manda. Sólo si la base no la reconoce como master se mira la concesión de la app
+    // (ver `masterExtra.ts`: gente que en Pulppo sigue como `associate` y necesita su panel).
+    return id ? String(id) : masterExtra(mail);
 }
 
 // Acceso de asesores (type:'associate') a Studio. Gemelo de masterCompanyForEmail: mismo criterio
