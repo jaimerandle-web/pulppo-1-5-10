@@ -702,8 +702,10 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     // ---------- HTML ----------
     const dot = (s: 'ok' | 'warn' | 'bad' | 'na') => `<span class="dt" style="background:${{ ok: SEA, warn: YEL, bad: RED, na: GRY }[s]}"></span>`;
     const rowH = (lbl: string, v: string, s: 'ok' | 'warn' | 'bad' | 'na', note = '') => `<div class="srow">${dot(s)}<span class="slbl">${lbl}</span><span class="sval">${v}</span><span class="snote">${note}</span></div>`;
-    let vstat: 'ok' | 'warn' | 'bad' | 'na' = 'na', vnote = '';
-    if (dval == null) { vstat = 'na'; } else if (dval <= 0) { vstat = 'ok'; vnote = 'por debajo del mercado'; } else if (dval <= 10) { vstat = 'warn'; vnote = 'ligeramente por encima'; } else { vstat = 'bad'; vnote = 'por encima del mercado'; }
+    // Sale la fila de «Valuación» de la salud del anuncio (Ale, 23-sep-2026). El ACM es una
+    // referencia floja —medido antes: no sirve como filtro de precio— y en una lista de chequeo
+    // se leía como un veredicto. `dval` SIGUE usándose para las recomendaciones y el freno, donde
+    // va acompañado de su contexto en vez de suelto con un semáforo.
     // contrato → fila de salud (semáforo por meses restantes)
     let cstat: 'ok' | 'warn' | 'bad' | 'na' = 'na', cval = '—', cnote = 'sin fecha registrada';
     if (mesesRest != null && exExpiry) {
@@ -716,7 +718,6 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const tcheck = `tipo ${tipoOk ? '✓' : '✗'} · operación ${opOk ? '✓' : '✗'} · zona ${zonaOk ? '✓' : '✗'}`;
     const health = [
         rowH('Calidad del anuncio', q != null ? `${q.toFixed(0)}/100` : '—', q != null && q >= 85 ? 'ok' : 'warn'),
-        rowH('Valuación', `${money(val)} vs estimado ${money(acm)}`, vstat, (dval != null ? `${dval >= 0 ? '+' : ''}${dval.toFixed(0)}% · ` : '') + vnote),
         rowH('Título', esc(title.slice(0, 60)) || '—', tipoOk && opOk && zonaOk ? 'ok' : 'warn', tcheck),
         rowH('Descripción', `${chars} caracteres · ${words} palabras`,
             chars >= MIN_CHARS && words <= 200 ? 'ok' : 'warn',
