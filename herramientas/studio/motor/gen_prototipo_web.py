@@ -755,6 +755,13 @@ body{margin:0;background:var(--papel);color:var(--tinta);font-family:var(--cuerp
   display:flex;flex-direction:column;height:748px;position:sticky;top:20px}
 .barra{display:flex;align-items:center;gap:8px;padding:11px 18px;border-bottom:1px solid var(--gris-claro);
   font-family:var(--etiq);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gris);flex:0 0 auto}
+/* Barra de revisión (sólo interno). Amarilla a propósito: tiene que quedar claro que lo
+   que se ve es la cuenta de otra persona, no la propia. */
+.revision{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:6px 12px;background:#F6BE00;color:#212322;font-size:11px;line-height:1.3}
+.revision button{background:#212322;color:#fff;border:0;border-radius:2px;
+  padding:3px 9px;font:inherit;font-weight:700;cursor:pointer}
+
 .barra .marca{width:9px;height:9px;border-radius:50%;background:var(--acento)}
 .vista{flex:1;overflow-y:auto;overflow-x:hidden}
 .pad{padding:20px}
@@ -1034,6 +1041,7 @@ table.datos td:last-child{text-align:right;font-variant-numeric:tabular-nums;fon
 <div class="escena">
   <div class="tel">
     <div class="barra"><span class="marca"></span><span id="barra-tit">Pulppo Studio</span></div>
+    <div class="revision" id="revision" hidden></div>
     <div class="vista" id="vista"></div>
     <div class="tabs" id="tabs" hidden>
       <button data-ir="hoy">Hoy</button>
@@ -2187,9 +2195,24 @@ window.addEventListener("resize", () => {
 });
 
 /* ---------- pintar ---------- */
+/* Barra de revisión: SÓLO la ve quien es interno (lo decide el SERVIDOR, no el archivo).
+   Existe porque la elección de "¿Quién eres?" se guarda en el teléfono y no había salida:
+   Ale quedó viendo el Studio como "Operaciones Temp" —una cuenta de la casa, no una asesora—
+   y así ninguna demo se ve bien. `?como=<correo>` en la URL sigue funcionando y manda sobre lo
+   guardado; esto es lo mismo sin tener que escribir la URL a mano. */
+function barraInterno(){
+  const b = document.getElementById("revision");
+  if(!b) return;
+  if(!S.interno){ b.hidden = true; return; }
+  b.hidden = false;
+  const quien = S.comoNombre || (B && B.nombre) || "nadie";
+  b.innerHTML = `<span>Viendo como <b>${esc(quien)}</b></span><button data-cambiar>cambiar</button>`;
+}
+
 function pintar(){
   const mapa = {quien:pQuienEres, fuera:pFuera, alta1:pAlta1, alta2:pAlta2, hoy:pHoy, editor:pEditor, piezas:pPiezas, perfil:pPerfil};
   document.getElementById("vista").innerHTML = (mapa[S.pantalla] || pHoy)();
+  barraInterno();
   document.getElementById("vista").scrollTop = 0;
   const tabs = document.getElementById("tabs");
   tabs.hidden = !S.altaLista || S.pantalla === "quien" || S.pantalla === "fuera";
@@ -2224,10 +2247,18 @@ document.addEventListener("click", e => {
     return;
   }
   if(t.dataset.recargar !== undefined){ return location.reload(); }
+  if(t.dataset.cambiar !== undefined){
+    try { localStorage.removeItem("studio.quien"); } catch(e) {}
+    // la URL manda sobre lo guardado, así que también hay que sacar el ?como de ahí
+    const u = new URL(location.href); u.searchParams.delete("como");
+    location.replace(u.pathname + u.search + u.hash);
+    return;
+  }
   if(t.dataset.quien){
     const elegido = EQUIPO[Number(t.dataset.quien)];
     if(!elegido) return;
     try { localStorage.setItem("studio.quien", elegido.email); } catch(e) {}
+    S.comoNombre = elegido.nombre || elegido.email;
     if(D.en_vivo){
       // en vivo el selector sólo trae nombre y correo: el perfil hay que ir a pedirlo
       perfilEnVivo(elegido.email).then(r => {
@@ -2532,6 +2563,9 @@ async function arrancar(){
     try {
       const r = await perfilEnVivo(como);
       B = r.perfil; interno = !!r.interno;
+      // Para la barra de revisión: sin esto, quien revisa queda pegado a la persona que
+      // eligió una vez —la elección se guarda en el teléfono— y no hay cómo cambiarla.
+      S.interno = interno;
     } catch(e) {
       enVista(pTropiezo("No pudimos cargar tus piezas",
         "Fue al pedir tus datos, no es tu conexión. Intenta de nuevo; si sigue igual, avísanos."));
