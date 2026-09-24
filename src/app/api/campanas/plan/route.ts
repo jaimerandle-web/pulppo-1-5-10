@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 const DEFAULT_HOUR_UTC = 15;   // 09:00 en México (UTC-6, sin horario de verano)
-const MAX_PER_MAIL = 3;
+const MAX_PER_MAIL = 12;   // sube de 3 a 12: el costo escala con (correos x tamano de lista), no con propiedades por correo
 
 function nextMonday(from: Date): Date {
     const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));

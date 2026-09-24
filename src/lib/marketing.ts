@@ -183,9 +183,22 @@ export async function listSingleSends(): Promise<SgSingleSend[]> {
 // Los códigos de propiedad de cada digest se guardan en el `name` del Single Send como sufijo " [DLI-1,DLI-2]".
 // Así se pueden leer de vuelta con listSingleSends() para no reenviar una propiedad que ya salió/está en cola.
 const CODES_RE = /\[([^\]]+)\]\s*$/;
-export function encodeCodesInName(base: string, codes: string[]): string {
-    const tag = codes.length ? ` [${codes.map((c) => c.toUpperCase()).join(',')}]` : '';
-    return (base.slice(0, 99 - tag.length) + tag).slice(0, 100);
+// SendGrid mide el nombre en BYTES, no en caracteres: los '·' y las tildes pesan 2, así que contar
+// `.length` deja pasar nombres de 100 caracteres que el API rechaza con 400. Y la base manda sobre los
+// códigos: `scheduledZoneWeeks` lee la zona y la fecha de ahí, así que se conserva entera y se cortan
+// los códigos que no quepan (con 9+ propiedades no caben todos). El detalle completo del lote no se
+// pierde: vive en la respuesta de /api/campanas/schedule.
+const byteLen = (s: string) => new TextEncoder().encode(s).length;
+export function encodeCodesInName(base: string, codes: string[], max = 100): string {
+    let head = base;
+    while (byteLen(head) > max) head = head.slice(0, -1);
+    let tag = '';
+    for (let i = 0; i < codes.length; i++) {
+        const next = ` [${codes.slice(0, i + 1).map((c) => c.toUpperCase()).join(',')}]`;
+        if (byteLen(head) + byteLen(next) > max) break;
+        tag = next;
+    }
+    return head + tag;
 }
 export function parseCodesFromName(name?: string): string[] {
     const m = CODES_RE.exec(name || '');

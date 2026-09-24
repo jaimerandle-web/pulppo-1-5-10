@@ -48,14 +48,18 @@ export async function POST(req: Request) {
             const render = await renderDigest(d.zonaName, codesFresh, { subject: s.subject });
             if (!render) { out.push({ key: s.key, zonaName: d.zonaName, ok: false, error: 'No se pudo armar el digest' }); continue; }
 
+            const dateTag = (s.sendAt || '').slice(0, 10);
+
+            // La lista lleva la FECHA en el nombre. Sin ella `getOrCreateList` reusaba una única lista por
+            // zona que crece en cada corrida: el correo terminaba saliendo a todo el acumulado histórico
+            // (Centro: 40,522) en vez de a la base que el plan calculó para ESTAS propiedades (9,197).
             let listId = listOf.get(zonaKey);
             if (!listId) {
-                listId = await getOrCreateList(`1·5·10 · ${d.zonaName}`);
+                listId = await getOrCreateList(`1·5·10 · ${d.zonaName} · ${dateTag}`);
                 await addContacts(listId, d.rows.map((r) => ({ email: r.email, nombre: r.nombre })));
                 listOf.set(zonaKey, listId);
             }
 
-            const dateTag = (s.sendAt || '').slice(0, 10);
             const name = encodeCodesInName(`1·5·10 · Exclusivas ${d.zonaName} · ${dateTag}`, render.codes);
             const html = withUnsubFooter(render.html);
             const send = await createSingleSend({ name, subject: render.subject, html, listId });
