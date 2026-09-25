@@ -1,4 +1,5 @@
 import { scheduleSingleSend, unscheduleSingleSend } from '@/lib/marketing';
+import { campanasHabilitadas, respuestaBloqueada } from '@/lib/campanasLock';
 
 // Fase 2, paso 3 (aprobación humana): POST { sends: [{ id, sendAt }] } agenda cada borrador en SendGrid.
 // Este es el ÚNICO punto que hace que un correo salga. DELETE ?id=<id> desprograma (vuelve a borrador),
@@ -9,6 +10,7 @@ export const maxDuration = 120;
 interface Send { id?: string; sendAt?: string }
 
 export async function POST(req: Request) {
+    if (!campanasHabilitadas()) return respuestaBloqueada();
     let body: { sends?: Send[] };
     try { body = await req.json(); } catch { return Response.json({ error: 'JSON inválido' }, { status: 400 }); }
 

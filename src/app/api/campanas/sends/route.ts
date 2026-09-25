@@ -1,3 +1,4 @@
+import { campanasHabilitadas, MOTIVO_BLOQUEO } from '@/lib/campanasLock';
 import { listSingleSends, singleSendStats, parseCodesFromName } from '@/lib/marketing';
 
 // Estado de las campañas 1·5·10 en SendGrid (Single Sends que arma este tool, por prefijo de nombre):
@@ -21,7 +22,9 @@ export async function GET() {
         }));
 
         items.sort((a, b) => String(b.send_at || '').localeCompare(String(a.send_at || '')));
-        return Response.json({ items });
+        // Esta lectura sigue viva con el candado puesto, y es la que le dice a la pantalla si mostrar
+        // el aviso y apagar los botones. Ver src/lib/campanasLock.ts.
+        return Response.json({ items, bloqueado: !campanasHabilitadas(), motivo: campanasHabilitadas() ? null : MOTIVO_BLOQUEO });
     } catch (e) {
         return Response.json({ error: e instanceof Error ? e.message : 'Error leyendo los envíos' }, { status: 500 });
     }

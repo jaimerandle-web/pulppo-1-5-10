@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { renderCampaign } from '@/lib/email';
 import { sendTestEmail } from '@/lib/sendgrid';
+import { campanasHabilitadas, respuestaBloqueada } from '@/lib/campanasLock';
 
 // Envío de PRUEBA de una campaña. POST { id, to?, subject?, hook? }.
 // Guardrail Fase 1: el destinatario DEBE ser @pulppo.com (nunca leads reales hasta Fase 2).
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
+    if (!campanasHabilitadas()) return respuestaBloqueada();
     let payload: { id?: string; to?: string; subject?: string; hook?: string };
     try { payload = await req.json(); } catch { return Response.json({ error: 'JSON inválido' }, { status: 400 }); }
 

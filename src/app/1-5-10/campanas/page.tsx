@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 // Generador de campañas 1·5·10: buscar propiedad → preview del email on-brand → enviar prueba
@@ -46,6 +46,17 @@ export default function CampanasPage() {
     const [sendsLoading, setSendsLoading] = useState(false);
     const [f2msg, setF2msg] = useState('');
     const [f2err, setF2err] = useState('');
+    // Candado del módulo (src/lib/campanasLock.ts). Se consulta al montar, por la lectura de estado que
+    // sigue viva con el candado puesto, para avisar y apagar los botones antes de que nadie los toque.
+    const [bloqueado, setBloqueado] = useState(false);
+    const [motivoBloqueo, setMotivoBloqueo] = useState('');
+
+    useEffect(() => {
+        fetch('/api/campanas/sends')
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => { if (d?.bloqueado) { setBloqueado(true); setMotivoBloqueo(String(d.motivo || '')); } })
+            .catch(() => { /* si la lectura falla, los guards del servidor siguen bloqueando igual */ });
+    }, []);
 
     const q = () => {
         const p = new URLSearchParams({ id: id.trim() });
@@ -228,6 +239,16 @@ export default function CampanasPage() {
                 <a href="/1-5-10" className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs hover:bg-neutral-50">← Dashboard</a>
             </header>
 
+            {bloqueado && (
+                <div className="mb-4 rounded-lg border-2 border-[#A52003] bg-[#fff5f3] px-4 py-3 text-sm text-[#A52003]">
+                    <b>🔒 Módulo bloqueado — no se puede crear ni enviar nada.</b>
+                    <div className="mt-1 text-xs text-neutral-700">{motivoBloqueo}</div>
+                    <div className="mt-1 text-xs text-neutral-700">
+                        Lo que <b>sí</b> sigue funcionando: ver el estado de los envíos y <b>cancelar</b> uno programado.
+                    </div>
+                </div>
+            )}
+
             <div className="mb-4 rounded-lg border border-[#F6BE00] bg-[#fffdf5] px-4 py-2 text-xs text-neutral-700">
                 <b>Arriba — generar y probar.</b> Arma el email desde una propiedad, genera su base y envíate una prueba
                 (solo a <b>@pulppo.com</b>). <b>Abajo — programar envíos reales</b> por SendGrid: planeas el calendario
@@ -288,7 +309,7 @@ export default function CampanasPage() {
                     <label className="text-xs font-semibold text-neutral-600">Enviar prueba a (default: tú)</label>
                     <input className={inputCls} value={to} onChange={(e) => setTo(e.target.value)}
                         placeholder="tu.correo@pulppo.com" />
-                    <button className={btnDark} onClick={sendTest} disabled={sending || !meta}>
+                    <button className={btnDark} onClick={sendTest} disabled={bloqueado || sending || !meta}>
                         {sending ? 'Enviando…' : '✉️ Enviar prueba'}
                     </button>
 
@@ -384,7 +405,7 @@ export default function CampanasPage() {
                     <div className="flex flex-col gap-2">
                         <label className="text-xs font-semibold text-neutral-600">Semana de inicio (lunes)</label>
                         <input type="date" className={inputCls} value={planStart} onChange={(e) => setPlanStart(e.target.value)} />
-                        <button className={btnDark} onClick={planCampaigns} disabled={planLoading}>
+                        <button className={btnDark} onClick={planCampaigns} disabled={bloqueado || planLoading}>
                             {planLoading ? 'Planeando…' : '1) Planear por zona'}
                         </button>
                         <span className="text-[11px] text-neutral-400">Máx. 100 códigos · máx 3 por correo · envío 09:00 MX</span>
@@ -425,7 +446,7 @@ export default function CampanasPage() {
                                 </div>
                             ))}
                         </div>
-                        <button className={btnDark + ' self-start'} onClick={createDrafts} disabled={schedLoading}>
+                        <button className={btnDark + ' self-start'} onClick={createDrafts} disabled={bloqueado || schedLoading}>
                             {schedLoading ? 'Creando borradores…' : '2) Crear borradores en SendGrid'}
                         </button>
                     </div>
@@ -462,7 +483,7 @@ export default function CampanasPage() {
                                 ))}
                             </tbody>
                         </table>
-                        <button className={btnDark + ' mt-3'} onClick={approveDrafts} disabled={approving}>
+                        <button className={btnDark + ' mt-3'} onClick={approveDrafts} disabled={bloqueado || approving}>
                             {approving ? 'Programando…' : '3) Aprobar y programar todo'}
                         </button>
                     </div>

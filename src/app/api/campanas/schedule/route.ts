@@ -2,6 +2,7 @@ import { withUnsubFooter } from '@/lib/email';
 import { renderDigest } from '@/lib/digest';
 import { buildZoneDigests, dedupZoneDigests } from '@/lib/audience';
 import { getOrCreateList, addContacts, createSingleSend, encodeCodesInName, claimedPropertyCodes, scheduledZoneWeeks, isoWeekKey, zoneWeekKey, type ClaimInfo } from '@/lib/marketing';
+import { campanasHabilitadas, respuestaBloqueada } from '@/lib/campanasLock';
 
 // Fase 2, paso 2: POST { sends: [{ key, codes[≤3], sendAt, subject? }] }. Cada "send" es un correo digest
 // (una zona + un bloque de máx 3 propiedades). Va a la base de SU zona (dedup entre zonas). Crea la Lista
@@ -12,6 +13,7 @@ export const maxDuration = 300;
 interface SendIn { key?: string; codes?: string[]; sendAt?: string; subject?: string }
 
 export async function POST(req: Request) {
+    if (!campanasHabilitadas()) return respuestaBloqueada();
     let body: { sends?: SendIn[] };
     try { body = await req.json(); } catch { return Response.json({ error: 'JSON inválido' }, { status: 400 }); }
 

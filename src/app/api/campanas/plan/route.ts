@@ -1,5 +1,6 @@
 import { buildZoneDigests, dedupZoneDigests } from '@/lib/audience';
 import { claimedPropertyCodes, scheduledZoneWeeks, isoWeekKey, zoneWeekKey } from '@/lib/marketing';
+import { campanasHabilitadas, respuestaBloqueada } from '@/lib/campanasLock';
 
 // Planeador (Fase 2, paso 1): POST { codes[], start?, hour? }. Agrupa por ZONA en digests "Exclusivas de
 // la semana" (varias propiedades en un correo). MÁX 3 propiedades por correo: si una zona tiene más de 3,
@@ -20,6 +21,7 @@ function nextMonday(from: Date): Date {
 }
 
 export async function POST(req: Request) {
+    if (!campanasHabilitadas()) return respuestaBloqueada();
     let body: { codes?: string[]; start?: string; hour?: number };
     try { body = await req.json(); } catch { return Response.json({ error: 'JSON inválido' }, { status: 400 }); }
 
