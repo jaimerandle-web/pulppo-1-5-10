@@ -1328,10 +1328,15 @@ function altoDeTexto(txt, c, tam){
   return n * tam * (c.lineHeight || 1.2);
 }
 
-function tamanoAjustado(c, txt){
+function tamanoAjustado(c, txt, forzar){
   const tam = c.fontSize || 16;
-  if(!c.autofit || !c.height || !c.width || !txt.trim()) return tam;
-  const piso = c.minFontSize || Math.round(tam * 0.75);
+  // `forzar` es para los HUECOS sin llenar: la etiqueta ("Pon tu lugar favorito aquí") suele
+  // ser más larga que el token que reemplaza, y si la plantilla no pidió autofit se partía en
+  // renglones y se encimaba con la línea de abajo. Ahí sí encoge, y con piso más bajo: vale
+  // más que se lea chiquito a que se monte encima de otra cosa.
+  if((!c.autofit && !forzar) || !c.height || !c.width || !txt.trim()) return tam;
+  const piso = forzar ? Math.max(9, Math.round(tam * 0.35))
+                      : (c.minFontSize || Math.round(tam * 0.75));
   let t = tam;
   while(t > piso && altoDeTexto(txt, c, t) > c.height) t -= 1;
   return t;
@@ -1371,8 +1376,16 @@ function esNumeral(c){
    que el token que reemplaza se parte en dos renglones y se encima con la línea de abajo. */
 const HUECO = {dato: "tu dato", fuente: "la fuente", contexto: "contexto", tema: "tema",
   pregunta: "tu pregunta", titulo: "título", cta: "tu cierre"};
+// Los lugares numerados de una lista de zona (desayuno_2, comer_3…). Cuando la colonia no da
+// los cinco, la pieza se ofrece igual y el hueco invita al asesor a poner el suyo, que además
+// es mejor contenido: conoce su zona mejor que el mapa.
+// Los templates los llaman `lugar_1..3`; los hechos de colonia que los llenan sí usan
+// `desayuno_N`/`comer_N`. Se cubren los dos nombres.
+const LUGAR = /^(lugar|desayuno|comer|colegio|parque|tienda|hospital)_[1-5]$/;
+
 function etiquetaHueco(tk){
   const base = String(tk).split(".").pop();
+  if(LUGAR.test(base)) return "Pon tu lugar favorito aquí";
   return HUECO[base] || base.replace(/_/g, " ");
 }
 
@@ -1386,7 +1399,10 @@ function renderTemplate(ref, escala, marcarTokens, iPag, vals, idIdea){
   let out = `<div class="lienzo" style="width:${W}px;height:${H}px;background:${pg.background||"white"};transform:scale(${escala})">`;
 
   for(const c of pg.children){
-    if(esNumeral(c) && _vacios.has(Math.round(c.y || 0))) continue;
+    // En el EDITOR el renglón no está vacío —lleva la invitación a poner el lugar—, así que
+    // su numeral tiene que seguir ahí, o la lista se ve como "01" y dos líneas sueltas.
+    // En la descarga sí se esconde (el canvas conserva el filtro): ahí el hueco va en blanco.
+    if(!marcarTokens && esNumeral(c) && _vacios.has(Math.round(c.y || 0))) continue;
     const x=c.x||0, y=c.y||0, w=c.width||0, h=c.height||0, rot=c.rotation||0, op=(c.opacity==null?1:c.opacity);
     const pos = `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;opacity:${op};transform:rotate(${rot}deg);`;
     const nom = c.name || "";
@@ -1395,9 +1411,11 @@ function renderTemplate(ref, escala, marcarTokens, iPag, vals, idIdea){
     const expr = nom.includes("{{") ? nom : null;
 
     if(c.type === "text"){
+      let hayHueco = false;
       let txt = esc(expr || c.text || "").replace(/\{\{([^}]+)\}\}/g, (m, tk) => {
         const v = mapa[tk.trim()];
         if(v) return esc(v);
+        hayHueco = true;
         // Se marca el hueco, pero con palabras: imprimir "{{dato}}" en la pieza parece un
         // error del sistema y no le dice al asesor qué tiene que hacer.
         return marcarTokens
@@ -1406,9 +1424,13 @@ function renderTemplate(ref, escala, marcarTokens, iPag, vals, idIdea){
       });
       if(!marcarTokens) txt = sinSeparadoresHuerfanos(txt);
       // el mismo texto sin marcas ni escapes, que es lo que hay que medir para el auto-ajuste
+      // Se mide CON la etiqueta del hueco: medirlo como texto vacío era la razón de que la
+      // etiqueta se saliera de su caja — el tamaño se calculaba para un texto que no era el
+      // que se iba a pintar.
       const plano = sinSeparadoresHuerfanos((expr || c.text || "").replace(/\{\{([^}]+)\}\}/g,
-        (m, tk) => mapa[tk.trim()] || ""));
-      const tamHtml = tamanoAjustado(c, c.textTransform === "uppercase" ? plano.toUpperCase() : plano);
+        (m, tk) => mapa[tk.trim()] || (marcarTokens ? etiquetaHueco(tk.trim()) : "")));
+      const tamHtml = tamanoAjustado(c, c.textTransform === "uppercase" ? plano.toUpperCase() : plano,
+        marcarTokens && hayHueco);
       out += `<div style="${pos}height:auto;font-family:'${c.fontFamily||"sans-serif"}',sans-serif;`
            + `font-size:${tamHtml}px;line-height:${c.lineHeight||1.2};color:${c.fill||"#000"};`
            + `text-align:${c.align||"left"};font-weight:${c.fontWeight||"normal"};`
@@ -1755,13 +1777,26 @@ function bloqueStickers(idea){
 }
 
 /* ---------- ideas del día ---------- */
+/* La semana corrida desde la época. Ya se usaba para la idea de la semana; ahora también
+   mueve historias y posts, que es lo que hace que el Studio no se vea igual cada lunes. */
+const SEMANA_ACTUAL = Math.floor(Date.now() / 6048e5);
+
 function storiesDeHoy(){
   const st = IDEAS.filter(i => i.seccion === "story" && disponible(i));
-  const n = st.length, k = S.rotacion % n, orden = [];
+  if(!st.length) return [];
+  const n = st.length, k = (SEMANA_ACTUAL + S.rotacion) % n, orden = [];
   for(let j=0;j<3;j++) orden.push(st[(k+j)%n]);
   return orden;
 }
-const postsSugeridos = () => IDEAS.filter(i => i.seccion === "post" && disponible(i)).slice(0,2);
+
+/* Los posts NO rotaban: `slice(0,2)` devolvía siempre los dos primeros, para siempre. Un
+   asesor que entraba cada semana veía exactamente lo mismo en su feed. */
+const postsSugeridos = () => {
+  const ps = IDEAS.filter(i => i.seccion === "post" && disponible(i));
+  if(!ps.length) return [];
+  const k = (SEMANA_ACTUAL + S.rotacion) % ps.length;
+  return [0, 1].map(j => ps[(k + j) % ps.length]);
+};
 // cada clase de evento tiene su propia idea; si no hay, cae a la primera de operación
 const ideaEvento = (clase) => IDEAS.find(i => i.seccion === "operacion" && i.clase === clase)
                            || IDEAS.find(i => i.seccion === "operacion");
@@ -1964,8 +1999,7 @@ function pHoy(){
   // semana, no una diaria — por eso es "de la semana".
   // Arranca en una idea distinta cada semana (no siempre la misma), pero estable
   // dentro de la semana: si cambiara en cada recarga se sentiría roto. "otra ↻" avanza.
-  const semanaDelAno = Math.floor(Date.now() / 6048e5);
-  const x = SEMANA.length ? SEMANA[(semanaDelAno + S.rotIdea) % SEMANA.length] : null;
+  const x = SEMANA.length ? SEMANA[(SEMANA_ACTUAL + S.rotIdea) % SEMANA.length] : null;
   const sd = x ? `<div class="sindis">
       <div class="fmt">${esc(x.formato)}${x.esfuerzo ? " · " + esc(x.esfuerzo) : ""}</div>
       <h4>${esc(rellenar(x.titulo))}</h4>
@@ -1992,7 +2026,7 @@ function pHoy(){
       <button class="linkbtn" id="rotar" style="font-size:11px">otras ↻</button></div>
     <div class="fila">${st}</div>
     <div class="rot"><span>Para tu feed</span>
-      <span style="text-transform:none;letter-spacing:0">post o carrusel</span></div>
+      <button class="linkbtn" data-rotar="1" style="font-size:11px">otros ↻</button></div>
     <div class="filaposts">${feed}</div>
 
     <div class="rot"><span>Tus propiedades</span></div>
@@ -2308,7 +2342,7 @@ document.addEventListener("click", e => {
     pintarPie(); S.pantalla = "alta1"; return pintar();
   }
   if(t.dataset.pag){ S.pagina += Number(t.dataset.pag); return pintar(); }
-  if(t.id === "rotar"){ S.rotacion++; return pintar(); }
+  if(t.id === "rotar" || t.dataset.rotar){ S.rotacion++; return pintar(); }
   if(t.id === "otraidea"){ S.rotIdea++; return pintar(); }
   if(t.dataset.formato){
     S.formatoSel[S.ideaAbierta] = t.dataset.formato;
