@@ -930,6 +930,18 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-vis
   text-transform:uppercase;color:var(--gris);background:none;border:0;padding:0;cursor:pointer}
 .menuprop{display:flex;flex-direction:column;border:1px solid var(--gris-claro);
   border-radius:10px;overflow:hidden;margin-top:8px}
+/* Tarjetas de "Comparte una propiedad". Fila deslizable: son 5 y apiladas empujan el
+   resto de la pantalla fuera de vista. */
+.props{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}
+.props::-webkit-scrollbar{display:none}
+.prop{flex:0 0 152px;background:#232422;border:1px solid #2f312f;border-radius:8px;
+  padding:0;overflow:hidden;text-align:left;cursor:pointer;color:inherit;font:inherit}
+.prop img{display:block;width:100%;height:92px;object-fit:cover}
+.prop .sinfoto{display:block;width:100%;height:92px;background:#2f312f}
+.prop .cuerpo{display:block;padding:8px 9px}
+.prop b{display:block;font-size:11.5px;line-height:1.3}
+.prop i{display:block;font-style:normal;font-size:10.5px;color:#9d9d9b;margin-top:3px}
+
 .filaprop{display:flex;align-items:center;justify-content:space-between;gap:10px;
   padding:12px 13px;background:none;border:0;border-bottom:1px solid var(--gris-claro);
   text-align:left;cursor:pointer;color:var(--tinta);width:100%}
@@ -1089,6 +1101,8 @@ const S = {
   alta: {zonas: [], opera:"ambas", tono:"cercano",
          emojis:"no", handle:"", cta:"Escríbeme por DM", celular:"si"},
   ideaAbierta: null, valores: {}, piezas: [], rotacion: 0, rotIdea: 0, rotZona: 0, altaLista: false, pagina: 0,
+  // aviso elegido a mano en "Comparte una propiedad" (índice en B.propuestas), o null
+  propuesta: null,
   // el inventario de la inmobiliaria trae 111 colonias en Diamond House: se muestran 15 y el
   // resto queda detrás de "ver más"
   zonasTodas: false,
@@ -1190,7 +1204,15 @@ function rellenar(t){
 }
 /* Los valores del aviso son de CADA asesora: en el archivo del equipo viven en su perfil
    (B.valores[idea]); en el de una sola asesora vienen en la idea. Se prueban los dos. */
+/* Si el asesor eligió un aviso en "Comparte una propiedad", mandan los valores de ESE aviso:
+   la pieza de captación sirve para cualquier publicado, no sólo para el del último evento. */
+function propuestaActiva(idea){
+  if(S.propuesta == null || !idea || idea.clase !== "captacion") return null;
+  return (B.propuestas || [])[S.propuesta] || null;
+}
 function datosDe(idea){
+  const pr = propuestaActiva(idea);
+  if(pr) return pr.valores;
   return (B.valores || {})[idea.id] || idea.valores_sugeridos || null;
 }
 /* Sólo la familia propiedad/operación se llena del aviso. NO se puede deducir de que la idea
@@ -1225,7 +1247,11 @@ function camposEditables(idea){
   if(!esDeDatos(idea)) return idea.tokens.filter(t => !t.includes("."));
   return idea.tokens.filter(t => EDITABLE_EN_DATOS.test(t) && !DATO_DURO.test(t));
 }
-function fotosDe(idea){ return (B.fotos_aviso || {})[idea.id] || idea.fotos_disponibles || 0; }
+function fotosDe(idea){
+  const pr = propuestaActiva(idea);
+  if(pr) return (pr.fotos || []).length;
+  return (B.fotos_aviso || {})[idea.id] || idea.fotos_disponibles || 0;
+}
 function valoresDe(idea){
   const v = {};
   for(const [k, val] of Object.entries(datosDe(idea) || {})) v[k] = rellenar(val);
@@ -1235,6 +1261,8 @@ function valoresDe(idea){
    desarrollo al frente; en las de contenido, las del inventario de esa colonia. Antes se tomaba
    siempre la primera y por eso una colonia salía ilustrada con el interior de una casa. */
 function fotosCandidatas(idea){
+  const pr = propuestaActiva(idea);
+  if(pr && pr.fotos && pr.fotos.length) return pr.fotos.slice(0, 6);
   const delAviso = (B.fotos_urls || {})[idea.id] || idea.fotos_urls;
   if(delAviso && delAviso.length) return delAviso.slice(0, 6);
   const z = S.valores.zona || (zonaPorDefecto().zona || "");
@@ -1776,6 +1804,29 @@ function bloqueStickers(idea){
   </div>`;
 }
 
+/* Qué compartir cuando NO pasó nada. El Studio sólo proponía propiedades cuando había un
+   evento fresco —cierre, captación, baja de precio—; sin eventos, no había ninguna que
+   ofrecer y el asesor se quedaba sin material de propiedad.
+
+   El orden lo decide el servidor: vistas altas y pocos contactos primero. Un aviso que
+   muchos miran y nadie contacta es el que más gana con volver a mostrarse; uno sin vistas
+   no necesita difusión, necesita revisarse. Por eso NO es al azar. */
+function bloquePropuestas(){
+  const ps = B.propuestas || [];
+  if(!ps.length) return "";
+  const tarjetas = ps.map((p, k) => `
+    <button class="prop" data-propuesta="${k}">
+      ${p.foto ? `<img src="${esc(p.foto)}" alt="" loading="lazy">` : '<span class="sinfoto"></span>'}
+      <span class="cuerpo">
+        <b>${esc(p.tipo)} · ${esc(p.colonia)}</b>
+        <i>${esc(p.motivo)}</i>
+      </span>
+    </button>`).join("");
+  return `<div class="rot"><span>Comparte una propiedad</span></div>
+    <p class="sub" style="margin:-4px 0 10px">Las que más se ven y menos contactan. Volver a mostrarlas es lo que puede moverlas.</p>
+    <div class="props">${tarjetas}</div>`;
+}
+
 /* ---------- ideas del día ---------- */
 /* La semana corrida desde la época. Ya se usaba para la idea de la semana; ahora también
    mueve historias y posts, que es lo que hace que el Studio no se vea igual cada lunes. */
@@ -2031,6 +2082,7 @@ function pHoy(){
 
     <div class="rot"><span>Tus propiedades</span></div>
     <div class="menuprop">${menuProp}</div>
+    ${bloquePropuestas()}
 
     <div class="ritmo">
       <div class="txt"><b>${hechas} de ${meta} esta semana</b>${hechas?"Seguís en racha.":"Empieza con una story: son dos campos."}</div>
@@ -2388,6 +2440,12 @@ document.addEventListener("click", e => {
     });
     return;
   }
+  if(t.dataset.propuesta !== undefined){
+    S.propuesta = Number(t.dataset.propuesta);
+    const cap = IDEAS.find(i => i.seccion === "operacion" && i.clase === "captacion");
+    if(cap){ S.fotoSel = {}; return abrirIdea(cap.id); }
+    return;
+  }
   if(t.dataset.liga){
     const i = IDEAS.find(x => x.id === S.ideaAbierta);
     const u = ligaDePieza(i);
@@ -2405,6 +2463,9 @@ document.addEventListener("click", e => {
     return;
   }
   if(t.dataset.ir){
+    // al salir del editor se suelta el aviso elegido: si no, la siguiente pieza de
+    // captación abriría con el de la vez pasada sin que nadie lo haya pedido
+    if(t.dataset.ir !== "editor") S.propuesta = null;
     if(t.dataset.listo){
       const h = document.getElementById("in-handle"), c = document.getElementById("in-cta");
       if(h) S.alta.handle = h.value.trim();

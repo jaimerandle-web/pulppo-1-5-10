@@ -352,6 +352,31 @@ export interface Evento {
     baja_pct?: number;
 }
 
+/**
+ * Un aviso que el Studio propone compartir cuando NO pasó nada digno de anunciar.
+ *
+ * Se ordenan por «necesita empuje»: muchas vistas y pocos leads. La idea es que publicar
+ * sirva para algo — un aviso que la gente ve y nadie contacta suele tener un problema de
+ * precio o de ficha, y volver a mostrarlo es la manera barata de moverlo. Al azar llenaría
+ * el feed igual, pero sin decidir nada.
+ */
+export interface Propuesta {
+    id: string;
+    code: string;
+    titulo: string;
+    colonia: string;
+    tipo: string;
+    precio: string;
+    foto: string;
+    vistas: number;
+    leads: number;
+    /** por qué esta y no otra, en palabras del asesor */
+    motivo: string;
+    /** tokens ya resueltos para la pieza de captación */
+    valores: Record<string, string>;
+    fotos: string[];
+}
+
 export interface PerfilStudio {
     email: string;
     emails: string[];
@@ -373,6 +398,8 @@ export interface PerfilStudio {
     valores: Record<string, Record<string, string>>;
     fotos_urls: Record<string, string[]>;
     fotos_aviso: Record<string, number>;
+    /** avisos sugeridos para compartir cuando no hay evento fresco */
+    propuestas: Propuesta[];
 }
 
 function cuandoDe(ts: Date, ahora: Date): string {
@@ -616,6 +643,60 @@ export async function perfilDeAsesor(
         fotosAviso[ideaId] = fotos.length;
     }
 
+    // ── propuestas: qué compartir cuando no pasó nada. Se ordenan por «necesita empuje»
+    // —muchas vistas, pocos leads—, que es donde volver a mostrar el aviso puede cambiar algo.
+    // Un aviso sin vistas no necesita difusión: necesita revisarse.
+    const propuestas: Propuesta[] = [];
+    const cfgCap = Object.entries(tokensPorIdea).find(([, c]) => c.clase === 'captacion');
+    if (cfgCap && idsPropios.length) {
+        const [, cfg] = cfgCap;
+        const [vistasRows, leadsRows] = await Promise.all([
+            db.collection('metrics').aggregate([
+                { $match: { property: { $in: idsPropios }, type: 'view' } },
+                { $group: { _id: '$property', n: { $sum: 1 } } }
+            ]).toArray(),
+            db.collection('leads').aggregate([
+                { $match: { 'property._id': { $in: idsPropios } } },
+                { $group: { _id: '$property._id', n: { $sum: 1 } } }
+            ]).toArray(),
+        ]);
+        const vMap = new Map(vistasRows.map(r => [String(r._id), r.n as number]));
+        const lMap = new Map(leadsRows.map(r => [String(r._id), r.n as number]));
+
+        const rank = publicadas
+            .map(p => {
+                const id = String(p._id);
+                const vistas = vMap.get(id) ?? 0, leads = lMap.get(id) ?? 0;
+                // vistas por lead: cuanto más alto, más gente mira sin contactar
+                return { p, vistas, leads, peso: vistas / (leads + 1) };
+            })
+            .filter(x => x.vistas > 0)
+            .sort((a, b) => b.peso - a.peso)
+            .slice(0, 5);
+
+        for (const x of rank) {
+            const doc = await db.collection('properties').findOne({ _id: x.p._id as ObjectId });
+            if (!doc) continue;
+            const fotos = await fotosDeProp(doc);
+            propuestas.push({
+                id: String(doc._id),
+                code: txt(doc.internalId) || String(doc._id),
+                titulo: txt(pick(doc, 'listing', 'title')),
+                colonia: txt(pick(doc, 'address', 'neighborhood', 'name')),
+                tipo: txt(doc.type),
+                precio: txt(pick(doc, 'listing', 'price', 'price')),
+                foto: fotos[0] ?? '',
+                vistas: x.vistas,
+                leads: x.leads,
+                motivo: x.leads === 0
+                    ? `${x.vistas} vistas y ningún contacto`
+                    : `${x.vistas} vistas y sólo ${x.leads} contacto${x.leads === 1 ? '' : 's'}`,
+                valores: tokensDePropiedad(doc, comp, cfg.tokens ?? [], fotos),
+                fotos: fotos.slice(0, 6),
+            });
+        }
+    }
+
     const personal = String(pick(a, 'personal', 'email') ?? '').trim().toLowerCase();
     const logos = (typeof comp.logo === 'object' && comp.logo !== null ? comp.logo : {}) as Record<string, string>;
 
@@ -650,6 +731,7 @@ export async function perfilDeAsesor(
         total_publicados: [...cuenta.values()].reduce((s, n) => s + n, 0),
         valores,
         fotos_urls: fotosUrls,
-        fotos_aviso: fotosAviso
+        fotos_aviso: fotosAviso,
+        propuestas
     };
 }
