@@ -1163,11 +1163,14 @@ function tokensDeZona(zona){
   for(const clave of ["colegio", "parque", "tienda", "hospital", "comer", "desayuno"]){
     const v = h[clave] || [];
     if(v.length){
-      t[clave] = v[0].nombre + " a " + v[0].dist;
+      // Sin distancia: "a 600 m" es propiedad de una PROPIEDAD, no de la colonia. En una
+      // pieza de zona no significa nada —¿600 m desde dónde?—. El token `_dist` sigue
+      // disponible aparte para quien sí tenga un domicilio de referencia.
+      t[clave] = v[0].nombre;
       t[clave + "_nombre"] = v[0].nombre;
       t[clave + "_dist"] = v[0].dist;
     }
-    v.slice(0, 5).forEach((x, i) => { t[clave + "_" + (i+1)] = x.nombre + " · " + x.dist; });
+    v.slice(0, 5).forEach((x, i) => { t[clave + "_" + (i+1)] = x.nombre; });
   }
   return t;
 }
@@ -1263,6 +1266,15 @@ function disponible(idea){
   return !!tokensDeZona(zonaPorDefecto().zona)[idea.requiere];
 }
 
+/* La liga pública del aviso, para el sticker de liga de Instagram. Es lo que convierte una
+   historia de propiedad en algo que genera contactos: sin liga, quien la ve tiene que
+   buscar el inmueble a mano. Sólo aplica a las piezas que nacen de un evento de aviso. */
+function ligaDePieza(idea){
+  if(!idea || !idea.clase) return "";
+  const ev = (B.eventos || []).find(e => e.clase === idea.clase && e.propId);
+  return ev ? "https://pulppo.com/propiedades/" + ev.propId : "";
+}
+
 function fotoDeLaPieza(idIdea){
   const i = IDEAS.find(x => x.id === (idIdea || S.ideaAbierta));
   return i ? fotoElegida(i) : "";
@@ -1353,6 +1365,17 @@ function esNumeral(c){
       && /^\s*\d{1,2}\s*$/.test(String(c.text || ""));
 }
 
+/* Cómo se ve un hueco sin llenar dentro de la pieza. Va en español y en imperativo: el
+   asesor tiene que entender que le toca escribirlo, no pensar que la herramienta falló. */
+/* Cortas a propósito: estos huecos caen en titulares de 200-260 px. Una etiqueta más larga
+   que el token que reemplaza se parte en dos renglones y se encima con la línea de abajo. */
+const HUECO = {dato: "tu dato", fuente: "la fuente", contexto: "contexto", tema: "tema",
+  pregunta: "tu pregunta", titulo: "título", cta: "tu cierre"};
+function etiquetaHueco(tk){
+  const base = String(tk).split(".").pop();
+  return HUECO[base] || base.replace(/_/g, " ");
+}
+
 function renderTemplate(ref, escala, marcarTokens, iPag, vals, idIdea){
   const t = TPL[ref]; if(!t) return {html:"", w:1080, h:1350};
   const pg = t.pages[Math.min(iPag||0, t.pages.length-1)] || {children:[]};
@@ -1375,7 +1398,11 @@ function renderTemplate(ref, escala, marcarTokens, iPag, vals, idIdea){
       let txt = esc(expr || c.text || "").replace(/\{\{([^}]+)\}\}/g, (m, tk) => {
         const v = mapa[tk.trim()];
         if(v) return esc(v);
-        return marcarTokens ? `<span style="background:#F6BE00;color:#212322;border-radius:3px;padding:0 3px">${esc(m)}</span>` : "";
+        // Se marca el hueco, pero con palabras: imprimir "{{dato}}" en la pieza parece un
+        // error del sistema y no le dice al asesor qué tiene que hacer.
+        return marcarTokens
+          ? `<span style="background:#F6BE00;color:#212322;border-radius:3px;padding:0 3px">${esc(etiquetaHueco(tk.trim()))}</span>`
+          : "";
       });
       if(!marcarTokens) txt = sinSeparadoresHuerfanos(txt);
       // el mismo texto sin marcas ni escapes, que es lo que hay que medir para el auto-ajuste
@@ -2039,7 +2066,10 @@ function pEditor(){
     </div>` : "";
 
   // una story no lleva caption: Instagram no lo muestra. Va con stickers sugeridos.
-  const esStory = i.formato === "story";
+  // OJO: el formato lo elige el usuario en el editor. Usar `i.formato` (el que trae la idea)
+  // dejaba el caption puesto al cambiar un post a historia, y en historia Instagram no lo
+  // muestra: era texto muerto que el asesor copiaba igual.
+  const esStory = formatoActual(i) === "story";
 
   // familia propiedad/operación: no hay campos que escribir, se llena del aviso
   const libres = camposEditables(i);
@@ -2103,6 +2133,7 @@ function pEditor(){
       <button class="prim" data-guardar="${i.id}" ${listo?"":"disabled"}>${
         SOPORTA_COMPARTIR ? "Compartir" : "Descargar"}</button>
       ${esStory ? "" : `<button class="sec" data-copiar="1">Copiar caption</button>`}
+      ${ligaDePieza(i) ? `<button class="sec" data-liga="1">Copiar liga</button>` : ""}
     </div>
     ${SOPORTA_COMPARTIR ? `<p class="sub" style="margin-top:10px;font-size:11.5px">Se abre
       el menú de tu teléfono: ahí tienes <b>Guardar en Fotos</b> e Instagram.</p>` : ""}
@@ -2213,7 +2244,10 @@ function pintar(){
   const mapa = {quien:pQuienEres, fuera:pFuera, alta1:pAlta1, alta2:pAlta2, hoy:pHoy, editor:pEditor, piezas:pPiezas, perfil:pPerfil};
   document.getElementById("vista").innerHTML = (mapa[S.pantalla] || pHoy)();
   barraInterno();
-  document.getElementById("vista").scrollTop = 0;
+  // Sólo al CAMBIAR de pantalla. Antes se reseteaba en cada repintado, así que elegir una
+  // zona o un chip en el alta te mandaba al tope y perdías dónde ibas.
+  if(S.pantalla !== S.pantallaPintada){ document.getElementById("vista").scrollTop = 0; }
+  S.pantallaPintada = S.pantalla;
   const tabs = document.getElementById("tabs");
   tabs.hidden = !S.altaLista || S.pantalla === "quien" || S.pantalla === "fuera";
   [...tabs.querySelectorAll("button")].forEach(b =>
@@ -2320,9 +2354,19 @@ document.addEventListener("click", e => {
     });
     return;
   }
+  if(t.dataset.liga){
+    const i = IDEAS.find(x => x.id === S.ideaAbierta);
+    const u = ligaDePieza(i);
+    if(u && navigator.clipboard) navigator.clipboard.writeText(u);
+    t.textContent = "Liga copiada";
+    setTimeout(() => { t.textContent = "Copiar liga"; }, 1600);
+    return;
+  }
   if(t.dataset.copiar){
     const i = IDEAS.find(x => x.id === S.ideaAbierta);
-    if(i && navigator.clipboard) navigator.clipboard.writeText(i.caption_sugerida || "");
+    // `rellenar` NO estaba acá: en pantalla el caption se veía resuelto y al pegarlo salía
+    // "{zona}". Lo que se copia tiene que ser exactamente lo que se ve.
+    if(i && navigator.clipboard) navigator.clipboard.writeText(rellenar(i.caption_sugerida || ""));
     t.textContent = "Copiada"; setTimeout(() => { t.textContent = "Copiar caption"; }, 1400);
     return;
   }

@@ -338,6 +338,10 @@ function tokensDePropiedad(prop: Doc, comp: Doc, tokens: string[], fotos: string
 
 export interface Evento {
     clase: 'captacion' | 'baja_precio' | 'contrato' | 'venta';
+    /** `properties._id`, para armar la liga pública pulppo.com/propiedades/<id>. La usa el
+     *  Studio en el sticker de liga de Instagram: sin esto la historia de una propiedad no
+     *  tiene a dónde mandar a quien la ve. */
+    propId?: string;
     colonia: string;
     tipo: string;
     titulo: string;
@@ -543,7 +547,8 @@ export async function perfilDeAsesor(
     const eventos: Evento[] = cands.map(c => ({
         ...c.ev,
         fecha: fechaISO(c.ts),
-        cuando: cuandoDe(c.ts, ahora)
+        cuando: cuandoDe(c.ts, ahora),
+        propId: String(c.propId)
     }));
 
     // ── el documento completo del aviso del evento más reciente de cada clase: es lo que
