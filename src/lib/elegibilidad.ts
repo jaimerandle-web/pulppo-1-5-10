@@ -10,7 +10,7 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { buildAudience } from './audience';
-import { firstPublished, mercadoEval, funnelEval, type MercadoEval, type FunnelEval } from './ficha';
+import { firstPublished, mercadoEval, funnelEval, ofertaMedianaPpm, type MercadoEval, type FunnelEval } from './ficha';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const RESIDENCIAL = new Set(['Casa', 'Departamento', 'Casa en condominio', 'PH']);
@@ -151,8 +151,11 @@ export async function computeEval(id: string, opts: { withBase?: boolean; detall
     const cierres = async (geo: Document): Promise<number[]> => {
         const ps = await db.collection('properties').aggregate([
             { $match: { 'status.last': 'completed', 'listing.operation': 'sale', type: typ, ...geo } },
-            { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', as: 'op' } },
-            { $limit: 400 }
+            // Sólo los campos que se leen: traer los documentos completos (propiedad + TODAS sus operaciones)
+            // tardaba 11.6 s en Benito Juárez contra ~1 s así.
+            { $limit: 400 },
+            { $project: { 'attributes.totalSurface': 1 } },
+            { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', pipeline: [{ $project: { _id: 0, 'closeValue.value': 1 } }], as: 'op' } }
         ]).toArray();
         const out: number[] = [];
         for (const p of ps) { const sm2 = num(dig(p, 'attributes', 'totalSurface')); for (const o of (p.op as Document[]) || []) { const v = num(dig(o, 'closeValue', 'value')); if (v && sm2 && sm2 > 0) out.push(v / sm2); } }
@@ -163,22 +166,9 @@ export async function computeEval(id: string, opts: { withBase?: boolean; detall
     if (cz.length < 5 && state) { scope = state; cz = await cierres({ 'address.state.name': state }); }
     const soldMed = cz.length >= 5 ? median(cz) : null;
 
-    // oferta (pedido) → mediana $/m² de lo publicado (pulppo + mls) por colonia→ciudad.
-    // Sobre TODO lo publicado de la zona, calculado en Mongo: antes se tomaban los primeros 250 del
-    // `mls` en orden natural y ese orden no es aleatorio — en Polanco (deptos) los primeros 250 daban
-    // $6,846/m² contra $90,569 del conjunto completo (3,802 avisos), y el "vs. oferta" salía +201%.
-    const askingPpm = async (geoField: string, geoVal: string): Promise<number[]> => {
-        const base = { 'listing.operation': 'sale', type: typ, 'status.last': 'published', 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 }, [geoField]: geoVal };
-        const ppm = (m: Document) => [{ $match: m }, { $limit: 8000 }, { $project: { _id: 0, p: { $divide: ['$listing.value', '$attributes.totalSurface'] } } }];
-        const [a, b] = await Promise.all([
-            db.collection('mls').aggregate(ppm(base), { maxTimeMS: 15000 }).toArray(),
-            db.collection('properties').aggregate(ppm({ ...base, _id: { $ne: P!._id } }), { maxTimeMS: 15000 }).toArray()
-        ]);
-        return [...a, ...b].map((r) => num(r.p)).filter((x): x is number => x != null);
-    };
-    let ask = nid ? await askingPpm('address.neighborhood.id', nid) : [];
-    if (ask.length < 8 && cid) ask = await askingPpm('address.city.id', cid);
-    const askingMed = ask.length >= 5 ? median(ask) : null;
+    // oferta (pedido) → mediana $/m² de todo lo publicado en la colonia→ciudad; misma función que la ficha
+    const ofertaP = ofertaMedianaPpm(P);
+    const askingMed = (await ofertaP).med;
 
     // velocidad de venta de la zona (días publicado → vendido)
     const velocidad = async (geo: Document): Promise<number[]> => {

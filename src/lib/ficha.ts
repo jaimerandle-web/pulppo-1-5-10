@@ -122,28 +122,72 @@ const COMP_PROJ = { 'listing.value': 1, 'listing.description': 1, attributes: 1,
 interface Subj { oid: ObjectId; typ: string | null; op: string; city: string | null; state: string | null; val: number | null; m2: number | null; ppm2: number | null; col: string | null; rec: number | null; lat: number | null; lng: number | null; myAmen: string[]; street: string | null }
 
 // Pool de comparables vivos (Pulppo + mercado MLS), con fallback colonia/ciudad→estado y sin la propia.
+//
+// ⚠️ El pool general (ciudad, 200 + 250 en orden natural) NO sirve para "qué te alcanza": en una ciudad
+// grande son una fracción arbitraria — DMA-017 (Miguel Hidalgo) veía 0 de los 468 avisos del MLS en su
+// rango de precio; CJF-239 (Mérida), 6 de 4,052. Por eso se pide APARTE, directo a Mongo, lo que la
+// tabla va a mostrar: hasta 1.5 km (índice 2dsphere) y ±10% de precio. El general se queda para la
+// referencia por $/m² y para reconocer colonias.
 const buildAlcPool = async (db: Awaited<ReturnType<typeof getDb>>, s: Subj): Promise<Comp[]> => {
-    const live = async (geo: Document): Promise<Comp[]> =>
+    const live = async (geo: Document, limit = 200): Promise<Comp[]> =>
         (await db.collection('properties').find(
-            { 'status.last': 'published', 'listing.operation': s.op, type: s.typ, ...geo, _id: { $ne: s.oid }, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
-            { projection: COMP_PROJ, limit: 200 }
+            { 'status.last': 'published', 'listing.operation': s.op, type: s.typ, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 }, ...geo, _id: { $ne: s.oid } },
+            { projection: COMP_PROJ, limit }
         ).toArray()).map((e) => toComp(e, 'Pulppo'));
-    const market = async (geo: Document): Promise<Comp[]> =>
+    const market = async (geo: Document, limit = 250): Promise<Comp[]> =>
         (await db.collection('mls').find(
-            { 'listing.operation': s.op, type: s.typ, 'status.last': 'published', ...geo, 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 } },
-            { projection: { ...COMP_PROJ, 'import.url': 1 }, limit: 250 }
+            { 'listing.operation': s.op, type: s.typ, 'status.last': 'published', 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 }, ...geo },
+            { projection: { ...COMP_PROJ, 'import.url': 1 }, limit }
         ).toArray()).map((e) => toComp(e, 'MLS'));
-    let poolC = s.city ? await live({ 'address.city.name': s.city }) : [];
+    const cerca: Document | null = s.lat != null && s.lng != null && s.val
+        ? { 'address.location': { $geoWithin: { $centerSphere: [[s.lng, s.lat], MAX_KM / 6378.1] } }, 'listing.value': { $gte: 0.9 * s.val, $lte: 1.1 * s.val } }
+        : null;
+    const [poolC0, mls0, cercaP, cercaM] = await Promise.all([
+        s.city ? live({ 'address.city.name': s.city }) : Promise.resolve([]),
+        s.city ? market({ 'address.city.name': s.city }) : Promise.resolve([]),
+        cerca ? live(cerca, 300).catch(() => []) : Promise.resolve([]),
+        cerca ? market(cerca, 400).catch(() => []) : Promise.resolve([])
+    ]);
+    let poolC = poolC0, mls = mls0;
     if (poolC.length < 3 && s.state) poolC = await live({ 'address.state.name': s.state });
-    let mls = s.city ? await market({ 'address.city.name': s.city }) : [];
     if (mls.length < 3 && s.state) mls = await market({ 'address.state.name': s.state });
+    // unión sin repetir: el mismo aviso puede venir en el pool general y en el de cercanía
+    const seen = new Set<string>();
+    const key = (c: Comp) => c.url ?? `${c.precio}|${c.m2}|${c.street}`;
+    const union = [...cercaP, ...poolC, ...cercaM, ...mls].filter((c) => { const k = key(c); if (seen.has(k)) return false; seen.add(k); return true; });
     // Excluir la MISMA propiedad (aunque venga duplicada del MLS): por calle igual o precio+superficie casi idénticos.
     const selfStreet = nrm(s.street);
     const isSelf = (c: Comp) =>
         (!!selfStreet && !!c.street && nrm(c.street) === selfStreet) ||
         (!!s.val && !!c.precio && !!s.m2 && !!c.m2 && Math.abs(c.precio - s.val) / s.val < 0.01 && Math.abs(c.m2 - s.m2) / s.m2 < 0.02);
-    return [...poolC, ...mls].filter((c) => !isSelf(c));
+    return union.filter((c) => !isSelf(c));
 };
+
+// Mediana del $/m² que se PIDE (Pulppo + MLS publicados, mismo tipo y operación) en la colonia, o en la
+// ciudad si la colonia tiene menos de 8. Sobre TODO lo publicado, calculado en Mongo: tomar "los
+// primeros N" no es una muestra — ese orden no es aleatorio y en Polanco daba $6,846/m² contra $90,569.
+// La usan la ficha y el evaluador 1·5·10, para que las dos digan lo mismo.
+export async function ofertaMedianaPpm(P: Document): Promise<{ med: number | null; n: number; scope: string | null }> {
+    const db = await getDb();
+    const base = {
+        'listing.operation': (dig(P, 'listing', 'operation') as string) ?? 'sale', type: (P.type as string) ?? null,
+        'status.last': 'published', 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 }
+    };
+    const ppm = (m: Document) => [{ $match: m }, { $limit: 8000 }, { $project: { _id: 0, p: { $divide: ['$listing.value', '$attributes.totalSurface'] } } }];
+    const pull = async (geo: Document): Promise<number[]> => {
+        const [a, b] = await Promise.all([
+            db.collection('mls').aggregate(ppm({ ...base, ...geo }), { maxTimeMS: 15000 }).toArray(),
+            db.collection('properties').aggregate(ppm({ ...base, ...geo, _id: { $ne: P._id } }), { maxTimeMS: 15000 }).toArray()
+        ]);
+        return [...a, ...b].map((r) => num(r.p)).filter((x): x is number => x != null);
+    };
+    const nid = dig(P, 'address', 'neighborhood', 'id') as string | undefined;
+    const cid = dig(P, 'address', 'city', 'id') as string | undefined;
+    let scope: string | null = (dig(P, 'address', 'neighborhood', 'name') as string) ?? null;
+    let xs = nid ? await pull({ 'address.neighborhood.id': nid }) : [];
+    if (xs.length < 8 && cid) { scope = (dig(P, 'address', 'city', 'name') as string) ?? null; xs = await pull({ 'address.city.id': cid }); }
+    return xs.length >= 5 ? { med: median(xs), n: xs.length, scope } : { med: null, n: xs.length, scope };
+}
 
 // Ranking "qué tan ad-hoc es el comparable": misma colonia > cercanía > tamaño > presupuesto > amenidades > recámaras.
 const kmOf = (s: Subj, c: Comp): number | null =>
@@ -513,8 +557,11 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const cierres = async (geo: Document): Promise<{ price: number; ppm2: number | null; m2: number | null }[]> => {
         const ps = await db.collection('properties').aggregate([
             { $match: { 'status.last': 'completed', 'listing.operation': op, type: typ, ...geo } },
-            { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', as: 'op' } },
-            { $limit: 400 }
+            // Sólo los campos que se leen: traer los documentos completos (propiedad + TODAS sus operaciones)
+            // tardaba 11.6 s en Benito Juárez contra ~1 s así.
+            { $limit: 400 },
+            { $project: { 'attributes.totalSurface': 1 } },
+            { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', pipeline: [{ $project: { _id: 0, 'closeValue.value': 1 } }], as: 'op' } }
         ]).toArray();
         const out: { price: number; ppm2: number | null; m2: number | null }[] = [];
         for (const p of ps) {
@@ -562,8 +609,8 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     if (col && nid) { const s = await zoneStats('filters.addresses.neighborhood.name', col, 'address.neighborhood.id', nid); if (s.dem >= 15 && s.ofe >= 3) { zonaLbl = col; zdem = s.dem; zofe = s.ofe; } }
     if (!zonaLbl && city && cityId) { const s = await zoneStats('filters.addresses.city.name', city, 'address.city.id', cityId); if (s.dem >= 15 && s.ofe >= 3) { zonaLbl = city; zdem = s.dem; zofe = s.ofe; } }
     const zratio = zofe ? zdem / zofe : 0;
-    const zppms = alcPool.map((c) => c.ppm2).filter((x): x is number => x != null);
-    const zoneMed = zppms.length ? median(zppms) : null;
+    const oferta = await ofertaMedianaPpm(P);
+    const zoneMed = oferta.med;
     let zread = '';
     if (zonaLbl) {
         if (zratio >= 1) zread = `Alta demanda y oferta limitada: buen momento para ${opVerb}, debería moverse rápido.`;
@@ -837,7 +884,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     //    • NO incluye la "Referencia · qué te alcanza por $/m² similar".
     //  Al tocar helpers/datos de arriba, cambia para AMBAS (a propósito). Solo bodyFull/bodySimple son exclusivos.
     // ============================================================================================
-    const ppmRef = ([['Tu propiedad', ppm2, BLK], ['Oferta mediana · MLS', zoneMed, GRY], ['Cierres mediana · Pulppo', soldMed, SEA]] as [string, number | null, string][]).filter((r) => (r[1] ?? 0) > 0) as [string, number, string][];
+    const ppmRef = ([['Tu propiedad', ppm2, BLK], ['Oferta mediana · mercado', zoneMed, GRY], ['Cierres mediana · Pulppo', soldMed, SEA]] as [string, number | null, string][]).filter((r) => (r[1] ?? 0) > 0) as [string, number, string][];
     const maxPpm = Math.max(...ppmRef.map((r) => r[1]), 1);
     const posTxt = (d: number | null) => (d == null ? '' : d > 2 ? `<b>${d}% arriba</b>` : d < -2 ? `<b>${Math.abs(d)}% abajo</b>` : '<b>en línea</b>');
     const cvsDelta = ppm2 && soldMed ? Math.round((ppm2 / soldMed - 1) * 100) : null;   // vs. cierres (Pulppo)
@@ -860,7 +907,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const frenoHtml = `<div class="box" style="border-left:3px solid ${frenoRed ? RED : YEL};margin-bottom:14px"><div class="eyebrow" style="color:${BLK}">Principal freno</div><div style="font-size:12px;margin-top:5px;line-height:1.5">${esc(freno)}</div></div>`;
     const cierresVisual = ppmRef.length ? `<div style="margin-top:16px"><div class="eyebrow" style="color:${BLK};margin-bottom:8px">Precio $/m²: tú vs. oferta vs. cierres</div>
       <div class="ppmbars">${ppmRef.map((r) => `<div class="ppmrow"><span class="ppml">${r[0]}</span><span class="ppmtrack"><span class="ppmbar" style="width:${Math.max((100 * r[1]) / maxPpm, 2)}%;background:${r[2]}"></span></span><span class="ppmv">${money(r[1])}/m²</span></div>`).join('')}</div>
-      <div class="ppmnote">Tu $/m² está ${cvoDelta != null ? `${posTxt(cvoDelta)} de la oferta (MLS)` : 'sin referencia de oferta'}${cvsDelta != null ? ` y ${posTxt(cvsDelta)} de los cierres reales${czN ? ` (${czN} en ${esc(scope)})` : ''}` : ''}.</div></div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`;
+      <div class="ppmnote">Tu $/m² está ${cvoDelta != null ? `${posTxt(cvoDelta)} de la oferta${oferta.scope ? ` en ${esc(oferta.scope)} (${oferta.n.toLocaleString('en-US')} avisos)` : ''}` : 'sin referencia de oferta'}${cvsDelta != null ? ` y ${posTxt(cvsDelta)} de los cierres reales${czN ? ` (${czN} en ${esc(scope)})` : ''}` : ''}.</div></div>` : `<div style="margin-top:10px;font-size:11px;color:${GRY}">Sin ventas cerradas registradas en ${esc(scope)}.</div>`;
     const compiteHref = `/ficha/${encodeURIComponent(id)}/comparables?tipo=zona${opts?.token ? `&token=${encodeURIComponent(opts.token)}` : ''}`;
     const compiteHtml = `<div style="margin-top:24px"><div class="eyebrow" style="color:${BLK};margin-bottom:4px">Con qué compite en la zona · ${compsAll.length} comparable${compsAll.length === 1 ? '' : 's'}</div><table><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(comps)}</table>${compsAll.length > comps.length ? `<div style="font-size:10px;margin-top:4px"><a href="${compiteHref}" style="color:${SEA};font-weight:700">Ver los ${compsAll.length} comparables →</a></div>` : ''}</div>`;
     const insightsCompBox = alcInsights.length ? `<div class="box" style="margin-top:16px"><div class="eyebrow">Insights de comparables</div><ul>${alcInsights.map((i) => `<li>${i}</li>`).join('')}</ul></div>` : '';
