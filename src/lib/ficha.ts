@@ -1054,3 +1054,125 @@ function median(xs: number[]): number {
     const m = Math.floor(s.length / 2);
     return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
 }
+
+// ============================================================================================
+//  PIEZAS PARA EL EVALUADOR 1·5·10 (elegibilidad.ts)
+//  Mismo cálculo que la ficha — "qué te alcanza", con qué compite, funnel y tipo de aviso — para
+//  que la evaluación y la ficha individual no den dos números distintos de la misma propiedad.
+//  El HTML usa las clases `.fx-*`, que define el CSS del evaluador.
+// ============================================================================================
+export { firstPublished };
+
+export interface MercadoEval {
+    alcanzaHtml: string; compiteHtml: string; alcInsights: string[];
+    /** opciones vivas en el mismo presupuesto (±10%, ≤1.5 km) */
+    alcN: number; alcMasGrandes: number;
+    /** Pulppo del mismo tipo publicadas en la misma colonia */
+    compN: number;
+    /** de esas, cuántas piden un $/m² al menos 5% más bajo */
+    compMasBaratas: number;
+}
+
+export async function mercadoEval(P: Document): Promise<MercadoEval> {
+    const db = await getDb();
+    const oid = P._id as ObjectId;
+    const id = String(oid);
+    const val = num(dig(P, 'listing', 'value'));
+    const m2 = num(dig(P, 'attributes', 'totalSurface')) ?? num(dig(P, 'attributes', 'surface'));
+    const typ = (P.type as string) ?? null;
+    const op = (dig(P, 'listing', 'operation') as string) ?? 'sale';
+    const col = (dig(P, 'address', 'neighborhood', 'name') as string) ?? null;
+    const ppm2 = val && m2 ? val / m2 : null;
+    const loc = (dig(P, 'address', 'location', 'coordinates') as number[]) || [];
+    const subj: Subj = {
+        oid, typ, op, val, m2, ppm2, col,
+        city: (dig(P, 'address', 'city', 'name') as string) ?? null,
+        state: (dig(P, 'address', 'state', 'name') as string) ?? null,
+        rec: num(dig(P, 'attributes', 'suites')),
+        lat: typeof loc[1] === 'number' ? loc[1] : null, lng: typeof loc[0] === 'number' ? loc[0] : null,
+        myAmen: svcAmen(P), street: (dig(P, 'address', 'street') as string)?.trim() || null
+    };
+    const [alcPool, zona] = await Promise.all([buildAlcPool(db, subj), fetchZoneComps(db, oid, typ, col, op)]);
+    const knownCols = knownColsOf(alcPool, subj);
+    const alcRanked = orderNamedFirst(rankAlcance(alcPool, subj), knownCols);
+    const compDist = (c: Comp) => (val && c.precio ? Math.abs(c.precio - val) / val : 0) + (m2 && c.m2 ? Math.abs(c.m2 - m2) / m2 : 0);
+    const compsAll = zona.sort((a, b) => compDist(a) - compDist(b));
+    const more = (n: number, href: string) => n ? `<div style="font-size:10px;margin-top:4px"><a href="${href}" style="color:${SEA};font-weight:700">Ver los ${n} →</a></div>` : '';
+    const base = `/ficha/${encodeURIComponent(id)}/comparables`;
+    const alcanzaHtml = `<table class="fx-t"><tr><th>Inmueble</th><th>Precio</th><th>Sup.</th><th>Rec/Baños</th><th>Por qué es comparable</th></tr>${alcTblRows(alcRanked.slice(0, 8), subj, knownCols)}</table>${alcRanked.length > 8 ? more(alcRanked.length, base) : ''}`;
+    const compiteHtml = `<table class="fx-t"><tr><th>Ubicación</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(compsAll.slice(0, 6))}</table>${compsAll.length > 6 ? more(compsAll.length, `${base}?tipo=zona`) : ''}`;
+    return {
+        alcanzaHtml, compiteHtml, alcInsights: alcGeneralInsights(alcRanked, subj),
+        alcN: alcRanked.length,
+        alcMasGrandes: m2 ? alcRanked.filter((c) => c.m2 && c.m2 > m2 * 1.05).length : 0,
+        compN: compsAll.length,
+        compMasBaratas: ppm2 ? compsAll.filter((c) => c.ppm2 && c.ppm2 < ppm2 * 0.95).length : 0
+    };
+}
+
+export interface FunnelEval {
+    html: string; vistas: number; leads: number; visitas: number; ofertas: number;
+}
+
+// Funnel comercial (vistas → leads → visitas → ofertas) y tipo de aviso que ha tenido en i24 y ML.
+// Mismas fuentes y criterios que la ficha: visitas = visitantes únicos confirmados, ofertas = operaciones
+// que llegaron a oferta o más, leads por categoría = sólo los que originó Inmuebles24.
+export async function funnelEval(P: Document): Promise<FunnelEval> {
+    const db = await getDb();
+    const oid = P._id as ObjectId;
+    const now = Date.now();
+    const [leads, visAgg, ofertas, vistasAgg] = await Promise.all([
+        db.collection('leads').find({ 'property._id': oid }, { projection: { source: 1, createdAt: 1 } }).toArray(),
+        db.collection('visits').aggregate([
+            { $match: { 'steps.property._id': oid, 'status.last': { $ne: 'cancelled' } } },
+            { $group: { _id: { $ifNull: ['$contact._id', { $ifNull: ['$contact.email', '$_id'] }] }, conf: { $max: { $cond: [{ $eq: ['$status.last', 'confirmed'] }, 1, 0] } } } },
+            { $group: { _id: null, confirmados: { $sum: '$conf' } } }
+        ]).toArray(),
+        db.collection('operations').countDocuments({ 'property._id': oid, 'status.last': { $in: [...ADVANCED] } }),
+        db.collection('metrics').aggregate([
+            { $match: { property: { $in: [oid, String(oid)] }, type: 'view' } }, { $count: 'n' }
+        ]).toArray()
+    ]);
+    const vistas = (vistasAgg[0]?.n as number) ?? 0;
+    const visitas = (visAgg[0]?.confirmados as number) ?? 0;
+
+    const fbase = Math.max(vistas, leads.length, 1);
+    const conv = (a: number, b: number) => (b ? `<span class="fx-conv">${Math.round((100 * a) / b)}%</span>` : '');
+    const stage = (lbl: string, n: number, extra = '') => `<div class="fx-st"><span class="fx-sl">${lbl}</span><span class="fx-tr"><span class="fx-bar" style="width:${Math.max((100 * n) / fbase, 0.6)}%"></span>${extra}</span><span class="fx-sn">${n.toLocaleString('en-US')}</span></div>`;
+    const funnel = stage('Vistas', vistas) + stage('Leads', leads.length, conv(leads.length, vistas))
+        + stage('Visitas', visitas, conv(visitas, leads.length)) + stage('Ofertas', ofertas, conv(ofertas, visitas));
+
+    // tipo de aviso: historial de categoría en i24 (tramos) + nivel actual en MercadoLibre
+    const hist = ((dig(P, 'portals', 'inmuebles24', 'history') as Document[]) || [])
+        .map((e) => ({ t: toDate(e.timestamp), cat: promoCat(e.type as string, e.status as string) }))
+        .filter((e): e is { t: Date; cat: PromoCat } => e.t != null)
+        .sort((a, b) => a.t.getTime() - b.t.getTime());
+    const spans = hist.map((e, i) => ({ a: e.t.getTime(), b: i + 1 < hist.length ? hist[i + 1].t.getTime() : now, cat: e.cat }));
+    const t0 = spans.length ? spans[0].a : now, total = Math.max(1, now - t0);
+    const ms = new Map<PromoCat, number>(), lc = new Map<PromoCat, number>();
+    for (const s of spans) ms.set(s.cat, (ms.get(s.cat) || 0) + (s.b - s.a));
+    for (const l of leads) {
+        if (classifySource(l.source as string) !== 'Inmuebles24') continue;
+        const c = l.createdAt instanceof Date ? (l.createdAt as Date).getTime() : null;
+        const s = c == null ? undefined : spans.find((x) => c >= x.a && c < x.b);
+        if (s) lc.set(s.cat, (lc.get(s.cat) || 0) + 1);
+    }
+    const PCOL: Record<PromoCat, string> = { Super: YEL, Destacado: SEA, Simple: GRY, Offline: RED, Otro: '#E3E3E3' };
+    const cat = (dig(P, 'portals', 'inmuebles24', 'type') as string) ?? null;
+    const mlt = (dig(P, 'portals', 'mercadolibre', 'type') as string) ?? null;
+    const hoy = `Hoy: i24 <b>${cat ? esc(CATLBL[cat] ?? cat) : '—'}</b> · MercadoLibre <b>${mlt ? esc(MLLBL[mlt] ?? mlt.replace(/_/g, ' ')) : '—'}</b>`;
+    const avisoHtml = spans.length ? `
+      <div style="position:relative;height:14px;background:${LGT};margin-top:6px">${spans.map((s) => `<span style="position:absolute;left:${(((s.a - t0) / total) * 100).toFixed(2)}%;width:${Math.max(((s.b - s.a) / total) * 100, 0.3).toFixed(2)}%;top:0;bottom:0;background:${PCOL[s.cat]}"></span>`).join('')}</div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:${GRY};margin-top:3px"><span>${fdate(new Date(t0))}</span><span>hoy</span></div>
+      <table class="fx-t"><tr><th>Tipo de aviso i24</th><th>Tiempo</th><th>Leads i24</th><th>Leads/mes</th></tr>${PROMORD.filter((c) => (ms.get(c) || 0) > 0).map((c) => {
+        const d = (ms.get(c) || 0) / 86400000, n = lc.get(c) || 0;
+        return `<tr><td><span style="display:inline-block;width:8px;height:8px;margin-right:6px;background:${PCOL[c]}"></span>${PROMOLBL[c]}</td><td class="nw">${Math.round(d)} días</td><td class="nw">${n}</td><td class="nw"><b>${d ? ((n / d) * 30.44).toFixed(1) : '0.0'}</b></td></tr>`;
+    }).join('')}</table>` : `<div style="font-size:11px;color:${GRY};margin-top:6px">Sin historial de categoría registrado en Inmuebles24.</div>`;
+
+    const html = `<div class="fx-g2">
+      <div><div class="fx-h">Funnel comercial</div>${funnel}
+        <div style="font-size:9px;color:${GRY};margin-top:6px">% = conversión desde la etapa anterior. Visitas = visitantes únicos confirmados. Vistas = las que registra Pulppo (Inmuebles24 y sitios propios)${vistas < leads.length ? '; hay más leads que vistas porque MercadoLibre, redes y otros portales no reportan sus vistas' : ''}.</div></div>
+      <div><div class="fx-h">Tipo de aviso que ha tenido</div><div style="font-size:11px">${hoy}</div>${avisoHtml}</div>
+    </div>`;
+    return { html, vistas, leads: leads.length, visitas, ofertas };
+}

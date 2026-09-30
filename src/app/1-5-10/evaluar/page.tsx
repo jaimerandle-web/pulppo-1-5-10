@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 interface Row {
     code: string; title?: string; typ?: string | null; col?: string | null; city?: string | null;
-    score?: number; banda?: string; okIntr?: boolean; esDesarrollo?: boolean; okMat?: boolean; faltaMat?: string[];
+    score?: number; banda?: string; okIntr?: boolean; okContrato?: boolean; faltaContrato?: string[]; esDesarrollo?: boolean; okMat?: boolean; faltaMat?: string[];
     ppm2?: number | null; vsAcm?: number | null; vsOferta?: number | null; vsCierre?: number | null;
     velocidadMed?: number | null; meses?: number | null; notFound?: boolean; error?: string;
 }
@@ -49,7 +49,7 @@ export default function EvaluarBuscador() {
             <p className="mb-4 text-sm text-neutral-600">
                 Evalúa si conviene convertir una propiedad a exclusiva 1·5·10 y qué le falta para entrar:
                 <b> precio competitivo</b> (mix ACM · oferta · cierres), <b>calidad del aviso</b>, <b>comisión</b> y
-                <b> demanda de zona</b>. Requiere venta y residencial; si es desarrollo hay posible rechazo (se revisa caso a caso); el material (foto+video+tour) se marca aparte.
+                <b> demanda de zona</b>. Requiere venta y residencial; si es desarrollo hay posible rechazo (se revisa caso a caso). Para activarla se marcan aparte la comisión 5% + IVA, el contrato de exclusiva firmado y el material (foto+video+tour).
                 Puedes pegar <b>uno o varios códigos</b> (uno por línea o separados por coma).
             </p>
 
@@ -74,14 +74,14 @@ export default function EvaluarBuscador() {
                             <tr className="border-b border-neutral-300 text-left text-xs uppercase tracking-wide text-neutral-500">
                                 <th className="py-2 pr-3">Propiedad</th><th className="py-2 pr-3">Aceptación</th>
                                 <th className="py-2 pr-3">vs ACM</th><th className="py-2 pr-3">vs oferta</th><th className="py-2 pr-3">vs cierres</th>
-                                <th className="py-2 pr-3">Velocidad zona</th><th className="py-2 pr-3">Material</th><th className="py-2 pr-3"></th>
+                                <th className="py-2 pr-3">Velocidad zona</th><th className="py-2 pr-3">Contrato</th><th className="py-2 pr-3">Material</th><th className="py-2 pr-3"></th>
                             </tr>
                         </thead>
                         <tbody>
                             {rows.map((r) => (
                                 <tr key={r.code} className="border-b border-neutral-100">
                                     {r.notFound || r.error ? (
-                                        <><td className="py-2 pr-3 font-mono">{r.code}</td><td className="py-2 pr-3 text-neutral-400" colSpan={7}>{r.notFound ? 'no encontrada' : r.error}</td></>
+                                        <><td className="py-2 pr-3 font-mono">{r.code}</td><td className="py-2 pr-3 text-neutral-400" colSpan={8}>{r.notFound ? 'no encontrada' : r.error}</td></>
                                     ) : (
                                         <>
                                             <td className="py-2 pr-3"><b className="font-mono">{r.code}</b><div className="text-xs text-neutral-500">{r.typ} · {r.col}, {r.city}</div>{r.esDesarrollo && <div className="mt-0.5 inline-block rounded bg-[#F6BE00] px-1.5 py-0.5 text-[10px] font-bold text-[#212322]">⚠️ desarrollo · posible rechazo</div>}</td>
@@ -94,6 +94,7 @@ export default function EvaluarBuscador() {
                                             <td className="py-2 pr-3">{dpct(r.vsOferta)}</td>
                                             <td className="py-2 pr-3">{dpct(r.vsCierre)}</td>
                                             <td className="py-2 pr-3">{r.velocidadMed != null ? `${Math.round(r.velocidadMed)} d` : '—'}</td>
+                                            <td className="py-2 pr-3">{r.okContrato ? '✓ en orden' : <span className="text-[#A5700a]">falta {r.faltaContrato?.map((k) => k.startsWith('Comisión') ? 'comisión 5% + IVA' : 'exclusiva firmada').join(' y ')}</span>}</td>
                                             <td className="py-2 pr-3">{r.okMat ? '✓ completo' : <span className="text-[#A5700a]">falta {r.faltaMat?.join(', ').toLowerCase()}</span>}</td>
                                             <td className="py-2 pr-3"><a className="text-[#529999] underline" href={`/1-5-10/evaluar/${encodeURIComponent(r.code)}`} target="_blank" rel="noreferrer">ver ficha</a></td>
                                         </>
