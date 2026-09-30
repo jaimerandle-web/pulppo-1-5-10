@@ -27,6 +27,9 @@ const FIJOS: Record<string, string> = {
     'erik.lugo@pulppo.com': '6a7cfe0f55d783c636b3c303',
     'jeorgina.tavira@pulppo.com': '6a7cfe0f55d783c636b3c303',
     'joel.sanchez@pulppo.com': '6a7cfe0f55d783c636b3c303',
+    // SOSO INMOBILIARIA — pedido por Ale el 30-sep-2026. Mónica Ortiz está activa en la cuenta
+    // como `associate`. Hay una sola compañía con ese nombre (4 asesores, 35 publicadas).
+    'monica.ortiz@pulppo.com': '6819479028b0263f716baeb9',
 };
 
 function delEntorno(): Record<string, string> {
