@@ -24,8 +24,8 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from '../data';
 import { CANALES, KEY2NAME, NOT, NOTP, classifySource, dig, isDate, num, oid } from './metrics';
-import { FAMILIA, RLBL } from './calidad';
-import { ALIAS_INMO, ORDEN_INMOBILIARIAS, SIN_CUENTA, normInmo } from './ordenInmobiliarias';
+import { RLBL } from './calidad';
+import { ALIAS_IDS, ALIAS_INMO, ORDEN_INMOBILIARIAS, SIN_CUENTA, normInmo } from './ordenInmobiliarias';
 import type { Operacion } from './view';
 
 const DIA = 86400000;
@@ -67,6 +67,8 @@ export interface Cierre {
     fecha: string; id: string; codigo: string | null; operacion: string; tipo: string | null;
     colonia: string | null; valor: number; comision: number;
     fuente: string; lado: 'vendedor' | 'comprador' | 'ambos'; asesor: string;
+    /** la fuente no venía en la operación: se dedujo del primer lead del comprador */
+    inferida?: boolean;
 }
 export interface Bloque {
     desde: string; hasta: string; etiqueta: string; dias: number;
@@ -82,7 +84,9 @@ export interface Bloque {
     };
     cierres: {
         n: number; venta: number; renta: number; valor: number; comision: number;
-        porFuente: Array<{ fuente: string; n: number; venta: number; renta: number; comision: number }>;
+        porFuente: Array<{ fuente: string; n: number; venta: number; renta: number; comision: number; inferidas: number }>;
+        /** cuántos cierres venían sin fuente (`other`) y cuántos quedaron sin poder atribuir */
+        sinFuenteOriginal: number; sinAtribuir: number;
         lista: Cierre[];
     };
 }
@@ -94,18 +98,54 @@ export interface InmoView {
     generado: string;
 }
 
-// Fuente del CIERRE (`buyer.source`). Lo que no es un canal de los 8 se nombra tal cual en vez de
-// juntarse en "otras": en 2026, 554 de ~1,300 cierres vienen como `other` (312 del lado vendedor =
-// comprador de un broker externo, sin fuente registrada) y el resto son fuentes chicas con nombre.
+// Fuente del CIERRE (`buyer.source`). En 2026, 544 de 1,341 cierres (41%) vienen como `other`. No es
+// un solo hueco — medido 1-oct-2026:
+//   · 276 lado vendedor con el comprador de una inmobiliaria EXTERNA (fuera de Pulppo) → «Broker
+//     externo». Ni siquiera hay contacto del comprador: no hay fuente que registrar.
+//   · 31 lado vendedor con el comprador de OTRA inmobiliaria de la red → «Red Pulppo».
+//   · ~82 con un lead previo del comprador → se INFIERE el canal de su primer lead antes del cierre
+//     (marcado como inferido: es una aproximación, no lo que capturó el asesor).
+//   · ~153 con contacto pero sin un solo lead antes del cierre → cliente de cartera, referido o
+//     contacto directo del asesor: «Cartera / sin lead».
+// Las fuentes chicas con nombre (Lonas, TuPortalOnline…) se muestran tal cual.
 const FUENTE_RARA: Record<string, string> = {
-    other: 'Otra / sin registrar', '': 'Otra / sin registrar', lonas: 'Lonas', tuportalonline: 'TuPortalOnline',
-    contactodirecto: 'Contacto directo', referido: 'Referido', 'doorvel.com': 'Doorvel', lamudi: 'Lamudi',
+    lonas: 'Lonas', tuportalonline: 'TuPortalOnline', contactodirecto: 'Contacto directo', referido: 'Referido',
+    'doorvel.com': 'Doorvel', lamudi: 'Lamudi', brokerexternal: 'Broker externo',
 };
-const fuenteCierre = (raw: unknown): string => {
-    const k = classifySource(raw as string);
-    if (k !== 'otros') return KEY2NAME[k] ?? k;
+const SIN_FUENTE = new Set(['other', '', 'none', 'null', 'undefined']);
+export const F_BROKER_EXT = 'Broker externo', F_RED = 'Red Pulppo (otra inmobiliaria)', F_CARTERA = 'Cartera / sin lead', F_SIN = 'Sin registrar';
+/** Fuente capturada, o null si vino vacía / `other` (entonces se deduce, ver arriba). */
+const fuenteCapturada = (raw: unknown): string | null => {
     const t = String(raw ?? '').trim();
-    return FUENTE_RARA[t.toLowerCase()] ?? (t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Otra / sin registrar');
+    if (SIN_FUENTE.has(t.toLowerCase())) return null;
+    const k = classifySource(t);
+    if (k !== 'otros') return KEY2NAME[k] ?? k;
+    return FUENTE_RARA[t.toLowerCase()] ?? t.charAt(0).toUpperCase() + t.slice(1);
+};
+
+// ── motivos de descarte (`searches.status.reasonToFinish`) ─────────
+// Valores reales medidos 1-oct-2026 sobre 12 meses (391k cancelaciones): descartado 30% · asesor 26%
+// · fantasma 13% · perdido 13% · SIN MOTIVO 8% · incontactable 5% · cancelado 4% · inesperado 1% ·
+// Agent inactive / automatico (sistema) <1% · y restos con grafías distintas del mismo motivo.
+// 'fantasma' aquí es lo que MARCÓ EL ASESOR — distinto del lead fantasma técnico (sin conversación).
+const NO_ES_DESCARTE = new Set(['success', 'Ganada', 'still_interested', 'test']);
+type FamDesc = 'noResponde' | 'incontactable' | 'broker' | 'perdido' | 'generico' | 'sistema';
+const FAM_DESC: Record<string, FamDesc> = {
+    fantasma: 'noResponde', stop_answering: 'noResponde', sent_to_ai: 'noResponde',
+    incontactable: 'incontactable',
+    asesor: 'broker',
+    perdido: 'perdido', Perdido: 'perdido', lost: 'perdido', lost_interest: 'perdido', inesperado: 'perdido', operaton_with_other_broker: 'perdido',
+    descartado: 'generico', cancelado: 'generico', '': 'generico',
+    'Agent inactive': 'sistema', automatico: 'sistema', 'Cancelado de forma automática': 'sistema',
+};
+const FAM_ORDEN: FamDesc[] = ['noResponde', 'incontactable', 'broker', 'perdido', 'generico', 'sistema'];
+const FAM_LBL: Record<FamDesc, string> = {
+    noResponde: 'No responde (marcado por el asesor)', incontactable: 'Incontactable', broker: 'Era asesor/broker',
+    perdido: 'Perdido / ya no le interesa', generico: 'Sin motivo específico', sistema: 'Cerrado por el sistema',
+};
+const MOTIVO_LBL: Record<string, string> = {
+    '': 'Sin motivo', cancelado: 'Cancelado (sin detalle)', Perdido: 'Perdido', lost: 'Perdido',
+    'Agent inactive': 'Asesor inactivo', automatico: 'Cancelado automático', 'Cancelado de forma automática': 'Cancelado automático',
 };
 
 const r1 = (x: number) => Math.round(x * 10) / 10;
@@ -140,7 +180,7 @@ export async function opcionesInmobiliarias(): Promise<InmoOpcion[]> {
     }
     const out: InmoOpcion[] = ORDEN_INMOBILIARIAS.map((x) => {
         const nombres = [x.nombre, ...(ALIAS_INMO[x.nombre] ?? [])];
-        const ids = [...new Set(nombres.flatMap((n) => porNombre.get(normInmo(n)) ?? []))];
+        const ids = [...new Set([...nombres.flatMap((n) => porNombre.get(normInmo(n)) ?? []), ...(ALIAS_IDS[x.nombre] ?? [])])];
         return {
             nombre: x.nombre, kam: x.kam || null, tier: x.tier || null, ids, enLista: true,
             ...(ids.length ? {} : { nota: SIN_CUENTA.has(x.nombre) ? 'sin cuenta identificable en Pulppo' : 'sin cuenta en Pulppo' }),
@@ -354,7 +394,10 @@ async function bloque(
         }
     })();
 
-    // ── descartados: la búsqueda del lead terminó cancelada con motivo ──
+    // ── descartados: la búsqueda del lead terminó cancelada ─────────────
+    // TODAS las cancelaciones, no sólo las que traen motivo: 7.6% viene sin motivo (null) y antes
+    // quedaba fuera del conteo. Se excluyen las que no son descarte (`success`/`Ganada` = terminó
+    // bien) y las cancelaciones del sistema van en su propia familia.
     const motivosTot = new Map<string, number>();
     const tareaDescarte = (async () => {
         const porSearch = new Map<string, LeadRef[]>();
@@ -362,10 +405,11 @@ async function bloque(
         const ids = [...porSearch.keys()].map(oid).filter((o): o is ObjectId => !!o);
         for (let i = 0; i < ids.length; i += 5000) {
             const cs = db.collection('searches').find(
-                { _id: { $in: ids.slice(i, i + 5000) }, 'status.last': 'cancelled', 'status.reasonToFinish': { $nin: [null, ''] } },
+                { _id: { $in: ids.slice(i, i + 5000) }, 'status.last': 'cancelled' },
                 { projection: { 'status.reasonToFinish': 1 } });
             for await (const s of cs) {
-                const motivo = String(dig(s, 'status', 'reasonToFinish'));
+                const motivo = String(dig(s, 'status', 'reasonToFinish') ?? '').trim();
+                if (NO_ES_DESCARTE.has(motivo)) continue;
                 for (const r of porSearch.get(String(s._id)) ?? []) {
                     for (const c of r.cells) c.desc += 1;
                     motivosTot.set(motivo, (motivosTot.get(motivo) ?? 0) + 1);
@@ -387,13 +431,40 @@ async function bloque(
         const ops = await db.collection('operations').find(q, { projection: {
             id: 1, closedAt: 1, 'property.internalId': 1, 'property.listing.operation': 1, 'property.type': 1,
             'property.address.neighborhood.name': 1, 'closeValue.value': 1, 'comission.value': 1, 'buyer.source': 1,
-            'seller.company._id': 1, 'buyer.company._id': 1,
+            'seller.company._id': 1, 'buyer.company._id': 1, 'buyer.company.external': 1, 'buyer.contact._id': 1, 'property._id': 1,
             'seller.broker._id': 1, 'seller.broker.firstName': 1, 'seller.broker.lastName': 1,
             'buyer.broker._id': 1, 'buyer.broker.firstName': 1, 'buyer.broker.lastName': 1,
         } }).sort({ closedAt: -1 }).toArray();
         const nombre = (o: Document, k: 'seller' | 'buyer') =>
             [dig(o, k, 'broker', 'firstName'), dig(o, k, 'broker', 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+        // Para los que vienen sin fuente y sí traen contacto: el primer lead de ese comprador antes del
+        // cierre (de la misma propiedad si lo hay). Una consulta por lotes, indexada por contact._id.
+        const porDeducir = ops.filter((o) => !fuenteCapturada(dig(o, 'buyer', 'source')) && dig(o, 'buyer', 'contact', '_id'));
+        const leadsDe = new Map<string, Array<{ t: Date; src: string; pid: string }>>();
+        const cidsB = [...new Set(porDeducir.map((o) => String(dig(o, 'buyer', 'contact', '_id'))))].map(oid).filter((x): x is ObjectId => !!x);
+        for (let i = 0; i < cidsB.length; i += 3000) {
+            for await (const l of db.collection('leads').find({ 'contact._id': { $in: cidsB.slice(i, i + 3000) } },
+                { projection: { 'contact._id': 1, source: 1, createdAt: 1, 'property._id': 1 } })) {
+                if (!isDate(l.createdAt)) continue;
+                const k = String(dig(l, 'contact', '_id'));
+                (leadsDe.get(k) ?? leadsDe.set(k, []).get(k)!).push({ t: l.createdAt, src: String(l.source ?? ''), pid: String(dig(l, 'property', '_id') ?? '') });
+            }
+        }
+        const deducir = (o: Document): { fuente: string; inferida?: boolean } => {
+            const sc = String(dig(o, 'seller', 'company', '_id') ?? ''), bc = String(dig(o, 'buyer', 'company', '_id') ?? '');
+            const cid = dig(o, 'buyer', 'contact', '_id');
+            if (cid) {
+                const cl = o.closedAt as Date, pid = String(dig(o, 'property', '_id') ?? '');
+                const previos = (leadsDe.get(String(cid)) ?? []).filter((l) => l.t <= cl);
+                const misma = previos.filter((l) => l.pid === pid);
+                const primero = (misma.length ? misma : previos).sort((a, b) => a.t.getTime() - b.t.getTime())[0];
+                if (primero) return { fuente: fuenteCapturada(primero.src) ?? F_SIN, inferida: true };
+            }
+            if (bc && bc !== sc) return { fuente: dig(o, 'buyer', 'company', 'external') === true ? F_BROKER_EXT : F_RED };
+            return { fuente: cid ? F_CARTERA : F_SIN };
+        };
         const out: Cierre[] = [];
+        let sinFuenteOrig = 0;
         for (const o of ops) {
             const sc = String(dig(o, 'seller', 'company', '_id') ?? ''), bc = String(dig(o, 'buyer', 'company', '_id') ?? '');
             const vende = reqInmo ? reqInmo.has(sc) : true, compra = reqInmo ? reqInmo.has(bc) : true;
@@ -416,14 +487,16 @@ async function bloque(
                 tipo: (dig(o, 'property', 'type') as string) ?? null,
                 colonia: (dig(o, 'property', 'address', 'neighborhood', 'name') as string) ?? null,
                 valor: num(dig(o, 'closeValue', 'value')), comision: num(dig(o, 'comission', 'value')),
-                fuente: fuenteCierre(dig(o, 'buyer', 'source')),
+                ...(() => { const fc = fuenteCapturada(dig(o, 'buyer', 'source')); return fc ? { fuente: fc } : deducir(o); })(),
                 lado: ladoX, asesor: nombres.join(' / ') || '—',
             });
+            if (!fuenteCapturada(dig(o, 'buyer', 'source'))) sinFuenteOrig += 1;
         }
-        return out;
+        return { out, sinFuenteOrig };
     })();
 
-    const [, , , lista] = await Promise.all([Promise.all(tareasJoin), tareaFantasma, tareaDescarte, tareaCierres]);
+    const [, , , cierresRes] = await Promise.all([Promise.all(tareasJoin), tareaFantasma, tareaDescarte, tareaCierres]);
+    const lista = cierresRes.out;
 
     const fila = (c: Celda): Fila => {
         const u = c.t0.size;
@@ -456,14 +529,13 @@ async function bloque(
 
     // composición del descarte
     const totDesc = [...motivosTot.values()].reduce((a, b) => a + b, 0);
-    const FAMLBL: Record<string, string> = { incontactable: 'Incontactable', broker: 'Era asesor/broker', noResponde: 'No responde / fantasma', perdido: 'Perdido u otro' };
     const fam = new Map<string, number>();
-    for (const [m, n] of motivosTot) { const k = FAMILIA[m] ?? 'perdido'; fam.set(k, (fam.get(k) ?? 0) + n); }
+    for (const [m, n] of motivosTot) { const k = FAM_DESC[m] ?? 'perdido'; fam.set(k, (fam.get(k) ?? 0) + n); }
 
-    const porFuente = new Map<string, { fuente: string; n: number; venta: number; renta: number; comision: number }>();
+    const porFuente = new Map<string, { fuente: string; n: number; venta: number; renta: number; comision: number; inferidas: number }>();
     for (const x of lista) {
-        const r = porFuente.get(x.fuente) ?? porFuente.set(x.fuente, { fuente: x.fuente, n: 0, venta: 0, renta: 0, comision: 0 }).get(x.fuente)!;
-        r.n += 1; r.comision += x.comision;
+        const r = porFuente.get(x.fuente) ?? porFuente.set(x.fuente, { fuente: x.fuente, n: 0, venta: 0, renta: 0, comision: 0, inferidas: 0 }).get(x.fuente)!;
+        r.n += 1; r.comision += x.comision; if (x.inferida) r.inferidas += 1;
         if (x.operacion === 'Venta') r.venta += 1; else if (x.operacion === 'Renta') r.renta += 1;
     }
     const bIncl = new Date(B.getTime() - DIA);
@@ -472,14 +544,19 @@ async function bloque(
         total: fila(total), fuentes, asesores, inmobiliarias,
         descarte: {
             total: totDesc,
-            familias: ['noResponde', 'incontactable', 'broker', 'perdido'].map((k) => ({ key: k, label: FAMLBL[k], n: fam.get(k) ?? 0, pct: totDesc ? Math.round((100 * (fam.get(k) ?? 0)) / totDesc) : 0 })),
-            motivos: [...motivosTot.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
-                .map(([m, n]) => ({ motivo: RLBL[m] ?? m.replace(/_/g, ' '), n, pct: totDesc ? Math.round((100 * n) / totDesc) : 0 })),
+            familias: FAM_ORDEN.map((k) => ({ key: k, label: FAM_LBL[k], n: fam.get(k) ?? 0, pct: totDesc ? Math.round((100 * (fam.get(k) ?? 0)) / totDesc) : 0 })),
+            // Todos los motivos, no un top: se agrupan las grafías del mismo motivo ('Perdido' y 'perdido').
+            motivos: (() => {
+                const m2 = new Map<string, number>();
+                for (const [m, n] of motivosTot) { const l = MOTIVO_LBL[m] ?? RLBL[m] ?? (m ? m.replace(/_/g, ' ') : 'Sin motivo'); m2.set(l, (m2.get(l) ?? 0) + n); }
+                return [...m2.entries()].sort((a, b) => b[1] - a[1]).map(([motivo, n]) => ({ motivo, n, pct: totDesc ? Math.round((100 * n) / totDesc) : 0 }));
+            })(),
         },
         cierres: {
             n: lista.length, venta: lista.filter((x) => x.operacion === 'Venta').length, renta: lista.filter((x) => x.operacion === 'Renta').length,
             valor: lista.reduce((a, x) => a + x.valor, 0), comision: lista.reduce((a, x) => a + x.comision, 0),
             porFuente: [...porFuente.values()].sort((a, b) => b.n - a.n),
+            sinFuenteOriginal: cierresRes.sinFuenteOrig, sinAtribuir: lista.filter((x) => x.fuente === F_SIN).length,
             lista: lista.slice(0, 60),
         },
     };

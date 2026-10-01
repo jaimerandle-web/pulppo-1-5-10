@@ -371,7 +371,7 @@ export default function InmobiliariasTab() {
                         })}
                     </div>
                     <div style={{ flex: '1 1 260px' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Motivos más comunes</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Todos los motivos</div>
                         {A.descarte.motivos.map((m) => (
                             <div key={m.motivo} style={{ display: 'flex', fontSize: 12, padding: '4px 0', borderBottom: `1px solid ${LGT}` }}>
                                 <span style={{ flex: 1 }}>{m.motivo}</span><span style={{ color: '#666', width: 60, textAlign: 'right' }}>{f0(m.n)}</span><span style={{ fontWeight: 700, width: 44, textAlign: 'right' }}>{m.pct}%</span>
@@ -380,6 +380,7 @@ export default function InmobiliariasTab() {
                         {!A.descarte.motivos.length && <div style={{ fontSize: 12, color: GRY }}>Sin descartes con motivo en el periodo.</div>}
                     </div>
                 </div>
+                <Aviso>«No responde» en los motivos es lo que <b>marcó el asesor</b> al cerrar la búsqueda; no es lo mismo que el lead fantasma de la tabla de arriba, que se mide por si hubo conversación. «Sin motivo específico» junta el «descartado» genérico, «cancelado» y los que se cerraron sin motivo.</Aviso>
                 <Aviso>El descarte <b>madura</b>: un lead de esta semana casi no ha tenido tiempo de cancelarse, así que un periodo reciente siempre se ve más limpio de lo que va a terminar. Contra otro periodo, lee la <b>composición</b> (por qué se descartan), no el porcentaje total{!descMaduro && C ? <> — por eso, con un periodo que cerró hace menos de 45 días, la variación del % de descartados no se muestra</> : null}.</Aviso>
             </Seccion>
 
@@ -401,7 +402,7 @@ export default function InmobiliariasTab() {
             )}
 
             <Seccion titulo="Cierres del periodo" onCopiar={() => copiar([['Fecha', 'Operación', 'Código', 'Tipo', 'Colonia', 'Valor', 'Comisión', 'Fuente', 'Lado', 'Asesor', 'ID operación'],
-                ...A.cierres.lista.map((x) => [x.fecha, x.operacion, x.codigo, x.tipo, x.colonia, x.valor, x.comision, x.fuente, x.lado, x.asesor, x.id])])}
+                ...A.cierres.lista.map((x) => [x.fecha, x.operacion, x.codigo, x.tipo, x.colonia, x.valor, x.comision, x.inferida ? `${x.fuente} (inferida)` : x.fuente, x.lado, x.asesor, x.id])])}
                 sub={<>Las operaciones que <b>cerraron</b> en el periodo, vengan de leads de cuando sea{v.inmobiliaria ? <>, de los dos lados: donde {v.inmobiliaria.nombre} vende la propiedad y donde trae al comprador</> : null}. La fuente es la del comprador.</>}>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <Kpi label="Cierres" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
@@ -409,11 +410,19 @@ export default function InmobiliariasTab() {
                     <Kpi label="Valor cerrado" value={money(A.cierres.valor)} delta={<Delta a={A.cierres.valor} b={C?.cierres.valor} />} />
                 </div>
                 <div style={{ height: 12 }} />
-                <Tabla head={['Fuente del comprador', 'Cierres', 'Venta', 'Renta', 'Comisión']} min={520}>
+                <Tabla head={['Fuente del comprador', 'Cierres', 'Venta', 'Renta', 'Comisión', 'Inferidas']} min={600}>
                     {A.cierres.porFuente.map((x) => (
-                        <tr key={x.fuente}><td style={td0}>{x.fuente}</td><td style={td}>{f0(x.n)}</td><td style={td}>{f0(x.venta)}</td><td style={td}>{f0(x.renta)}</td><td style={td}>{money(x.comision)}</td></tr>
+                        <tr key={x.fuente}><td style={td0}>{x.fuente}</td><td style={td}>{f0(x.n)}</td><td style={td}>{f0(x.venta)}</td><td style={td}>{f0(x.renta)}</td><td style={td}>{money(x.comision)}</td><td style={{ ...td, color: x.inferidas ? '#8A6D00' : GRY }}>{x.inferidas ? f0(x.inferidas) : '—'}</td></tr>
                     ))}
                 </Tabla>
+                {A.cierres.sinFuenteOriginal > 0 && (
+                    <Aviso>
+                        <b>{f0(A.cierres.sinFuenteOriginal)} de {f0(A.cierres.n)}</b> cierres venían sin fuente en la operación (<code>other</code>). Se atribuyeron así:
+                        si el comprador lo trajo una inmobiliaria de fuera de Pulppo, <b>Broker externo</b>; si fue otra de la red, <b>Red Pulppo</b>;
+                        si el comprador tenía un lead previo, el canal de su <b>primer lead</b> (columna «Inferidas»); y si tenía contacto pero ningún lead, <b>Cartera / sin lead</b> (cliente propio, referido o contacto directo).
+                        {A.cierres.sinAtribuir ? <> Quedan <b>{f0(A.cierres.sinAtribuir)}</b> sin poder atribuir.</> : <> No queda ninguno sin atribuir.</>}
+                    </Aviso>
+                )}
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '20px 0 6px' }}>Últimos cierres</div>
                 <Tabla head={['Fecha', 'Operación', 'Propiedad', 'Valor', 'Comisión', 'Fuente', 'Lado', 'Asesor']} min={880}>
                     {A.cierres.lista.map((x) => (
@@ -423,7 +432,7 @@ export default function InmobiliariasTab() {
                             <td style={{ ...td0, whiteSpace: 'normal' }}>{x.codigo ? <a href={`/ficha/${encodeURIComponent(x.codigo)}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>{x.codigo}</a> : '—'}<div style={{ fontSize: 10.5, color: '#666' }}>{[x.tipo, x.colonia].filter(Boolean).join(' · ')}</div></td>
                             <td style={td}>{money(x.valor)}</td>
                             <td style={td}>{money(x.comision)}</td>
-                            <td style={td0}>{x.fuente}</td>
+                            <td style={td0}>{x.fuente}{x.inferida && <div style={{ fontSize: 10, color: '#8A6D00' }}>inferida del 1er lead</div>}</td>
                             <td style={{ ...td0, color: ladoColor[x.lado], fontWeight: 700 }}>{x.lado}</td>
                             <td style={{ ...td0, whiteSpace: 'normal' }}>{x.asesor}</td>
                         </tr>

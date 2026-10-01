@@ -114,11 +114,20 @@ export const normInmo = (s: unknown): string =>
 
 /**
  * Nombre de la lista → nombre(s) con que la cuenta existe en `companies`, cuando no coinciden.
- * Sólo los confirmados; los que no se encontraron se quedan sin alias y salen en cero con nota
- * (ver `SIN_CUENTA`), en vez de adivinar entre cuentas parecidas.
+ * Sólo los confirmados. Un nombre trae TODAS las compañías que se llamen igual (sin Habi).
  */
 export const ALIAS_INMO: Record<string, string[]> = {
     Aramil: ['Aramil Inmobiliaria'],
+    // Alta 18-ago-2026 (pamela@grupoada.com.mx, 3 asesores). El 29-sep se crearon dos cuentas más
+    // con el mismo nombre, vacías: entran también, por si el equipo se mueve a una de ellas.
+    'Grupo Ada': ['Grupo ADA Inmobiliaria'],
 };
-/** De la lista, sin cuenta identificable en Pulppo (30-sep-2026). */
-export const SIN_CUENTA = new Set(['Grupo Ada', 'Servicios inmoiliarios integrales']);
+/**
+ * Por id, cuando el nombre CHOCA con otras compañías: «SERVICIOS INTEGRALES INMOBILIARIOS» existe
+ * 4 veces y sólo una es la inmobiliaria (alta 28-ago-2026, 5 asesores); las otras son de 2025, vacías.
+ */
+export const ALIAS_IDS: Record<string, string[]> = {
+    'Servicios inmoiliarios integrales': ['6a9206170c8bf0ef7f97ab6f'],
+};
+/** De la lista, sin cuenta identificable en Pulppo. */
+export const SIN_CUENTA = new Set<string>();
