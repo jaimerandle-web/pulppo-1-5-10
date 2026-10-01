@@ -59,6 +59,10 @@ export interface Fila {
     fantasmas: number; rescatados: number; mueren: number;
     pctFantasma: number | null; pctMueren: number | null;
     descartados: number; pctDescartado: number | null;
+    /** de los descartados, cuántos sin un solo seguimiento registrado por el asesor antes del descarte */
+    descSinSeg: number; pctDescSinSeg: number | null;
+    /** teléfono que no sirve (menos de 10 dígitos, todos iguales o una secuencia) */
+    telInvalido: number; pctTelInvalido: number | null;
     /** fuente que más leads trae (sólo en filas de asesor / inmobiliaria) */
     topFuente?: string;
     nota?: string;
@@ -80,7 +84,9 @@ export interface Bloque {
     descarte: {
         total: number;
         familias: Array<{ key: string; label: string; n: number; pct: number }>;
-        motivos: Array<{ motivo: string; n: number; pct: number }>;
+        motivos: Array<{ motivo: string; familia: string; n: number; pct: number; segMediana: number | null; segProm: number | null; pctSinSeg: number | null }>;
+        /** búsquedas descartadas con seguimiento medido (una por búsqueda, no por lead) */
+        busquedas: number;
     };
     cierres: {
         n: number; venta: number; renta: number; valor: number; comision: number;
@@ -129,7 +135,7 @@ const fuenteCapturada = (raw: unknown): string | null => {
 // Agent inactive / automatico (sistema) <1% · y restos con grafías distintas del mismo motivo.
 // 'fantasma' aquí es lo que MARCÓ EL ASESOR — distinto del lead fantasma técnico (sin conversación).
 const NO_ES_DESCARTE = new Set(['success', 'Ganada', 'still_interested', 'test']);
-type FamDesc = 'noResponde' | 'incontactable' | 'broker' | 'perdido' | 'generico' | 'sistema';
+type FamDesc = 'noResponde' | 'incontactable' | 'broker' | 'perdido' | 'noCalifica' | 'otro' | 'generico' | 'sistema';
 const FAM_DESC: Record<string, FamDesc> = {
     fantasma: 'noResponde', stop_answering: 'noResponde', sent_to_ai: 'noResponde',
     incontactable: 'incontactable',
@@ -138,11 +144,54 @@ const FAM_DESC: Record<string, FamDesc> = {
     descartado: 'generico', cancelado: 'generico', '': 'generico',
     'Agent inactive': 'sistema', automatico: 'sistema', 'Cancelado de forma automática': 'sistema',
 };
-const FAM_ORDEN: FamDesc[] = ['noResponde', 'incontactable', 'broker', 'perdido', 'generico', 'sistema'];
+const FAM_ORDEN: FamDesc[] = ['noResponde', 'incontactable', 'broker', 'perdido', 'noCalifica', 'otro', 'generico', 'sistema'];
 const FAM_LBL: Record<FamDesc, string> = {
-    noResponde: 'No responde (marcado por el asesor)', incontactable: 'Incontactable', broker: 'Era asesor/broker',
-    perdido: 'Perdido / ya no le interesa', generico: 'Sin motivo específico', sistema: 'Cerrado por el sistema',
+    noResponde: 'No responde / fantasma (según el asesor)', incontactable: 'Incontactable / datos falsos', broker: 'Era asesor/broker',
+    perdido: 'Perdido / ya no busca', noCalifica: 'No califica (presupuesto, requisitos, zona)', otro: 'Otro (duplicado, era el dueño)',
+    generico: 'Sin motivo específico', sistema: 'Cerrado por el sistema',
 };
+
+// El «descartado» genérico es 30% de todo el descarte, pero el asesor casi siempre escribe la razón en
+// `status.description` (95% trae texto). Se clasifica por palabras clave. Medido 1-oct-2026 sobre 30k
+// descartes genéricos (abr–sep): separa el 64%; el resto queda como «Descartado · otro / sin detalle».
+// Orden = prioridad (gana la primera que coincide). Patrones SIN acentos: el texto se normaliza.
+const DESC_TXT: Array<{ k: string; lbl: string; fam: FamDesc; rx: RegExp }> = [
+    { k: 'broker', lbl: 'Era broker (según el comentario)', fam: 'broker', rx: /\bbroker|\basesor|inmobiliaria|colega|\bagente\b/ },
+    { k: 'datos', lbl: 'Número o datos falsos', fam: 'incontactable', rx: /no existe|falso|fake|equivocad|numero (incorrecto|erroneo|mal|invalido)|es invalido|no es (el|su) numero|spam|extorsion|fraude|\bbot\b|sin numero|numero invalido|no le llegan/ },
+    { k: 'noresp', lbl: 'No responde (según el comentario)', fam: 'noResponde', rx: /no contesta|no responde|fantasma|no respondio|sin respuesta|dejo de contestar|no hubo respuesta|ghost|nunca contesto|no ha contestado/ },
+    { k: 'nodisp', lbl: 'La propiedad ya no estaba disponible', fam: 'noCalifica', rx: /ya se (rento|vendio)|no disponible|ya no esta disponible|rentada|vendida|apartad/ },
+    { k: 'requisitos', lbl: 'No cumple requisitos (mascota, plazo, aval…)', fam: 'noCalifica', rx: /mascota|perro|gato|aval|fiador|poliza|investigacion|credito|infonavit|fovissste|bancari|corto plazo|temporal|requisit|deposito|ingresos|no califica|historial|\d+ meses/ },
+    { k: 'presupuesto', lbl: 'Presupuesto', fam: 'noCalifica', rx: /presupuesto|caro|precio|economic|barat|no le alcanza|fuera de (su )?rango|monto/ },
+    { k: 'yanobusca', lbl: 'Ya compró / rentó o ya no busca', fam: 'perdido', rx: /ya (rento|compro|encontro|consiguio|no busca|no le interesa)|no le interesa|ya no|cambio de opinion|desist|pospon|por el momento no|mas adelante|solo (estaba )?viendo|curiosidad/ },
+    { k: 'zona', lbl: 'Zona o características', fam: 'noCalifica', rx: /zona|ubicacion|lejos|elevador|estacionamiento|recamaras|tamano|metros|amueblad|\bpiso\b|vista/ },
+    { k: 'duplicado', lbl: 'Duplicado / ya lo atiende alguien', fam: 'otro', rx: /duplicad|repetid|mismo cliente|ya se le esta atendiendo|ya lo atiende|ya esta en seguimiento/ },
+    { k: 'propietario', lbl: 'Era el propietario', fam: 'otro', rx: /propietari|duen/ },
+];
+const sinAcento = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+/** Clave del motivo: el crudo, o `descartado:<sub>` si es genérico y el comentario dice por qué. */
+function motivoDe(crudo: string, descripcion: unknown): string {
+    if (FAM_DESC[crudo] !== 'generico') return crudo;
+    const t = sinAcento(String(descripcion ?? '')).trim();
+    if (t.length < 3) return crudo;
+    const hit = DESC_TXT.find((x) => x.rx.test(t));
+    return hit ? `descartado:${hit.k}` : crudo;
+}
+const familiaDe = (m: string): FamDesc =>
+    m.startsWith('descartado:') ? DESC_TXT.find((x) => `descartado:${x.k}` === m)?.fam ?? 'generico' : FAM_DESC[m] ?? 'perdido';
+const etiquetaMotivo = (m: string): string => {
+    if (m.startsWith('descartado:')) return `Descartado · ${DESC_TXT.find((x) => `descartado:${x.k}` === m)?.lbl ?? 'otro'}`;
+    if (m === 'descartado') return 'Descartado · otro / sin detalle';
+    return MOTIVO_LBL[m] ?? RLBL[m] ?? (m ? m.replace(/_/g, ' ') : 'Sin motivo');
+};
+
+/** Teléfono que no sirve para contactar. Medido jul–ago 2026: 1.5% de los leads (casi todos traen correo). */
+function telInvalido(p: unknown): boolean {
+    const d = String(p ?? '').replace(/\D/g, '');
+    const u = d.slice(-10);
+    if (u.length < 10) return true;
+    if (new Set(u).size <= 2) return true;
+    return '01234567890123456789'.includes(u) || '98765432109876543210'.includes(u);
+}
 const MOTIVO_LBL: Record<string, string> = {
     '': 'Sin motivo', cancelado: 'Cancelado (sin detalle)', Perdido: 'Perdido', lost: 'Perdido',
     'Agent inactive': 'Asesor inactivo', automatico: 'Cancelado automático', 'Cancelado de forma automática': 'Cancelado automático',
@@ -213,12 +262,12 @@ interface Celda {
     req: Set<string> | null;
     leads: number; venta: number; renta: number; baseLab: number; lt60: number; sin: number; resp: number[];
     t0: Map<string, Date>; vis: Set<string>; ofe: Set<string>; clo: Set<string>;
-    fant: number; resc: number; desc: number;
+    fant: number; resc: number; desc: number; descSinSeg: number; telInv: number;
     fuentes: Map<string, number>;
 }
 const nuevaCelda = (key: string, nombre: string, req: Set<string> | null): Celda => ({
     key, nombre, req, leads: 0, venta: 0, renta: 0, baseLab: 0, lt60: 0, sin: 0, resp: [],
-    t0: new Map(), vis: new Set(), ofe: new Set(), clo: new Set(), fant: 0, resc: 0, desc: 0, fuentes: new Map(),
+    t0: new Map(), vis: new Set(), ofe: new Set(), clo: new Set(), fant: 0, resc: 0, desc: 0, descSinSeg: 0, telInv: 0, fuentes: new Map(),
 });
 
 async function bloque(
@@ -249,7 +298,8 @@ async function bloque(
     };
     const cur = db.collection('leads').find(filtro, {
         projection: { source: 1, createdAt: 1, answeredAt: 1, 'contact._id': 1, 'property.listing.operation': 1,
-            'company._id': 1, 'company.name': 1, 'agent._id': 1, 'agent.firstName': 1, 'agent.lastName': 1, interaction: 1, search: 1 },
+            'company._id': 1, 'company.name': 1, 'agent._id': 1, 'agent.firstName': 1, 'agent.lastName': 1, interaction: 1, search: 1,
+            phone: 1, 'contact.phone': 1 },
         batchSize: 10000,
     });
     for await (const l of cur) {
@@ -277,8 +327,10 @@ async function bloque(
         const mins = isDate(ans) ? (ans.getTime() - ca.getTime()) / 60000 : null;
         const cidRaw = dig(l, 'contact', '_id');
         const cid = cidRaw != null ? String(cidRaw) : null;
+        const telMalo = telInvalido(l.phone ?? dig(l, 'contact', 'phone'));
         for (const c of mis) {
             c.leads += 1;
+            if (telMalo) c.telInv += 1;
             if (oper === 'sale') c.venta += 1; else if (oper === 'rent') c.renta += 1;
             if (lab) {
                 c.baseLab += 1;
@@ -399,22 +451,50 @@ async function bloque(
     // quedaba fuera del conteo. Se excluyen las que no son descarte (`success`/`Ganada` = terminó
     // bien) y las cancelaciones del sistema van en su propia familia.
     const motivosTot = new Map<string, number>();
+    // seguimientos por motivo: una entrada por BÚSQUEDA descartada (varios leads pueden compartirla)
+    const segPorMotivo = new Map<string, number[]>();
     const tareaDescarte = (async () => {
         const porSearch = new Map<string, LeadRef[]>();
         for (const r of refs) if (r.search) (porSearch.get(r.search) ?? porSearch.set(r.search, []).get(r.search)!).push(r);
         const ids = [...porSearch.keys()].map(oid).filter((o): o is ObjectId => !!o);
+        const descartadas: Array<{ id: ObjectId; motivo: string; fin: Date | null }> = [];
         for (let i = 0; i < ids.length; i += 5000) {
             const cs = db.collection('searches').find(
                 { _id: { $in: ids.slice(i, i + 5000) }, 'status.last': 'cancelled' },
-                { projection: { 'status.reasonToFinish': 1 } });
+                { projection: { 'status.reasonToFinish': 1, 'status.description': 1, 'status.history': 1 } });
             for await (const s of cs) {
-                const motivo = String(dig(s, 'status', 'reasonToFinish') ?? '').trim();
-                if (NO_ES_DESCARTE.has(motivo)) continue;
+                const crudo = String(dig(s, 'status', 'reasonToFinish') ?? '').trim();
+                if (NO_ES_DESCARTE.has(crudo)) continue;
+                const motivo = motivoDe(crudo, dig(s, 'status', 'description'));
+                const fin = ((dig(s, 'status', 'history') as Document[]) ?? [])
+                    .filter((h) => h?.status === 'cancelled' && isDate(h.timestamp)).map((h) => h.timestamp as Date)
+                    .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+                descartadas.push({ id: s._id as ObjectId, motivo, fin });
                 for (const r of porSearch.get(String(s._id)) ?? []) {
                     for (const c of r.cells) c.desc += 1;
                     motivosTot.set(motivo, (motivosTot.get(motivo) ?? 0) + 1);
                 }
             }
+        }
+        // Seguimientos que el ASESOR marcó como hechos antes del descarte (`tasks`, finishedBy ≠ System).
+        // El sistema crea tareas solas (SEGUIMIENTO-FANTASMA, -BUSCANDO…) y cierra muchas por su cuenta:
+        // ésas no son un toque. Los WhatsApp del asesor NO están en la base, así que esto es lo que
+        // queda REGISTRADO en Pulppo, no todo lo que hizo.
+        const hechos = new Map<string, Date[]>();
+        await Promise.all(Array.from({ length: Math.ceil(descartadas.length / 5000) }, async (_, j) => {
+            const cur = db.collection('tasks').find(
+                { 'metadata.search': { $in: descartadas.slice(j * 5000, (j + 1) * 5000).map((d) => d.id) }, status: 'done', finishedBy: { $ne: 'System' } },
+                { projection: { 'metadata.search': 1, finishedAt: 1 } });
+            for await (const t of cur) {
+                if (!isDate(t.finishedAt)) continue;
+                const k = String(dig(t, 'metadata', 'search'));
+                (hechos.get(k) ?? hechos.set(k, []).get(k)!).push(t.finishedAt);
+            }
+        }));
+        for (const d of descartadas) {
+            const n = (hechos.get(String(d.id)) ?? []).filter((t) => !d.fin || t <= d.fin).length;
+            (segPorMotivo.get(d.motivo) ?? segPorMotivo.set(d.motivo, []).get(d.motivo)!).push(n);
+            if (n === 0) for (const r of porSearch.get(String(d.id)) ?? []) for (const c of r.cells) c.descSinSeg += 1;
         }
     })();
 
@@ -510,6 +590,8 @@ async function bloque(
             fantasmas: c.fant, rescatados: c.resc, mueren: c.fant - c.resc,
             pctFantasma: p1(c.fant, c.leads), pctMueren: p1(c.fant - c.resc, c.leads),
             descartados: c.desc, pctDescartado: p1(c.desc, c.leads),
+            descSinSeg: c.descSinSeg, pctDescSinSeg: p1(c.descSinSeg, c.desc),
+            telInvalido: c.telInv, pctTelInvalido: p1(c.telInv, c.leads),
             ...(top ? { topFuente: KEY2NAME[top[0]] ?? 'Otras fuentes' } : {}),
         };
     };
@@ -530,7 +612,7 @@ async function bloque(
     // composición del descarte
     const totDesc = [...motivosTot.values()].reduce((a, b) => a + b, 0);
     const fam = new Map<string, number>();
-    for (const [m, n] of motivosTot) { const k = FAM_DESC[m] ?? 'perdido'; fam.set(k, (fam.get(k) ?? 0) + n); }
+    for (const [m, n] of motivosTot) { const k = familiaDe(m); fam.set(k, (fam.get(k) ?? 0) + n); }
 
     const porFuente = new Map<string, { fuente: string; n: number; venta: number; renta: number; comision: number; inferidas: number }>();
     for (const x of lista) {
@@ -547,10 +629,20 @@ async function bloque(
             familias: FAM_ORDEN.map((k) => ({ key: k, label: FAM_LBL[k], n: fam.get(k) ?? 0, pct: totDesc ? Math.round((100 * (fam.get(k) ?? 0)) / totDesc) : 0 })),
             // Todos los motivos, no un top: se agrupan las grafías del mismo motivo ('Perdido' y 'perdido').
             motivos: (() => {
-                const m2 = new Map<string, number>();
-                for (const [m, n] of motivosTot) { const l = MOTIVO_LBL[m] ?? RLBL[m] ?? (m ? m.replace(/_/g, ' ') : 'Sin motivo'); m2.set(l, (m2.get(l) ?? 0) + n); }
-                return [...m2.entries()].sort((a, b) => b[1] - a[1]).map(([motivo, n]) => ({ motivo, n, pct: totDesc ? Math.round((100 * n) / totDesc) : 0 }));
+                // se juntan las grafías del mismo motivo ('Perdido' / 'perdido') bajo una etiqueta
+                const m2 = new Map<string, { familia: string; n: number; seg: number[] }>();
+                for (const [m, n] of motivosTot) {
+                    const l = etiquetaMotivo(m);
+                    const e = m2.get(l) ?? m2.set(l, { familia: FAM_LBL[familiaDe(m)], n: 0, seg: [] }).get(l)!;
+                    e.n += n; e.seg.push(...(segPorMotivo.get(m) ?? []));
+                }
+                return [...m2.entries()].sort((a, b) => b[1].n - a[1].n).map(([motivo, e]) => ({
+                    motivo, familia: e.familia, n: e.n, pct: totDesc ? Math.round((100 * e.n) / totDesc) : 0,
+                    segMediana: mediana(e.seg), segProm: e.seg.length ? r1(e.seg.reduce((a, b) => a + b, 0) / e.seg.length) : null,
+                    pctSinSeg: p1(e.seg.filter((x) => x === 0).length, e.seg.length),
+                }));
             })(),
+            busquedas: [...segPorMotivo.values()].reduce((a, x) => a + x.length, 0),
         },
         cierres: {
             n: lista.length, venta: lista.filter((x) => x.operacion === 'Venta').length, renta: lista.filter((x) => x.operacion === 'Renta').length,
