@@ -15,21 +15,8 @@ import {
     monthWindow, oid, utc,
 } from './metrics';
 import type { Operacion } from './view';
-
-// Los mismos motivos y etiquetas que usa el pulso, para que no haya dos vocabularios.
-export const RLBL: Record<string, string> = {
-    descartado: 'Descartado (genérico)', asesor: 'Cliente era asesor/broker',
-    fantasma: 'Fantasma / no contesta', perdido: 'Perdido', incontactable: 'Incontactable',
-    inesperado: 'Inesperado', sent_to_ai: 'Enviado a IA', stop_answering: 'Dejó de responder',
-    lost_interest: 'Perdió interés', operaton_with_other_broker: 'Cerró con otro broker',
-};
-// Agrupación en cuatro familias, que es como se decide algo. El detalle fino queda disponible
-// en `motivos`, pero para comparar portales mes a mes nadie usa diez columnas.
-export const FAMILIA: Record<string, 'incontactable' | 'broker' | 'noResponde' | 'perdido'> = {
-    incontactable: 'incontactable',
-    asesor: 'broker',
-    fantasma: 'noResponde', stop_answering: 'noResponde', sent_to_ai: 'noResponde',
-};
+import { NO_ES_DESCARTE, etiquetaMotivo, familiaDe, motivoDe } from './descarte';
+export { RLBL } from './descarte';
 
 export interface CalidadMes {
     mes: string;
@@ -41,6 +28,10 @@ export interface CalidadMes {
     pctBroker: number | null;       // motivo "era asesor/broker"
     pctNoResponde: number | null;
     pctPerdido: number | null;
+    /** presupuesto, requisitos, zona, ya no disponible (sale del comentario del «descartado» genérico) */
+    pctNoCalifica: number | null;
+    /** «descartado» sin detalle, «cancelado», sin motivo, duplicados y cierres del sistema */
+    pctSinMotivo: number | null;
     /** % de contactos únicos etiquetados como broker (distinto del motivo de descarte). */
     pctBrokerTag: number | null;
 }
@@ -127,11 +118,14 @@ export async function calidadView(
     const ids = [...sid2cells.keys()].map(oid).filter((o): o is NonNullable<typeof o> => !!o);
     for (let i = 0; i < ids.length; i += 2000) {
         const cs = db.collection('searches').find(
-            { _id: { $in: ids.slice(i, i + 2000) }, 'status.last': 'cancelled',
-              'status.reasonToFinish': { $nin: [null, ''] } },
-            { projection: { 'status.reasonToFinish': 1 }, batchSize: 5000 });
+            // TODAS las cancelaciones (antes se saltaban las que no traen motivo: ~8%) menos las que
+            // no son descarte (búsqueda ganada). Taxonomía compartida con la pestaña de inmobiliarias.
+            { _id: { $in: ids.slice(i, i + 2000) }, 'status.last': 'cancelled' },
+            { projection: { 'status.reasonToFinish': 1, 'status.description': 1 }, batchSize: 5000 });
         for await (const sdoc of cs) {
-            const motivo = String(dig(sdoc, 'status', 'reasonToFinish'));
+            const crudo = String(dig(sdoc, 'status', 'reasonToFinish') ?? '').trim();
+            if (NO_ES_DESCARTE.has(crudo)) continue;
+            const motivo = motivoDe(crudo, dig(sdoc, 'status', 'description'));
             for (const cellKey of sid2cells.get(String(sdoc._id)) ?? []) {
                 const c = cells.get(cellKey)!;
                 c.motivos.set(motivo, (c.motivos.get(motivo) ?? 0) + 1);
@@ -148,14 +142,16 @@ export async function calidadView(
     for (const [name, k] of CANALES) {
         const rows: CalidadMes[] = mkeys.map((mk) => {
             const c = cells.get(ck(k, mk))!;
-            let desc = 0, inc = 0, brk = 0, nor = 0, per = 0;
+            let desc = 0, inc = 0, brk = 0, nor = 0, per = 0, noc = 0, sin = 0;
             for (const [motivo, n] of c.motivos) {
                 desc += n;
-                const fam = FAMILIA[motivo];
+                const fam = familiaDe(motivo);
                 if (fam === 'incontactable') inc += n;
                 else if (fam === 'broker') brk += n;
                 else if (fam === 'noResponde') nor += n;
-                else per += n;
+                else if (fam === 'perdido') per += n;
+                else if (fam === 'noCalifica') noc += n;
+                else sin += n;   // genérico sin detalle, otro, sistema
             }
             const u = c.unicos.size;
             const nb = [...c.unicos].filter((x) => bset.has(x)).length;
@@ -166,6 +162,8 @@ export async function calidadView(
                 pctBroker: p1(brk, c.leads),
                 pctNoResponde: p1(nor, c.leads),
                 pctPerdido: p1(per, c.leads),
+                pctNoCalifica: p1(noc, c.leads),
+                pctSinMotivo: p1(sin, c.leads),
                 pctBrokerTag: p1(nb, u),
             };
         });
@@ -181,7 +179,7 @@ export async function calidadView(
         return {
             canal: p.canal,
             filas: [...c.motivos.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
-                .map(([m, n]) => ({ motivo: RLBL[m] ?? m.replace(/_/g, ' '), n, pct: Math.round((100 * n) / tot) })),
+                .map(([m, n]) => ({ motivo: etiquetaMotivo(m), n, pct: Math.round((100 * n) / tot) })),
         };
     });
 

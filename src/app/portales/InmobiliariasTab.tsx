@@ -311,7 +311,7 @@ export default function InmobiliariasTab() {
             <td style={{ ...td, color: (x.pctDescSinSeg ?? 0) >= 75 ? RED : BLK }}>{pc(x.pctDescSinSeg)}</td>
         </tr>
     );
-    const HEAD_EQ = ['', 'Leads', 'Fuente #1', '% visita', 'Visitas', 'Cierres', '< 60 min', '1ª resp.', 'Mueren', 'Descartados', 'Desc. sin seguim.'];
+    const HEAD_EQ = ['', 'Leads', 'Fuente #1', '% visita', 'Visitas', 'Cierres', '< 60 min', '1ª resp.', 'Mueren', 'Descartados', 'Desc. sin toque'];
     const tsvEquipo = (xs: Fila[], primera: string) => copiar([[primera, ...HEAD_EQ.slice(1), 'Nota'],
         ...xs.map((x) => [x.nombre, x.leads, x.topFuente, x.pVisita, x.visitas, x.cierres, x.pctLt60, x.respMed, x.pctMueren, x.pctDescartado, x.pctDescSinSeg, x.nota])]);
 
@@ -352,7 +352,7 @@ export default function InmobiliariasTab() {
             </Seccion>
 
             <Seccion titulo="Leads fantasma y descartados" onCopiar={() => copiar([['Fuente', ...HEAD_CAL.slice(1)], ...A.fuentes.map((x) => [x.nombre, x.leads, x.pctFantasma, x.rescatados, x.pctMueren, x.pctDescartado, x.pctSinResp, x.pctTelInvalido])])}
-                sub={<><b>Sin conversación</b>: el lead sólo trae el evento del portal («Vio teléfono», «Contactó por WhatsApp») y ni una llamada. La mayoría no se pierde: el comprador abre WhatsApp y la plática entra por otro lado (<b>rescatados</b>). <b>Mueren de verdad</b> los que tampoco aparecen ahí, de un día antes a 14 días después. <b>Tel. inválido</b>: menos de 10 dígitos, todos iguales o una secuencia (casi todos sí traen correo; sin ningún dato de contacto prácticamente no llega nadie).</>}>
+                sub={<><b>Sin conversación</b>: el lead sólo trae el evento del portal («Vio teléfono», «Contactó por WhatsApp») y ni una llamada. La mayoría no se pierde: el comprador abre WhatsApp y la plática entra por otro lado (<b>rescatados</b>). <b>Mueren de verdad</b> los que tampoco aparecen ahí, de un día antes a 14 días después. Un lead con <b>teléfono inválido</b> (menos de 10 dígitos, todos iguales o una secuencia) también cuenta como fantasma; la última columna dice cuántos son.</>}>
                 <Tabla head={['Fuente', ...HEAD_CAL.slice(1)]}>
                     {A.fuentes.map((x) => filaCalidad(x, buscar(C?.fuentes, x.key)))}
                     {filaCalidad(T, CT)}
@@ -374,11 +374,11 @@ export default function InmobiliariasTab() {
                     </div>
                 </div>
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '20px 0 6px', display: 'flex' }}>
-                    <span style={{ flex: 1 }}>Todos los motivos · y cuántos seguimientos tuvo antes de descartarse</span>
-                    <button onClick={() => copiar([['Motivo', 'Familia', 'Leads', '%', 'Seguimientos (mediana)', 'Seguimientos (promedio)', '% sin seguimiento'], ...A.descarte.motivos.map((m) => [m.motivo, m.familia, m.n, m.pct, m.segMediana, m.segProm, m.pctSinSeg])])}
+                    <span style={{ flex: 1 }}>Todos los motivos · y cuántos toques registró el asesor antes de descartar</span>
+                    <button onClick={() => copiar([['Motivo', 'Familia', 'Leads', '%', 'Toques (mediana)', 'Toques (promedio)', '% sin ningún toque'], ...A.descarte.motivos.map((m) => [m.motivo, m.familia, m.n, m.pct, m.segMediana, m.segProm, m.pctSinSeg])])}
                         style={{ fontSize: 11, padding: '3px 8px', border: `1px solid ${LGT}`, borderRadius: R, background: '#fff', cursor: 'pointer', fontFamily: 'inherit', color: '#555', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>Copiar tabla</button>
                 </div>
-                <Tabla head={['Motivo', 'Familia', 'Leads', '%', 'Seguimientos · mediana', 'Promedio', 'Sin seguimiento']} min={820}>
+                <Tabla head={['Motivo', 'Familia', 'Leads', '%', 'Toques · mediana', 'Promedio', 'Sin ningún toque']} min={820}>
                     {A.descarte.motivos.map((m) => (
                         <tr key={m.motivo}>
                             <td style={{ ...td0, whiteSpace: 'normal' }}>{m.motivo}</td>
@@ -392,7 +392,7 @@ export default function InmobiliariasTab() {
                     ))}
                     {!A.descarte.motivos.length && <tr><td style={{ ...td0, color: GRY }} colSpan={7}>Sin descartes en el periodo.</td></tr>}
                 </Tabla>
-                <Aviso><b>Seguimiento</b> = tarea que el <b>asesor</b> marcó como hecha en Pulppo antes de descartar (las que el sistema crea y cierra solo no cuentan). Los WhatsApp del asesor <b>no se guardan en la base</b>, así que un «sin seguimiento» quiere decir sin seguimiento <b>registrado</b>: puede que sí le haya escrito y no lo marcó. Aun así, un descarte por «no responde» sin un solo seguimiento registrado es la señal a revisar.</Aviso>
+                <Aviso><b>Toque registrado</b> = lo que el <b>asesor</b> hizo en Pulppo sobre esa búsqueda antes de descartarla: seguimientos que marcó como hechos, propiedades que le sugirió, búsqueda que le compartió y notas (las tareas que el sistema crea y cierra solo no cuentan). Los WhatsApp del asesor <b>no se guardan en la base</b>, así que «sin ningún toque» quiere decir sin nada <b>registrado</b>: puede que sí le haya escrito por fuera. Aun así, un descarte por «no responde» sin un solo toque registrado es la señal a revisar.</Aviso>
                 <Aviso>«No responde» en los motivos es lo que <b>marcó el asesor</b> al cerrar la búsqueda; no es lo mismo que el lead fantasma de la tabla de arriba, que se mide por si hubo conversación. «Sin motivo específico» junta el «descartado» genérico, «cancelado» y los que se cerraron sin motivo.</Aviso>
                 <Aviso>El descarte <b>madura</b>: un lead de esta semana casi no ha tenido tiempo de cancelarse, así que un periodo reciente siempre se ve más limpio de lo que va a terminar. Contra otro periodo, lee la <b>composición</b> (por qué se descartan), no el porcentaje total{!descMaduro && C ? <> — por eso, con un periodo que cerró hace menos de 45 días, la variación del % de descartados no se muestra</> : null}.</Aviso>
             </Seccion>

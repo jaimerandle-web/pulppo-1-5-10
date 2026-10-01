@@ -13,7 +13,7 @@
 //     es `buyer.source`, igual que el scorecard.
 //   · DESCARTE = `searches.status.reasonToFinish` del lead (ver calidad.ts). Madura: un lead de
 //     esta semana todavía no ha tenido tiempo de cancelarse.
-//   · FANTASMA = lead sin conversación real: su `interaction` sólo trae el evento del portal
+//   · FANTASMA = lead con teléfono inválido, o sin conversación real: su `interaction` sólo trae el evento del portal
 //     ("Vio teléfono", "Contactó por WhatsApp") y ni una llamada. La mayoría NO muere: el
 //     comprador abre WhatsApp y esa conversación entra por otro lado. "Muere de verdad" = ni
 //     siquiera eso, en una ventana de −1/+14 días sobre las conversaciones del mismo contacto.
@@ -24,7 +24,7 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from '../data';
 import { CANALES, KEY2NAME, NOT, NOTP, classifySource, dig, isDate, num, oid } from './metrics';
-import { RLBL } from './calidad';
+import { FAM_LBL, FAM_ORDEN, NO_ES_DESCARTE, etiquetaMotivo, familiaDe, motivoDe } from './descarte';
 import { ALIAS_IDS, ALIAS_INMO, ORDEN_INMOBILIARIAS, SIN_CUENTA, normInmo } from './ordenInmobiliarias';
 import type { Operacion } from './view';
 
@@ -129,61 +129,6 @@ const fuenteCapturada = (raw: unknown): string | null => {
     return FUENTE_RARA[t.toLowerCase()] ?? t.charAt(0).toUpperCase() + t.slice(1);
 };
 
-// ── motivos de descarte (`searches.status.reasonToFinish`) ─────────
-// Valores reales medidos 1-oct-2026 sobre 12 meses (391k cancelaciones): descartado 30% · asesor 26%
-// · fantasma 13% · perdido 13% · SIN MOTIVO 8% · incontactable 5% · cancelado 4% · inesperado 1% ·
-// Agent inactive / automatico (sistema) <1% · y restos con grafías distintas del mismo motivo.
-// 'fantasma' aquí es lo que MARCÓ EL ASESOR — distinto del lead fantasma técnico (sin conversación).
-const NO_ES_DESCARTE = new Set(['success', 'Ganada', 'still_interested', 'test']);
-type FamDesc = 'noResponde' | 'incontactable' | 'broker' | 'perdido' | 'noCalifica' | 'otro' | 'generico' | 'sistema';
-const FAM_DESC: Record<string, FamDesc> = {
-    fantasma: 'noResponde', stop_answering: 'noResponde', sent_to_ai: 'noResponde',
-    incontactable: 'incontactable',
-    asesor: 'broker',
-    perdido: 'perdido', Perdido: 'perdido', lost: 'perdido', lost_interest: 'perdido', inesperado: 'perdido', operaton_with_other_broker: 'perdido',
-    descartado: 'generico', cancelado: 'generico', '': 'generico',
-    'Agent inactive': 'sistema', automatico: 'sistema', 'Cancelado de forma automática': 'sistema',
-};
-const FAM_ORDEN: FamDesc[] = ['noResponde', 'incontactable', 'broker', 'perdido', 'noCalifica', 'otro', 'generico', 'sistema'];
-const FAM_LBL: Record<FamDesc, string> = {
-    noResponde: 'No responde / fantasma (según el asesor)', incontactable: 'Incontactable / datos falsos', broker: 'Era asesor/broker',
-    perdido: 'Perdido / ya no busca', noCalifica: 'No califica (presupuesto, requisitos, zona)', otro: 'Otro (duplicado, era el dueño)',
-    generico: 'Sin motivo específico', sistema: 'Cerrado por el sistema',
-};
-
-// El «descartado» genérico es 30% de todo el descarte, pero el asesor casi siempre escribe la razón en
-// `status.description` (95% trae texto). Se clasifica por palabras clave. Medido 1-oct-2026 sobre 30k
-// descartes genéricos (abr–sep): separa el 64%; el resto queda como «Descartado · otro / sin detalle».
-// Orden = prioridad (gana la primera que coincide). Patrones SIN acentos: el texto se normaliza.
-const DESC_TXT: Array<{ k: string; lbl: string; fam: FamDesc; rx: RegExp }> = [
-    { k: 'broker', lbl: 'Era broker (según el comentario)', fam: 'broker', rx: /\bbroker|\basesor|inmobiliaria|colega|\bagente\b/ },
-    { k: 'datos', lbl: 'Número o datos falsos', fam: 'incontactable', rx: /no existe|falso|fake|equivocad|numero (incorrecto|erroneo|mal|invalido)|es invalido|no es (el|su) numero|spam|extorsion|fraude|\bbot\b|sin numero|numero invalido|no le llegan/ },
-    { k: 'noresp', lbl: 'No responde (según el comentario)', fam: 'noResponde', rx: /no contesta|no responde|fantasma|no respondio|sin respuesta|dejo de contestar|no hubo respuesta|ghost|nunca contesto|no ha contestado/ },
-    { k: 'nodisp', lbl: 'La propiedad ya no estaba disponible', fam: 'noCalifica', rx: /ya se (rento|vendio)|no disponible|ya no esta disponible|rentada|vendida|apartad/ },
-    { k: 'requisitos', lbl: 'No cumple requisitos (mascota, plazo, aval…)', fam: 'noCalifica', rx: /mascota|perro|gato|aval|fiador|poliza|investigacion|credito|infonavit|fovissste|bancari|corto plazo|temporal|requisit|deposito|ingresos|no califica|historial|\d+ meses/ },
-    { k: 'presupuesto', lbl: 'Presupuesto', fam: 'noCalifica', rx: /presupuesto|caro|precio|economic|barat|no le alcanza|fuera de (su )?rango|monto/ },
-    { k: 'yanobusca', lbl: 'Ya compró / rentó o ya no busca', fam: 'perdido', rx: /ya (rento|compro|encontro|consiguio|no busca|no le interesa)|no le interesa|ya no|cambio de opinion|desist|pospon|por el momento no|mas adelante|solo (estaba )?viendo|curiosidad/ },
-    { k: 'zona', lbl: 'Zona o características', fam: 'noCalifica', rx: /zona|ubicacion|lejos|elevador|estacionamiento|recamaras|tamano|metros|amueblad|\bpiso\b|vista/ },
-    { k: 'duplicado', lbl: 'Duplicado / ya lo atiende alguien', fam: 'otro', rx: /duplicad|repetid|mismo cliente|ya se le esta atendiendo|ya lo atiende|ya esta en seguimiento/ },
-    { k: 'propietario', lbl: 'Era el propietario', fam: 'otro', rx: /propietari|duen/ },
-];
-const sinAcento = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-/** Clave del motivo: el crudo, o `descartado:<sub>` si es genérico y el comentario dice por qué. */
-function motivoDe(crudo: string, descripcion: unknown): string {
-    if (FAM_DESC[crudo] !== 'generico') return crudo;
-    const t = sinAcento(String(descripcion ?? '')).trim();
-    if (t.length < 3) return crudo;
-    const hit = DESC_TXT.find((x) => x.rx.test(t));
-    return hit ? `descartado:${hit.k}` : crudo;
-}
-const familiaDe = (m: string): FamDesc =>
-    m.startsWith('descartado:') ? DESC_TXT.find((x) => `descartado:${x.k}` === m)?.fam ?? 'generico' : FAM_DESC[m] ?? 'perdido';
-const etiquetaMotivo = (m: string): string => {
-    if (m.startsWith('descartado:')) return `Descartado · ${DESC_TXT.find((x) => `descartado:${x.k}` === m)?.lbl ?? 'otro'}`;
-    if (m === 'descartado') return 'Descartado · otro / sin detalle';
-    return MOTIVO_LBL[m] ?? RLBL[m] ?? (m ? m.replace(/_/g, ' ') : 'Sin motivo');
-};
-
 /** Teléfono que no sirve para contactar. Medido jul–ago 2026: 1.5% de los leads (casi todos traen correo). */
 function telInvalido(p: unknown): boolean {
     const d = String(p ?? '').replace(/\D/g, '');
@@ -192,10 +137,6 @@ function telInvalido(p: unknown): boolean {
     if (new Set(u).size <= 2) return true;
     return '01234567890123456789'.includes(u) || '98765432109876543210'.includes(u);
 }
-const MOTIVO_LBL: Record<string, string> = {
-    '': 'Sin motivo', cancelado: 'Cancelado (sin detalle)', Perdido: 'Perdido', lost: 'Perdido',
-    'Agent inactive': 'Asesor inactivo', automatico: 'Cancelado automático', 'Cancelado de forma automática': 'Cancelado automático',
-};
 
 const r1 = (x: number) => Math.round(x * 10) / 10;
 const p1 = (a: number, b: number) => (b ? r1((100 * a) / b) : null);
@@ -288,7 +229,7 @@ async function bloque(
     cel('f:otros', 'Otras fuentes', reqInmo);
 
     // leads → celdas; se guardan para los joins de después
-    type LeadRef = { id: ObjectId; cells: Celda[]; t: Date; cid: string | null; inter: ObjectId | null; search: string | null };
+    type LeadRef = { id: ObjectId; cells: Celda[]; t: Date; cid: string | null; inter: ObjectId | null; search: string | null; telMalo: boolean };
     const refs: LeadRef[] = [];
     const filtro: Document = {
         createdAt: { $gte: A, $lt: B }, ...NOT,
@@ -343,7 +284,7 @@ async function bloque(
         refs.push({
             id: l._id as ObjectId, cells: mis, t: ca, cid,
             inter: l.interaction instanceof ObjectId ? l.interaction : null,
-            search: l.search ? String(l.search) : null,
+            search: l.search ? String(l.search) : null, telMalo,
         });
     }
 
@@ -410,8 +351,9 @@ async function bloque(
             ]);
             for await (const it of cur) real.add(String(it._id));
         }));
-        // Sin interacción también es fantasma: el registro no tiene conversación en absoluto.
-        const fant = refs.filter((r) => !r.inter || !real.has(String(r.inter)));
+        // Fantasma = sin conversación real (sin interacción también cuenta) O con un teléfono que no
+        // sirve (decisión de Ale, 1-oct-2026). Si de todos modos conversó por otro lado, se rescata.
+        const fant = refs.filter((r) => r.telMalo || !r.inter || !real.has(String(r.inter)));
         for (const r of fant) for (const c of r.cells) c.fant += 1;
 
         // Rescate: ¿ese contacto conversó de verdad en otra interacción, de −1 a +14 días?
@@ -476,10 +418,12 @@ async function bloque(
                 }
             }
         }
-        // Seguimientos que el ASESOR marcó como hechos antes del descarte (`tasks`, finishedBy ≠ System).
-        // El sistema crea tareas solas (SEGUIMIENTO-FANTASMA, -BUSCANDO…) y cierra muchas por su cuenta:
-        // ésas no son un toque. Los WhatsApp del asesor NO están en la base, así que esto es lo que
-        // queda REGISTRADO en Pulppo, no todo lo que hizo.
+        // TOQUES REGISTRADOS antes del descarte = lo que el ASESOR hizo en Pulppo sobre esa búsqueda:
+        //   · seguimientos que marcó como hechos (`tasks`, finishedBy ≠ System: el sistema crea
+        //     SEGUIMIENTO-FANTASMA/-BUSCANDO… y cierra muchas solo, ésas no son un toque);
+        //   · propiedades que le sugirió, búsqueda que le compartió, notas (`logs` de la API).
+        // Los WhatsApp del asesor NO están en la base (`messages` dejó de llenarse; `interactions` sólo
+        // trae al cliente y al número de Pulppo), así que esto es lo REGISTRADO, no todo lo que hizo.
         const hechos = new Map<string, Date[]>();
         await Promise.all(Array.from({ length: Math.ceil(descartadas.length / 5000) }, async (_, j) => {
             const cur = db.collection('tasks').find(
@@ -489,6 +433,17 @@ async function bloque(
                 if (!isDate(t.finishedAt)) continue;
                 const k = String(dig(t, 'metadata', 'search'));
                 (hechos.get(k) ?? hechos.set(k, []).get(k)!).push(t.finishedAt);
+            }
+        }));
+        // `logs.message` está indexado: se pide el texto EXACTO de cada acción por búsqueda (1.8 s por mes).
+        const ACCIONES = ['[PATCH] /search/{}/properties/add', '[POST] /search/{}/share', '[PATCH] /search/{}/properties/add-note'];
+        const textos = descartadas.flatMap((d) => ACCIONES.map((a) => a.replace('{}', String(d.id))));
+        await Promise.all(Array.from({ length: Math.ceil(textos.length / 6000) }, async (_, j) => {
+            const cur = db.collection('logs').find({ message: { $in: textos.slice(j * 6000, (j + 1) * 6000) } }, { projection: { message: 1, createdAt: 1 } });
+            for await (const l of cur) {
+                const m = /\/search\/([0-9a-f]{24})/.exec(String(l.message));
+                if (!m || !isDate(l.createdAt)) continue;
+                (hechos.get(m[1]) ?? hechos.set(m[1], []).get(m[1])!).push(l.createdAt);
             }
         }));
         for (const d of descartadas) {

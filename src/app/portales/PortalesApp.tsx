@@ -476,9 +476,18 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                             cancelarse, así que el mes en curso <b>siempre</b> se ve más limpio de lo que va a
                             terminar siendo. No leas la última columna como una mejora.
                         </Aviso>
+                        <div style={{ marginTop: 10 }}>
+                            <Aviso>
+                                <b>Desde el 1-oct-2026 cuenta todos los descartes.</b> Antes quedaban fuera los que se
+                                cerraron sin motivo (~8%) y las búsquedas <b>ganadas</b> se sumaban como «perdido», así
+                                que los porcentajes de meses ya reportados suben un poco. El «descartado» genérico se
+                                reparte según lo que escribió el asesor (presupuesto, requisitos, era broker…); lo que no
+                                dice por qué va en «Sin motivo».
+                            </Aviso>
+                        </div>
 
                         <div style={{ overflowX: 'auto', margin: '16px 0' }}>
-                            <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 780 }}>
+                            <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 900 }}>
                                 <thead>
                                     <tr>
                                         <th style={tth0}>Portal</th>
@@ -488,6 +497,8 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                                         <th style={tth}>No responde</th>
                                         <th style={tth}>Incontactable</th>
                                         <th style={tth}>Perdido</th>
+                                        <th style={tth}>No califica</th>
+                                        <th style={tth}>Sin motivo</th>
                                         <th style={tth}>Broker por tag</th>
                                     </tr>
                                 </thead>
@@ -504,6 +515,8 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                                                 <td style={ttd}>{pc(r.pctNoResponde)}</td>
                                                 <td style={ttd}>{pc(r.pctIncontactable)}</td>
                                                 <td style={ttd}>{pc(r.pctPerdido)}</td>
+                                                <td style={ttd}>{pc(r.pctNoCalifica)}</td>
+                                                <td style={{ ...ttd, color: GRY }}>{pc(r.pctSinMotivo)}</td>
                                                 <td style={{ ...ttd, color: (r.pctBrokerTag ?? 0) >= 30 ? RED : GRY }}>{pc(r.pctBrokerTag)}</td>
                                             </tr>
                                         );
