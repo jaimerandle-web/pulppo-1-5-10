@@ -313,3 +313,23 @@ guarde `demanda` y `competencia` con fecha (ver `PROPUESTA_MOTOR.md` en el repo 
 
 El doc canónico del criterio es `SPEC_SCORING.md` en
 `~/Documents/Pulppo/Análisis de Portales/analisis/optimizacion-avisos/`.
+
+## Portales → "Leads, funnel y cierres" por inmobiliaria
+
+`/portales` → **Por inmobiliaria**. Filtros: inmobiliaria (o «Todas» = vista general con la tabla
+de las 102 en el orden canónico), asesor, venta/renta, periodo (mes · trimestre · YTD · fechas) y
+comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobiliaria.ts`, API
+`/api/portales/inmobiliarias` (sólo internos), UI `src/app/portales/InmobiliariasTab.tsx`.
+
+- **Funnel = cohorte estricta** (leads del periodo → lo que hicieron después). Con inmobiliaria
+  elegida, la visita/oferta/cierre tiene que ser con ESA inmobiliaria.
+- **Cierres = actividad del periodo**, de ambos lados (vendedor/comprador), fuente = `buyer.source`.
+  `other` se muestra como «Otra / sin registrar» (≈40% de los cierres de 2026), no se esconde.
+- **Fantasma** = `lead.interaction` sin llamada ni mensaje real del cliente (los eventos «Vio
+  teléfono» no cuentan). **Muere** = tampoco conversó en otra interacción del mismo contacto de
+  −1 a +14 días. La regla corre EN MONGO (`$regexMatch`); traer los mensajes era el 70% del tiempo.
+  `interactions` NO tiene índice por `lead`: entrar siempre por `lead.interaction` (= `_id`).
+- **Lista canónica** en `src/lib/portales/ordenInmobiliarias.ts` (copia de `_lista.txt`). Una
+  inmobiliaria puede estar partida en varias compañías con el mismo nombre: se suman todas.
+- Tiempos: una inmobiliaria ~7 s; vista general de un mes ~7 s; general YTD vs año pasado ~2 min
+  (cabe en `maxDuration` 300, y se cachea 10 min).

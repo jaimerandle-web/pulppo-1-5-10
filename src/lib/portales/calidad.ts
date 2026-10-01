@@ -17,7 +17,7 @@ import {
 import type { Operacion } from './view';
 
 // Los mismos motivos y etiquetas que usa el pulso, para que no haya dos vocabularios.
-const RLBL: Record<string, string> = {
+export const RLBL: Record<string, string> = {
     descartado: 'Descartado (genérico)', asesor: 'Cliente era asesor/broker',
     fantasma: 'Fantasma / no contesta', perdido: 'Perdido', incontactable: 'Incontactable',
     inesperado: 'Inesperado', sent_to_ai: 'Enviado a IA', stop_answering: 'Dejó de responder',
@@ -25,7 +25,7 @@ const RLBL: Record<string, string> = {
 };
 // Agrupación en cuatro familias, que es como se decide algo. El detalle fino queda disponible
 // en `motivos`, pero para comparar portales mes a mes nadie usa diez columnas.
-const FAMILIA: Record<string, 'incontactable' | 'broker' | 'noResponde' | 'perdido'> = {
+export const FAMILIA: Record<string, 'incontactable' | 'broker' | 'noResponde' | 'perdido'> = {
     incontactable: 'incontactable',
     asesor: 'broker',
     fantasma: 'noResponde', stop_answering: 'noResponde', sent_to_ai: 'noResponde',

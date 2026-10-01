@@ -19,7 +19,7 @@ type Datos = { calidadQ?: string; costo?: PortalesView; pulso?: PulseView; histo
 
 const DE_SECCION: Record<Section, Vista | null> = {
     costo: 'costo', funnel: 'costo', deal: 'costo',
-    calidad: 'calidad', pulso: 'pulso', historico: 'historico', comoleer: null,
+    calidad: 'calidad', pulso: 'pulso', historico: 'historico', inmobiliarias: null, comoleer: null,
 };
 
 const BLK = '#212322', GRY = '#B7B7B7', LGT = '#F3F3F3';

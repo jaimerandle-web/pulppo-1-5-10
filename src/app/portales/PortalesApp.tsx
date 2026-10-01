@@ -9,6 +9,7 @@ import type { PortalesView, Portal, PortalMes } from '@/lib/portales/view';
 import type { PulseView } from '@/lib/portales/pulse';
 import type { HistoricoView } from '@/lib/portales/historico';
 import type { CalidadView } from '@/lib/portales/calidad';
+import InmobiliariasTab from './InmobiliariasTab';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2;
@@ -22,7 +23,7 @@ const MESL: Record<string, string> = {
 };
 const mesLargo = (mk: string) => `${MESL[mk.slice(5)]} ${mk.slice(0, 4)}`;
 
-export type Section = 'costo' | 'funnel' | 'deal' | 'calidad' | 'pulso' | 'historico' | 'comoleer';
+export type Section = 'costo' | 'funnel' | 'deal' | 'calidad' | 'pulso' | 'historico' | 'inmobiliarias' | 'comoleer';
 
 /** Mini-barras horizontales para una serie semanal. Sin librería: son 8 divs. */
 function Spark({ vals, color = BLK }: { vals: number[]; color?: string }) {
@@ -125,6 +126,8 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                 {nav('historico', 'Histórico y año vs año')}
                 <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.6px', color: GRY, fontWeight: 700, padding: '14px 8px 5px' }}>Semanal · adelantado</div>
                 {nav('pulso', 'Pulso de la semana')}
+                <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.6px', color: GRY, fontWeight: 700, padding: '14px 8px 5px' }}>Por inmobiliaria</div>
+                {nav('inmobiliarias', 'Leads, funnel y cierres')}
                 <div style={{ height: 14 }} />
                 {nav('comoleer', 'Cómo leer esto')}
                 <div style={{ marginTop: 20, padding: '0 8px' }}>
@@ -143,7 +146,10 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
             {/* ── contenido ── */}
             <div style={{ flex: 1, padding: '24px 28px', maxWidth: 1180, minWidth: 0 }}>
 
-                {(controles || onPresentar) && (
+                {/* La pestaña de inmobiliarias trae sus propios filtros (fechas libres, asesor, comparación). */}
+                {section === 'inmobiliarias' && <InmobiliariasTab />}
+
+                {section !== 'inmobiliarias' && (controles || onPresentar) && (
                     <div style={{ display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap', paddingBottom: 14, marginBottom: 16, borderBottom: `1px solid ${LGT}` }}>
                         {controles}
                         <div style={{ flex: 1 }} />
@@ -158,7 +164,7 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                 )}
 
 
-                {d.operacion !== 'todas' && (
+                {section !== 'inmobiliarias' && d.operacion !== 'todas' && (
                     <div style={{ marginBottom: 16 }}>
                         <Aviso tono="alerta">
                             Estás viendo <b>sólo {d.operacion === 'sale' ? 'venta' : 'renta'}</b>. Los leads,
@@ -169,7 +175,7 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                         </Aviso>
                     </div>
                 )}
-                {d.sinInversion.length > 0 && d.operacion === 'todas' && (
+                {section !== 'inmobiliarias' && d.sinInversion.length > 0 && d.operacion === 'todas' && (
                     <div style={{ marginBottom: 16 }}>
                         <Aviso tono="alerta">
                             <b>Falta cargar la inversión de {d.sinInversion.map(mesLargo).join(' y ')} en el Sheet.</b>{' '}
