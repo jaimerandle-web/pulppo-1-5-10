@@ -324,8 +324,13 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
 - **Funnel = cohorte estricta** (leads del periodo → lo que hicieron después). Con inmobiliaria
   elegida, la visita/oferta/cierre tiene que ser con ESA inmobiliaria.
 - **Cierres = actividad del periodo**, de ambos lados (vendedor/comprador), fuente = `buyer.source`.
-  `other` se muestra como «Otra / sin registrar» (≈40% de los cierres de 2026), no se esconde.
-- **Fantasma** = `lead.interaction` sin llamada ni mensaje real del cliente (los eventos «Vio
+  `other` (≈40% de 2026) se atribuye: broker externo / red Pulppo / canal del primer lead del
+  comprador («inferida») / «Cartera / sin lead». Dedup por propiedad + comprador (paying + closed).
+- **Ofertaron** cuenta también las ofertas que se cayeron (`status.history`), no sólo `status.last`.
+- **Descartes**: taxonomía única en `src/lib/portales/descarte.ts` (también la usa «Calidad del
+  lead»). Toques antes de descartar = `tasks` del asesor + acciones en `logs`; los WhatsApp del
+  asesor NO están en la base.
+- **Fantasma** = teléfono inválido, o `lead.interaction` sin llamada ni mensaje real del cliente (los eventos «Vio
   teléfono» no cuentan). **Muere** = tampoco conversó en otra interacción del mismo contacto de
   −1 a +14 días. La regla corre EN MONGO (`$regexMatch`); traer los mensajes era el 70% del tiempo.
   `interactions` NO tiene índice por `lead`: entrar siempre por `lead.interaction` (= `_id`).

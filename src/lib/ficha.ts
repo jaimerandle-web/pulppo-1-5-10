@@ -173,20 +173,24 @@ export async function ofertaMedianaPpm(P: Document): Promise<{ med: number | nul
         'listing.operation': (dig(P, 'listing', 'operation') as string) ?? 'sale', type: (P.type as string) ?? null,
         'status.last': 'published', 'attributes.totalSurface': { $gt: 0 }, 'listing.value': { $gt: 0 }
     };
-    const ppm = (m: Document) => [{ $match: m }, { $limit: 8000 }, { $project: { _id: 0, p: { $divide: ['$listing.value', '$attributes.totalSurface'] } } }];
-    const pull = async (geo: Document): Promise<number[]> => {
-        const [a, b] = await Promise.all([
-            db.collection('mls').aggregate(ppm({ ...base, ...geo }), { maxTimeMS: 15000 }).toArray(),
-            db.collection('properties').aggregate(ppm({ ...base, ...geo, _id: { $ne: P._id } }), { maxTimeMS: 15000 }).toArray()
-        ]);
-        return [...a, ...b].map((r) => num(r.p)).filter((x): x is number => x != null);
+    // La mediana se calcula EN MONGO ($median, Mongo 7) sobre TODO el conjunto, MLS + Pulppo unidos:
+    // sin tope. Antes había un `$limit: 8000` que, a nivel ciudad (CDMX, Mérida), volvía a muestrear
+    // "los primeros N" — el mismo sesgo que esta función existe para evitar.
+    const ppm = { $project: { _id: 0, p: { $divide: ['$listing.value', '$attributes.totalSurface'] } } };
+    const pull = async (geo: Document): Promise<{ med: number | null; n: number }> => {
+        const r = await db.collection('mls').aggregate([
+            { $match: { ...base, ...geo } }, ppm,
+            { $unionWith: { coll: 'properties', pipeline: [{ $match: { ...base, ...geo, _id: { $ne: P._id } } }, ppm] } },
+            { $group: { _id: null, med: { $median: { input: '$p', method: 'approximate' } }, n: { $sum: 1 } } },
+        ], { maxTimeMS: 30000, allowDiskUse: true }).toArray();
+        return { med: num(r[0]?.med), n: (r[0]?.n as number) ?? 0 };
     };
     const nid = dig(P, 'address', 'neighborhood', 'id') as string | undefined;
     const cid = dig(P, 'address', 'city', 'id') as string | undefined;
     let scope: string | null = (dig(P, 'address', 'neighborhood', 'name') as string) ?? null;
-    let xs = nid ? await pull({ 'address.neighborhood.id': nid }) : [];
-    if (xs.length < 8 && cid) { scope = (dig(P, 'address', 'city', 'name') as string) ?? null; xs = await pull({ 'address.city.id': cid }); }
-    return xs.length >= 5 ? { med: median(xs), n: xs.length, scope } : { med: null, n: xs.length, scope };
+    let x = nid ? await pull({ 'address.neighborhood.id': nid }) : { med: null, n: 0 };
+    if (x.n < 8 && cid) { scope = (dig(P, 'address', 'city', 'name') as string) ?? null; x = await pull({ 'address.city.id': cid }); }
+    return x.n >= 5 && x.med != null ? { med: Math.round(x.med), n: x.n, scope } : { med: null, n: x.n, scope };
 }
 
 // Ranking "qué tan ad-hoc es el comparable": misma colonia > cercanía > tamaño > presupuesto > amenidades > recámaras.
@@ -526,7 +530,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const visConf = (visAgg[0]?.confirmados as number) ?? 0;   // visitantes con visita confirmada
     const visPend = ((visAgg[0]?.visitantes as number) ?? 0) - visConf;   // visitantes solo con visita pendiente
     const vis = visConf;   // el funnel/conversión usan las visitas reales (confirmadas)
-    const ofertas = await db.collection('operations').countDocuments({ 'property._id': oid, 'status.last': { $in: [...ADVANCED] } });
+    const ofertas = await db.collection('operations').countDocuments({ 'property._id': oid, $or: [{ 'status.last': { $in: [...ADVANCED] } }, { 'status.history.status': { $in: [...ADVANCED] } }] });
 
     // ---- Comportamiento en el tiempo: vistas del anuncio (metrics type='view', TODAS las fuentes) + leads, por mes ----
     // metrics.property viene como ObjectId (avisos nuevos) o string (viejos): matchear ambos. Cada evento = 1 vista.
@@ -561,7 +565,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
             // tardaba 11.6 s en Benito Juárez contra ~1 s así.
             { $limit: 400 },
             { $project: { 'attributes.totalSurface': 1 } },
-            { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', pipeline: [{ $project: { _id: 0, 'closeValue.value': 1 } }], as: 'op' } }
+            { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', pipeline: [{ $match: { 'status.last': { $in: ['closed', 'paying'] } } }, { $project: { _id: 0, 'closeValue.value': 1 } }], as: 'op' } }
         ]).toArray();
         const out: { price: number; ppm2: number | null; m2: number | null }[] = [];
         for (const p of ps) {
@@ -1175,7 +1179,7 @@ export async function funnelEval(P: Document): Promise<FunnelEval> {
             { $group: { _id: { $ifNull: ['$contact._id', { $ifNull: ['$contact.email', '$_id'] }] }, conf: { $max: { $cond: [{ $eq: ['$status.last', 'confirmed'] }, 1, 0] } } } },
             { $group: { _id: null, confirmados: { $sum: '$conf' } } }
         ]).toArray(),
-        db.collection('operations').countDocuments({ 'property._id': oid, 'status.last': { $in: [...ADVANCED] } }),
+        db.collection('operations').countDocuments({ 'property._id': oid, $or: [{ 'status.last': { $in: [...ADVANCED] } }, { 'status.history.status': { $in: [...ADVANCED] } }] }),
         db.collection('metrics').aggregate([
             { $match: { property: { $in: [oid, String(oid)] }, type: 'view' } }, { $count: 'n' }
         ]).toArray()

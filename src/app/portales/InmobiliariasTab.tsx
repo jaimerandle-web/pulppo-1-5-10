@@ -332,8 +332,8 @@ export default function InmobiliariasTab() {
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
                 <Kpi label="Leads" value={f0(T.leads)} sub={`${f0(T.unicos)} personas · ${f0(T.venta)} venta / ${f0(T.renta)} renta`} delta={<Delta a={T.leads} b={CT?.leads} />} />
-                <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
-                <Kpi label="Cierres de la cohorte" value={f0(T.cierres)} sub={`${pc(T.pCierre)} de los leads`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
+                <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
+                <Kpi label="Cierres de la cohorte" value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
                 <Kpi label="1ª respuesta" value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
                 <Kpi label="Leads que mueren" value={pc(T.pctMueren)} sub={`${pc(T.pctFantasma)} sin conversación`} delta={<Delta a={T.pctMueren} b={CT?.pctMueren} pts invertir />} />
                 <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
@@ -378,7 +378,7 @@ export default function InmobiliariasTab() {
                     <button onClick={() => copiar([['Motivo', 'Familia', 'Leads', '%', 'Toques (mediana)', 'Toques (promedio)', '% sin ningún toque'], ...A.descarte.motivos.map((m) => [m.motivo, m.familia, m.n, m.pct, m.segMediana, m.segProm, m.pctSinSeg])])}
                         style={{ fontSize: 11, padding: '3px 8px', border: `1px solid ${LGT}`, borderRadius: R, background: '#fff', cursor: 'pointer', fontFamily: 'inherit', color: '#555', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>Copiar tabla</button>
                 </div>
-                <Tabla head={['Motivo', 'Familia', 'Leads', '%', 'Toques · mediana', 'Promedio', 'Sin ningún toque']} min={820}>
+                <Tabla head={['Motivo', 'Familia', 'Leads', '%', 'Toques · mediana', 'Promedio', 'Búsquedas sin toque']} min={820}>
                     {A.descarte.motivos.map((m) => (
                         <tr key={m.motivo}>
                             <td style={{ ...td0, whiteSpace: 'normal' }}>{m.motivo}</td>
@@ -392,7 +392,7 @@ export default function InmobiliariasTab() {
                     ))}
                     {!A.descarte.motivos.length && <tr><td style={{ ...td0, color: GRY }} colSpan={7}>Sin descartes en el periodo.</td></tr>}
                 </Tabla>
-                <Aviso><b>Toque registrado</b> = lo que el <b>asesor</b> hizo en Pulppo sobre esa búsqueda antes de descartarla: seguimientos que marcó como hechos, propiedades que le sugirió, búsqueda que le compartió y notas (las tareas que el sistema crea y cierra solo no cuentan). Los WhatsApp del asesor <b>no se guardan en la base</b>, así que «sin ningún toque» quiere decir sin nada <b>registrado</b>: puede que sí le haya escrito por fuera. Aun así, un descarte por «no responde» sin un solo toque registrado es la señal a revisar.</Aviso>
+                <Aviso><b>Toque registrado</b> = lo que el <b>asesor</b> hizo en Pulppo sobre esa búsqueda antes de descartarla: seguimientos que marcó como hechos, propiedades que le sugirió, búsqueda que le compartió y notas (las tareas que el sistema crea y cierra solo no cuentan). Los WhatsApp del asesor <b>no se guardan en la base</b>, así que «sin ningún toque» quiere decir sin nada <b>registrado</b>: puede que sí le haya escrito por fuera. Aun así, un descarte por «no responde» sin un solo toque registrado es la señal a revisar. Aquí los toques se cuentan por <b>búsqueda</b> (varios leads de la misma persona comparten una); en la tabla por asesor, «Desc. sin toque» va por <b>lead</b>, así que los dos porcentajes no tienen que coincidir.</Aviso>
                 <Aviso>«No responde» en los motivos es lo que <b>marcó el asesor</b> al cerrar la búsqueda; no es lo mismo que el lead fantasma de la tabla de arriba, que se mide por si hubo conversación. «Sin motivo específico» junta el «descartado» genérico, «cancelado» y los que se cerraron sin motivo.</Aviso>
                 <Aviso>El descarte <b>madura</b>: un lead de esta semana casi no ha tenido tiempo de cancelarse, así que un periodo reciente siempre se ve más limpio de lo que va a terminar. Contra otro periodo, lee la <b>composición</b> (por qué se descartan), no el porcentaje total{!descMaduro && C ? <> — por eso, con un periodo que cerró hace menos de 45 días, la variación del % de descartados no se muestra</> : null}.</Aviso>
             </Seccion>

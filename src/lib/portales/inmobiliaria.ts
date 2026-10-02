@@ -33,7 +33,9 @@ const MX_MS = 6 * 3600 * 1000;
 const OFERTA = ['offer', 'offer_blocked', 'contract', 'paying', 'closed'];
 const CIERRE = ['closed', 'paying'];
 // El evento del portal se guarda como si fuera un mensaje del cliente: no es conversación.
-const PLACEHOLDER = /^(vio (el )?tel[eé]fono|ver tel[eé]fono|vio el anuncio|contact[oó] por whats?app)$/i;
+// Variantes revisadas el 2-oct-2026 sobre los mensajes cortos más comunes del «cliente»: además de los
+// clásicos, el sistema escribe «es un lead de teléfono / WhatsApp» y «el cliente vio el teléfono».
+const PLACEHOLDER = /^(el cliente )?(vio|ver) (el )?tel[eé]fono\.?$|^vio el anuncio\.?$|^contact[oó] por whats?app\.?$|^es un lead de (tel[eé]fono|whats?app)\.?$/i;
 
 export type Comparar = 'ninguno' | 'anterior' | 'anio';
 export interface FiltroInmo {
@@ -268,7 +270,8 @@ async function bloque(
         const mins = isDate(ans) ? (ans.getTime() - ca.getTime()) / 60000 : null;
         const cidRaw = dig(l, 'contact', '_id');
         const cid = cidRaw != null ? String(cidRaw) : null;
-        const telMalo = telInvalido(l.phone ?? dig(l, 'contact', 'phone'));
+        // `||` y no `??`: hay leads con phone = '' y el teléfono bueno en el contacto.
+        const telMalo = telInvalido(l.phone || dig(l, 'contact', 'phone'));
         for (const c of mis) {
             c.leads += 1;
             if (telMalo) c.telInv += 1;
@@ -317,7 +320,9 @@ async function bloque(
         })());
         tareasJoin.push((async () => {
             const co = db.collection('operations').find(
-                { 'buyer.contact._id': { $in: chunk }, 'status.last': { $in: OFERTA } },
+                // También las ofertas que después se cayeron: en 2026 hay 752 operaciones canceladas que sí
+                // llegaron a oferta (vs 1,491 vigentes). Contar sólo `status.last` dejaba «ofertaron» corto.
+                { 'buyer.contact._id': { $in: chunk }, $or: [{ 'status.last': { $in: OFERTA } }, { 'status.history.status': { $in: OFERTA } }] },
                 { projection: { 'buyer.contact._id': 1, createdAt: 1, closedAt: 1, 'status.last': 1, 'buyer.company._id': 1 } });
             for await (const o of co) {
                 const s = String(dig(o, 'buyer', 'contact', '_id'));
@@ -381,9 +386,11 @@ async function bloque(
             }
         }));
         for (const r of fant) {
+            // Teléfono inválido pero SU interacción sí trae conversación: es fantasma por regla, pero no murió.
+            const conversoAqui = r.telMalo && !!r.inter && real.has(String(r.inter));
             const ds = r.cid ? vent.get(r.cid) : undefined;
             const t = r.t.getTime();
-            if (ds?.some((d) => d.getTime() >= t - DIA && d.getTime() <= t + 14 * DIA))
+            if (conversoAqui || ds?.some((d) => d.getTime() >= t - DIA && d.getTime() <= t + 14 * DIA))
                 for (const c of r.cells) c.resc += 1;
         }
     })();
@@ -469,12 +476,20 @@ async function bloque(
             'seller.company._id': 1, 'buyer.company._id': 1, 'buyer.company.external': 1, 'buyer.contact._id': 1, 'property._id': 1,
             'seller.broker._id': 1, 'seller.broker.firstName': 1, 'seller.broker.lastName': 1,
             'buyer.broker._id': 1, 'buyer.broker.firstName': 1, 'buyer.broker.lastName': 1,
+            'seller.company.external': 1,
         } }).sort({ closedAt: -1 }).toArray();
+        // Una misma venta a veces tiene DOS operaciones (paying + closed): 8 de 1,364 en 2026. Se queda
+        // la más reciente por propiedad + comprador.
+        const vistos = new Set<string>();
+        const opsU = ops.filter((o) => {
+            const k = `${String(dig(o, 'property', '_id') ?? o._id)}|${String(dig(o, 'buyer', 'contact', '_id') ?? o._id)}`;
+            if (vistos.has(k)) return false; vistos.add(k); return true;
+        });
         const nombre = (o: Document, k: 'seller' | 'buyer') =>
             [dig(o, k, 'broker', 'firstName'), dig(o, k, 'broker', 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
         // Para los que vienen sin fuente y sí traen contacto: el primer lead de ese comprador antes del
         // cierre (de la misma propiedad si lo hay). Una consulta por lotes, indexada por contact._id.
-        const porDeducir = ops.filter((o) => !fuenteCapturada(dig(o, 'buyer', 'source')) && dig(o, 'buyer', 'contact', '_id'));
+        const porDeducir = opsU.filter((o) => !fuenteCapturada(dig(o, 'buyer', 'source')) && dig(o, 'buyer', 'contact', '_id'));
         const leadsDe = new Map<string, Array<{ t: Date; src: string; pid: string }>>();
         const cidsB = [...new Set(porDeducir.map((o) => String(dig(o, 'buyer', 'contact', '_id'))))].map(oid).filter((x): x is ObjectId => !!x);
         for (let i = 0; i < cidsB.length; i += 3000) {
@@ -490,30 +505,38 @@ async function bloque(
             const cid = dig(o, 'buyer', 'contact', '_id');
             if (cid) {
                 const cl = o.closedAt as Date, pid = String(dig(o, 'property', '_id') ?? '');
-                const previos = (leadsDe.get(String(cid)) ?? []).filter((l) => l.t <= cl);
+                // sólo leads con fuente útil: si el primero también vino `other`, se busca el siguiente
+                const previos = (leadsDe.get(String(cid)) ?? []).filter((l) => l.t <= cl && fuenteCapturada(l.src));
                 const misma = previos.filter((l) => l.pid === pid);
                 const primero = (misma.length ? misma : previos).sort((a, b) => a.t.getTime() - b.t.getTime())[0];
-                if (primero) return { fuente: fuenteCapturada(primero.src) ?? F_SIN, inferida: true };
+                if (primero) return { fuente: fuenteCapturada(primero.src)!, inferida: true };
             }
             if (bc && bc !== sc) return { fuente: dig(o, 'buyer', 'company', 'external') === true ? F_BROKER_EXT : F_RED };
             return { fuente: cid ? F_CARTERA : F_SIN };
         };
         const out: Cierre[] = [];
         let sinFuenteOrig = 0;
-        for (const o of ops) {
+        for (const o of opsU) {
             const sc = String(dig(o, 'seller', 'company', '_id') ?? ''), bc = String(dig(o, 'buyer', 'company', '_id') ?? '');
             const vende = reqInmo ? reqInmo.has(sc) : true, compra = reqInmo ? reqInmo.has(bc) : true;
             let ladoX: Cierre['lado'] = vende && compra ? 'ambos' : vende ? 'vendedor' : 'comprador';
-            if (!reqInmo) ladoX = sc && sc === bc ? 'ambos' : 'vendedor';
+            // Vista general: el lado es el de la RED. Comprador externo → vendimos; vendedor externo →
+            // trajimos al comprador; las dos inmobiliarias de la red (iguales o no) → ambos.
+            if (!reqInmo) {
+                const bExt = !bc || dig(o, 'buyer', 'company', 'external') === true;
+                const sExt = !sc || dig(o, 'seller', 'company', 'external') === true;
+                ladoX = bExt && !sExt ? 'vendedor' : sExt && !bExt ? 'comprador' : 'ambos';
+            }
             const sb = String(dig(o, 'seller', 'broker', '_id') ?? ''), bb = String(dig(o, 'buyer', 'broker', '_id') ?? '');
             if (asesor) {
                 const a = String(asesor);
                 const deEl = (vende && sb === a) || (compra && bb === a);
                 if (!deEl) continue;
             }
+            const conVendedor = reqInmo ? vende : ladoX !== 'comprador', conComprador = reqInmo ? compra : ladoX !== 'vendedor';
             const nombres = [...new Set([
-                ...(vende || !reqInmo ? [nombre(o, 'seller')] : []),
-                ...(compra && reqInmo ? [nombre(o, 'buyer')] : []),
+                ...(conVendedor ? [nombre(o, 'seller')] : []),
+                ...(conComprador ? [nombre(o, 'buyer')] : []),
             ].filter(Boolean))];
             const opx = String(dig(o, 'property', 'listing', 'operation') ?? '');
             out.push({
@@ -622,11 +645,24 @@ export function ventanas(f: FiltroInmo): { A: Date; B: Date; cA: Date | null; cB
             const n = (B.getUTCFullYear() - A.getUTCFullYear()) * 12 + (B.getUTCMonth() - A.getUTCMonth());
             return { A, B, cA: new Date(Date.UTC(A.getUTCFullYear(), A.getUTCMonth() - n, 1)), cB: A };
         }
+        // Mes en curso (del 1 a hoy) → los MISMOS días del mes anterior: 1–2 oct contra 1–2 sep, no
+        // contra 29–30 sep.
+        const ultimo = new Date(B.getTime() - DIA);
+        if (A.getUTCDate() === 1 && ultimo.getUTCMonth() === A.getUTCMonth() && ultimo.getUTCFullYear() === A.getUTCFullYear()) {
+            const cA = new Date(Date.UTC(A.getUTCFullYear(), A.getUTCMonth() - 1, 1));
+            const finMesAnt = new Date(Date.UTC(A.getUTCFullYear(), A.getUTCMonth(), 0)).getUTCDate();
+            const cB = new Date(Date.UTC(cA.getUTCFullYear(), cA.getUTCMonth(), Math.min(ultimo.getUTCDate(), finMesAnt)) + DIA);
+            return { A, B, cA, cB };
+        }
         const len = B.getTime() - A.getTime();
         return { A, B, cA: new Date(A.getTime() - len), cB: A };
     }
     if (f.comparar === 'anio') {
-        const menos1 = (d: Date) => new Date(Date.UTC(d.getUTCFullYear() - 1, d.getUTCMonth(), d.getUTCDate()));
+        // 29-feb menos un año → 28-feb (Date.UTC lo rodaría al 1-mar)
+        const menos1 = (d: Date) => {
+            const y = d.getUTCFullYear() - 1, m = d.getUTCMonth();
+            return new Date(Date.UTC(y, m, Math.min(d.getUTCDate(), new Date(Date.UTC(y, m + 1, 0)).getUTCDate())));
+        };
         return { A, B, cA: menos1(A), cB: menos1(B) };
     }
     return { A, B, cA: null, cB: null };

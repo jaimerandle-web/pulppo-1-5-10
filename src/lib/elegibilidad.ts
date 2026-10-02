@@ -129,7 +129,8 @@ export async function computeEval(id: string, opts: { withBase?: boolean; detall
     if (!exStart) vExclusiva = cStatus === 'completed' ? 'contrato firmado, pero sin exclusiva' : 'sin exclusiva cargada';
     else if (cStatus !== 'completed') vExclusiva = ESTADO_CONTRATO[cStatus] ?? cStatus;
     else if (exVence && exVence.getTime() < now) vExclusiva = `vencida el ${fdate(exVence)}`;
-    else { okExclusiva = true; vExclusiva = exVence ? `firmada · vence ${fdate(exVence)}` : 'firmada'; }
+    // Sin `durationMonths` no se puede saber si venció: cuenta como firmada pero lo dice.
+    else { okExclusiva = true; vExclusiva = exVence ? `firmada · vence ${fdate(exVence)}` : 'firmada · sin vigencia cargada'; }
 
     // rebaja de precio (best-effort: listing.prices con historial)
     const prices = (dig(P, 'listing', 'prices') as Document[]) || [];
@@ -155,7 +156,7 @@ export async function computeEval(id: string, opts: { withBase?: boolean; detall
             // tardaba 11.6 s en Benito Juárez contra ~1 s así.
             { $limit: 400 },
             { $project: { 'attributes.totalSurface': 1 } },
-            { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', pipeline: [{ $project: { _id: 0, 'closeValue.value': 1 } }], as: 'op' } }
+            { $lookup: { from: 'operations', localField: '_id', foreignField: 'property._id', pipeline: [{ $match: { 'status.last': { $in: ['closed', 'paying'] } } }, { $project: { _id: 0, 'closeValue.value': 1 } }], as: 'op' } }
         ]).toArray();
         const out: number[] = [];
         for (const p of ps) { const sm2 = num(dig(p, 'attributes', 'totalSurface')); for (const o of (p.op as Document[]) || []) { const v = num(dig(o, 'closeValue', 'value')); if (v && sm2 && sm2 > 0) out.push(v / sm2); } }
