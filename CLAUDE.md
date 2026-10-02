@@ -330,11 +330,13 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
 - **Descartes**: taxonomía única en `src/lib/portales/descarte.ts` (también la usa «Calidad del
   lead»). Toques antes de descartar = `tasks` del asesor + acciones en `logs`; los WhatsApp del
   asesor NO están en la base.
-- **Fantasma** = teléfono inválido, o `lead.interaction` sin llamada ni mensaje real del cliente (los eventos «Vio
-  teléfono» no cuentan). **Sin respuesta visible** (antes «muere») = tampoco conversó en otra interacción del
-  mismo contacto de −30 a +14 días. NO es lead perdido: trae teléfono; es que el chat del asesor no
-  se guarda. La regla corre EN MONGO (`$regexMatch`); traer los mensajes era el 70% del tiempo.
-  `interactions` NO tiene índice por `lead`: entrar siempre por `lead.interaction` (= `_id`).
+- **Contacto con el lead**: cada lead cae en UNA de tres (suman 100%): **con conversación** (plática
+  real en su `interaction`, o en otra del mismo contacto de −30 a +14 días) · **sin respuesta visible**
+  (teléfono válido, no vemos respuesta: el asesor contesta desde su WhatsApp y ese chat no se guarda;
+  NO es lead perdido) · **fantasma** (teléfono inválido y sin conversación). Aparte, «llegó sólo el
+  clic» (el portal mandó sólo el evento «Vio teléfono»/«Contactó por WhatsApp»/«Es un lead de…»).
+  La regla corre EN MONGO (`$regexMatch`). `interactions` NO tiene índice por `lead`: entrar por
+  `lead.interaction` (= `_id`). `answeredAt` NO prueba que hubo mensaje.
 - **Lista canónica** en `src/lib/portales/ordenInmobiliarias.ts` (copia de `_lista.txt`). Una
   inmobiliaria puede estar partida en varias compañías con el mismo nombre: se suman todas.
 - Tiempos: una inmobiliaria ~7 s; vista general de un mes ~7 s; general YTD vs año pasado ~2 min

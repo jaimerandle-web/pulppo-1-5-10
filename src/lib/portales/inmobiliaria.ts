@@ -61,9 +61,13 @@ export interface Fila {
     respMed: number | null;
     visitas: number; ofertas: number; cierres: number;
     pVisita: number | null; pOferta: number | null; pCierre: number | null;
-    /** sobre leads: sin conversación real / de esos, rescatados en otra conversación / mueren */
-    fantasmas: number; rescatados: number; mueren: number;
-    pctFantasma: number | null; pctMueren: number | null;
+    /** cada lead cae en UNA: con conversación · sin respuesta visible · fantasma (suman leads) */
+    conConversacion: number; pctConConversacion: number | null;
+    sinRespuesta: number; pctSinRespuesta: number | null;
+    /** teléfono inválido y sin conversación: no hay cómo contactarlo */
+    fantasmas: number; pctFantasma: number | null;
+    /** el portal mandó sólo el evento («Vio teléfono»…): dato del portal, no del lead */
+    soloClic: number; pctSoloClic: number | null;
     descartados: number; pctDescartado: number | null;
     /** de los descartados, cuántos sin un solo seguimiento registrado por el asesor antes del descarte */
     descSinSeg: number; pctDescSinSeg: number | null;
@@ -209,12 +213,12 @@ interface Celda {
     req: Set<string> | null;
     leads: number; venta: number; renta: number; baseLab: number; lt60: number; sin: number; resp: number[];
     t0: Map<string, Date>; vis: Set<string>; ofe: Set<string>; clo: Set<string>;
-    fant: number; resc: number; desc: number; descSinSeg: number; telInv: number;
+    soloClic: number; conv: number; sinResp: number; fantTel: number; desc: number; descSinSeg: number; telInv: number;
     fuentes: Map<string, number>;
 }
 const nuevaCelda = (key: string, nombre: string, req: Set<string> | null): Celda => ({
     key, nombre, req, leads: 0, venta: 0, renta: 0, baseLab: 0, lt60: 0, sin: 0, resp: [],
-    t0: new Map(), vis: new Set(), ofe: new Set(), clo: new Set(), fant: 0, resc: 0, desc: 0, descSinSeg: 0, telInv: 0, fuentes: new Map(),
+    t0: new Map(), vis: new Set(), ofe: new Set(), clo: new Set(), soloClic: 0, conv: 0, sinResp: 0, fantTel: 0, desc: 0, descSinSeg: 0, telInv: 0, fuentes: new Map(),
 });
 
 async function bloque(
@@ -360,17 +364,22 @@ async function bloque(
             ]);
             for await (const it of cur) real.add(String(it._id));
         }));
-        // Fantasma = sin conversación real (sin interacción también cuenta) O con un teléfono que no
-        // sirve (decisión de Ale, 1-oct-2026). Si de todos modos conversó por otro lado, se rescata.
-        const fant = refs.filter((r) => r.telMalo || !r.inter || !real.has(String(r.inter)));
-        for (const r of fant) for (const c of r.cells) c.fant += 1;
+        // Cada lead cae en UNA de tres (Ale, 2-oct-2026: «no son rescatados, simplemente son leads»):
+        //   · CON CONVERSACIÓN — plática real en su interacción, o en otra del mismo contacto de −30 a
+        //     +14 días (el comprador abrió WhatsApp y entró por otro lado, o ya venía platicando).
+        //   · SIN RESPUESTA VISIBLE — teléfono válido, se le puede escribir, pero no vemos respuesta: el
+        //     asesor contesta desde su WhatsApp y ese chat no se guarda.
+        //   · FANTASMA — teléfono inválido y sin conversación: no hay cómo contactarlo.
+        // Aparte, «sólo el clic» = el portal mandó únicamente el evento (dato del portal, no del lead).
+        const sinAqui = refs.filter((r) => !r.inter || !real.has(String(r.inter)));
+        for (const r of sinAqui) for (const c of r.cells) c.soloClic += 1;
 
-        // Rescate: ¿ese contacto conversó de verdad en otra interacción, de −1 a +14 días?
+        // ¿ese contacto conversó de verdad en OTRA interacción?
         const vent = new Map<string, Date[]>();   // contacto → fechas de mensajes reales del cliente
-        const cids = [...new Set(fant.map((r) => r.cid).filter((x): x is string => !!x))].map(oid).filter((o): o is ObjectId => !!o);
+        const cids = [...new Set(sinAqui.map((r) => r.cid).filter((x): x is string => !!x))].map(oid).filter((o): o is ObjectId => !!o);
         // Ventana: de 30 días ANTES (ya estaba en plática y volvió a dar clic a un anuncio) a 14 después.
         const w0 = new Date(A.getTime() - 30 * DIA), w1 = new Date(B.getTime() + 14 * DIA);
-        const propias = new Set(fant.map((r) => (r.inter ? String(r.inter) : '')).filter(Boolean));
+        const propias = new Set(sinAqui.map((r) => (r.inter ? String(r.inter) : '')).filter(Boolean));
         await Promise.all(Array.from({ length: Math.ceil(cids.length / 2000) }, async (_, j) => {
             const cur = db.collection('interactions').aggregate([
                 { $match: { 'contact._id': { $in: cids.slice(j * 2000, (j + 1) * 2000) }, updatedAt: { $gte: w0 } } },
@@ -390,13 +399,19 @@ async function bloque(
                 (vent.get(k) ?? vent.set(k, []).get(k)!).push(...ds);
             }
         }));
-        for (const r of fant) {
-            // Teléfono inválido pero SU interacción sí trae conversación: es fantasma por regla, pero no murió.
-            const conversoAqui = r.telMalo && !!r.inter && real.has(String(r.inter));
-            const ds = r.cid ? vent.get(r.cid) : undefined;
-            const t = r.t.getTime();
-            if (conversoAqui || ds?.some((d) => d.getTime() >= t - 30 * DIA && d.getTime() <= t + 14 * DIA))
-                for (const c of r.cells) c.resc += 1;
+        const enSinAqui = new Set(sinAqui);
+        for (const r of refs) {
+            let conv = !enSinAqui.has(r);
+            if (!conv) {
+                const ds = r.cid ? vent.get(r.cid) : undefined;
+                const t = r.t.getTime();
+                conv = !!ds?.some((d) => d.getTime() >= t - 30 * DIA && d.getTime() <= t + 14 * DIA);
+            }
+            for (const c of r.cells) {
+                if (conv) c.conv += 1;
+                else if (r.telMalo) c.fantTel += 1;
+                else c.sinResp += 1;
+            }
         }
     })();
 
@@ -570,8 +585,10 @@ async function bloque(
             pctLt60: p1(c.lt60, c.baseLab), pctSinResp: p1(c.sin, c.baseLab), respMed: mediana(c.resp.map((x) => Math.round(x))),
             visitas: c.vis.size, ofertas: c.ofe.size, cierres: c.clo.size,
             pVisita: p1(c.vis.size, u), pOferta: p1(c.ofe.size, u), pCierre: p1(c.clo.size, u),
-            fantasmas: c.fant, rescatados: c.resc, mueren: c.fant - c.resc,
-            pctFantasma: p1(c.fant, c.leads), pctMueren: p1(c.fant - c.resc, c.leads),
+            conConversacion: c.conv, pctConConversacion: p1(c.conv, c.leads),
+            sinRespuesta: c.sinResp, pctSinRespuesta: p1(c.sinResp, c.leads),
+            fantasmas: c.fantTel, pctFantasma: p1(c.fantTel, c.leads),
+            soloClic: c.soloClic, pctSoloClic: p1(c.soloClic, c.leads),
             descartados: c.desc, pctDescartado: p1(c.desc, c.leads),
             descSinSeg: c.descSinSeg, pctDescSinSeg: p1(c.descSinSeg, c.desc),
             telInvalido: c.telInv, pctTelInvalido: p1(c.telInv, c.leads),
