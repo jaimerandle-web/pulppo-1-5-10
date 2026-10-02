@@ -3,9 +3,11 @@
 // descartados y cierres — por inmobiliaria o de toda la red, con comparación contra el periodo
 // anterior o el mismo periodo del año pasado. Cálculo en `lib/portales/inmobiliaria.ts`.
 //
-// Igual que el resto de /portales, nada se consulta hasta que le das Aplicar: con fechas libres,
-// cada tecla dispararía una consulta de varios segundos.
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+// Abre con una vista predeterminada (toda la red · último mes completo · vs. mes anterior) y cada
+// filtro la actualiza solo (Ale, 2-oct-2026). Para no disparar una consulta por tecla: espera a que
+// el filtro se quede quieto (300 ms; 900 ms en fechas libres), cancela la consulta anterior y sólo
+// pinta la respuesta de la ÚLTIMA. Mientras carga se queda la vista anterior, atenuada.
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Bloque, Cierre, Comparar, Fila, InmoView } from '@/lib/portales/inmobiliaria';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
@@ -142,8 +144,7 @@ export default function InmobiliariasTab() {
         anioQ: iniAnioQ, q: iniQ,
         rDesde: iso(new Date(hoy.getTime() - 29 * 86400000)), rHasta: iso(hoy), comparar: 'anterior',
     };
-    const [b, setB] = useState<Filtros>(ini);          // borrador
-    const [ap, setAp] = useState<Filtros | null>(null); // aplicado
+    const [b, setB] = useState<Filtros>(ini);
     const [ops, setOps] = useState<Opcion[]>([]);
     const [asesores, setAsesores] = useState<Asesor[]>([]);
     const [v, setV] = useState<InmoView | null>(null);
@@ -160,22 +161,29 @@ export default function InmobiliariasTab() {
             .then((r) => r.json()).then((j) => setAsesores(j.asesores ?? [])).catch(() => {});
     }, [b.inmo]);
 
+    const ctrl = useRef<AbortController | null>(null);
     const consultar = useCallback((f: Filtros, refresh = false) => {
         const { desde, hasta } = periodo(f);
         if (!desde || !hasta || desde > hasta) { setErr('El periodo termina antes de empezar.'); return; }
+        ctrl.current?.abort();                      // la consulta anterior ya no importa
+        const c = new AbortController(); ctrl.current = c;
         setCargando(true); setErr(null);
         const q = new URLSearchParams({ view: 'datos', desde, hasta, operacion: f.op, comparar: f.comparar });
         if (f.inmo) q.set('inmo', f.inmo);
         if (f.inmo && f.asesor) q.set('asesor', f.asesor);
         if (refresh) q.set('refresh', '1');
-        fetch(`/api/portales/inmobiliarias?${q}`)
+        fetch(`/api/portales/inmobiliarias?${q}`, { signal: c.signal })
             .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(j.error ?? r.statusText))))
-            .then((j) => { setV(j); setAp(f); })
-            .catch((e) => setErr(String(e)))
-            .finally(() => setCargando(false));
+            .then((j) => { if (ctrl.current === c) setV(j); })
+            .catch((e) => { if (ctrl.current === c && e?.name !== 'AbortError') setErr(String(e)); })
+            .finally(() => { if (ctrl.current === c) setCargando(false); });
     }, []);
-
-    const sucio = !ap || JSON.stringify(ap) !== JSON.stringify(b);
+    // Vista predeterminada al entrar + cada cambio de filtro actualiza solo.
+    useEffect(() => {
+        const t = setTimeout(() => consultar(b), b.modo === 'rango' ? 900 : 300);
+        return () => clearTimeout(t);
+    }, [b, consultar]);
+    useEffect(() => () => ctrl.current?.abort(), []);
     const inp: CSSProperties = { padding: '6px 8px', border: `1px solid ${LGT}`, borderRadius: R, fontSize: 12, fontFamily: 'inherit', color: BLK, background: '#fff' };
     const lbl: CSSProperties = { fontSize: 10, color: GRY, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', display: 'block', marginBottom: 3 };
     const pills = <T extends string>(val: T, opts: Array<[T, string]>, set: (x: T) => void) => (
@@ -224,12 +232,12 @@ export default function InmobiliariasTab() {
                 </span>
             </div>
             <div><span style={lbl}>Comparar contra</span>{pills(b.comparar, [['ninguno', 'Nada'], ['anterior', 'Periodo anterior'], ['anio', 'Año pasado']], (x) => set('comparar', x))}</div>
-            <button onClick={() => consultar(b)} disabled={cargando || !sucio} style={{
-                padding: '7px 15px', borderRadius: R, border: `1px solid ${sucio ? BLK : LGT}`, background: sucio && !cargando ? BLK : '#fff',
-                color: sucio && !cargando ? '#fff' : GRY, fontSize: 12, fontWeight: 700, cursor: sucio && !cargando ? 'pointer' : 'default', fontFamily: 'inherit',
-            }}>{cargando ? 'Consultando…' : 'Aplicar'}</button>
-            {ap && !sucio && !cargando && <button onClick={() => consultar(ap, true)} style={{ ...inp, cursor: 'pointer', fontSize: 11 }}>Recargar</button>}
-            {ap && sucio && !cargando && <span style={{ fontSize: 11, color: '#8A6D00' }}>sin aplicar</span>}
+            {cargando
+                ? <span style={{ fontSize: 11.5, color: '#8A6D00', fontWeight: 700, alignSelf: 'center' }}>Actualizando…</span>
+                : <button onClick={() => consultar(b, true)} title="Vuelve a consultar Mongo sin usar la caché de 10 min" style={{ ...inp, cursor: 'pointer', fontSize: 11 }}>Recargar</button>}
+            {(b.inmo || b.asesor || b.op !== 'todas' || b.modo !== 'mes' || b.mes !== ini.mes || b.comparar !== 'anterior') && (
+                <button onClick={() => setB(ini)} style={{ ...inp, cursor: 'pointer', fontSize: 11, color: '#666' }}>Vista predeterminada</button>
+            )}
         </div>
     );
 
@@ -237,7 +245,7 @@ export default function InmobiliariasTab() {
         <>
             <h1 style={{ fontFamily: 'EB Garamond, serif', fontSize: 28, fontWeight: 400, margin: '0 0 4px' }}>Leads, funnel y cierres por inmobiliaria</h1>
             <div style={{ fontSize: 12.5, color: '#666', marginBottom: 14 }}>
-                Desempeño de los leads por fuente, por asesor y por inmobiliaria, con los fantasmas, los descartados y los cierres del periodo.
+                Desempeño de los leads por fuente, por asesor y por inmobiliaria: funnel, contacto con el lead, descartados y cierres del periodo. Los filtros actualizan la vista solos.
             </div>
             {filtros}
         </>
@@ -247,8 +255,7 @@ export default function InmobiliariasTab() {
     if (!v) return (
         <>{head}
             <div style={{ marginTop: 20, fontSize: 13, color: '#666', lineHeight: 1.6 }}>
-                {cargando ? 'Consultando Mongo… una inmobiliaria tarda unos segundos; la vista general de un trimestre o YTD puede tardar un par de minutos la primera vez.'
-                    : <>Elige la inmobiliaria (o «Todas» para la vista general), el periodo y contra qué comparar, y dale <b>Aplicar</b>.</>}
+                Consultando Mongo… la vista general de un mes tarda unos segundos; un trimestre o YTD de toda la red puede tardar un par de minutos la primera vez (después queda en caché 10 min).
             </div>
         </>
     );
@@ -320,6 +327,7 @@ export default function InmobiliariasTab() {
     return (
         <>
             {head}
+            <div style={{ opacity: cargando ? 0.45 : 1, transition: 'opacity .15s', pointerEvents: cargando ? 'none' : 'auto' }}>
             <div style={{ marginTop: 16, fontSize: 13 }}>
                 <b>{v.inmobiliaria ? v.inmobiliaria.nombre : 'Toda la red'}</b>
                 {v.inmobiliaria?.kam && <span style={{ color: '#666' }}> · KAM {v.inmobiliaria.kam}{v.inmobiliaria.tier ? ` · ${v.inmobiliaria.tier}` : ''}</span>}
@@ -456,6 +464,7 @@ export default function InmobiliariasTab() {
             </Seccion>
             <div style={{ fontSize: 10, color: GRY, marginTop: 26 }}>
                 Excluye Habi y cuentas de prueba. Calculado {new Date(v.generado).toLocaleString('es-MX')}.
+            </div>
             </div>
         </>
     );
