@@ -294,7 +294,7 @@ export default function InmobiliariasTab() {
             <td style={{ ...td, color: (x.pctTelInvalido ?? 0) >= 3 ? RED : BLK }}>{pc(x.pctTelInvalido)}</td>
         </tr>
     );
-    const HEAD_CAL = ['', 'Leads', 'Sin conversación', 'Rescatados', 'Mueren de verdad', 'Descartados', 'Sin responder', 'Tel. inválido'];
+    const HEAD_CAL = ['', 'Leads', 'Sin conversación', 'Rescatados', 'Sin respuesta visible', 'Descartados', 'Sin responder', 'Tel. inválido'];
 
     const filaEquipo = (x: Fila, c: Fila | null) => (
         <tr key={x.key}>
@@ -311,7 +311,7 @@ export default function InmobiliariasTab() {
             <td style={{ ...td, color: (x.pctDescSinSeg ?? 0) >= 75 ? RED : BLK }}>{pc(x.pctDescSinSeg)}</td>
         </tr>
     );
-    const HEAD_EQ = ['', 'Leads', 'Fuente #1', '% visita', 'Visitas', 'Cierres', '< 60 min', '1ª resp.', 'Mueren', 'Descartados', 'Desc. sin toque'];
+    const HEAD_EQ = ['', 'Leads', 'Fuente #1', '% visita', 'Visitas', 'Cierres', '< 60 min', '1ª resp.', 'Sin resp. visible', 'Descartados', 'Desc. sin toque'];
     const tsvEquipo = (xs: Fila[], primera: string) => copiar([[primera, ...HEAD_EQ.slice(1), 'Nota'],
         ...xs.map((x) => [x.nombre, x.leads, x.topFuente, x.pVisita, x.visitas, x.cierres, x.pctLt60, x.respMed, x.pctMueren, x.pctDescartado, x.pctDescSinSeg, x.nota])]);
 
@@ -335,7 +335,7 @@ export default function InmobiliariasTab() {
                 <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
                 <Kpi label="Cierres de la cohorte" value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
                 <Kpi label="1ª respuesta" value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
-                <Kpi label="Leads que mueren" value={pc(T.pctMueren)} sub={`${pc(T.pctFantasma)} sin conversación`} delta={<Delta a={T.pctMueren} b={CT?.pctMueren} pts invertir />} />
+                <Kpi label="Sin respuesta visible" value={pc(T.pctMueren)} sub={`${pc(T.pctFantasma)} llegaron sólo con el clic`} delta={<Delta a={T.pctMueren} b={CT?.pctMueren} pts invertir />} />
                 <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
             </div>
             {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}
@@ -352,7 +352,7 @@ export default function InmobiliariasTab() {
             </Seccion>
 
             <Seccion titulo="Leads fantasma y descartados" onCopiar={() => copiar([['Fuente', ...HEAD_CAL.slice(1)], ...A.fuentes.map((x) => [x.nombre, x.leads, x.pctFantasma, x.rescatados, x.pctMueren, x.pctDescartado, x.pctSinResp, x.pctTelInvalido])])}
-                sub={<><b>Sin conversación</b>: el lead sólo trae el evento del portal («Vio teléfono», «Contactó por WhatsApp») y ni una llamada. La mayoría no se pierde: el comprador abre WhatsApp y la plática entra por otro lado (<b>rescatados</b>). <b>Mueren de verdad</b> los que tampoco aparecen ahí, de un día antes a 14 días después. Un lead con <b>teléfono inválido</b> (menos de 10 dígitos, todos iguales o una secuencia) también cuenta como fantasma; la última columna dice cuántos son.</>}>
+                sub={<><b>Sin conversación</b>: el lead sólo trae el evento del portal («Vio teléfono», «Contactó por WhatsApp») y ni una llamada. Muchos no se pierden: el comprador abre WhatsApp y la plática entra por otro lado, o ya estaba platicando con nosotros (<b>rescatados</b>, de 30 días antes a 14 después). <b>Sin respuesta visible</b> son los que tampoco aparecen ahí. <b>No están perdidos</b>: el lead trae su teléfono y se le puede escribir; lo que pasa es que el asesor contesta desde su WhatsApp, ese chat no se guarda en Pulppo y no podemos ver si el cliente respondió. Un lead con <b>teléfono inválido</b> (menos de 10 dígitos, todos iguales o una secuencia) también cuenta como fantasma; la última columna dice cuántos son.</>}>
                 <Tabla head={['Fuente', ...HEAD_CAL.slice(1)]}>
                     {A.fuentes.map((x) => filaCalidad(x, buscar(C?.fuentes, x.key)))}
                     {filaCalidad(T, CT)}

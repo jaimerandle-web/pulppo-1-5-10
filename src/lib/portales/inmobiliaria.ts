@@ -15,8 +15,12 @@
 //     esta semana todavía no ha tenido tiempo de cancelarse.
 //   · FANTASMA = lead con teléfono inválido, o sin conversación real: su `interaction` sólo trae el evento del portal
 //     ("Vio teléfono", "Contactó por WhatsApp") y ni una llamada. La mayoría NO muere: el
-//     comprador abre WhatsApp y esa conversación entra por otro lado. "Muere de verdad" = ni
-//     siquiera eso, en una ventana de −1/+14 días sobre las conversaciones del mismo contacto.
+//     comprador abre WhatsApp y esa conversación entra por otro lado. «Sin respuesta visible» = ni
+//     siquiera eso, en una ventana de −30/+14 días sobre las conversaciones del mismo contacto.
+//     NO quiere decir que el lead esté perdido (2-oct-2026, Ale): trae teléfono (96% válido) y el
+//     asesor le puede escribir. Es que no hay respuesta del cliente que Pulppo pueda VER: la app
+//     marca `answeredAt` cuando el asesor abre su WhatsApp para contestar, pero ese chat no se guarda
+//     (DH ago: 0 de 300 con mensaje saliente del número de Pulppo, 18 con autorespuesta).
 //     (Medido 1-oct-2026, i24+ML agosto: 83% sin conversación, 59% rescatado, 34% muere.)
 //     La regla se evalúa EN MONGO ($regexMatch) y sólo viaja el resultado: bajar los mensajes
 //     completos era el 70% del tiempo de la vista.
@@ -364,7 +368,8 @@ async function bloque(
         // Rescate: ¿ese contacto conversó de verdad en otra interacción, de −1 a +14 días?
         const vent = new Map<string, Date[]>();   // contacto → fechas de mensajes reales del cliente
         const cids = [...new Set(fant.map((r) => r.cid).filter((x): x is string => !!x))].map(oid).filter((o): o is ObjectId => !!o);
-        const w0 = new Date(A.getTime() - DIA), w1 = new Date(B.getTime() + 14 * DIA);
+        // Ventana: de 30 días ANTES (ya estaba en plática y volvió a dar clic a un anuncio) a 14 después.
+        const w0 = new Date(A.getTime() - 30 * DIA), w1 = new Date(B.getTime() + 14 * DIA);
         const propias = new Set(fant.map((r) => (r.inter ? String(r.inter) : '')).filter(Boolean));
         await Promise.all(Array.from({ length: Math.ceil(cids.length / 2000) }, async (_, j) => {
             const cur = db.collection('interactions').aggregate([
@@ -390,7 +395,7 @@ async function bloque(
             const conversoAqui = r.telMalo && !!r.inter && real.has(String(r.inter));
             const ds = r.cid ? vent.get(r.cid) : undefined;
             const t = r.t.getTime();
-            if (conversoAqui || ds?.some((d) => d.getTime() >= t - DIA && d.getTime() <= t + 14 * DIA))
+            if (conversoAqui || ds?.some((d) => d.getTime() >= t - 30 * DIA && d.getTime() <= t + 14 * DIA))
                 for (const c of r.cells) c.resc += 1;
         }
     })();

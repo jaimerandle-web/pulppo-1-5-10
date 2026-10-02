@@ -331,8 +331,9 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   lead»). Toques antes de descartar = `tasks` del asesor + acciones en `logs`; los WhatsApp del
   asesor NO están en la base.
 - **Fantasma** = teléfono inválido, o `lead.interaction` sin llamada ni mensaje real del cliente (los eventos «Vio
-  teléfono» no cuentan). **Muere** = tampoco conversó en otra interacción del mismo contacto de
-  −1 a +14 días. La regla corre EN MONGO (`$regexMatch`); traer los mensajes era el 70% del tiempo.
+  teléfono» no cuentan). **Sin respuesta visible** (antes «muere») = tampoco conversó en otra interacción del
+  mismo contacto de −30 a +14 días. NO es lead perdido: trae teléfono; es que el chat del asesor no
+  se guarda. La regla corre EN MONGO (`$regexMatch`); traer los mensajes era el 70% del tiempo.
   `interactions` NO tiene índice por `lead`: entrar siempre por `lead.interaction` (= `_id`).
 - **Lista canónica** en `src/lib/portales/ordenInmobiliarias.ts` (copia de `_lista.txt`). Una
   inmobiliaria puede estar partida en varias compañías con el mismo nombre: se suman todas.
