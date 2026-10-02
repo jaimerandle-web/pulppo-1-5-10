@@ -132,7 +132,7 @@ export function MBMercadoVista({ d }: { d: Mercado }) {
             {filtrosUI}
 
             {/* KPIs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 22 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: 12, marginBottom: 22 }}>
                 <Kpi eyebrow={op === 'venta' ? 'Precio de cierre' : 'Renta de cierre'}
                      value={suficiente ? money(mediana(precios)) : '—'}
                      note={suficiente ? `Mediana de ${f0(vis.length)} cierres` : `Menos de ${MIN} cierres con estos filtros`} />
@@ -147,7 +147,7 @@ export function MBMercadoVista({ d }: { d: Mercado }) {
             </div>
 
             {/* Tops */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, marginBottom: 22 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14, marginBottom: 22 }}>
                 <Top titulo="Top 5 alcaldías" filas={top(vis, (c) => c.alcaldia, MIN)} min={MIN} />
                 <Top titulo={alcaldias.length === 1 ? `Top 5 colonias · ${alcaldias[0]}` : 'Top 5 colonias'}
                      filas={top(vis, (c) => c.colonia, MIN)} min={MIN} />
@@ -224,7 +224,7 @@ function Multi({ label, opciones, sel, onChange }:
                 {txt} ▾
             </button>
             {abierto && (
-                <div style={{ position: 'absolute', top: 38, left: 0, zIndex: 20, width: 280, background: '#fff',
+                <div style={{ position: 'absolute', top: 38, left: 0, zIndex: 20, width: 'min(280px, calc(100vw - 28px))', background: '#fff',
                               border: `1px solid ${BLK}`, borderRadius: R, padding: 10 }}>
                     <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Buscar ${label.toLowerCase()}…`}
                         style={{ ...control, width: '100%', cursor: 'text', boxSizing: 'border-box', marginBottom: 8 }} />
@@ -287,6 +287,15 @@ function Top({ titulo, filas, min }: { titulo: string; filas: { k: string; med: 
 /** Mediana mensual de $/m². Un mes con menos de `min` cierres queda como hueco, no como punto. */
 function Evolucion({ cierres, min, hasta }: { cierres: Cierre[]; min: number; hasta: string }) {
     const [hover, setHover] = useState<number | null>(null);
+    const caja = useRef<HTMLDivElement>(null);
+    const [ancho, setAncho] = useState(960);
+    useEffect(() => {
+        const el = caja.current;
+        if (!el) return;
+        const ro = new ResizeObserver(([e]) => setAncho(Math.round(e.contentRect.width)));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
     const serie = useMemo(() => {
         if (!cierres.length) return [];
         const g = new Map<string, number[]>();
@@ -300,7 +309,7 @@ function Evolucion({ cierres, min, hasta }: { cierres: Cierre[]; min: number; ha
         return out;
     }, [cierres, min, hasta]);
 
-    const W = 960, H = 260, P = { l: 56, r: 16, t: 14, b: 30 };
+    const W = Math.max(280, ancho), H = W < 560 ? 220 : 260, P = { l: 48, r: 10, t: 14, b: 30 };
     const vals = serie.map((s) => s.med).filter((v): v is number => v !== null);
     const conDatos = vals.length >= 2;
     let lo = conDatos ? Math.min(...vals) : 0, hi = conDatos ? Math.max(...vals) : 1;
@@ -330,11 +339,12 @@ function Evolucion({ cierres, min, hasta }: { cierres: Cierre[]; min: number; ha
             <div style={{ fontSize: 11.5, color: MUTED, margin: '3px 0 10px' }}>
                 Mediana mensual con los filtros de zona y tipo. Los meses con menos de {min} cierres quedan en blanco.
             </div>
+            <div ref={caja} style={{ width: '100%' }} />
             {!conDatos ? (
                 <div style={{ fontSize: 12.5, color: GRY, padding: '30px 0' }}>No hay suficientes meses con {min}+ cierres para dibujar la tendencia.</div>
             ) : (
                 <div style={{ position: 'relative' }}>
-                    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}
+                    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', maxWidth: '100%' }}
                          onMouseLeave={() => setHover(null)} role="img" aria-label="Evolución mensual del precio por m²">
                         {ticks.map((t) => (
                             <g key={t}>
@@ -342,7 +352,7 @@ function Evolucion({ cierres, min, hasta }: { cierres: Cierre[]; min: number; ha
                                 <text x={P.l - 8} y={y(t) + 4} textAnchor="end" fontSize={11} fill={MUTED}>{moneyK(t)}</text>
                             </g>
                         ))}
-                        {serie.map((s, i) => (s.mes.endsWith('-01') || i === 0) && (
+                        {serie.map((s, i) => (s.mes.endsWith('-01') || (i === 0 && W >= 560)) && (
                             <text key={s.mes} x={x(i)} y={H - 8} textAnchor={i === 0 ? 'start' : 'middle'} fontSize={11} fill={MUTED}>
                                 {s.mes.endsWith('-01') ? s.mes.slice(0, 4) : mesLbl(s.mes)}
                             </text>
@@ -410,10 +420,10 @@ function Lista({ cierres }: { cierres: Cierre[] }) {
                     <h3 style={h3}>Cierres</h3>
                     <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3 }}>{f0(filas.length)} cierres con estos filtros</div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flex: '1 1 300px', justifyContent: 'flex-end' }}>
                     <Seg value={vista} onChange={(v) => setVista(v as 'cards' | 'tabla')} options={[['cards', 'Tarjetas'], ['tabla', 'Tabla']]} />
                     <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar calle, colonia, desarrollo…"
-                        style={{ ...control, cursor: 'text', width: 230 }} />
+                        style={{ ...control, cursor: 'text', flex: '1 1 180px', maxWidth: 260, minWidth: 0 }} />
                 </div>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, marginBottom: 12 }}>
@@ -424,7 +434,7 @@ function Lista({ cierres }: { cierres: Cierre[] }) {
             {pagina.length === 0 && <div style={{ fontSize: 12.5, color: GRY, padding: '20px 0' }}>Sin cierres con estos filtros.</div>}
 
             {vista === 'cards' ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))', gap: 12 }}>
                     {pagina.map((c, i) => (
                         <div key={i} style={{ border: `1px solid ${LGT}`, borderRadius: R, overflow: 'hidden' }}>
                             <div style={{ padding: '14px 16px 12px' }}>
@@ -466,7 +476,7 @@ function Lista({ cierres }: { cierres: Cierre[] }) {
             )}
 
             {nPag > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 14, fontSize: 13 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 14, fontSize: 13 }}>
                     <button disabled={pag === 0} onClick={() => setPag((p) => p - 1)} style={{ ...control, opacity: pag === 0 ? 0.4 : 1 }}>← Anterior</button>
                     <span style={{ color: MUTED }}>Página {pag + 1} de {nPag}</span>
                     <button disabled={pag >= nPag - 1} onClick={() => setPag((p) => p + 1)} style={{ ...control, opacity: pag >= nPag - 1 ? 0.4 : 1 }}>Siguiente →</button>
