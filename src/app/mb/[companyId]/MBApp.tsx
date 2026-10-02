@@ -5,6 +5,8 @@ import type { MBData, MBProp, MBFuera, RespKey } from '@/lib/mb';
 import MBAnalisis from './MBAnalisis';
 import MBDestacados from './MBDestacados';
 import MBDesempeno from './MBDesempeno';
+import MBMercado from './MBMercado';
+import { tieneMercado } from '@/lib/mercadoPiloto';
 import MB1510 from './MB1510';
 import PrintRoot from './PrintRoot';
 
@@ -37,11 +39,11 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 // minutos → texto corto legible
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
-type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'p1510' | 'analisis' | 'comoleer';
+type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'mercado' | 'p1510' | 'analisis' | 'comoleer';
 // El botón de menú en celular muestra en qué sección estás; sin esto sólo dice "Menú" y te
 // pierdes al navegar.
 const SECTION_LABEL: Record<Section, string> = {
-    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño',
+    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño', mercado: 'Mercado',
     p1510: '1·5·10', analisis: 'Generador de análisis', comoleer: 'Cómo leer esto',
 };
 
@@ -534,7 +536,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <span style={{ fontSize: 13.5, fontWeight: 600 }}>{SECTION_LABEL[section]}</span>
                 </button>
                 <div className={`mb-nav${menuAbierto ? ' abierto' : ''}`}>
-                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{CON_DESEMPENO.has(d.companyId) && nav('desempeno', 'Desempeño')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{CON_DESEMPENO.has(d.companyId) && nav('desempeno', 'Desempeño')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 </div>
                 <div className="mb-side-pie" style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
@@ -842,6 +844,20 @@ export default function MBApp({ d }: { d: MBData }) {
                             cierre. Del año en curso, leído en vivo.
                         </div>
                         <MBDesempeno companyId={d.companyId} />
+                    </div>
+                )}
+
+                {section === 'mercado' && tieneMercado(d.companyId) && (
+                    <div>
+                        <div style={eyebrow}>Mercado</div><div style={accent} />
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
+                            ¿A cuánto se está cerrando en tu zona?
+                        </div>
+                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 660 }}>
+                            Precios de cierre reales de toda la red Pulppo, no precios de lista. Filtra
+                            por zona y tipo para ver el $/m² y hacia dónde se mueve.
+                        </div>
+                        <MBMercado companyId={d.companyId} />
                     </div>
                 )}
 
