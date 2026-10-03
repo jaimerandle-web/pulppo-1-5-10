@@ -57,7 +57,7 @@ export async function GET(req: Request) {
                 ? await portalesView(desde && hasta ? { desde, hasta, operacion } : { months, operacion })
             : vista === 'calidad'
                 ? await calidadView(desde && hasta ? { desde, hasta, operacion } : { months, operacion })
-            : vista === 'pulso' ? await pulseView()
+            : vista === 'pulso' ? await pulseView({ operacion })
             : vista === 'historico' ? await historicoView()
             : await periodoView(desde, hasta);
         const at = Date.now();

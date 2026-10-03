@@ -18,7 +18,7 @@
 // va de 43 a 144 días.
 import { getDb } from '../data';
 import {
-    CANALES, KEYS, MESES, NOT, NOTP, brokerContacts, classifySource, dig, hoyMx, isDate,
+    CANALES, KEYS, MESES, NOT, NOTP, SIN_COSTO, brokerContacts, classifySource, dig, hoyMx, isDate,
     mesKey, monthWindow, num, oid, utc,
 } from './metrics';
 import { GRATIS, NOTA_MELI, inversionMeses, type InversionMes } from './inversion';
@@ -331,7 +331,7 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
         if (!rows.some((r) => r.leads || r.cierres)) continue;
         portales.push({
             canal: name, key: k, rows,
-            pagado: k !== 'whatsapp' && k !== 'pulppo',
+            pagado: !SIN_COSTO.has(k),
             gratis: GRATIS.has(k),
         });
     }

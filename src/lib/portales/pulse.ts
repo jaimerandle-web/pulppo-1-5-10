@@ -24,8 +24,17 @@ export interface SerieCanal {
     canal: string; key: string; weeks: number[]; wtd: number;
     wow: number | null; mtd: number; pmtd: number; pace: number | null;
 }
-export interface RespSemana { tot: number; pctLt60: number; pctAns: number; pctSin: number }
+export interface RespGrupo { tot: number; pctLt60: number; pctSin: number }
+export interface RespSemana {
+    tot: number; pctLt60: number; pctAns: number; pctSin: number;
+    /** asesor con WhatsApp vinculado / sin vincular. Sin vincular, `answeredAt` queda vacío aunque
+     *  el asesor sí conteste (lo hace por fuera): su «sin responder» es en buena parte artefacto. */
+    vinc: RespGrupo; noVinc: RespGrupo;
+    /** leads sin asesor asignado (no entran en ninguno de los dos grupos) */
+    sinAsesor: number;
+}
 export interface PulseView {
+    operacion: 'todas' | 'sale' | 'rent';
     generado: string; semanaRef: string; wlabels: string[]; p30Label: string;
     series: SerieCanal[];
     resp: RespSemana[];
@@ -47,7 +56,9 @@ type Bloque = Record<string, { now: number; prev: number; delta: number }>;
 const r1 = (x: number) => Math.round(x * 10) / 10;
 const p1 = (b: number, t: number) => (t ? r1((100 * b) / t) : 0);
 
-export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView> {
+export async function pulseView(opts: { operacion?: 'todas' | 'sale' | 'rent'; nweeks?: number } = {}, now = Date.now()): Promise<PulseView> {
+    const nweeks = opts.nweeks ?? 8;
+    const oper = opts.operacion ?? 'todas';
     const db = await getDb();
     const h = hoyMx(now);
     const hoy = utc(h.y, h.m, h.d);
@@ -73,6 +84,8 @@ export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView
     const weekly = new Map<string, number[]>();
     const wtdLeads = new Map<string, number>();
     const resp = Array.from({ length: nweeks }, () => ({ tot: 0, ans: 0, sin: 0, lt60: 0 }));
+    // Para partir la atención por WhatsApp vinculado: (semana, asesor, sin responder, <1h).
+    const respLeads: Array<{ i: number; aid: string | null; sin: boolean; lt60: boolean }> = [];
     const mtd = new Map<string, number>(), pmtd = new Map<string, number>();
     const price = { now: { venta: new Map<string, number>(), renta: new Map<string, number>() },
                     prev: { venta: new Map<string, number>(), renta: new Map<string, number>() } };
@@ -83,8 +96,9 @@ export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView
     const inc = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
 
     const cur = db.collection('leads').find(
-        { createdAt: { $gte: inicio, $lt: wtdB }, ...NOT },
-        { projection: { source: 1, createdAt: 1, answeredAt: 1, 'contact._id': 1, search: 1,
+        { createdAt: { $gte: inicio, $lt: wtdB }, ...NOT,
+          ...(oper === 'todas' ? {} : { 'property.listing.operation': oper }) },
+        { projection: { source: 1, createdAt: 1, answeredAt: 1, 'contact._id': 1, search: 1, 'agent._id': 1,
                         'property.listing.operation': 1, 'property.listing.value': 1 } });
     for await (const l of cur) {
         const ca = l.createdAt;
@@ -107,11 +121,12 @@ export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView
                 if (hh >= 9 && hh <= 20) {
                     resp[i].tot += 1;
                     const ans = l.answeredAt;
-                    if (!isDate(ans)) resp[i].sin += 1;
-                    else {
-                        resp[i].ans += 1;
-                        if ((ans.getTime() - ca.getTime()) / 60000 < 60) resp[i].lt60 += 1;
-                    }
+                    const sinR = !isDate(ans);
+                    const r60 = !sinR && (ans.getTime() - ca.getTime()) / 60000 < 60;
+                    if (sinR) resp[i].sin += 1;
+                    else { resp[i].ans += 1; if (r60) resp[i].lt60 += 1; }
+                    const aid = dig(l, 'agent', '_id');
+                    respLeads.push({ i, aid: aid != null ? String(aid) : null, sin: sinR, lt60: r60 });
                 }
                 break;
             }
@@ -143,6 +158,8 @@ export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView
         if (!isDate(st)) continue;
         const cid = dig(v, 'contact', '_id');
         const src = cid == null ? undefined : cEarliest.get(String(cid));
+        // Con un filtro de operación, sólo cuentan las visitas de personas con un lead de esa operación.
+        if (oper !== 'todas' && !src) continue;
         const k = src?.canal ?? 's/d';
         const seg = STACK.includes(k) ? k : (k === 's/d' ? 's/d' : 'otros');
         for (let i = 0; i < nweeks; i++)
@@ -150,7 +167,7 @@ export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView
     }
     const segs = [...STACK, 'otros', 's/d'];
     const visitas = {
-        segs: segs.map((k) => ({ key: k, name: KEY2NAME[k] ?? (k === 'otros' ? 'Otros' : 'Sin dato') })),
+        segs: segs.map((k) => ({ key: k, name: KEY2NAME[k] ?? (k === 'otros' ? 'Resto de fuentes' : 'Sin dato') })),
         weeks: visStack.map((m) => Object.fromEntries(segs.map((k) => [k, m.get(k) ?? 0]))),
         total: visStack.map((m) => [...m.values()].reduce((a, b) => a + b, 0)),
     };
@@ -166,7 +183,7 @@ export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView
         const [bp, tp] = cuenta(brkBy.prev.get(k) ?? []);
         // Menos de 50 leads en la ventana no dice nada: un caso mueve el porcentaje entero.
         if (tn < 50) continue;
-        porPortal.push({ canal: KEY2NAME[k] ?? (k === 'otros' ? 'Otros' : k),
+        porPortal.push({ canal: KEY2NAME[k] ?? (k === 'otros' ? 'Otras fuentes' : k),
             pctNow: p1(bn, tn), pctPrev: p1(bp, tp), delta: r1(p1(bn, tn) - p1(bp, tp)), total: tn });
     }
     porPortal.sort((a, b) => b.pctNow - a.pctNow);
@@ -256,8 +273,25 @@ export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView
             mtd: m, pmtd: pm, pace: pm ? Math.round(((m - pm) / pm) * 100) : null });
     }
     series.sort((a, b) => b.weeks.reduce((x, y) => x + y, 0) - a.weeks.reduce((x, y) => x + y, 0));
-    const respS: RespSemana[] = resp.map((r) => ({ tot: r.tot,
-        pctLt60: p1(r.lt60, r.tot), pctAns: p1(r.ans, r.tot), pctSin: p1(r.sin, r.tot) }));
+    // WhatsApp vinculado de cada asesor (agents.whatsapp, booleano).
+    const aids = [...new Set(respLeads.map((x) => x.aid).filter((x): x is string => !!x))]
+        .map(oid).filter((o): o is NonNullable<typeof o> => !!o);
+    const vinculado = new Map<string, boolean>();
+    for (let i = 0; i < aids.length; i += 2000)
+        for await (const a of db.collection('agents').find({ _id: { $in: aids.slice(i, i + 2000) } }, { projection: { whatsapp: 1 } }))
+            vinculado.set(String(a._id), a.whatsapp === true);
+    const grupo = () => ({ tot: 0, sin: 0, lt60: 0 });
+    const porGrupo = Array.from({ length: nweeks }, () => ({ v: grupo(), n: grupo(), sa: 0 }));
+    for (const x of respLeads) {
+        const g = porGrupo[x.i];
+        if (!x.aid) { g.sa += 1; continue; }
+        const b = vinculado.get(x.aid) ? g.v : g.n;
+        b.tot += 1; if (x.sin) b.sin += 1; if (x.lt60) b.lt60 += 1;
+    }
+    const fin = (b: { tot: number; sin: number; lt60: number }): RespGrupo => ({ tot: b.tot, pctLt60: p1(b.lt60, b.tot), pctSin: p1(b.sin, b.tot) });
+    const respS: RespSemana[] = resp.map((r, i) => ({ tot: r.tot,
+        pctLt60: p1(r.lt60, r.tot), pctAns: p1(r.ans, r.tot), pctSin: p1(r.sin, r.tot),
+        vinc: fin(porGrupo[i].v), noVinc: fin(porGrupo[i].n), sinAsesor: porGrupo[i].sa }));
 
     // ── alertas ────────────────────────────────────────────────────
     const alerts: PulseView['alerts'] = [];
@@ -265,11 +299,11 @@ export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView
         if (s.wow !== null && s.wow <= -25 && s.weeks[nweeks - 1] >= 20)
             alerts.push({ sev: 'alta', txt: `${s.canal}: leads −${Math.abs(s.wow)}% vs semana previa (${s.weeks[nweeks - 2]}→${s.weeks[nweeks - 1]}).` });
         if (s.pace !== null && s.pace <= -20 && s.mtd >= 30)
-            alerts.push({ sev: 'media', txt: `${s.canal}: ritmo del mes ${s.pace}% vs mes pasado a la fecha (${s.pmtd}→${s.mtd}).` });
+            alerts.push({ sev: 'media', txt: `${s.canal}: el mes va ${s.pace}% contra el mes pasado al mismo día (${s.pmtd}→${s.mtd}).` });
     }
     const ult = respS[nweeks - 1], pen = respS[nweeks - 2];
     if (ult && ult.pctSin >= 5)
-        alerts.push({ sev: 'alta', txt: `Sin responder ${ult.pctSin}% en la última semana (meta <5%).` });
+        alerts.push({ sev: 'alta', txt: `Sin responder ${ult.pctSin}% en la última semana (meta <5%) — asesores con WhatsApp vinculado ${ult.vinc.pctSin}%, sin vincular ${ult.noVinc.pctSin}%.` });
     if (ult && pen && ult.pctLt60 < pen.pctLt60 - 5)
         alerts.push({ sev: 'media', txt: `Respuesta <1h cayó a ${ult.pctLt60}% (${pen.pctLt60}% la semana previa).` });
     for (const pp of porPortal)
@@ -279,6 +313,7 @@ export async function pulseView(nweeks = 8, now = Date.now()): Promise<PulseView
     const [lwA, lwB] = wk[nweeks - 1];
     const finSem = new Date(lwB.getTime() - DIA);
     return {
+        operacion: oper,
         generado: new Date(now).toISOString(),
         semanaRef: `${lwA.getUTCDate()}/${String(lwA.getUTCMonth() + 1).padStart(2, '0')}–${finSem.getUTCDate()}/${String(finSem.getUTCMonth() + 1).padStart(2, '0')}`,
         wlabels, p30Label: `últimos 30d (desde ${w30A.getUTCDate()} ${MESES[w30A.getUTCMonth() + 1]})`,

@@ -14,11 +14,17 @@ import { getDb } from '../data';
 /** Desfase fijo México (UTC−6, sin DST) en milisegundos. */
 export const MX_MS = 6 * 3600 * 1000;
 
+// «Otros» dejó de ser un cajón (Ale, 2-oct-2026): eran ~490 leads/30d con nombre propio —
+// tokko 208 (Tokko Broker, llega por email) · teléfono principal 148 (conmutador de Pulppo) ·
+// doorvel 28 · Sitio Web/Website 31 (sitios propios). Lo que queda en «otros» son restos (~20).
 export const CANALES: Array<[string, string]> = [
     ['Inmuebles24', 'i24'], ['MercadoLibre', 'meli'], ['EasyBroker', 'easybroker'],
     ['Propiedades.com', 'propiedades'], ['Casas y Terrenos', 'cyt'], ['Meta (FB/IG)', 'facebook'],
     ['WhatsApp', 'whatsapp'], ['Pulppo', 'pulppo'],
+    ['Tokko', 'tokko'], ['Teléfono Pulppo', 'telefono'], ['Doorvel', 'doorvel'], ['Sitio propio', 'sitio'],
 ];
+/** Canales sin factura (propios o integraciones gratis): su ROI en blanco no es un faltante. */
+export const SIN_COSTO = new Set(['whatsapp', 'pulppo', 'tokko', 'telefono', 'sitio']);
 export const KEYS = CANALES.map(([, k]) => k);
 export const KEY2NAME: Record<string, string> = Object.fromEntries(CANALES.map(([n, k]) => [k, n]));
 export const MESES = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -30,7 +36,12 @@ export const MESES = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago'
 const HABI = { $regex: 'tuhabi', $options: 'i' } as const;
 const TEST = { $regex: String.raw`\btest\b|testing|\bdemo\b|prueba`, $options: 'i' } as const;
 /** lead.company (la inmobiliaria que recibe) — universos de leads/visitas/cohorte. */
-export const NOT: Filter<Document> = { 'company.email': { $not: HABI }, 'company.name': { $not: TEST } };
+// `source = 'Formulario de Contacto'` es 100% spam de bots (los formularios de los sitios de Brokian
+// no tienen captcha: «Monkey Digital», «Video Promotion for…»). Medido ago-2026: 215 de 219 sin
+// atender nunca. Se excluye como Habi: no es demanda.
+export const NOT: Filter<Document> = {
+    'company.email': { $not: HABI }, 'company.name': { $not: TEST }, source: { $ne: 'Formulario de Contacto' },
+};
 /** property.company embebida — cierres y pipeline. */
 export const NOTP: Filter<Document> = {
     'property.company.email': { $not: HABI }, 'property.company.name': { $not: TEST },
@@ -51,8 +62,12 @@ const SRC_REGEX: Record<string, string> = {
     facebook: 'facebook|^fb$|^fb-|meta|^ig$|instagram|igshopping|^an$',
     whatsapp: 'whatsapp',
     pulppo: 'pulppo',
+    tokko: 'tokko',
+    telefono: 'tel[eé]fono principal',
+    doorvel: 'doorvel',
+    sitio: '^(sitio web|website)$',
 };
-const ORDEN = ['i24', 'meli', 'easybroker', 'propiedades', 'cyt', 'facebook', 'whatsapp', 'pulppo'];
+const ORDEN = ['i24', 'meli', 'easybroker', 'propiedades', 'cyt', 'facebook', 'whatsapp', 'pulppo', 'tokko', 'telefono', 'doorvel', 'sitio'];
 const COMP: Record<string, RegExp> = Object.fromEntries(
     Object.entries(SRC_REGEX).map(([k, v]) => [k, new RegExp(v, 'i')]));
 

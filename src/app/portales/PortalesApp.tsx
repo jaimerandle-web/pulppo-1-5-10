@@ -164,7 +164,7 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                 )}
 
 
-                {section !== 'inmobiliarias' && d.operacion !== 'todas' && (
+                {['costo', 'funnel', 'deal'].includes(section) && d.operacion !== 'todas' && (
                     <div style={{ marginBottom: 16 }}>
                         <Aviso tono="alerta">
                             Estás viendo <b>sólo {d.operacion === 'sale' ? 'venta' : 'renta'}</b>. Los leads,
@@ -619,10 +619,10 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                                         <th style={tth0}>8 semanas</th>
                                         <th style={tth}>Última</th>
                                         <th style={tth}>vs previa</th>
-                                        <th style={tth}>En curso</th>
+                                        <th style={tth}>Semana en curso</th>
                                         <th style={tth}>Mes a hoy</th>
-                                        <th style={tth}>Mes pasado</th>
-                                        <th style={tth}>Ritmo</th>
+                                        <th style={tth}>Mes pasado al mismo día</th>
+                                        <th style={tth}>Mes vs mes pasado</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -642,14 +642,17 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                             </table>
                         </div>
                         <div style={{ fontSize: 10.5, color: GRY, marginTop: -14, marginBottom: 20 }}>
-                            «En curso» es la semana que va corriendo y por eso no entra en la comparación.
-                            «Mes pasado» está cortado al mismo día del mes, no al mes completo.
+                            «Semana en curso» va corriendo y por eso no entra en la comparación. «Mes vs mes pasado»
+                            compara lo que lleva el mes contra el mes pasado cortado al mismo día (no contra el mes completo).
                         </div>
 
                         <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, fontWeight: 400, margin: '0 0 4px' }}>Atención</h2>
                         <div style={{ fontSize: 11.5, color: '#666', marginBottom: 10 }}>
                             Sólo leads que entraron entre 9:00 y 20:59 de México. Sin ese filtro, los de
                             madrugada disparan el «sin responder» y el número deja de significar algo.
+                            El «sin responder» va partido por asesor <b>con</b> y <b>sin</b> WhatsApp vinculado: sin vincular,
+                            el asesor contesta por fuera y Pulppo no lo registra, así que su porcentaje es en buena parte
+                            falta de registro, no abandono. El que hay que vigilar es el de los vinculados.
                         </div>
                         <div style={{ overflowX: 'auto', marginBottom: 20 }}>
                             <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 620 }}>
@@ -665,9 +668,21 @@ export default function PortalesApp({ d, pulso, hist, calidad, section, setSecti
                                         {pulso.resp.map((r, i) => <td key={i} style={ttd}>{r.pctLt60}%</td>)}
                                     </tr>
                                     <tr>
-                                        <td style={ttd0}>Sin responder</td>
+                                        <td style={ttd0}>Sin responder · todos</td>
                                         {pulso.resp.map((r, i) => (
                                             <td key={i} style={{ ...ttd, color: r.pctSin >= 5 ? RED : BLK, fontWeight: r.pctSin >= 5 ? 700 : 400 }}>{r.pctSin}%</td>
+                                        ))}
+                                    </tr>
+                                    <tr>
+                                        <td style={{ ...ttd0, paddingLeft: 20 }}>con WhatsApp vinculado</td>
+                                        {pulso.resp.map((r, i) => (
+                                            <td key={i} style={{ ...ttd, color: r.vinc.pctSin >= 5 ? RED : BLK }}>{r.vinc.pctSin}%<div style={{ fontSize: 10, color: GRY }}>{f0(r.vinc.tot)} leads</div></td>
+                                        ))}
+                                    </tr>
+                                    <tr>
+                                        <td style={{ ...ttd0, paddingLeft: 20 }}>sin WhatsApp vinculado</td>
+                                        {pulso.resp.map((r, i) => (
+                                            <td key={i} style={{ ...ttd, color: GRY }}>{r.noVinc.pctSin}%<div style={{ fontSize: 10 }}>{f0(r.noVinc.tot)} leads</div></td>
                                         ))}
                                     </tr>
                                     <tr>

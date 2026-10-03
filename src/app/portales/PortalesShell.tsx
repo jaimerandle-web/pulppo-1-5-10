@@ -15,7 +15,7 @@ import PortalesApp, { type Section } from './PortalesApp';
 import Presentacion, { SECCIONES, type SeccionP } from './Presentacion';
 
 type Vista = 'costo' | 'pulso' | 'historico' | 'periodo' | 'calidad';
-type Datos = { calidadQ?: string; costo?: PortalesView; pulso?: PulseView; historico?: HistoricoView; periodo?: PeriodoView; calidad?: CalidadView };
+type Datos = { calidadQ?: string; pulsoQ?: string; costo?: PortalesView; pulso?: PulseView; historico?: HistoricoView; periodo?: PeriodoView; calidad?: CalidadView };
 
 const DE_SECCION: Record<Section, Vista | null> = {
     costo: 'costo', funnel: 'costo', deal: 'costo',
@@ -35,11 +35,9 @@ export default function PortalesShell() {
 
     // Rango de MESES para todo lo que lleva costo (ver view.ts: la inversión es mensual).
     //
-    // Hay DOS estados a propósito: el BORRADOR (lo que estás tecleando) y lo APLICADO (lo que
-    // se consultó). Antes la consulta salía en cuanto tocabas un input: cambiar "desde" y luego
-    // "hasta" disparaba dos consultas de 20 s, la primera de un rango que nunca quisiste, y
-    // mientras tanto la pantalla seguía mostrando los números viejos sin avisar. Ahora nada se
-    // mueve hasta que le das Aplicar.
+    // Hay dos estados: el BORRADOR (lo que estás moviendo) y lo APLICADO (lo que se consultó). Ya no
+    // hay botón «Aplicar» (Ale, 2-oct-2026: «debería verse inmediato»): el borrador se aplica solo
+    // cuando se queda quieto 600 ms, así cambiar "desde" y luego "hasta" sigue siendo UNA consulta.
     const iniDesde = useMemo(() => { const d = new Date(hoy); d.setUTCMonth(d.getUTCMonth() - 5); return mesKey(d); }, [hoy]);
     const [desde, setDesde] = useState(iniDesde);
     const [hasta, setHasta] = useState(() => mesKey(hoy));
@@ -48,7 +46,11 @@ export default function PortalesShell() {
     const [bHasta, setBHasta] = useState(() => mesKey(hoy));
     const [bOper, setBOper] = useState<'todas' | 'sale' | 'rent'>('todas');
     const sucio = bDesde !== desde || bHasta !== hasta || bOper !== oper;
-    const aplicar = () => { setDesde(bDesde); setHasta(bHasta); setOper(bOper); };
+    useEffect(() => {
+        if (!sucio) return;
+        const t = setTimeout(() => { setDesde(bDesde); setHasta(bHasta); setOper(bOper); }, 600);
+        return () => clearTimeout(t);
+    }, [bDesde, bHasta, bOper, sucio]);
     // Rango de FECHAS exactas, sólo para contar leads.
     const [pDesde, setPDesde] = useState(() => iso(new Date(hoy.getTime() - 29 * 86400000)));
     const [pHasta, setPHasta] = useState(() => iso(hoy));
@@ -63,7 +65,7 @@ export default function PortalesShell() {
         fetch(`/api/portales?view=${v}${q}${refresh ? '&refresh=1' : ''}`)
             .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(j.error ?? r.statusText))))
             .then((j) => {
-                setD((p) => ({ ...p, [v]: j, ...(v === 'calidad' ? { calidadQ: q } : {}) }));
+                setD((p) => ({ ...p, [v]: j, ...(v === 'calidad' ? { calidadQ: q } : {}), ...(v === 'pulso' ? { pulsoQ: q } : {}) }));
                 setAt((p) => ({ ...p, [v]: j.cacheAt ?? Date.now() }));
             })
             .catch((e) => setErr(String(e)))
@@ -71,6 +73,7 @@ export default function PortalesShell() {
     }, []);
 
     const qCosto = `&desde=${desde}&hasta=${hasta}&operacion=${oper}`;
+    const qOper = `&operacion=${oper}`;
     const qPeriodo = `&desde=${pDesde}&hasta=${pHasta}`;
 
     // La vista de costo se recarga cuando cambia el rango de meses.
@@ -81,8 +84,10 @@ export default function PortalesShell() {
         if (!v || v === 'costo' || cargando === v) return;
         // Calidad usa el MISMO rango y filtro que costo, así que se repide cuando cambian.
         if (v === 'calidad') { if (d.calidadQ !== qCosto) cargar('calidad', qCosto); return; }
+        // El pulso es semanal: no usa el rango de meses, sólo venta/renta.
+        if (v === 'pulso') { if (d.pulsoQ !== qOper) cargar('pulso', qOper); return; }
         if (!d[v]) cargar(v);
-    }, [section, d, cargando, cargar, qCosto]);
+    }, [section, d, cargando, cargar, qCosto, qOper]);
     // El periodo sólo si está prendido en presentación.
     useEffect(() => {
         if (modo === 'presentacion' && secs.has('periodo') && cargando !== 'periodo') cargar('periodo', qPeriodo);
@@ -92,12 +97,20 @@ export default function PortalesShell() {
     const inp: React.CSSProperties = { padding: '6px 8px', border: `1px solid ${LGT}`, borderRadius: 2, fontSize: 12, fontFamily: 'inherit', color: BLK };
 
     const OPS: Array<['todas' | 'sale' | 'rent', string]> = [['todas', 'Todo'], ['sale', 'Venta'], ['rent', 'Renta']];
-    const controles = (
+    // Cada sección muestra SÓLO los filtros que de verdad la mueven: el pulso es semanal (no usa
+    // meses) y el histórico no usa ninguno. Antes se veían los dos en todas y parecía que no cargaban.
+    const usaMeses = modo === 'presentacion' || section === 'costo' || section === 'funnel' || section === 'deal' || section === 'calidad';
+    const usaOper = usaMeses || section === 'pulso';
+    const controles = !usaOper ? (
+        <span style={{ fontSize: 11.5, color: GRY }}>Esta vista no usa filtros: siempre muestra el histórico completo.</span>
+    ) : (
         <>
+            {usaMeses && <>
             <label style={{ fontSize: 11, color: GRY, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px' }}>Meses</label>
             <input type="month" value={bDesde} max={bHasta} onChange={(e) => setBDesde(e.target.value)} style={inp} />
             <span style={{ color: GRY, fontSize: 12 }}>a</span>
             <input type="month" value={bHasta} min={bDesde} max={mesKey(hoy)} onChange={(e) => setBHasta(e.target.value)} style={inp} />
+            </>}
             <span style={{ display: 'inline-flex', border: `1px solid ${LGT}`, borderRadius: 2, overflow: 'hidden', marginLeft: 4 }}>
                 {OPS.map(([k, lbl]) => (
                     <button key={k} onClick={() => setBOper(k)} style={{
@@ -107,12 +120,7 @@ export default function PortalesShell() {
                     }}>{lbl}</button>
                 ))}
             </span>
-            <button onClick={aplicar} disabled={!sucio || !!cargando} style={{
-                padding: '6px 13px', borderRadius: 2, border: `1px solid ${sucio ? BLK : LGT}`,
-                background: sucio && !cargando ? BLK : '#fff', color: sucio && !cargando ? '#fff' : GRY,
-                fontSize: 11.5, fontWeight: 700, cursor: sucio && !cargando ? 'pointer' : 'default', fontFamily: 'inherit',
-            }}>{cargando === 'costo' ? 'Consultando…' : 'Aplicar'}</button>
-            {sucio && !cargando && <span style={{ fontSize: 11, color: '#8A6D00' }}>sin aplicar</span>}
+            {(sucio || cargando) && <span style={{ fontSize: 11.5, color: '#8A6D00', fontWeight: 700 }}>Actualizando…</span>}
         </>
     );
 
@@ -164,7 +172,7 @@ export default function PortalesShell() {
             section={section} setSection={setSection}
             cacheAt={(vistaActual && at[vistaActual]) ?? null}
             cargando={cargando !== null}
-            onRefresh={() => { if (vistaActual) cargar(vistaActual, vistaActual === 'costo' ? qCosto : '', true); }}
+            onRefresh={() => { if (vistaActual) cargar(vistaActual, vistaActual === 'costo' || vistaActual === 'calidad' ? qCosto : vistaActual === 'pulso' ? qOper : '', true); }}
             controles={controles}
             onPresentar={() => setModo('presentacion')}
         />
