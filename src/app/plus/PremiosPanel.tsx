@@ -2,7 +2,7 @@
 // Premios del año en el Salón de la fama: preview en vivo, acumulado y SIEMPRE con comisión
 // cobrada. Cambia cada mes hasta diciembre; la lista final sale de aquí mismo.
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import type { Premios, PremioBroker } from '@/lib/premios';
+import type { Premios, Lugar } from '@/lib/premios';
 import type { Level } from '@/lib/plus';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
@@ -15,8 +15,18 @@ const LVL: Record<Level, { base: string; soft: string; lbl: string }> = {
 };
 const money = (n?: number | null) => (n == null || isNaN(n) ? '—' : `$${Math.round(n).toLocaleString('en-US')}`);
 const mill = (n: number) => (n >= 1e6 ? `$${(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : money(n));
-const pct = (n?: number | null) => (n == null ? '—' : `${(n * 100).toFixed(1)}%`);
 const serif: CSSProperties = { fontFamily: 'EB Garamond, serif' };
+
+function fmtV(l: Lugar): string {
+    switch (l.fmt) {
+        case 'money': return mill(l.value);
+        case 'pct': return `${(l.value * 100).toFixed(1)}%`;
+        case 'int': return l.value.toLocaleString('es-MX');
+        case 'score': return l.value.toFixed(0);
+        case 'dias': return `${l.value.toFixed(l.value < 10 ? 1 : 0)} días`;
+        case 'min': return l.value < 60 ? `${Math.round(l.value)} min` : `${(l.value / 60).toFixed(1)} h`;
+    }
+}
 
 function Avatar({ src, name, color, size = 30 }: { src?: string | null; name: string; color: string; size?: number }) {
     const ini = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
@@ -36,25 +46,38 @@ function Card({ titulo, nota, children, acento = BLK }: { titulo: string; nota?:
     );
 }
 
-function Fila({ i, children, valor, sub }: { i: number; children: ReactNode; valor: string; sub?: string }) {
+/** Podio genérico: con foto si es persona (trae `photo` definido), sin foto si es inmobiliaria. */
+function Podio({ rows, color, vacio = 'Sin datos suficientes todavía.' }: { rows: Lugar[]; color: string; vacio?: string }) {
+    if (!rows.length) return <div style={{ fontSize: 11.5, color: GRY }}>{vacio}</div>;
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 0', borderBottom: `1px solid ${LGT}` }}>
-            <span style={{ ...serif, fontSize: 16, color: i === 0 ? YEL : GRY, width: 14, textAlign: 'center', flexShrink: 0 }}>{i + 1}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ ...serif, fontSize: 15 }}>{valor}</div>
-                {sub && <div style={{ fontSize: 10, color: GRY }}>{sub}</div>}
-            </div>
-        </div>
+        <>
+            {rows.map((l, i) => (
+                <div key={l.name + i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 0', borderBottom: `1px solid ${LGT}` }}>
+                    <span style={{ ...serif, fontSize: 16, color: i === 0 ? YEL : GRY, width: 14, textAlign: 'center', flexShrink: 0 }}>{i + 1}</span>
+                    {l.photo !== undefined && <Avatar src={l.photo} name={l.name} color={color} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: i === 0 ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</div>
+                        {(l.company || (l.photo === undefined && l.sub)) && (
+                            <div style={{ fontSize: 10.5, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {l.photo !== undefined ? l.company : l.sub}
+                            </div>
+                        )}
+                        {l.nota && <div style={{ fontSize: 9.5, color: '#999', lineHeight: 1.3, marginTop: 2 }}>{l.nota}</div>}
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, maxWidth: 120 }}>
+                        <div style={{ ...serif, fontSize: 15 }}>{fmtV(l)}</div>
+                        {l.photo !== undefined && l.sub && <div style={{ fontSize: 10, color: GRY }}>{l.sub}</div>}
+                    </div>
+                </div>
+            ))}
+        </>
     );
 }
 
-const Nombre = ({ n, s, bold }: { n: string; s?: string | null; bold?: boolean }) => (
-    <>
-        <div style={{ fontSize: 12.5, fontWeight: bold ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n}</div>
-        {s && <div style={{ fontSize: 10.5, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s}</div>}
-    </>
+const Seccion = ({ t }: { t: string }) => (
+    <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, color: '#888', margin: '20px 0 9px', borderBottom: `1px solid ${LGT}`, paddingBottom: 5 }}>{t}</div>
 );
+const grid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 };
 
 export default function PremiosPanel({ year }: { year: number }) {
     const [p, setP] = useState<Premios | null>(null);
@@ -84,18 +107,8 @@ export default function PremiosPanel({ year }: { year: number }) {
     );
 
     if (err) return <div style={{ marginBottom: 26 }}>{head}<div style={{ color: RED, fontSize: 12.5 }}>No pude calcular los premios: {err}</div></div>;
-    if (!p) return <div style={{ marginBottom: 26 }}>{head}<div style={{ color: GRY, fontSize: 12.5 }}>Calculando el año desde Mongo (≈30 s la primera vez)…</div></div>;
+    if (!p) return <div style={{ marginBottom: 26 }}>{head}<div style={{ color: GRY, fontSize: 12.5 }}>Calculando el año desde Mongo (≈40 s la primera vez)…</div></div>;
 
-    const brokerList = (rows: PremioBroker[], lv: Level) => rows.map((b, i) => (
-        <Fila key={b.name + i} i={i} valor={mill(b.value)} sub={`${b.nops} ${b.nops === 1 ? 'op' : 'ops'}`}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
-                <Avatar src={b.photo} name={b.name} color={LVL[lv].base} />
-                <div style={{ minWidth: 0 }}>
-                    <Nombre n={b.name} s={[b.company, b.levelHoy && b.levelHoy !== lv ? `hoy ${LVL[b.levelHoy as Level]?.lbl ?? b.levelHoy}` : null].filter(Boolean).join(' · ')} bold={i === 0} />
-                </div>
-            </div>
-        </Fila>
-    ));
     const bda = p.brokerDelAño;
 
     return (
@@ -103,17 +116,17 @@ export default function PremiosPanel({ year }: { year: number }) {
             {head}
 
             {/* Los dos premios mayores, arriba y en grande */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginBottom: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
                 <div style={{ background: BLK, color: '#fff', borderRadius: R, padding: '16px 18px' }}>
                     <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.14em', fontWeight: 700, color: GRY }}>Inmobiliaria del año</div>
                     {p.inmoDelAño[0] && <>
                         <div style={{ ...serif, fontSize: 28, margin: '6px 0 2px' }}>{p.inmoDelAño[0].name}</div>
-                        <div style={{ ...serif, fontSize: 19, color: YEL }}>{money(p.inmoDelAño[0].value)} <span style={{ fontSize: 12, color: GRY, fontFamily: 'inherit' }}>cobrados · {p.inmoDelAño[0].nops} ops</span></div>
+                        <div style={{ ...serif, fontSize: 19, color: YEL }}>{money(p.inmoDelAño[0].value)} <span style={{ fontSize: 12, color: GRY, fontFamily: 'inherit' }}>cobrados · {p.inmoDelAño[0].sub}</span></div>
                     </>}
                     <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,.12)' }}>
                         {p.inmoDelAño.slice(1).map((r, i) => (
                             <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-                                <span><span style={{ ...serif, color: GRY, marginRight: 8 }}>{i + 2}</span>{r.name}{r.onboarding && <span style={{ color: GRY }}> · onboarding</span>}</span>
+                                <span><span style={{ ...serif, color: GRY, marginRight: 8 }}>{i + 2}</span>{r.name}{r.nota && <span style={{ color: GRY }}> · {r.nota}</span>}</span>
                                 <span style={serif}>{mill(r.value)}</span>
                             </div>
                         ))}
@@ -127,66 +140,98 @@ export default function PremiosPanel({ year }: { year: number }) {
                             <div>
                                 <div style={{ ...serif, fontSize: 26, lineHeight: 1.1 }}>{bda.name}</div>
                                 <div style={{ fontSize: 12, color: '#6E4F22', marginTop: 2 }}>{bda.company}</div>
-                                <div style={{ ...serif, fontSize: 19, marginTop: 6 }}>{money(bda.value)} <span style={{ fontSize: 11.5, color: '#777', fontFamily: 'inherit' }}>cobrados como élite · {bda.nops} ops</span></div>
+                                <div style={{ ...serif, fontSize: 19, marginTop: 6 }}>{money(bda.value)} <span style={{ fontSize: 11.5, color: '#777', fontFamily: 'inherit' }}>cobrados en el año · {bda.sub}</span></div>
                             </div>
                         </div>
                     ) : <div style={{ fontSize: 12, color: GRY, marginTop: 8 }}>Sin datos.</div>}
-                    <div style={{ fontSize: 10.5, color: '#777', marginTop: 12 }}>El #1 de élite del año. Su parte por rol (comprador 50 / vendedor 25 / productor 25).</div>
+                    <div style={{ fontSize: 10.5, color: '#777', marginTop: 12 }}>El #1 de los que hoy son élite. Su parte por rol (comprador 50 / vendedor 25 / productor 25).</div>
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+            <Seccion t="Brokers por nivel" />
+            <div style={grid}>
                 {(['elite', 'professional', 'standard'] as Level[]).map((lv) => (
                     <Card key={lv} titulo={`Premio Broker ${LVL[lv].lbl}`} acento={LVL[lv].base}
-                        nota="Top 5. Cada peso cuenta en el nivel que tenía el asesor el mes del cobro.">
-                        {brokerList(p.brokers[lv], lv)}
+                        nota="Top 5. Compiten en el nivel que tienen hoy, con todo lo cobrado en el año.">
+                        <Podio rows={p.brokers[lv]} color={LVL[lv].base} />
                     </Card>
                 ))}
+            </div>
 
-                <Card titulo="Inmobiliaria con el mejor desempeño" acento={SEA}
+            <Seccion t="Inmobiliarias" />
+            <div style={grid}>
+                <Card titulo="Mejor desempeño" acento={SEA}
                     nota="Puntaje 0–100: cobrado, crecimiento vs mismo periodo del año pasado, conversión lead→cierre y visitas por lead (25% c/u). Mínimo 200 leads.">
-                    {p.desempeño.map((r, i) => (
-                        <Fila key={r.name} i={i} valor={(r.extra?.puntaje ?? 0).toFixed(0)}
-                            sub={`crec ${r.extra?.crecimiento == null ? '—' : `${r.extra.crecimiento >= 0 ? '+' : ''}${Math.round(r.extra.crecimiento * 100)}%`} · conv ${pct(r.extra?.conversion)}`}>
-                            <Nombre n={r.name} s={`${mill(r.value)} cobrados`} bold={i === 0} />
-                        </Fila>
-                    ))}
+                    <Podio rows={p.desempeño} color={SEA} />
                 </Card>
-
-                <Card titulo="Ticket promedio de facturación" acento={BLK} nota="Valor promedio de lo vendido. Mínimo 5 ventas con cobro en el año.">
-                    {p.ticket.map((r, i) => (
-                        <Fila key={r.name} i={i} valor={mill(r.value)} sub={`${r.extra?.ventas ?? 0} ventas`}>
-                            <Nombre n={r.name} bold={i === 0} />
-                        </Fila>
-                    ))}
+                <Card titulo="Ticket promedio de facturación" nota="Valor promedio de lo vendido. Mínimo 5 ventas con cobro en el año.">
+                    <Podio rows={p.ticket} color={BLK} />
                 </Card>
+                <Card titulo="Inmobiliarias nuevas · top 3" acento={YEL} nota="Las que entraron a Pulppo este año, por lo cobrado.">
+                    <Podio rows={p.nuevasInmo} color={YEL} />
+                </Card>
+                <Card titulo="Mejor tasa de visita" acento={SEA} nota="De los contactos con lead en el año, cuántos llegaron a visita con la misma inmobiliaria. Mínimo 200 leads.">
+                    <Podio rows={p.tasaVisita} color={SEA} />
+                </Card>
+                <Card titulo="Mejor calidad de inventario" nota="% del inventario publicado hoy con ficha en calidad Alta. Mínimo 30 propiedades.">
+                    <Podio rows={p.calidad} color={BLK} />
+                </Card>
+                <Card titulo="Más operaciones en conjunto" acento={YEL} nota="Pares de inmobiliarias de la red que más operaciones cobraron juntas (una de cada lado).">
+                    <Podio rows={p.conjunto} color={YEL} />
+                </Card>
+            </div>
 
+            <Seccion t="Asesores" />
+            <div style={grid}>
+                <Card titulo="Racha élite" acento={LVL.elite.base} nota="Más meses seguidos en élite, vigentes hoy.">
+                    <Podio rows={p.racha} color={LVL.elite.base} />
+                </Card>
+                <Card titulo="Revelación del año" acento={YEL} nota="Más niveles subidos de enero a hoy. Empate → más cobrado.">
+                    <Podio rows={p.revelacion} color={YEL} />
+                </Card>
+                <Card titulo="Respuesta relámpago" acento={SEA} nota="Mediana del tiempo de respuesta a sus leads del año, sin respuestas automáticas (<10 s). Mínimo 50 leads respondidos.">
+                    <Podio rows={p.relampago} color={SEA} />
+                </Card>
+                <Card titulo="Mejor lead a cierre" acento={SEA} nota="Contactos que le llegaron como lead este año y le compraron. Mínimo 100 leads.">
+                    <Podio rows={p.leadCierre} color={SEA} />
+                </Card>
+                <Card titulo="Captador del año" nota="Exclusivas firmadas con fecha de inicio en el año (contrato completado).">
+                    <Podio rows={p.captador} color={BLK} />
+                </Card>
+                <Card titulo="Más rentas cerradas" nota="Rentas con cobro en el año en las que participó (cualquier rol).">
+                    <Podio rows={p.rentas} color={BLK} />
+                </Card>
                 <Card titulo="Mayor cantidad de insignias" acento={YEL} nota="Ganadas en el año, sin Academy. Empate → gana quien tiene las más difíciles.">
-                    {p.insignias.map((r, i) => (
-                        <Fila key={r.name + i} i={i} valor={`${r.n}`} sub="insignias">
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
-                                <Avatar src={r.photo} name={r.name} color={YEL} />
-                                <div style={{ minWidth: 0 }}>
-                                    <Nombre n={r.name} s={r.company} bold={i === 0} />
-                                    <div style={{ fontSize: 9.5, color: '#999', whiteSpace: 'normal', lineHeight: 1.3, marginTop: 2 }}>{r.cuales.join(' · ')}</div>
-                                </div>
-                            </div>
-                        </Fila>
-                    ))}
+                    <Podio rows={p.insignias} color={YEL} />
                 </Card>
+            </div>
 
+            <Seccion t="Récords" />
+            <div style={grid}>
+                <Card titulo="Venta de mayor valor" acento={YEL} nota="Valor de cierre, ventas con cobro en el año.">
+                    <Podio rows={p.ventaMayor} color={YEL} />
+                </Card>
+                <Card titulo="Venta más rápida" acento={SEA} nota="Del primer lead del comprador al cierre. Sólo si el lead llegó antes de abrir la operación (si no, se capturó tarde).">
+                    <Podio rows={p.ventaRapida} color={SEA} />
+                </Card>
+            </div>
+
+            <Seccion t="Ascensos del año" />
+            <div style={grid}>
                 <Card titulo={`Nuevos élite · ${p.nuevosElite.length}`} acento={LVL.elite.base} nota="Llegaron a élite por primera vez este año. En gris: ya bajaron.">
                     <div style={{ display: 'grid', gap: 6 }}>
                         {p.nuevosElite.map((n) => (
                             <div key={n.name} style={{ display: 'flex', gap: 8, alignItems: 'center', opacity: n.sigue ? 1 : .45 }}>
                                 <Avatar src={n.photo} name={n.name} color={LVL.elite.base} size={26} />
-                                <div style={{ flex: 1, minWidth: 0 }}><Nombre n={n.name} s={n.company} /></div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 12.5, fontWeight: 500 }}>{n.name}</div>
+                                    <div style={{ fontSize: 10.5, color: '#888' }}>{n.company}</div>
+                                </div>
                                 <span style={{ fontSize: 10.5, color: '#888', textTransform: 'capitalize' }}>{n.mes}</span>
                             </div>
                         ))}
                     </div>
                 </Card>
-
                 <Card titulo={`Nuevos profesionales · ${p.nuevosPro.length}`} acento={LVL.professional.base} nota="Llegaron a profesional (o directo a élite) por primera vez este año. En gris: ya bajaron.">
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                         {(verPro ? p.nuevosPro : p.nuevosPro.slice(0, 18)).map((n) => (
@@ -205,7 +250,7 @@ export default function PremiosPanel({ year }: { year: number }) {
             </div>
 
             {p.pendiente.length > 0 && (
-                <div style={{ marginTop: 12, padding: '10px 13px', background: '#FBF3D9', borderRadius: R, fontSize: 11.5, lineHeight: 1.5 }}>
+                <div style={{ marginTop: 14, padding: '10px 13px', background: '#FBF3D9', borderRadius: R, fontSize: 11.5, lineHeight: 1.5 }}>
                     <b>Ojo antes de anunciar:</b> estas inmobiliarias tienen operaciones cerradas en el año que todavía no se cobran, y con cobrada no cuentan:{' '}
                     {p.pendiente.map((x, i) => (
                         <span key={x.name}>{i > 0 && ' · '}<b>{x.name}</b> {mill(x.porCobrar)} por cobrar</span>
