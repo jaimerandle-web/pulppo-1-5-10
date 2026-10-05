@@ -31,6 +31,7 @@ const MIN_LEADS_BROKER = 100;   // lead→cierre por asesor
 const MIN_RESP_BROKER = 50;     // leads respondidos para "respuesta relámpago"
 const MIN_PROPS_CALIDAD = 30;   // inventario publicado para "mejor calidad de inventario"
 const MIN_VENTAS_TICKET = 5;
+const MIN_VALOR_RAPIDA = 2_000_000;  // venta más rápida: sin terrenos ni tickets chicos (decisión de Ale)
 
 // Un lugar en un podio. `value` es la métrica principal (formateada según `fmt`); `sub` va en chico.
 export interface Lugar { name: string; company?: string | null; photo?: string | null; value: number; fmt: 'money' | 'pct' | 'int' | 'dias' | 'min' | 'score'; sub?: string; nota?: string }
@@ -210,7 +211,7 @@ export async function fetchPremios(year: number): Promise<Premios> {
     const ventasCerradas: { id: string; cid: string; raw: unknown; closed: Date; created: Date | null; brand: string; e: string; v: number }[] = [];
     for await (const o of db.collection('operations').find(
         { closedAt: { $gte: INI, $lt: FIN }, 'status.last': { $in: ['closed', 'paying'] } },
-        { projection: { id: 1, closedAt: 1, createdAt: 1, company: 1, 'buyer.contact._id': 1, 'buyer.broker.email': 1, 'property.listing.operation': 1, 'closeValue.value': 1 } })) {
+        { projection: { id: 1, closedAt: 1, createdAt: 1, company: 1, 'buyer.contact._id': 1, 'buyer.broker.email': 1, 'property.listing.operation': 1, 'property.type': 1, 'closeValue.value': 1 } })) {
         const b = (o.buyer as Document) ?? {};
         const e = String(((b.broker as Document) ?? {}).email ?? '');
         const raw = ((b.contact as Document) ?? {})._id;
@@ -220,7 +221,10 @@ export async function fetchPremios(year: number): Promise<Premios> {
         if (k && leadsC.get(k)?.has(cid)) { const s = cerr.get(k) ?? new Set<string>(); s.add(cid); cerr.set(k, s); }
         if (leadsCA.get(e)?.has(cid)) { const s = cerrA.get(e) ?? new Set<string>(); s.add(cid); cerrA.set(e, s); }
         const c = brandOf(o.company as Document);
-        if (!c.out && (((o.property as Document) ?? {}).listing as Document ?? {})?.operation === 'sale') {
+        const tipo = String(((o.property as Document) ?? {}).type ?? '');
+        const valor = num(((o.closeValue as Document) ?? {}).value);
+        if (!c.out && (((o.property as Document) ?? {}).listing as Document ?? {})?.operation === 'sale'
+            && valor >= MIN_VALOR_RAPIDA && !/terreno|lote/i.test(tipo)) {
             ventasCerradas.push({ id: String(o.id), cid, raw, closed: o.closedAt as Date, created: isDate(o.createdAt) ? o.createdAt : null, brand: c.brand, e, v: num(((o.closeValue as Document) ?? {}).value) });
         }
     }
@@ -358,7 +362,9 @@ export async function fetchPremios(year: number): Promise<Premios> {
     const ventaMayor: Lugar[] = ventas.sort((a, b) => b.v - a.v).slice(0, 3)
         .map((x) => ({ name: nm(x.brand), value: x.v, fmt: 'money', sub: x.e ? `${am.name.get(x.e) ?? x.e} · ${x.id}` : x.id }));
 
-    // venta más rápida: del primer lead del comprador al cierre. Sólo cuenta si el lead es
+    // venta más rápida: del primer lead del comprador al cierre. Sólo ventas de $2M+ y sin
+    // terrenos (un terreno de $600K entre dos asesores de la misma familia ganaba con 13 días).
+    // Sólo cuenta si el lead es
     // ANTERIOR a que se abriera la operación: si no, el lead se capturó tarde y el cliente ya
     // venía de antes (la venta de $61.8M de enero tenía la operación abierta desde oct-2025 y
     // el "lead" 6 días antes del cierre). Menos de 1 día también se descarta.

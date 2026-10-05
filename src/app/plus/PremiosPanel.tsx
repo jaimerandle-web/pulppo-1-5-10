@@ -211,7 +211,7 @@ export default function PremiosPanel({ year }: { year: number }) {
                 <Card titulo="Venta de mayor valor" acento={YEL} nota="Valor de cierre, ventas con cobro en el año.">
                     <Podio rows={p.ventaMayor} color={YEL} />
                 </Card>
-                <Card titulo="Venta más rápida" acento={SEA} nota="Del primer lead del comprador al cierre. Sólo si el lead llegó antes de abrir la operación (si no, se capturó tarde).">
+                <Card titulo="Venta más rápida" acento={SEA} nota="Del primer lead del comprador al cierre. Ventas de $2M o más, sin terrenos, y sólo si el lead llegó antes de abrir la operación.">
                     <Podio rows={p.ventaRapida} color={SEA} />
                 </Card>
             </div>
