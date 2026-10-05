@@ -61,6 +61,8 @@ export interface AgentMaps {
     photo: Map<string, string | null>;
     uidEmail: Map<string, string>;
     name: Map<string, string>;
+    /** [nombre(s), apellido(s)] por separado: las imágenes del ranking los parten en dos renglones. */
+    parts: Map<string, [string, string]>;
     company: Map<string, string | null>;
     hist: Map<string, [Date, Level][]>;
     pulppo: Set<string>;
@@ -69,7 +71,7 @@ export interface AgentMaps {
 export async function agentMaps(): Promise<AgentMaps> {
     const db = await getDb();
     const m: AgentMaps = {
-        level: new Map(), photo: new Map(), uidEmail: new Map(), name: new Map(),
+        level: new Map(), photo: new Map(), uidEmail: new Map(), name: new Map(), parts: new Map(),
         company: new Map(), hist: new Map(), pulppo: new Set(),
     };
     const cur = db.collection('agents').find({}, {
@@ -84,6 +86,7 @@ export async function agentMaps(): Promise<AgentMaps> {
         m.pulppo.add(e);
         if (a.uid) m.uidEmail.set(a.uid as string, e);
         m.name.set(e, `${a.firstName ?? ''} ${a.lastName ?? ''}`.trim());
+        m.parts.set(e, [String(a.firstName ?? '').trim(), String(a.lastName ?? '').trim()]);
         const c = a.company as Document | undefined;
         m.company.set(e, c && typeof c === 'object' ? ((c.name as string) ?? null) : null);
         const hs: [Date, Level][] = ((a.levelHistory as Document[]) ?? [])
@@ -95,17 +98,22 @@ export async function agentMaps(): Promise<AgentMaps> {
     return m;
 }
 
-export interface CompanyMeta { integ: Date | null; tuhabi: boolean }
+export interface CompanyMeta { integ: Date | null; tuhabi: boolean; logo: string | null }
 
 export async function companyMetaMap(): Promise<Map<string, CompanyMeta>> {
     const db = await getDb();
     const out = new Map<string, CompanyMeta>();
-    const cur = db.collection('companies').find({}, { projection: { integratedAt: 1, 'domain.host': 1 } });
+    const cur = db.collection('companies').find({}, { projection: { integratedAt: 1, 'domain.host': 1, 'logo.default': 1 } });
     for await (const c of cur) {
         const host = String(((c.domain as Document) ?? {}).host ?? '');
         out.set(String(c._id), {
             integ: isDate(c.integratedAt) ? (c.integratedAt as Date) : null,
             tuhabi: host.toLowerCase().includes('tuhabi'),
+            // 7,800 companies traen el placeholder genérico de Inmuebles24 como logo: eso no es logo.
+            logo: (() => {
+                const u = (((c.logo as Document) ?? {}).default as string) || '';
+                return u && !/placeholder-img/.test(u) ? u : null;
+            })(),
         });
     }
     return out;
@@ -114,7 +122,7 @@ export async function companyMetaMap(): Promise<Map<string, CompanyMeta>> {
 const isTuhabi = (meta: Map<string, CompanyMeta> | undefined, cid: string) => !!meta?.get(cid)?.tuhabi;
 
 // ── rankings de inmobiliarias ──────────────────────────────────────
-export interface CompanyRow { name: string | null; value: number; nops: number; onboarding: boolean }
+export interface CompanyRow { id: string; name: string | null; value: number; nops: number; onboarding: boolean; logo: string | null }
 
 /** {companyId: [nombre, valor, nOps]} del mes/métrica. Excluye demos y TuHabi. */
 export async function companyValueByMonth(
@@ -171,7 +179,7 @@ export async function topCompanies(
         // Regla de Ale: con fecha en integratedAt = consultoría; sin fecha = onboarding.
         const isOnb = (meta.get(cid)?.integ ?? null) === null;
         if (onboarding && !isOnb) continue;
-        rows.push({ name: r.name, value: r.value, nops: r.nops, onboarding: isOnb });
+        rows.push({ id: cid, name: r.name, value: r.value, nops: r.nops, onboarding: isOnb, logo: meta.get(cid)?.logo ?? null });
     }
     rows.sort((a, b) => b.value - a.value);
     return rows.slice(0, n);
@@ -254,7 +262,7 @@ export async function brokerValueByMonth(
     return { acc, nops };
 }
 
-export interface BrokerRow { email: string; name: string; company: string | null; value: number; nops: number; photo: string | null }
+export interface BrokerRow { email: string; name: string; first: string; last: string; company: string | null; value: number; nops: number; photo: string | null }
 export interface BrokerOp { op: string; inmo: string | null; calle: string | null; comisionDeal: number; parte: number; roles: string }
 
 /** Las operaciones que componen la comisión de un asesor en el mes: qué deal, su rol,
@@ -317,7 +325,8 @@ export async function topBrokersByLevel(
         const lv = am.level.get(e) as Level | null | undefined;
         if (lv && lv in by) {
             by[lv].push({
-                email: e, name: am.name.get(e) ?? '?', company: am.company.get(e) ?? null,
+                email: e, name: am.name.get(e) ?? '?',
+                first: am.parts.get(e)?.[0] ?? '', last: am.parts.get(e)?.[1] ?? '', company: am.company.get(e) ?? null,
                 value: v, nops: nops.get(e) ?? 0, photo: am.photo.get(e) ?? null,
             });
         }

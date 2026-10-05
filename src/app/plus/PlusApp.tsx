@@ -7,6 +7,7 @@
 // oficiales, así que aquí no hay ninguno.
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { PlusData, Level, Metric, BrokerRow } from '@/lib/plus';
+import RankingImages from './RankingImages';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2;
@@ -26,7 +27,7 @@ const LVL: Record<Level, { base: string; soft: string; ink: string }> = {
 };
 const ORDEN_LVL: Level[] = ['elite', 'professional', 'standard'];
 
-type Section = 'cierre' | 'fama' | 'carrera' | 'comoleer';
+type Section = 'cierre' | 'fama' | 'carrera' | 'imagenes' | 'comoleer';
 
 function Kpi({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
     return (
@@ -223,7 +224,8 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
             <div style={{ display: 'flex', gap: 22, padding: '20px 26px', alignItems: 'flex-start' }}>
                 <div style={{ width: 190, flexShrink: 0, position: 'sticky', top: 20 }}>
                     {nav('cierre', 'Cierre del mes')}{nav('fama', 'Salón de la fama')}
-                    {nav('carrera', 'La carrera')}{nav('comoleer', 'Cómo leer esto')}
+                    {nav('carrera', 'La carrera')}{nav('imagenes', 'Imágenes del ranking')}
+                    {nav('comoleer', 'Cómo leer esto')}
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -427,6 +429,9 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
                             </div>
                         </div>
                     )}
+
+                    {/* key: al cambiar mes o métrica se descartan las ediciones del mes anterior */}
+                    {section === 'imagenes' && <RankingImages key={`${d.year}-${d.month}-${d.metric}`} d={d} />}
 
                     {section === 'comoleer' && (
                         <div style={{ maxWidth: 720 }}>
