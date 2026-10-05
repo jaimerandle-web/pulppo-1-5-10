@@ -8,6 +8,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { PlusData, Level, Metric, BrokerRow } from '@/lib/plus';
 import RankingImages from './RankingImages';
+import PremiosPanel from './PremiosPanel';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2;
@@ -289,6 +290,7 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
 
                     {section === 'fama' && (
                         <div>
+                            <PremiosPanel year={d.year} />
                             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
                                 <Kpi label="Élite hoy" value={f(eliteHoy)} sub="según el último corte" />
                                 <Kpi label="Rachas vigentes" value={f(d.vigentes.length)} />

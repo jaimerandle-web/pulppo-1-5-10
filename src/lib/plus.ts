@@ -25,7 +25,7 @@ const ORDER: Record<string, number> = { standard: 1, professional: 2, elite: 3 }
 const DEMO_RE = /demo|testing|prueba|tu360|pulppo\.com|inmobiliaria demo/i;
 export type Metric = 'cobrada' | 'total';
 
-const isDemo = (n?: string | null) => !!n && DEMO_RE.test(n);
+export const isDemo = (n?: string | null) => !!n && DEMO_RE.test(n);
 const isDate = (v: unknown): v is Date => v instanceof Date && !isNaN(v.getTime());
 
 const DAY_MS = 86_400_000;
@@ -37,7 +37,7 @@ const mxDay = (d: Date) => Math.floor((d.getTime() - 6 * 3_600_000) / DAY_MS);
  *  KAMs hacen tras cerrar el último día del mes, y ellas lo cuentan en el mes del cierre
  *  (p. ej. Quatre 705-GUAR-PATR: cierre 31-ago, pago 1-sep → agosto). Pagos anticipados o
  *  muy posteriores al cierre se quedan en su propio mes. */
-function paymentDate(p: Document, closedAt: unknown): Date | null {
+export function paymentDate(p: Document, closedAt: unknown): Date | null {
     if (!isDate(p.createdAt)) return null;
     if (isDate(closedAt) && p.createdAt > closedAt) {
         const gap = mxDay(p.createdAt) - mxDay(closedAt);
@@ -186,7 +186,7 @@ export async function topCompanies(
 }
 
 // ── split de comisión por rol ──────────────────────────────────────
-function splitByRole(o: Document, amount: number, pulppo: Set<string>): Map<string, number> {
+export function splitByRole(o: Document, amount: number, pulppo: Set<string>): Map<string, number> {
     const be = (((o.buyer as Document) ?? {}).broker as Document ?? {})?.email as string | undefined;
     const se = (((o.seller as Document) ?? {}).broker as Document ?? {})?.email as string | undefined;
     const pe = (((o.property as Document) ?? {}).agent as Document ?? {})?.email as string | undefined;
