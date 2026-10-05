@@ -437,34 +437,55 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                         <h1 style={{ fontFamily: 'EB Garamond, serif', fontSize: 28, fontWeight: 400, margin: '0 0 14px' }}>
                             Cómo leer esto
                         </h1>
+                        <div style={{ fontSize: 12.5, color: '#555', lineHeight: 1.6, marginBottom: 20, maxWidth: 820 }}>
+                            Cada pestaña contesta una pregunta. Las cinco de arriba comparten filtros (inmobiliaria, operación,
+                            periodo y comparación) y se actualizan solas al cambiarlos. Junto a cada número hay una <b>ⓘ</b> con
+                            cómo se calcula.
+                        </div>
+                        {([
+                            ['Resumen', '¿Cómo vamos?', 'Los seis números clave, qué cambió contra el periodo comparado, qué hay que atender y cómo va cada canal.'],
+                            ['Inversión y retorno', '¿Cuánto costó y qué regresó?', 'Inversión, CPL, CPA y ROI por canal, más el deal de MercadoLibre.'],
+                            ['Leads y calidad', '¿Cuántos llegan y qué tan buenos son?', 'Leads por fuente, brokers, tiempo de respuesta, contacto con el lead y por qué se descartan.'],
+                            ['Funnel y cierres', '¿Qué pasa con ellos después?', 'Lead → visita → oferta → cierre por fuente, y los cierres del periodo con su fuente.'],
+                            ['Inmobiliarias y asesores', '¿Quién convierte?', 'La misma lectura por asesor o por inmobiliaria (las 102 en el orden de siempre).'],
+                            ['La semana', '¿Qué pasó esta semana?', 'Atención y respuesta semana a semana, partida por WhatsApp vinculado / no vinculado. Sólo usa el filtro de operación.'],
+                            ['Histórico y año vs año', '¿Cómo venimos en el tiempo?', 'Series mensuales; no usa los filtros de arriba.'],
+                        ] as const).map(([t, q, txt]) => (
+                            <div key={t} style={{ display: 'flex', gap: 16, padding: '9px 0', borderBottom: `1px solid ${LGT}`, fontSize: 12.5, lineHeight: 1.5 }}>
+                                <div style={{ width: 190, flexShrink: 0, fontWeight: 700 }}>{t}</div>
+                                <div style={{ width: 250, flexShrink: 0, fontFamily: 'EB Garamond, serif', fontSize: 15 }}>{q}</div>
+                                <div style={{ color: '#555' }}>{txt}</div>
+                            </div>
+                        ))}
+                        <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, fontWeight: 400, margin: '30px 0 0' }}>Reglas para no leerlo mal</h2>
+                        <div style={{ width: 50, height: 1, background: '#F6BE00', margin: '8px 0 16px' }} />
                         {[
-                            ['Lead único = una persona',
-                             'Si alguien escribe tres veces son 3 leads y 1 lead único. El embudo son tres pasos: leads → leads únicos → visitas, y la tasa de visita sale sobre los únicos, no sobre los leads. La columna "leads x único" dice cuánto mensaje repetido manda cada portal. El CPL sí va sobre leads: es lo que le compras al portal.'],
-                            ['Una visita sólo cuenta si fue DESPUÉS del lead',
-                             'Antes se acreditaba al portal cualquier visita del historial del contacto, aunque hubiera ocurrido meses antes de que el lead entrara. Eso casi duplicaba la tasa. Si comparas contra un reporte anterior a septiembre 2026, la diferencia es ésta y no una caída del negocio.'],
-                            ['Las dos atribuciones no se suman',
-                             'El «adelantado» es la cohorte del mes: leads que entraron y qué pasó con ellos — contesta qué tan bueno era lo que entró. El «rezagado» son las operaciones cerradas en el mes por buyer.source, vengan de leads de cualquier mes — contesta qué cobramos. De ahí salen regalía, ticket y ROI. Sumarlos es el error más común con estos números.'],
-                            ['s/d no es cero',
-                             'Si un mes no está cargado en el Sheet, su inversión es desconocida y el CPL queda en s/d. Un cero diría «fue gratis», que sólo es cierto para propiedades.com.'],
+                            ['Cohorte y cierres del periodo no se suman',
+                             'El funnel es una cohorte: las personas que dejaron un lead en el periodo y lo que hicieron después (contesta qué tan bueno era lo que entró). «Cierres del periodo» son las operaciones que cerraron en esas fechas, vengan de leads de cuando sea (contesta qué cobramos); de ahí salen regalía y ROI. Sumarlos es el error más común. Y los cierres de una cohorte reciente salen bajos por construcción: el ciclo de venta va de 43 a 144 días.'],
+                            ['Las tasas van sobre personas, no sobre leads',
+                             'Si alguien escribe tres veces son 3 leads y 1 persona. Visita, oferta y cierre se calculan sobre personas únicas, y una visita sólo cuenta si fue después del lead. El CPL sí va sobre leads: es lo que le compras al portal.'],
+                            ['«Sin respuesta visible» no es un lead perdido',
+                             'Cada lead cae en una de tres y suman 100%: con conversación, sin respuesta visible (tiene teléfono válido pero no vemos que haya contestado: el asesor responde desde su WhatsApp y ese chat no se guarda en Pulppo) y fantasma (teléfono inválido y sin conversación: no hay cómo contactarlo). «Llegó sólo el clic» es aparte: el portal mandó sólo el evento, sin mensaje.'],
+                            ['Los toques son los registrados en Pulppo',
+                             'Antes de descartar contamos seguimientos marcados como hechos, propiedades sugeridas, búsquedas compartidas y notas. Lo que el asesor escribió por WhatsApp no queda en la base, así que «sin toque» quiere decir sin nada registrado.'],
+                            ['El descarte madura',
+                             'Un periodo reciente siempre se ve más limpio de lo que va a terminar: los leads no han tenido tiempo de descartarse. Contra otro periodo, lee la composición (por qué se descartan), no el porcentaje total.'],
+                            ['Todo cierre tiene fuente',
+                             'La fuente es la del comprador. Cuando la operación no la trae se atribuye: broker de fuera → Broker externo; otra inmobiliaria de la red → Red Pulppo; comprador con un lead previo → el canal de su primer lead («inferida»); contacto sin ningún lead → Cartera / sin lead.'],
                             ['La inversión se escribe en el Sheet, no aquí',
-                             'La fuente es «Investment Strategy - 2026», un tab por mes, bloque RESULTS. Al cerrar el mes se llena ahí y este tablero lo lee solo. No hay tabla a mano que mantener: eso es justo lo que se rompió antes.'],
-                            ['MeLi es el único que no sale del Sheet',
-                             'Su costo es base fija más 6% de la comisión de las operaciones que le atribuyen, así que sólo se conoce con el mes cerrado y necesita una revisión a mano. Ver la pestaña del deal.'],
+                             'Sale de «Investment Strategy - 2026», un tab por mes, bloque de resultados. Si un tab trae el plan del mes anterior (plan mensual fijo) se usa y se avisa. Si un mes no está cargado, sus canales salen s/d: un cero diría que fue gratis. Inmuebles24 Mérida es NURA y va en su propia línea.'],
+                            ['ROI sólo con la red completa y meses completos',
+                             'Los portales cobran por aviso, no por inmobiliaria ni por venta/renta: con una inmobiliaria elegida o con Venta/Renta, CPL, CPA y ROI se apagan. Con fechas que no empiezan el día 1, también. ROI = regalía que retiene Pulppo ÷ inversión, no la comisión total.'],
+                            ['MeLi se revisa a mano',
+                             'Cuesta base fija $152,800 + 6% de la comisión de las operaciones del deal, así que sólo se conoce con el mes cerrado. La tabla del deal es una lista de revisión: las banderas dicen qué mirar antes de pagar.'],
                             ['Habi y las cuentas de prueba están fuera de todo',
-                             'Habi se excluye siempre por el email de la inmobiliaria (contiene tuhabi), nunca por el nombre: sus inmobiliarias tienen nombres arbitrarios que no dicen «habi», y filtrar por nombre mata inmobiliarias reales como Habitat o Habix.'],
+                             'Habi se excluye por el email de la inmobiliaria (contiene tuhabi), nunca por el nombre: filtrar por nombre mataría inmobiliarias reales como Habitat o Habix.'],
                         ].map(([t, txt]) => (
-                            <div key={t} style={{ marginBottom: 16 }}>
+                            <div key={t} style={{ marginBottom: 16, maxWidth: 820 }}>
                                 <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>{t}</div>
                                 <div style={{ fontSize: 12.5, color: '#555', lineHeight: 1.6 }}>{txt}</div>
                             </div>
                         ))}
-                        <div style={{ marginTop: 22, paddingTop: 14, borderTop: `1px solid ${LGT}`, fontSize: 11.5, color: GRY, lineHeight: 1.6 }}>
-                            Adelantado vs rezagado es la división del menú, y es el principio del proyecto:
-                            el <b>pulso</b> contesta «¿cómo vamos esta semana?» con leads, atención y
-                            visitas; lo <b>mensual</b> contesta «¿qué cobramos y cuánto costó?». Un cierre no
-                            se mira semana a semana. Cada vista se calcula aparte y sólo al entrar, para que
-                            abrir la página no cueste las tres consultas.
-                        </div>
                     </>
                 )}
             </div>
