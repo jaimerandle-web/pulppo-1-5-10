@@ -74,10 +74,60 @@ function copiar(filas: Array<Array<string | number | null | undefined>>) {
     navigator.clipboard?.writeText(tsv).catch(() => { /* sin permiso de portapapeles */ });
 }
 
-function Kpi({ label, value, sub, delta }: { label: string; value: string; sub?: string; delta?: ReactNode }) {
+/** Definiciones que van dentro de las ⓘ (un solo lugar para que todas las pestañas digan lo mismo). */
+const DEF = {
+    leads: <>Leads que <b>entraron</b> en el periodo, de todas las fuentes. «Personas» cuenta a cada contacto una vez aunque haya dejado varios leads.</>,
+    visita: <>De las personas que dejaron un lead en el periodo, cuántas visitaron <b>después</b> (cohorte). Con inmobiliaria elegida, la visita tiene que ser con esa inmobiliaria.</>,
+    ofertaron: <>Personas de la cohorte que hicieron una oferta después de su lead. Cuenta también las ofertas que se cayeron.</>,
+    cierresCohorte: <>Personas de la cohorte que ya cerraron. En periodos recientes sale bajo por construcción: el ciclo de venta va de 43 a 144 días.</>,
+    cierresPeriodo: <>Operaciones que <b>cerraron</b> en el periodo, vengan de leads de cuando sea. Cuenta los dos lados (vendedor y comprador) y no repite propiedad + comprador.</>,
+    regalia: <>Lo que retiene Pulppo de la comisión de los cierres del periodo. No es la comisión total, que es del broker.</>,
+    roi: <>Regalía de los cierres de canales pagados ÷ inversión de esos canales. Sólo se calcula con meses completos, sin inmobiliaria y con «Todo» en operación: la inversión es de toda la red.</>,
+    cpl: <>Inversión ÷ leads de los canales que cuestan (WhatsApp, Pulppo, sitio, etc. no entran).</>,
+    inversion: <>Sale del Sheet «Investment Strategy 2026», bloque de resultados de cada mes. MeLi = base $152,800 + 6% de la comisión del deal.</>,
+    sinRespuesta: <>Tiene teléfono válido y se le puede escribir, pero no vemos que haya contestado. El asesor responde desde su WhatsApp y ese chat no se guarda en Pulppo: <b>no es un lead perdido</b>, es un lead sin conversación visible.</>,
+    brokers: <>Leads cuyo contacto está etiquetado como broker en Pulppo: no son compradores finales.</>,
+    respuesta: <>Mediana de minutos a la primera respuesta, sólo de leads que entraron de 9:00 a 20:59 (hora de México).</>,
+    descartados: <>Leads cuya búsqueda se cerró como descartada o cancelada. El descarte madura: un periodo reciente siempre se ve más limpio de lo que va a terminar, por eso la variación se apaga si el periodo cerró hace menos de 45 días.</>,
+    comision: <>Comisión total de los cierres del periodo (de la operación, no sólo la regalía).</>,
+    valor: <>Suma del valor de las propiedades cerradas en el periodo.</>,
+};
+
+/** ⓘ con la explicación de método: se abre al pasar el mouse o al hacer clic. */
+function Info({ children, ancho = 320 }: { children: ReactNode; ancho?: number }) {
+    const [abierto, setAbierto] = useState(false);
+    const [fijo, setFijo] = useState(false);
+    const ref = useRef<HTMLSpanElement>(null);
+    const [izq, setIzq] = useState(false);
+    useEffect(() => {
+        if (!fijo) return;
+        const fuera = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setFijo(false); setAbierto(false); } };
+        document.addEventListener('mousedown', fuera);
+        return () => document.removeEventListener('mousedown', fuera);
+    }, [fijo]);
+    const abrir = () => {
+        const r = ref.current?.getBoundingClientRect();
+        setIzq(!!r && r.left + ancho > window.innerWidth - 16);
+        setAbierto(true);
+    };
+    return (
+        <span ref={ref} style={{ position: 'relative', display: 'inline-block', verticalAlign: 'middle', marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}
+            onMouseEnter={abrir} onMouseLeave={() => { if (!fijo) setAbierto(false); }}>
+            <button type="button" aria-label="Cómo se calcula" onClick={() => { if (fijo) { setFijo(false); setAbierto(false); } else { abrir(); setFijo(true); } }}
+                style={{ width: 15, height: 15, borderRadius: '50%', border: `1px solid ${GRY}`, background: abierto ? BLK : '#fff', color: abierto ? '#fff' : GRY, fontSize: 10, lineHeight: '13px', padding: 0, cursor: 'pointer', fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 700 }}>i</button>
+            {abierto && (
+                <span style={{ position: 'absolute', top: 20, [izq ? 'right' : 'left']: -6, zIndex: 50, width: ancho, maxWidth: 'calc(100vw - 32px)', background: '#fff', border: `1px solid ${BLK}`, borderRadius: R, padding: '10px 12px', fontSize: 11.5, lineHeight: 1.5, color: '#333', fontWeight: 400, fontFamily: 'Nunito Sans, sans-serif', whiteSpace: 'normal', textAlign: 'left' }}>
+                    {children}
+                </span>
+            )}
+        </span>
+    );
+}
+
+function Kpi({ label, value, sub, delta, info }: { label: string; value: string; sub?: string; delta?: ReactNode; info?: ReactNode }) {
     return (
         <div style={{ flex: '1 1 150px', background: '#fff', border: `1px solid ${LGT}`, padding: '12px 14px', borderRadius: R, minWidth: 0 }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>{label}</div>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>{label}{info && <Info>{info}</Info>}</div>
             <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.05, margin: '7px 0 3px' }}>{value}</div>
             <div style={{ fontSize: 10.5, color: '#777', lineHeight: 1.35 }}>{delta}{delta && sub ? ' · ' : ''}{sub}</div>
         </div>
@@ -93,11 +143,11 @@ function Delta({ a, b, pts = false, invertir = false }: { a?: number | null; b?:
     return <span style={{ color: v === 0 ? GRY : bueno ? SEA : RED, fontWeight: 700 }}>{v > 0 ? '+' : ''}{v}{pts ? ' pts' : '%'}</span>;
 }
 
-function Seccion({ titulo, sub, onCopiar, children }: { titulo: string; sub?: ReactNode; onCopiar?: () => void; children: ReactNode }) {
+function Seccion({ titulo, sub, info, onCopiar, children }: { titulo: string; sub?: ReactNode; info?: ReactNode; onCopiar?: () => void; children: ReactNode }) {
     return (
         <div style={{ marginTop: 30 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-                <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, fontWeight: 400, margin: 0 }}>{titulo}</h2>
+                <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, fontWeight: 400, margin: 0 }}>{titulo}{info && <Info ancho={380}>{info}</Info>}</h2>
                 <div style={{ flex: 1 }} />
                 {onCopiar && <button onClick={onCopiar} style={{ fontSize: 11, padding: '4px 9px', border: `1px solid ${LGT}`, borderRadius: R, background: '#fff', cursor: 'pointer', fontFamily: 'inherit', color: '#555' }}>Copiar tabla</button>}
             </div>
@@ -307,7 +357,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
         <>
             <h1 style={{ fontFamily: 'EB Garamond, serif', fontSize: 28, fontWeight: 400, margin: '0 0 4px' }}>{TITULOS[section][0]}</h1>
             <div style={{ fontSize: 12.5, color: '#666', marginBottom: 14 }}>
-                {TITULOS[section][1]} Los filtros son los mismos en estas cuatro secciones y se aplican solos.
+                {TITULOS[section][1]} Los filtros son los mismos en estas cinco secciones y se aplican solos.
             </div>
             {filtros}
         </>
@@ -468,12 +518,12 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 const top = A.fuentes.slice(0, 8);
                 return (<>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-                        <Kpi label="Leads" value={f0(T.leads)} sub={`${f0(T.unicos)} personas`} delta={<Delta a={T.leads} b={CT?.leads} />} />
-                        <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
-                        <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
-                        <Kpi label="Regalía Pulppo" value={money(A.cierres.regalia)} delta={<Delta a={A.cierres.regalia} b={C?.cierres.regalia} />} />
-                        <Kpi label="ROI" value={roiTot != null ? `${roiTot.toFixed(2)}×` : '—'} sub={roiTot != null ? 'canales pagados' : sinCostoReal ? 'sólo con «Todo» y sin inmobiliaria' : faltaInv ? 'falta la inversión del mes' : periodoParcial ? 'elige meses completos' : '…'} />
-                        <Kpi label="Sin respuesta visible" value={pc(T.pctSinRespuesta)} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
+                        <Kpi label="Leads" info={DEF.leads} value={f0(T.leads)} sub={`${f0(T.unicos)} personas`} delta={<Delta a={T.leads} b={CT?.leads} />} />
+                        <Kpi label="Lead → visita" info={DEF.visita} value={pc(T.pVisita)} sub={`${f0(T.visitas)} visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
+                        <Kpi label="Cierres del periodo" info={DEF.cierresPeriodo} value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
+                        <Kpi label="Regalía Pulppo" info={DEF.regalia} value={money(A.cierres.regalia)} delta={<Delta a={A.cierres.regalia} b={C?.cierres.regalia} />} />
+                        <Kpi label="ROI" info={DEF.roi} value={roiTot != null ? `${roiTot.toFixed(2)}×` : '—'} sub={roiTot != null ? 'canales pagados' : sinCostoReal ? 'sólo con «Todo» y sin inmobiliaria' : faltaInv ? 'falta la inversión del mes' : periodoParcial ? 'elige meses completos' : '…'} />
+                        <Kpi label="Sin respuesta visible" info={DEF.sinRespuesta} value={pc(T.pctSinRespuesta)} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
                     </div>
                     <Seccion titulo="Qué cambió">
                         {lineas.map(([k, txt]) => (
@@ -516,17 +566,18 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
 
             {section === 'inversion' && (<>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-                    <Kpi label="Inversión" value={sinCostoReal || periodoParcial ? '—' : faltaInv ? 's/d' : ia ? money(totInv) : '…'} sub={ia?.faltantes.length ? `falta cargar ${ia.faltantes.map(mesLargo).join(', ')}` : `${mesesA.length} ${mesesA.length === 1 ? 'mes' : 'meses'} · canales con costo`} />
-                    <Kpi label="CPL" value={!sinCostoReal && !periodoParcial && !faltaInv && totLeadsInv ? money(totInv / totLeadsInv) : '—'} sub={`${f0(totLeadsInv)} leads de canales pagados`} />
-                    <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
-                    <Kpi label="Regalía Pulppo" value={money(A.cierres.regalia)} sub="de los cierres del periodo" delta={<Delta a={A.cierres.regalia} b={C?.cierres.regalia} />} />
-                    <Kpi label="ROI" value={!sinCostoReal && !periodoParcial && !faltaInv && totInv ? `${(totRegInv / totInv).toFixed(2)}×` : '—'} sub="regalía de canales pagados ÷ su inversión" />
+                    <Kpi label="Inversión" info={DEF.inversion} value={sinCostoReal || periodoParcial ? '—' : faltaInv ? 's/d' : ia ? money(totInv) : '…'} sub={ia?.faltantes.length ? `falta cargar ${ia.faltantes.map(mesLargo).join(', ')}` : `${mesesA.length} ${mesesA.length === 1 ? 'mes' : 'meses'} · canales con costo`} />
+                    <Kpi label="CPL" info={DEF.cpl} value={!sinCostoReal && !periodoParcial && !faltaInv && totLeadsInv ? money(totInv / totLeadsInv) : '—'} sub={`${f0(totLeadsInv)} leads de canales pagados`} />
+                    <Kpi label="Cierres del periodo" info={DEF.cierresPeriodo} value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
+                    <Kpi label="Regalía Pulppo" info={DEF.regalia} value={money(A.cierres.regalia)} sub="de los cierres del periodo" delta={<Delta a={A.cierres.regalia} b={C?.cierres.regalia} />} />
+                    <Kpi label="ROI" info={DEF.roi} value={!sinCostoReal && !periodoParcial && !faltaInv && totInv ? `${(totRegInv / totInv).toFixed(2)}×` : '—'} sub="canales pagados" />
                 </div>
-                {sinCostoReal && <Aviso>La inversión es de <b>toda la red y de todas las operaciones</b>: los portales cobran por aviso, no por venta/renta ni por inmobiliaria. Con {v.inmobiliaria ? 'una inmobiliaria elegida' : 'venta o renta'} no hay un costo honesto que dividir, así que CPL, CPA y ROI se apagan. Los cierres y la regalía sí están filtrados.</Aviso>}
+                {sinCostoReal && <Aviso>CPL, CPA y ROI se apagan con {v.inmobiliaria ? 'una inmobiliaria elegida' : 'venta o renta'}: la inversión es de toda la red y no hay forma honesta de dividirla. Cierres y regalía sí van filtrados.</Aviso>}
                 {periodoParcial && !sinCostoReal && <Aviso>La inversión es <b>mensual</b>. Con fechas que no empiezan el día 1, CPL, CPA y ROI saldrían inventados: elige Mes, Trimestre o YTD.</Aviso>}
-                {mesEnCurso && !sinCostoReal && <Aviso>El periodo incluye el <b>mes en curso</b>: su inversión ya está completa en el Sheet pero los leads y cierres no, así que el CPL se ve más caro y el ROI más bajo de lo que va a quedar.</Aviso>}
+                {mesEnCurso && !sinCostoReal && <Aviso>Incluye el <b>mes en curso</b>: la inversión ya está completa y los leads y cierres no, así que el CPL se ve más caro y el ROI más bajo de lo que va a quedar.</Aviso>}
                 <Seccion titulo="Por canal" onCopiar={() => copiar([['Canal', 'Inversión', 'Leads', 'CPL', 'Cierres', 'CPA', 'Regalía', 'ROI'], ...filasInv.map((x) => [x.nombre, x.inv ?? '', x.leads, x.cpl ? Math.round(x.cpl) : '', x.cierres, x.cpa ? Math.round(x.cpa) : '', Math.round(x.regalia), x.roi != null ? Number(x.roi.toFixed(2)) : ''])])}
-                    sub={<>Leads = los que <b>entraron</b> en el periodo. Cierres y regalía = operaciones que <b>cerraron</b> en el periodo, por la fuente del comprador. ROI = regalía que retiene Pulppo ÷ inversión (no la comisión total, que es del broker).{C ? ' Debajo del ROI, la diferencia contra el periodo comparado.' : ''}</>}>
+                    sub="Cuánto costó cada canal y qué regresó."
+                    info={<><b>Leads</b> = los que entraron en el periodo. <b>Cierres y regalía</b> = operaciones que cerraron en el periodo, por la fuente del comprador. <b>ROI</b> = regalía que retiene Pulppo ÷ inversión (no la comisión total, que es del broker).{C ? ' Debajo del ROI, la diferencia contra el periodo comparado.' : ''}</>}>
                     <Tabla head={['Canal', 'Inversión', 'Leads', 'CPL', 'Cierres', 'CPA', 'Regalía', 'ROI']} min={760}>
                         {filasInv.map((x) => {
                             const invTxt = sinCostoReal || periodoParcial ? '—' : x.inv === undefined ? (ia ? 'sin línea' : '…') : x.inv === null ? 's/d' : x.inv === 0 ? (SIN_COSTO.has(x.k) ? 'sin costo' : 'gratis') : money(x.inv);
@@ -554,12 +605,13 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                             {otrasFuentesCierre.map((x) => <tr key={x.fuente}><td style={td0}>{x.fuente}</td><td style={td}>{f0(x.n)}</td><td style={td}>{money(x.regalia)}</td></tr>)}
                         </Tabla>
                     </>)}
-                    {ia?.copiados.length ? <Aviso>{ia.copiados.map(([m, de]) => `${mesLargo(m)} usa el plan de ${de}`).join(' · ')}: el tab del Sheet trae el bloque del mes anterior (el plan mensual es fijo). Si el gasto real cambia, hay que capturarlo en su tab.</Aviso> : null}
-                {ia?.faltantes.length ? <Aviso><b>Falta cargar la inversión de {ia.faltantes.map(mesLargo).join(' y ')} en el Sheet.</b> Esos canales muestran <b>s/d</b>, no cero: cero diría que fue gratis.</Aviso> : null}
+                    {ia?.copiados.length ? <Aviso>{ia.copiados.map(([m, de]) => `${mesLargo(m)} usa el plan de ${de}`).join(' · ')} (plan mensual fijo). Si el gasto real cambia, captúralo en su tab del Sheet.</Aviso> : null}
+                {ia?.faltantes.length ? <Aviso><b>Falta cargar la inversión de {ia.faltantes.map(mesLargo).join(' y ')} en el Sheet.</b> Mientras, sus canales muestran <b>s/d</b>.</Aviso> : null}
                 </Seccion>
 
                 {!v.inmobiliaria && v.filtro.operacion === 'todas' && (
-                    <Seccion titulo="Deal MercadoLibre" sub={<>MeLi cuesta <b>base fija $152,800 + 6%</b> de la comisión de las operaciones del deal cerradas en el mes. Ninguna regla de Mongo reproduce los meses ya conciliados, así que la tabla es una <b>lista de revisión</b>: las banderas dicen qué mirar antes de pagar.</>}>
+                    <Seccion titulo="Deal MercadoLibre" sub="Base $152,800 + 6% de la comisión del deal. Las banderas dicen qué revisar antes de pagar."
+                        info={<>Ninguna regla de Mongo reproduce los meses ya conciliados, así que la tabla es una <b>lista de revisión</b>, no el monto a pagar.</>}>
                         {ia && <Tabla head={['Mes', 'Inversión MeLi', 'De dónde sale']} min={420}>
                             {ia.meli.map((m) => (
                                 <tr key={m.mes} onClick={() => setMesDeal(m.mes)} style={{ cursor: 'pointer', background: m.mes === mesDeal ? LGT : '#fff' }}>
@@ -589,15 +641,16 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
 
             {section === 'leads' && (<>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-                    <Kpi label="Leads" value={f0(T.leads)} sub={`${f0(T.unicos)} personas · ${f0(T.venta)} venta / ${f0(T.renta)} renta`} delta={<Delta a={T.leads} b={CT?.leads} />} />
-                    <Kpi label="De brokers" value={pc(T.pctBroker)} sub={`${f0(T.brokerLeads)} leads de contactos broker`} delta={<Delta a={T.pctBroker} b={CT?.pctBroker} pts invertir />} />
-                    <Kpi label="Sin respuesta visible" value={pc(T.pctSinRespuesta)} sub={`${pc(T.pctConConversacion)} con conversación · ${pc(T.pctFantasma)} fantasma`} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
-                    <Kpi label="1ª respuesta" value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
-                    <Kpi label="Descartados" value={pc(T.pctDescartado)} sub={`${f0(T.descartados)} leads`} delta={descMaduro ? <Delta a={T.pctDescartado} b={CT?.pctDescartado} pts invertir /> : undefined} />
+                    <Kpi label="Leads" info={DEF.leads} value={f0(T.leads)} sub={`${f0(T.unicos)} personas · ${f0(T.venta)} venta / ${f0(T.renta)} renta`} delta={<Delta a={T.leads} b={CT?.leads} />} />
+                    <Kpi label="De brokers" info={DEF.brokers} value={pc(T.pctBroker)} sub={`${f0(T.brokerLeads)} leads de contactos broker`} delta={<Delta a={T.pctBroker} b={CT?.pctBroker} pts invertir />} />
+                    <Kpi label="Sin respuesta visible" info={DEF.sinRespuesta} value={pc(T.pctSinRespuesta)} sub={`${pc(T.pctConConversacion)} con conversación · ${pc(T.pctFantasma)} fantasma`} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
+                    <Kpi label="1ª respuesta" info={DEF.respuesta} value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
+                    <Kpi label="Descartados" info={DEF.descartados} value={pc(T.pctDescartado)} sub={`${f0(T.descartados)} leads`} delta={descMaduro ? <Delta a={T.pctDescartado} b={CT?.pctDescartado} pts invertir /> : undefined} />
                 </div>
                 {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}
                 <Seccion titulo="Leads por fuente" onCopiar={() => copiar([['Fuente', 'Leads', 'Personas', 'Venta', 'Renta', '% broker', '< 60 min', '1ª resp. (min)'], ...A.fuentes.map((x) => [x.nombre, x.leads, x.unicos, x.venta, x.renta, x.pctBroker, x.pctLt60, x.respMed])])}
-                    sub="Broker = el contacto está etiquetado como broker en Pulppo. Atención: sólo leads que entraron de 9:00 a 20:59 de México; el «sin responder» partido por WhatsApp vinculado está en «La semana».">
+                    sub="Cuántos llegan de cada canal y qué tan rápido se contestan."
+                    info={<><b>% broker</b>: {DEF.brokers} <b>&lt; 60 min</b> y <b>1ª resp.</b>: sólo leads que entraron de 9:00 a 20:59 de México. El «sin responder» partido por WhatsApp vinculado / no vinculado está en «La semana».</>}>
                     <Tabla head={['Fuente', 'Leads', 'Personas', 'Venta', 'Renta', '% broker', '< 60 min', '1ª resp.']}>
                         {[...A.fuentes, T].map((x) => {
                             const c = x === T ? CT : buscar(C?.fuentes, x.key);
@@ -617,14 +670,15 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                     </Tabla>
                 </Seccion>
             <Seccion titulo="Contacto con el lead y descartados" onCopiar={() => copiar([['Fuente', ...HEAD_CAL.slice(1)], ...A.fuentes.map((x) => [x.nombre, x.leads, x.pctConConversacion, x.pctSinRespuesta, x.pctFantasma, x.pctSoloClic, x.pctDescartado, x.pctSinResp])])}
-                sub={<>Cada lead cae en <b>una</b> de tres: <b>Con conversación</b> — hay plática real, en su registro o por otro lado (el comprador abrió WhatsApp, o ya venía platicando con nosotros: de 30 días antes a 14 después). <b>Sin respuesta visible</b> — tiene teléfono válido y se le puede escribir, pero no vemos que haya respondido: el asesor contesta desde su WhatsApp y ese chat no se guarda en Pulppo, así que <b>no es un lead perdido</b>. <b>Fantasma</b> — teléfono inválido (menos de 10 dígitos, todos iguales o una secuencia) y sin conversación: no hay cómo contactarlo. Las tres suman 100%. «Llegó sólo el clic» es un dato del portal: el lead entró únicamente con el evento («Vio teléfono», «Contactó por WhatsApp»), sin mensaje.</>}>
+                sub="Cada lead cae en una de tres — con conversación, sin respuesta visible o fantasma — y suman 100%."
+                info={<>Cada lead cae en <b>una</b> de tres: <b>Con conversación</b> — hay plática real, en su registro o por otro lado (el comprador abrió WhatsApp, o ya venía platicando con nosotros: de 30 días antes a 14 después). <b>Sin respuesta visible</b> — tiene teléfono válido y se le puede escribir, pero no vemos que haya respondido: el asesor contesta desde su WhatsApp y ese chat no se guarda en Pulppo, así que <b>no es un lead perdido</b>. <b>Fantasma</b> — teléfono inválido (menos de 10 dígitos, todos iguales o una secuencia) y sin conversación: no hay cómo contactarlo. Las tres suman 100%. «Llegó sólo el clic» es un dato del portal: el lead entró únicamente con el evento («Vio teléfono», «Contactó por WhatsApp»), sin mensaje.</>}>
                 <Tabla head={['Fuente', ...HEAD_CAL.slice(1)]}>
                     {A.fuentes.map((x) => filaCalidad(x, buscar(C?.fuentes, x.key)))}
                     {filaCalidad(T, CT)}
                 </Tabla>
                 <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', marginTop: 18 }}>
                     <div style={{ flex: '1 1 300px' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Por qué se descartan · {f0(A.descarte.total)} leads</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Por qué se descartan · {f0(A.descarte.total)} leads<Info><p style={{ margin: '0 0 6px' }}>«No responde» en los motivos es lo que <b>marcó el asesor</b> al cerrar la búsqueda; no es lo mismo que el lead fantasma de la tabla de arriba, que se mide por si hubo conversación. «Sin motivo específico» junta el «descartado» genérico, «cancelado» y los que se cerraron sin motivo.</p>El descarte <b>madura</b>: un lead de esta semana casi no ha tenido tiempo de cancelarse, así que un periodo reciente siempre se ve más limpio de lo que va a terminar. Contra otro periodo, lee la <b>composición</b> (por qué se descartan), no el porcentaje total{!descMaduro && C ? <> — por eso, con un periodo que cerró hace menos de 45 días, la variación del % de descartados no se muestra</> : null}.</Info></div>
                         {A.descarte.familias.map((x) => {
                             const cx = C?.descarte.familias.find((y) => y.key === x.key);
                             return (
@@ -639,7 +693,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                     </div>
                 </div>
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '20px 0 6px', display: 'flex' }}>
-                    <span style={{ flex: 1 }}>Todos los motivos · y cuántos toques registró el asesor antes de descartar</span>
+                    <span style={{ flex: 1 }}>Todos los motivos · y cuántos toques registró el asesor antes de descartar<Info ancho={380}><b>Toque registrado</b> = lo que el <b>asesor</b> hizo en Pulppo sobre esa búsqueda antes de descartarla: seguimientos que marcó como hechos, propiedades que le sugirió, búsqueda que le compartió y notas (las tareas que el sistema crea y cierra solo no cuentan). Los WhatsApp del asesor <b>no se guardan en la base</b>, así que «sin ningún toque» quiere decir sin nada <b>registrado</b>: puede que sí le haya escrito por fuera. Aun así, un descarte por «no responde» sin un solo toque registrado es la señal a revisar. Aquí los toques se cuentan por <b>búsqueda</b> (varios leads de la misma persona comparten una); en la tabla por asesor, «Desc. sin toque» va por <b>lead</b>, así que los dos porcentajes no tienen que coincidir.</Info></span>
                     <button onClick={() => copiar([['Motivo', 'Familia', 'Leads', '%', 'Toques (mediana)', 'Toques (promedio)', '% sin ningún toque'], ...A.descarte.motivos.map((m) => [m.motivo, m.familia, m.n, m.pct, m.segMediana, m.segProm, m.pctSinSeg])])}
                         style={{ fontSize: 11, padding: '3px 8px', border: `1px solid ${LGT}`, borderRadius: R, background: '#fff', cursor: 'pointer', fontFamily: 'inherit', color: '#555', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>Copiar tabla</button>
                 </div>
@@ -657,14 +711,12 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                     ))}
                     {!A.descarte.motivos.length && <tr><td style={{ ...td0, color: GRY }} colSpan={7}>Sin descartes en el periodo.</td></tr>}
                 </Tabla>
-                <Aviso><b>Toque registrado</b> = lo que el <b>asesor</b> hizo en Pulppo sobre esa búsqueda antes de descartarla: seguimientos que marcó como hechos, propiedades que le sugirió, búsqueda que le compartió y notas (las tareas que el sistema crea y cierra solo no cuentan). Los WhatsApp del asesor <b>no se guardan en la base</b>, así que «sin ningún toque» quiere decir sin nada <b>registrado</b>: puede que sí le haya escrito por fuera. Aun así, un descarte por «no responde» sin un solo toque registrado es la señal a revisar. Aquí los toques se cuentan por <b>búsqueda</b> (varios leads de la misma persona comparten una); en la tabla por asesor, «Desc. sin toque» va por <b>lead</b>, así que los dos porcentajes no tienen que coincidir.</Aviso>
-                <Aviso>«No responde» en los motivos es lo que <b>marcó el asesor</b> al cerrar la búsqueda; no es lo mismo que el lead fantasma de la tabla de arriba, que se mide por si hubo conversación. «Sin motivo específico» junta el «descartado» genérico, «cancelado» y los que se cerraron sin motivo.</Aviso>
-                <Aviso>El descarte <b>madura</b>: un lead de esta semana casi no ha tenido tiempo de cancelarse, así que un periodo reciente siempre se ve más limpio de lo que va a terminar. Contra otro periodo, lee la <b>composición</b> (por qué se descartan), no el porcentaje total{!descMaduro && C ? <> — por eso, con un periodo que cerró hace menos de 45 días, la variación del % de descartados no se muestra</> : null}.</Aviso>
             </Seccion>
 
 
                 <Seccion titulo="Por qué se descartan, por fuente" onCopiar={() => copiar([['Fuente', '% descartados', ...FAM.map(([, l]) => l)], ...A.fuentes.map((x) => [x.nombre, x.pctDescartado, ...FAM.map(([k]) => (x.descartados ? Math.round((100 * (x.descFam[k] ?? 0)) / x.descartados) : ''))])])}
-                    sub="De los leads descartados de cada fuente, en qué familia de motivo cayeron (cada fila suma 100%). Sirve para ver si un portal manda más brokers, más datos falsos o más gente que no responde.">
+                    sub="Si un portal manda más brokers, más datos falsos o más gente que no responde."
+                    info={<>De los leads descartados de cada fuente, en qué familia de motivo cayeron. Cada fila suma 100%.</>}>
                     <Tabla head={['Fuente', '% descartados', ...FAM.map(([, l]) => l)]} min={980}>
                         {[...A.fuentes, T].map((x) => (
                             <tr key={x.key}>
@@ -682,30 +734,32 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
 
             {section === 'embudo' && (<>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-                    <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
-                    <Kpi label="Ofertaron" value={f0(T.ofertas)} sub={`${pc(T.pOferta)} de las personas`} delta={<Delta a={T.ofertas} b={CT?.ofertas} />} />
-                    <Kpi label="Cierres de la cohorte" value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
-                    <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
+                    <Kpi label="Lead → visita" info={DEF.visita} value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
+                    <Kpi label="Ofertaron" info={DEF.ofertaron} value={f0(T.ofertas)} sub={`${pc(T.pOferta)} de las personas`} delta={<Delta a={T.ofertas} b={CT?.ofertas} />} />
+                    <Kpi label="Cierres de la cohorte" info={DEF.cierresCohorte} value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
+                    <Kpi label="Cierres del periodo" info={DEF.cierresPeriodo} value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
                 </div>
                 {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}
             <Seccion titulo="Funnel comercial por fuente" onCopiar={() => tsvFunnel(A.fuentes, 'Fuente')}
-                sub={<>Cohorte: los leads que <b>entraron</b> en el periodo y lo que hicieron <b>después</b>{v.inmobiliaria ? <> — la visita, la oferta y el cierre tienen que ser con {v.inmobiliaria.nombre}</> : null}. Las tasas van sobre personas únicas, no sobre registros.</>}>
+                sub="Los leads que entraron en el periodo y lo que hicieron después."
+                info={<>Es una <b>cohorte</b>: se sigue a las personas que dejaron un lead en el periodo, no a la actividad del periodo{v.inmobiliaria ? <> — la visita, la oferta y el cierre tienen que ser con {v.inmobiliaria.nombre}</> : null}. Las tasas van sobre personas únicas, no sobre registros. Los cierres de una cohorte reciente salen bajos por construcción (el ciclo de venta va de 43 a 144 días); para juzgar cierres, mira «Cierres del periodo».</>}>
                 <Embudo t={T} c={CT} />
                 <div style={{ height: 14 }} />
                 <Tabla head={HEAD_FUNNEL}>
                     {A.fuentes.map((x) => filaFunnel(x, buscar(C?.fuentes, x.key)))}
                     {filaFunnel(T, CT)}
                 </Tabla>
-                {recienteCohorte && <Aviso>Los cierres de una cohorte reciente salen bajos por construcción: el ciclo de venta va de 43 a 144 días. Para juzgar cierres, compara periodos de hace 4 meses o más, o mira «Cierres del periodo» abajo.</Aviso>}
+                {recienteCohorte && <Aviso>Cohorte reciente: sus cierres todavía no maduran. Para juzgar cierres, mira «Cierres del periodo» abajo.</Aviso>}
             </Seccion>
 
             <Seccion titulo="Cierres del periodo" onCopiar={() => copiar([['Fecha', 'Operación', 'Código', 'Tipo', 'Colonia', 'Valor', 'Comisión', 'Fuente', 'Lado', 'Asesor', 'ID operación'],
                 ...A.cierres.lista.map((x) => [x.fecha, x.operacion, x.codigo, x.tipo, x.colonia, x.valor, x.comision, x.inferida ? `${x.fuente} (inferida)` : x.fuente, x.lado, x.asesor, x.id])])}
-                sub={<>Las operaciones que <b>cerraron</b> en el periodo, vengan de leads de cuando sea{v.inmobiliaria ? <>, de los dos lados: donde {v.inmobiliaria.nombre} vende la propiedad y donde trae al comprador</> : null}. La fuente es la del comprador.</>}>
+                sub="Lo que cerró en el periodo, con la fuente del comprador."
+                info={<>Operaciones que <b>cerraron</b> en el periodo, vengan de leads de cuando sea{v.inmobiliaria ? <>, de los dos lados: donde {v.inmobiliaria.nombre} vende la propiedad y donde trae al comprador</> : null}. Cuando la operación no trae fuente (<code>other</code>) se atribuye: broker de fuera de Pulppo → <b>Broker externo</b>; otra inmobiliaria de la red → <b>Red Pulppo</b>; comprador con un lead previo → el canal de su <b>primer lead</b> (columna «Inferidas»); contacto sin ningún lead → <b>Cartera / sin lead</b>.</>}>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    <Kpi label="Cierres" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
-                    <Kpi label="Comisión" value={money(A.cierres.comision)} delta={<Delta a={A.cierres.comision} b={C?.cierres.comision} />} />
-                    <Kpi label="Valor cerrado" value={money(A.cierres.valor)} delta={<Delta a={A.cierres.valor} b={C?.cierres.valor} />} />
+                    <Kpi label="Cierres" info={DEF.cierresPeriodo} value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
+                    <Kpi label="Comisión" info={DEF.comision} value={money(A.cierres.comision)} delta={<Delta a={A.cierres.comision} b={C?.cierres.comision} />} />
+                    <Kpi label="Valor cerrado" info={DEF.valor} value={money(A.cierres.valor)} delta={<Delta a={A.cierres.valor} b={C?.cierres.valor} />} />
                 </div>
                 <div style={{ height: 12 }} />
                 <Tabla head={['Fuente del comprador', 'Cierres', 'Venta', 'Renta', 'Comisión', 'Inferidas']} min={600}>
@@ -714,12 +768,9 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                     ))}
                 </Tabla>
                 {A.cierres.sinFuenteOriginal > 0 && (
-                    <Aviso>
-                        <b>{f0(A.cierres.sinFuenteOriginal)} de {f0(A.cierres.n)}</b> cierres venían sin fuente en la operación (<code>other</code>). Se atribuyeron así:
-                        si el comprador lo trajo una inmobiliaria de fuera de Pulppo, <b>Broker externo</b>; si fue otra de la red, <b>Red Pulppo</b>;
-                        si el comprador tenía un lead previo, el canal de su <b>primer lead</b> (columna «Inferidas»); y si tenía contacto pero ningún lead, <b>Cartera / sin lead</b> (cliente propio, referido o contacto directo).
-                        {A.cierres.sinAtribuir ? <> Quedan <b>{f0(A.cierres.sinAtribuir)}</b> sin poder atribuir.</> : <> No queda ninguno sin atribuir.</>}
-                    </Aviso>
+                    <div style={{ fontSize: 11.5, color: '#666', marginTop: 8 }}>
+                        <b>{f0(A.cierres.sinFuenteOriginal)} de {f0(A.cierres.n)}</b> cierres venían sin fuente y se atribuyeron (ver ⓘ).{A.cierres.sinAtribuir ? <> Quedan <b>{f0(A.cierres.sinAtribuir)}</b> sin poder atribuir.</> : null}
+                    </div>
                 )}
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '20px 0 6px' }}>Últimos cierres</div>
                 <Tabla head={['Fecha', 'Operación', 'Propiedad', 'Valor', 'Comisión', 'Fuente', 'Lado', 'Asesor']} min={880}>
@@ -744,12 +795,12 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
 
             {section === 'inmobiliarias' && (<>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-                <Kpi label="Leads" value={f0(T.leads)} sub={`${f0(T.unicos)} personas · ${f0(T.venta)} venta / ${f0(T.renta)} renta`} delta={<Delta a={T.leads} b={CT?.leads} />} />
-                <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
-                <Kpi label="Cierres de la cohorte" value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
-                <Kpi label="1ª respuesta" value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
-                <Kpi label="Sin respuesta visible" value={pc(T.pctSinRespuesta)} sub={`${pc(T.pctConConversacion)} con conversación · ${pc(T.pctFantasma)} fantasma`} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
-                <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
+                <Kpi label="Leads" info={DEF.leads} value={f0(T.leads)} sub={`${f0(T.unicos)} personas · ${f0(T.venta)} venta / ${f0(T.renta)} renta`} delta={<Delta a={T.leads} b={CT?.leads} />} />
+                <Kpi label="Lead → visita" info={DEF.visita} value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
+                <Kpi label="Cierres de la cohorte" info={DEF.cierresCohorte} value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
+                <Kpi label="1ª respuesta" info={DEF.respuesta} value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
+                <Kpi label="Sin respuesta visible" info={DEF.sinRespuesta} value={pc(T.pctSinRespuesta)} sub={`${pc(T.pctConConversacion)} con conversación · ${pc(T.pctFantasma)} fantasma`} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
+                <Kpi label="Cierres del periodo" info={DEF.cierresPeriodo} value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
             </div>
             {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}
 
