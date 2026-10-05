@@ -235,6 +235,8 @@ export function fillTemplate(tpl: PolotnoDoc, f: RankingFill): PolotnoDoc {
         } else if (slide === 'consultoria' || slide === 'onboarding') {
             [1, 2, 3, 4, 5].forEach((n) => {
                 const c = f[slide][n - 1], lg = by(`logo${n}`);
+                // Lugar vacío (p. ej. sólo 4 en onboarding): tapar el número que trae el fondo.
+                const num = by(`num${n}`); if (num) num.visible = !c;
                 if (!lg) return;
                 lg.src = c?.logo ?? ''; lg.visible = !!c?.logo;
                 // Sin logo en Mongo: el nombre en texto en la misma caja, para no dejar el hueco.

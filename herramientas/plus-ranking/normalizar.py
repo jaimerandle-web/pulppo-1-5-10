@@ -12,9 +12,9 @@ Qué hace:
     consultoria · onboarding.
 
 Si Ale cambia el diseño en Polotno: exportar el JSON a originales/ y volver a correr esto.
-    python3 herramientas/plus-ranking/normalizar.py
+    python3 herramientas/plus-ranking/normalizar.py   (requiere Pillow)
 """
-import base64, copy, hashlib, json, os, re, urllib.request
+import base64, copy, hashlib, io, json, os, re, urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(AQUI, '..', '..'))
@@ -23,11 +23,14 @@ ASSETS = os.path.join(OUT, 'assets')
 os.makedirs(ASSETS, exist_ok=True)
 
 
-def guarda(src):
+def bytes_de(src):
     if src.startswith('data:'):
-        b = base64.b64decode(src.split(',', 1)[1])
-    else:
-        b = urllib.request.urlopen(urllib.request.Request(src, headers={'User-Agent': 'Mozilla/5.0'})).read()
+        return base64.b64decode(src.split(',', 1)[1])
+    return urllib.request.urlopen(urllib.request.Request(src, headers={'User-Agent': 'Mozilla/5.0'})).read()
+
+
+def guarda(src):
+    b = bytes_de(src)
     ext = 'png' if b[:4] == b'\x89PNG' else 'jpg'
     nombre = hashlib.sha1(b).hexdigest()[:12] + '.' + ext
     p = os.path.join(ASSETS, nombre)
@@ -118,7 +121,7 @@ def normaliza_brokers(page, W):
     page['children'] = nuevos
 
 
-def normaliza_logos(page):
+def normaliza_logos(page, W):
     els = plano(page['children'])
     for e in els:
         m = re.match(r'^logo\s*(\d)$', e.get('name', ''))
@@ -136,6 +139,54 @@ def normaliza_logos(page):
         cy = e['y'] + e['height'] / 2
         e.update(x=x0, y=cy - maxH / 2, width=maxW, height=maxH, src='',
                  cropX=0, cropY=0, cropWidth=1, cropHeight=1, custom={'logo': True})
+    # El número de cada posición viene dibujado en la imagen de fondo. Para poder quitarlo
+    # cuando el lugar queda vacío (p. ej. sólo 4 inmobiliarias en onboarding), se agrega un
+    # parche oculto num{n} del color del fondo encima del círculo; la app lo enciende.
+    fondo = next((e for e in els if e['type'] == 'image' and not e.get('custom', {}).get('logo')
+                  and e['width'] >= W * 0.95), None)
+    if fondo:
+        from PIL import Image
+        im = Image.open(io.BytesIO(bytes_de(fondo['src']))).convert('RGB')
+        kx, ky = im.width / fondo['width'], im.height / fondo['height']
+        nuevos = []
+        for e in logos:
+            cy = e['y'] + e['height'] / 2
+            def extension(y):
+                """Extremos (x1, x2) de lo que no es fondo en el renglón y, a la izquierda del logo.
+                Fondo = el pixel justo antes de la caja del logo (dentro del panel). Se recorre hacia
+                la izquierda y se para al topar con una franja larga distinta: es el borde del panel
+                (el post tiene margen blanco)."""
+                fila = [im.getpixel((min(im.width - 1, int(x * kx)), min(im.height - 1, int(y * ky)))) for x in range(0, int(x0))]
+                bgc = fila[-3]
+                dif = lambda c: sum(abs(a - b) for a, b in zip(c, bgc)) > 60
+                claros, racha = [], 0
+                for x in range(len(fila) - 1, -1, -1):
+                    if dif(fila[x]):
+                        racha += 1
+                        if racha > 25:
+                            claros = claros[:-25]
+                            break
+                        claros.append(x)
+                    else:
+                        racha = 0
+                return (min(claros), max(claros), bgc) if claros else None
+            # El logo no siempre está centrado con su número (se acomodaron a mano): se barre una
+            # banda de renglones y el más ancho es el que pasa por el centro del círculo.
+            banda = [(y, extension(y)) for y in range(int(cy - 45), int(cy + 46), 2)]
+            banda = [(y, ex) for y, ex in banda if ex]
+            if not banda:
+                continue
+            ancho = max(ex[1] - ex[0] for _, ex in banda)
+            centro_y = [y for y, ex in banda if ex[1] - ex[0] >= ancho - 2]
+            cyc = sum(centro_y) / len(centro_y)
+            x1, x2, bgc = next(ex for _, ex in banda if ex[1] - ex[0] == ancho)
+            r = (x2 - x1) / 2 + 5
+            cx = (x1 + x2) / 2
+            nuevos.append({'type': 'figure', 'subType': 'circle', 'name': f"num{e['name'][-1]}", 'visible': False,
+                           'x': cx - r, 'y': cyc - r, 'width': 2 * r, 'height': 2 * r,
+                           'fill': 'rgba(%d,%d,%d,1)' % bgc, 'opacity': 1})
+        i = els.index(fondo) + 1
+        els[i:i] = nuevos
     page['children'] = els
 
 
@@ -166,7 +217,7 @@ for fmt, tipos in ORDEN.items():
         if tipo in ('elite', 'professional', 'standard'):
             normaliza_brokers(page, d['width'])
         elif tipo in ('consultoria', 'onboarding'):
-            normaliza_logos(page)
+            normaliza_logos(page, d['width'])
         else:
             els = plano(page['children'])
             for e in els:
@@ -177,7 +228,7 @@ for fmt, tipos in ORDEN.items():
                     e['name'] = 'mes'
             page['children'] = els
         # elementos invisibles fuera (p. ej. la imagen de referencia oculta del post)
-        page['children'] = [e for e in page['children'] if e.get('visible', True)]
+        page['children'] = [e for e in page['children'] if e.get('visible', True) or re.match(r'^num\d$', e.get('name', ''))]
     externaliza(d)
     d.pop('audios', None)
     json.dump(d, open(os.path.join(OUT, f'{fmt}.json'), 'w'), ensure_ascii=False)
