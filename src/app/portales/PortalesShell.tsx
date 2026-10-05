@@ -21,7 +21,7 @@ type Datos = { calidadQ?: string; pulsoQ?: string; costo?: PortalesView; pulso?:
 // leads, funnel, inmobiliarias) consultan su propia API compartida. «costo» queda SÓLO para el
 // modo presentación (el reporte que se le enseña a cada portal).
 const DE_SECCION: Record<Section, Vista | null> = {
-    inversion: null, leads: null, embudo: null, inmobiliarias: null,
+    resumen: null, inversion: null, leads: null, embudo: null, inmobiliarias: null,
     pulso: 'pulso', historico: 'historico', comoleer: null,
 };
 
@@ -31,7 +31,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function PortalesShell() {
     const hoy = useMemo(() => new Date(Date.now() - 6 * 3600 * 1000), []);
-    const [section, setSection] = useState<Section>('inversion');
+    const [section, setSection] = useState<Section>('resumen');
     const [modo, setModo] = useState<'analisis' | 'presentacion'>('analisis');
     const [portal, setPortal] = useState('i24');
     const [secs, setSecs] = useState<Set<SeccionP>>(new Set(['volumen', 'mezcla', 'atencion', 'embudo']));

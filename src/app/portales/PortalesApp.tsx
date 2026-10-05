@@ -23,9 +23,9 @@ const mesLargo = (mk: string) => `${MESL[mk.slice(5)]} ${mk.slice(0, 4)}`;
 
 // Menú por PREGUNTA (Ale, 5-oct-2026). Las cuatro primeras comparten una sola consulta y una sola
 // barra de filtros (InmobiliariasTab): así un número es el mismo en todas las pestañas.
-export type Section = 'inversion' | 'leads' | 'embudo' | 'inmobiliarias' | 'pulso' | 'historico' | 'comoleer';
-export type SeccionV2 = 'inversion' | 'leads' | 'embudo' | 'inmobiliarias';
-const V2: Section[] = ['inversion', 'leads', 'embudo', 'inmobiliarias'];
+export type Section = 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias' | 'pulso' | 'historico' | 'comoleer';
+export type SeccionV2 = 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias';
+const V2: Section[] = ['resumen', 'inversion', 'leads', 'embudo', 'inmobiliarias'];
 
 /** Mini-barras horizontales para una serie semanal. Sin librería: son 8 divs. */
 function Spark({ vals, color = BLK }: { vals: number[]; color?: string }) {
@@ -100,6 +100,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
             <div style={{ width: 208, flexShrink: 0, borderRight: `1px solid ${LGT}`, padding: '22px 12px', position: 'sticky', top: 0, alignSelf: 'flex-start' }}>
                 <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 21, lineHeight: 1.1, padding: '0 8px 4px' }}>Análisis de portales</div>
                 <div style={{ fontSize: 10.5, color: GRY, padding: '0 8px 16px' }}>Leads, costo y resultados de cada portal</div>
+                {nav('resumen', 'Resumen')}
                 {nav('inversion', 'Inversión y retorno')}
                 {nav('leads', 'Leads y calidad')}
                 {nav('embudo', 'Funnel y cierres')}

@@ -306,8 +306,10 @@ export async function pulseView(opts: { operacion?: 'todas' | 'sale' | 'rent'; n
         alerts.push({ sev: 'alta', txt: `Sin responder ${ult.pctSin}% en la última semana (meta <5%) — asesores con WhatsApp vinculado ${ult.vinc.pctSin}%, sin vincular ${ult.noVinc.pctSin}%.` });
     if (ult && pen && ult.pctLt60 < pen.pctLt60 - 5)
         alerts.push({ sev: 'media', txt: `Respuesta <1h cayó a ${ult.pctLt60}% (${pen.pctLt60}% la semana previa).` });
+    // También exige base en la ventana previa: un canal nuevo (Tokko) salía "+25 pts" contra un 0% vacío.
+    const prevTot = new Map([...brkBy.prev.entries()].map(([k, v]) => [KEY2NAME[k] ?? (k === 'otros' ? 'Otras fuentes' : k), v.length]));
     for (const pp of porPortal)
-        if (Math.abs(pp.delta) >= 8 && pp.total >= 100)
+        if (Math.abs(pp.delta) >= 8 && pp.total >= 100 && (prevTot.get(pp.canal) ?? 0) >= 50)
             alerts.push({ sev: 'media', txt: `${pp.canal}: broker ${pp.delta > 0 ? 'subió' : 'bajó'} a ${pp.pctNow}% de sus leads (${pp.delta > 0 ? '+' : ''}${pp.delta} pts vs 30d previos).` });
 
     const [lwA, lwB] = wk[nweeks - 1];

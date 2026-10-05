@@ -27,6 +27,7 @@ const mesesDe = (desde: string, hasta: string) => {
     return out;
 };
 const TITULOS: Record<SeccionV2, [string, string]> = {
+    resumen: ['Resumen', '¿Cómo vamos? Lo más importante del periodo en una pantalla: qué cambió, qué hay que atender y cómo va cada canal.'],
     inversion: ['Inversión y retorno', '¿Cuánto cuesta cada portal y qué nos regresa? Inversión del Sheet, leads del periodo y la regalía de los cierres del periodo.'],
     leads: ['Leads y calidad', '¿Cuántos leads llegan, de dónde, y qué tan buenos son? Brokers, contacto con el lead y por qué se descartan.'],
     embudo: ['Funnel y cierres', '¿Cuántos visitan, ofertan y cierran, por fuente? Y qué cerró en el periodo.'],
@@ -218,7 +219,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
     const [deal, setDeal] = useState<{ mes: string; d: DealMes | null } | null>(null);
     const [mesDeal, setMesDeal] = useState<string>('');
     useEffect(() => {
-        if (section !== 'inversion' || !v) return;
+        if ((section !== 'inversion' && section !== 'resumen') || !v) return;
         const ma = mesesDe(v.actual.desde, v.actual.hasta), mc = v.comparado ? mesesDe(v.comparado.desde, v.comparado.hasta) : [];
         const key = `${ma.join(',')}|${mc.join(',')}`;
         if (inv?.key === key) return;
@@ -229,6 +230,14 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
         Promise.all([pedir(ma), pedir(mc)]).then(([a, c]) => setInv({ key, a, c }));
         setMesDeal((prev) => (ma.includes(prev) ? prev : (ma.filter((m) => m < iso(hoy).slice(0, 7)).pop() ?? ma[ma.length - 1])));
     }, [section, v, inv?.key, hoy]);
+    // Alertas de la semana (pulso) para el Resumen.
+    const [alertasSemana, setAlertasSemana] = useState<{ op: string; a: Array<{ sev: 'alta' | 'media'; txt: string }> } | null>(null);
+    useEffect(() => {
+        if (section !== 'resumen' || alertasSemana?.op === b.op) return;
+        setAlertasSemana({ op: b.op, a: [] });
+        fetch(`/api/portales?view=pulso&operacion=${b.op}`).then((r) => (r.ok ? r.json() : null))
+            .then((j) => setAlertasSemana({ op: b.op, a: j?.alerts ?? [] })).catch(() => {});
+    }, [section, b.op, alertasSemana?.op]);
     useEffect(() => {
         if (section !== 'inversion' || !mesDeal || deal?.mes === mesDeal) return;
         setDeal({ mes: mesDeal, d: null });
@@ -428,6 +437,82 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 {v.inmobiliaria && v.inmobiliaria.cuentas > 1 && <div style={{ fontSize: 11, color: GRY, marginTop: 3 }}>La cuenta está partida en {v.inmobiliaria.cuentas} compañías con el mismo nombre en Pulppo; aquí se suman todas.</div>}
             </div>
 
+
+            {section === 'resumen' && (() => {
+                const roiTot = !sinCostoReal && !periodoParcial && !faltaInv && totInv ? totRegInv / totInv : null;
+                const pctD = (a: number, b?: number | null) => (b ? Math.round(((a - b) / b) * 100) : null);
+                const signo = (n: number | null, suf = '%') => (n == null ? '' : `${n > 0 ? '+' : ''}${n}${suf}`);
+                const cmp = C ? (v.filtro.comparar === 'anio' ? 'que el año pasado' : 'que el periodo anterior') : '';
+                // canal que más movió el volumen
+                const mov = C ? A.fuentes.map((f) => ({ f, c: buscar(C.fuentes, f.key) })).filter((x) => x.c)
+                    .map((x) => ({ n: x.f.nombre, d: x.f.leads - x.c!.leads })).sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0] : null;
+                const conv = C ? A.fuentes.filter((f) => f.unicos >= 200).map((f) => ({ f, c: buscar(C.fuentes, f.key) }))
+                    .filter((x) => x.c && x.c.pVisita != null && x.f.pVisita != null)
+                    .map((x) => ({ n: x.f.nombre, d: Math.round(((x.f.pVisita as number) - (x.c!.pVisita as number)) * 10) / 10, v: x.f.pVisita }))
+                    .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0] : null;
+                const topReg = [...A.cierres.porFuente].sort((a, b) => b.regalia - a.regalia)[0];
+                const lineas: Array<[string, ReactNode]> = [
+                    ['Volumen', <>Entraron <b>{f0(T.leads)}</b> leads ({f0(T.unicos)} personas){C ? <>, <b>{signo(pctD(T.leads, CT?.leads))}</b> {cmp}</> : null}.{mov && mov.d !== 0 ? <> El que más lo movió: <b>{mov.n}</b> ({mov.d > 0 ? '+' : ''}{f0(mov.d)}).</> : null}</>],
+                    ['Conversión', <>Visitó el <b>{pc(T.pVisita)}</b> de las personas{C && T.pVisita != null && CT?.pVisita != null ? <> ({signo(Math.round((T.pVisita - CT.pVisita) * 10) / 10, ' pts')} {cmp})</> : null}.{conv && Math.abs(conv.d) >= 1 ? <> Mayor cambio: <b>{conv.n}</b> {signo(conv.d, ' pts')} (hoy {pc(conv.v)}).</> : null}{recienteCohorte ? ' Los cierres de esta cohorte todavía están madurando.' : ''}</>],
+                    ['Resultado', <>Cerraron <b>{f0(A.cierres.n)}</b> operaciones con <b>{money(A.cierres.regalia)}</b> de regalía{C ? <> ({signo(pctD(A.cierres.regalia, C.cierres.regalia))})</> : null}{topReg ? <>; la fuente que más aportó fue <b>{topReg.fuente}</b> ({money(topReg.regalia)})</> : null}.{roiTot != null ? <> ROI de los canales pagados: <b>{roiTot.toFixed(2)}×</b>.</> : null}</>],
+                    ['Calidad', <><b>{pc(T.pctBroker)}</b> de los leads vienen de brokers y en el <b>{pc(T.pctSinRespuesta)}</b> no vemos respuesta del cliente{C && T.pctSinRespuesta != null && CT?.pctSinRespuesta != null ? <> ({signo(Math.round((T.pctSinRespuesta - CT.pctSinRespuesta) * 10) / 10, ' pts')})</> : null}. Primera respuesta mediana: <b>{mins(T.respMed)}</b>.</>],
+                ];
+                // Las alertas del pulso son de la última semana: sólo vienen al caso si el periodo la incluye.
+                const incluyeSemana = (Date.now() - new Date(A.hasta).getTime()) / 86400000 <= 14;
+                const atender: Array<{ sev: 'alta' | 'media'; txt: string }> = [
+                    ...(incluyeSemana ? alertasSemana?.a ?? [] : []),
+                    ...A.fuentes.filter((f) => f.leads >= 200 && (f.pctSinRespuesta ?? 0) >= 50)
+                        .map((f) => ({ sev: 'media' as const, txt: `${f.nombre}: en el ${pc(f.pctSinRespuesta)} de sus leads no vemos respuesta del cliente.` })),
+                    ...(faltaInv && ia ? [{ sev: 'media' as const, txt: `Falta cargar la inversión de ${ia.faltantes.map(mesLargo).join(', ')} en el Sheet: CPL y ROI quedan en s/d.` }] : []),
+                ];
+                const top = A.fuentes.slice(0, 8);
+                return (<>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                        <Kpi label="Leads" value={f0(T.leads)} sub={`${f0(T.unicos)} personas`} delta={<Delta a={T.leads} b={CT?.leads} />} />
+                        <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
+                        <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
+                        <Kpi label="Regalía Pulppo" value={money(A.cierres.regalia)} delta={<Delta a={A.cierres.regalia} b={C?.cierres.regalia} />} />
+                        <Kpi label="ROI" value={roiTot != null ? `${roiTot.toFixed(2)}×` : '—'} sub={roiTot != null ? 'canales pagados' : sinCostoReal ? 'sólo con «Todo» y sin inmobiliaria' : faltaInv ? 'falta la inversión del mes' : periodoParcial ? 'elige meses completos' : '…'} />
+                        <Kpi label="Sin respuesta visible" value={pc(T.pctSinRespuesta)} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
+                    </div>
+                    <Seccion titulo="Qué cambió">
+                        {lineas.map(([k, txt]) => (
+                            <div key={k} style={{ display: 'flex', gap: 14, padding: '9px 0', borderBottom: `1px solid ${LGT}`, fontSize: 13, lineHeight: 1.55 }}>
+                                <span style={{ width: 92, flexShrink: 0, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, paddingTop: 2 }}>{k}</span>
+                                <span>{txt}</span>
+                            </div>
+                        ))}
+                    </Seccion>
+                    <Seccion titulo="Para atender" sub={incluyeSemana ? 'Alertas de la última semana completa y de este periodo.' : 'Alertas de este periodo (las de la semana sólo salen si el periodo incluye las últimas dos semanas).'}>
+                        {!atender.length ? <div style={{ fontSize: 12.5, color: GRY }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
+                            : atender.map((x, i) => (
+                                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '7px 0', borderBottom: `1px solid ${LGT}`, fontSize: 12.5 }}>
+                                    <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.5px', color: x.sev === 'alta' ? RED : '#8A6D00', width: 44, flexShrink: 0 }}>{x.sev === 'alta' ? 'ALTA' : 'MEDIA'}</span>
+                                    <span>{x.txt}</span>
+                                </div>
+                            ))}
+                    </Seccion>
+                    <Seccion titulo="Por canal" sub={<>Lo esencial de cada canal. El detalle está en las otras secciones del menú.</>}>
+                        <Tabla head={['Canal', 'Leads', '% visita', 'Cierres', 'Regalía', 'ROI']} min={600}>
+                            {top.map((f) => {
+                                const fi = filasInv.find((x) => x.k === f.key.slice(2));
+                                const c = buscar(C?.fuentes, f.key);
+                                const ok = !sinCostoReal && !periodoParcial && !faltaInv;
+                                return (
+                                    <tr key={f.key}>
+                                        <td style={td0}>{f.nombre}</td>
+                                        <td style={td}>{f0(f.leads)}{c && <div style={{ fontSize: 10 }}><Delta a={f.leads} b={c.leads} /></div>}</td>
+                                        <td style={td}>{pc(f.pVisita)}{c && <div style={{ fontSize: 10 }}><Delta a={f.pVisita} b={c.pVisita} pts /></div>}</td>
+                                        <td style={td}>{f0(fi?.cierres ?? 0)}</td>
+                                        <td style={td}>{money(fi?.regalia ?? 0)}</td>
+                                        <td style={{ ...td, fontWeight: 700, color: ok && fi?.roi != null ? (fi.roi >= 1 ? SEA : RED) : GRY }}>{ok && fi?.roi != null ? `${fi.roi.toFixed(2)}×` : '—'}</td>
+                                    </tr>
+                                );
+                            })}
+                        </Tabla>
+                    </Seccion>
+                </>);
+            })()}
 
             {section === 'inversion' && (<>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
