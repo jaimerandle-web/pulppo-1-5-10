@@ -5,6 +5,8 @@
 // Dos métricas, se elige con toggle en la UI:
 //   · 'cobrada' — comisión efectivamente cobrada en el mes: Σ payments[].comission.value
 //                 cuyo createdAt cae en el mes. Es la que reproduce la lista de Ale.
+//                 Excepción: pago capturado 1–2 días después del cierre → cuenta en el mes
+//                 del cierre (ver paymentDate).
 //   · 'total'   — comisión de operaciones cerradas: comission.value de ops con closedAt en
 //                 el mes y status.last en (closed, paying).
 //
@@ -25,6 +27,24 @@ export type Metric = 'cobrada' | 'total';
 
 const isDemo = (n?: string | null) => !!n && DEMO_RE.test(n);
 const isDate = (v: unknown): v is Date => v instanceof Date && !isNaN(v.getTime());
+
+const DAY_MS = 86_400_000;
+/** Día calendario en hora de México (UTC−6), para comparar fechas por día y no por hora. */
+const mxDay = (d: Date) => Math.floor((d.getTime() - 6 * 3_600_000) / DAY_MS);
+
+/** Fecha con la que un pago entra a 'cobrada'. Normalmente su createdAt, PERO si se capturó
+ *  1–2 días después del cierre se toma la fecha del cierre: son ajustes de comisión que las
+ *  KAMs hacen tras cerrar el último día del mes, y ellas lo cuentan en el mes del cierre
+ *  (p. ej. Quatre 705-GUAR-PATR: cierre 31-ago, pago 1-sep → agosto). Pagos anticipados o
+ *  muy posteriores al cierre se quedan en su propio mes. */
+function paymentDate(p: Document, closedAt: unknown): Date | null {
+    if (!isDate(p.createdAt)) return null;
+    if (isDate(closedAt) && p.createdAt > closedAt) {
+        const gap = mxDay(p.createdAt) - mxDay(closedAt);
+        if (gap >= 1 && gap <= 2) return closedAt;
+    }
+    return p.createdAt;
+}
 
 /** [inicio, fin) del mes. month es 1..12. */
 export function monthBounds(year: number, month: number): [Date, Date] {
@@ -112,11 +132,12 @@ export async function companyValueByMonth(
         // Ojo: recorre TODAS las ops con pagos (no se puede filtrar por mes en la query
         // porque el mes se decide por payments[].createdAt, que es un array).
         const cur = db.collection('operations').find(
-            { 'payments.0': { $exists: true } }, { projection: { company: 1, payments: 1 } });
+            { 'payments.0': { $exists: true } }, { projection: { company: 1, payments: 1, closedAt: 1 } });
         for await (const op of cur) {
             let j = 0;
             for (const p of ((op.payments as Document[]) ?? [])) {
-                if (isDate(p.createdAt) && p.createdAt >= start && p.createdAt < end) {
+                const d = paymentDate(p, op.closedAt);
+                if (d && d >= start && d < end) {
                     j += Number(((p.comission as Document) ?? {}).value ?? 0) || 0;
                 }
             }
@@ -213,7 +234,8 @@ export async function brokerValueByMonth(
         let amt = 0;
         if (metric === 'cobrada') {
             for (const p of ((o.payments as Document[]) ?? [])) {
-                if (isDate(p.createdAt) && p.createdAt >= start && p.createdAt < end) {
+                const d = paymentDate(p, o.closedAt);
+                if (d && d >= start && d < end) {
                     amt += Number(((p.comission as Document) ?? {}).value ?? 0) || 0;
                 }
             }
@@ -258,7 +280,8 @@ export async function brokerOps(
         let amt = 0;
         if (metric === 'cobrada') {
             for (const p of ((o.payments as Document[]) ?? [])) {
-                if (isDate(p.createdAt) && p.createdAt >= start && p.createdAt < end) {
+                const d = paymentDate(p, o.closedAt);
+                if (d && d >= start && d < end) {
                     amt += Number(((p.comission as Document) ?? {}).value ?? 0) || 0;
                 }
             }
