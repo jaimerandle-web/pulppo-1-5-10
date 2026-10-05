@@ -89,22 +89,40 @@ function wrap(ctx: CanvasRenderingContext2D, line: string, maxW: number): string
     return out;
 }
 
-function drawText(ctx: CanvasRenderingContext2D, e: El) {
+function textLines(e: El): string[] {
+    const lines = htmlLines(e.text);
+    return e.textTransform === 'uppercase' ? lines.map((l) => l.toUpperCase()) : lines;
+}
+
+/** Tamaño al que cabe cada renglón sin partirse (mínimo 55% del de diseño). */
+function fitSize(ctx: CanvasRenderingContext2D, e: El): number {
     let fs: number = e.fontSize || 16;
+    const min = fs * 0.55, lines = textLines(e);
+    const weight = e.fontWeight === 'normal' ? '400' : (e.fontWeight || '400');
+    const set = () => {
+        ctx.font = `${e.fontStyle === 'italic' ? 'italic ' : ''}${weight} ${fs}px "${e.fontFamily}"`;
+        ctx.letterSpacing = `${(e.letterSpacing || 0) * fs}px`;
+    };
+    set();
+    while (fs > min && lines.some((l) => ctx.measureText(l).width > e.width)) { fs -= 0.5; set(); }
+    ctx.letterSpacing = '0px';
+    return fs;
+}
+
+function drawText(ctx: CanvasRenderingContext2D, e: El) {
+    let fs: number = e._fs ?? e.fontSize ?? 16;
     const weight = e.fontWeight === 'normal' ? '400' : (e.fontWeight || '400');
     const setFont = () => {
         ctx.font = `${e.fontStyle === 'italic' ? 'italic ' : ''}${weight} ${fs}px "${e.fontFamily}"`;
         ctx.letterSpacing = `${(e.letterSpacing || 0) * fs}px`;
     };
     setFont();
-    let lines = htmlLines(e.text);
-    if (e.textTransform === 'uppercase') lines = lines.map((l) => l.toUpperCase());
+    const lines = textLines(e);
     let all: string[];
     if (e.custom?.fit) {
         // Nombres e inmobiliarias: nunca partir el renglón (se encimaría con el de abajo);
-        // si no cabe, se achica la letra hasta 55% del tamaño de diseño.
-        const min = fs * 0.55;
-        while (fs > min && lines.some((l) => ctx.measureText(l).width > e.width)) { fs -= 0.5; setFont(); }
+        // si no cabe, se achica la letra (ver fitSize; con fitGroup se iguala en el grupo).
+        if (e._fs == null) { fs = fitSize(ctx, e); setFont(); }
         all = lines;
     } else {
         all = lines.flatMap((l) => wrap(ctx, l, e.width));
@@ -191,6 +209,17 @@ export async function renderPage(doc: PolotnoDoc, page: PolotnoDoc['pages'][numb
     ctx.scale(scale, scale);
     ctx.fillStyle = page.background || '#fff';
     ctx.fillRect(0, 0, doc.width, doc.height);
+    // Tamaño común por grupo: los tres nombres (y las tres inmobiliarias) de una lámina van al
+    // mismo tamaño, el del que menos cabe. Achicar sólo el largo se veía disparejo.
+    const groups = new Map<string, El[]>();
+    for (const e of page.children) {
+        const g = e.custom?.fitGroup;
+        if (e.type === 'text' && g && e.visible !== false && String(e.text ?? '').trim()) groups.set(g, [...(groups.get(g) ?? []), e]);
+    }
+    for (const els of groups.values()) {
+        const fs = Math.min(...els.map((e) => fitSize(ctx, e)));
+        els.forEach((e) => { e._fs = fs; });
+    }
     for (const e of page.children) {
         if (e.visible === false || e.showInExport === false) continue;
         ctx.save();
@@ -228,7 +257,7 @@ export function fillTemplate(tpl: PolotnoDoc, f: RankingFill): PolotnoDoc {
                 // El post los parte en dos renglones (<p>nombre</p><p>apellido</p>); la historia
                 // en uno. Se respeta lo que traiga la plantilla.
                 if (nm) nm.text = /<p/i.test(String(nm.text)) ? `<p>${b.first}</p><p>${b.last}</p>` : `${b.first} ${b.last}`.trim();
-                if (inmo) inmo.text = b.inmo ? `/${b.inmo.toUpperCase()}` : '';
+                if (inmo) inmo.text = b.inmo ? `/ ${b.inmo.toUpperCase()}` : '';
                 if (foto) { foto.src = b.photo ?? ''; foto.visible = !!b.photo; }
                 if (ini) ini.text = b.photo ? '' : initials(b);
             });

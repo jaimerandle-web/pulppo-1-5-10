@@ -116,8 +116,13 @@ def normaliza_brokers(page, W):
         nuevos[i:i] = [ph, ini, foto]
     for e in nuevos:
         e.pop('_W', None)
-        if e.get('name', '').startswith(('broker', 'inmo')):
-            e['custom'] = {'fit': True}
+        nm = e.get('name', '')
+        if nm.startswith(('broker', 'inmo')):
+            # Huecos de datos: siempre visibles (en la historia élite el inmo1 venía oculto en
+            # Polotno y Mercedes Rivas salía sin inmobiliaria). fitGroup = los tres del mismo
+            # tipo comparten tamaño de letra.
+            e['visible'] = True
+            e['custom'] = {'fit': True, 'fitGroup': 'broker' if nm.startswith('broker') else 'inmo'}
     page['children'] = nuevos
 
 
