@@ -279,7 +279,8 @@ export async function portalesView(opts: number | RangoMeses = 6, now = Date.now
         // MeLi no se lee del Sheet: es base fija + 6% del deal (conciliado si lo hay).
         if (k === 'meli') return deals.get(mk)?.inversion ?? null;
         if (!im || im.faltante) return null;
-        const v = im.canales[k];
+        // El scorecard trata i24 completo (leads de NURA incluidos): se suma su paquete.
+        const v = k === 'i24' && im.canales.i24 !== undefined ? im.canales.i24 + (im.canales.i24nura ?? 0) : im.canales[k];
         return v === undefined ? null : v;
     };
 

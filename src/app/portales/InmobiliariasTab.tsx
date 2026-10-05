@@ -554,7 +554,8 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                             {otrasFuentesCierre.map((x) => <tr key={x.fuente}><td style={td0}>{x.fuente}</td><td style={td}>{f0(x.n)}</td><td style={td}>{money(x.regalia)}</td></tr>)}
                         </Tabla>
                     </>)}
-                    {ia?.faltantes.length ? <Aviso><b>Falta cargar la inversión de {ia.faltantes.map(mesLargo).join(' y ')} en el Sheet.</b> Esos canales muestran <b>s/d</b>, no cero: cero diría que fue gratis.</Aviso> : null}
+                    {ia?.copiados.length ? <Aviso>{ia.copiados.map(([m, de]) => `${mesLargo(m)} usa el plan de ${de}`).join(' · ')}: el tab del Sheet trae el bloque del mes anterior (el plan mensual es fijo). Si el gasto real cambia, hay que capturarlo en su tab.</Aviso> : null}
+                {ia?.faltantes.length ? <Aviso><b>Falta cargar la inversión de {ia.faltantes.map(mesLargo).join(' y ')} en el Sheet.</b> Esos canales muestran <b>s/d</b>, no cero: cero diría que fue gratis.</Aviso> : null}
                 </Seccion>
 
                 {!v.inmobiliaria && v.filtro.operacion === 'todas' && (

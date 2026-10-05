@@ -24,7 +24,9 @@ const TAB = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
 // `i24 mérida` suma a `i24`: así lo hace el número que Ale reporta (jul 579,353 + 38,910 =
 // 618,263, que es exactamente lo que tenía la tabla a mano).
 const CANAL_KEY: Record<string, string> = {
-    'i24': 'i24', 'i24 merida': 'i24', 'inmuebles24': 'i24',
+    // «I24 Mérida» es el paquete de NURA (contrato propio con i24): va en su propia clave para
+    // poder separarlo (Ale, 5-oct-2026). Donde se necesita el i24 completo se suman las dos.
+    'i24': 'i24', 'i24 merida': 'i24nura', 'inmuebles24': 'i24',
     'meli': 'meli', 'mercadolibre': 'meli',
     'meta': 'facebook', 'fb': 'facebook', 'facebook': 'facebook',
     'easybroker': 'easybroker',
@@ -62,6 +64,8 @@ export interface InversionMes {
     faltante: boolean;
     /** Qué dice el Sheet para MeLi, para poder contrastarlo con la fórmula del deal. */
     meliSheet: number | null;
+    /** El tab trae el bloque del mes ANTERIOR (plan mensual fijo copiado): nombre de ese mes. */
+    copiaDe?: string;
 }
 
 // ── CSV ────────────────────────────────────────────────────────────
@@ -131,10 +135,20 @@ async function fetchTab(mes: string): Promise<InversionMes> {
     //   2. Los tabs de julio y agosto arrastran un segundo bloque pegado que sigue diciendo
     //      "RESULTS JUNIO". Buscar sólo "RESULTS" podría caer en el equivocado.
     const mesTab = norm(tab);
-    const ini = rows.findIndex((r) => {
+    let ini = rows.findIndex((r) => {
         const s = norm(r[1] || '');
         return s.startsWith('results') && s.includes(mesTab);
     });
+    // Plan mensual fijo (Ale, 5-oct-2026): el tab de septiembre es una copia del de agosto y su
+    // bloque sigue diciendo «RESULTS AGOSTO». Se acepta SÓLO si es el mes inmediato anterior y es
+    // el primer bloque RESULTS del tab; cualquier otro mes se sigue rechazando (el fallback de gviz
+    // a la primera hoja trae «RESULTS ENERO»).
+    let copiaDe: string | undefined;
+    if (ini < 0) {
+        const mesAnt = norm(TAB[m === 1 ? 12 : m - 1]);
+        const primero = rows.findIndex((r) => norm(r[1] || '').startsWith('results'));
+        if (primero >= 0 && norm(rows[primero][1] || '').includes(mesAnt)) { ini = primero; copiaDe = TAB[m === 1 ? 12 : m - 1].toLowerCase(); }
+    }
     if (ini < 0) return vacio;
 
     const canales: Record<string, number> = {};
@@ -147,7 +161,7 @@ async function fetchTab(mes: string): Promise<InversionMes> {
         if (!key) continue;                         // fila que no es un canal conocido
         const v = money(rows[i][2] || '');
         if (v === null) continue;
-        canales[key] = (canales[key] ?? 0) + v;     // i24 + i24 Mérida caen en la misma clave
+        canales[key] = (canales[key] ?? 0) + v;
     }
 
     // Los canales gratis son 0 real, no "no sé".
@@ -161,6 +175,7 @@ async function fetchTab(mes: string): Promise<InversionMes> {
         mes, canales,
         faltante: suma === 0,
         meliSheet: canales.meli ?? null,
+        ...(copiaDe ? { copiaDe } : {}),
     };
 }
 
@@ -193,6 +208,8 @@ export interface InversionRango {
     /** meses cuyo tab del Sheet todavía no existe o está en ceros */
     faltantes: string[];
     meli: Array<{ mes: string; inversion: number; fuente: 'conciliado' | 'calculado' }>;
+    /** meses cuyo tab trae el plan del mes anterior copiado: [mes, mes del que se copió] */
+    copiados: Array<[string, string]>;
 }
 export async function inversionRango(meses: string[]): Promise<InversionRango> {
     const { dealMes } = await import('./deal');
@@ -210,5 +227,6 @@ export async function inversionRango(meses: string[]): Promise<InversionRango> {
     }
     for (const k of GRATIS) porCanal[k] = 0;
     porCanal.meli = deals.reduce((a, d) => a + d.inversion, 0);
-    return { meses, porCanal, faltantes, meli: deals.map((d) => ({ mes: d.mes, inversion: d.inversion, fuente: d.fuente })) };
+    const copiados = meses.filter((m) => inv[m]?.copiaDe).map((m) => [m, inv[m].copiaDe!] as [string, string]);
+    return { meses, porCanal, faltantes, meli: deals.map((d) => ({ mes: d.mes, inversion: d.inversion, fuente: d.fuente })), copiados };
 }

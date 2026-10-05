@@ -152,6 +152,10 @@ function telInvalido(p: unknown): boolean {
     return '01234567890123456789'.includes(u) || '98765432109876543210'.includes(u);
 }
 
+/** NURA tiene contrato propio con i24 (la línea «I24 Mérida» del Sheet): se reporta aparte. */
+export const I24_NURA = 'Inmuebles24 · NURA';
+const esNura = (name: unknown) => /\bnura\b/i.test(String(name ?? ''));
+
 const r1 = (x: number) => Math.round(x * 10) / 10;
 const p1 = (a: number, b: number) => (b ? r1((100 * a) / b) : null);
 const mediana = (xs: number[]): number | null => {
@@ -241,6 +245,7 @@ async function bloque(
         cells.get(key) ?? cells.set(key, nuevaCelda(key, nombre, req)).get(key)!;
     const total = cel('total', 'Total', reqInmo);
     for (const [n, k] of CANALES) cel(`f:${k}`, n, reqInmo);
+    cel('f:i24nura', I24_NURA, reqInmo);
     cel('f:otros', 'Otras fuentes', reqInmo);
 
     // leads → celdas; se guardan para los joins de después
@@ -261,7 +266,9 @@ async function bloque(
     for await (const l of cur) {
         const ca = l.createdAt;
         if (!isDate(ca)) continue;
-        const canal = classifySource(l.source as string);
+        // i24 de NURA va aparte: tiene su propio paquete con i24 («I24 Mérida» en el Sheet).
+        const canal0 = classifySource(l.source as string);
+        const canal = canal0 === 'i24' && esNura(dig(l, 'company', 'name')) ? 'i24nura' : canal0;
         const mis: Celda[] = [total, cells.get(`f:${canal}`)!];
         if (op) {
             const aid = dig(l, 'agent', '_id');
@@ -500,6 +507,7 @@ async function bloque(
             id: 1, closedAt: 1, 'property.internalId': 1, 'property.listing.operation': 1, 'property.type': 1,
             'property.address.neighborhood.name': 1, 'closeValue.value': 1, 'comission.value': 1, 'pulppoComission.value': 1, 'buyer.source': 1,
             'seller.company._id': 1, 'buyer.company._id': 1, 'buyer.company.external': 1, 'buyer.contact._id': 1, 'property._id': 1,
+            'seller.company.name': 1, 'buyer.company.name': 1,
             'seller.broker._id': 1, 'seller.broker.firstName': 1, 'seller.broker.lastName': 1,
             'buyer.broker._id': 1, 'buyer.broker.firstName': 1, 'buyer.broker.lastName': 1,
             'seller.company.external': 1,
@@ -571,7 +579,13 @@ async function bloque(
                 tipo: (dig(o, 'property', 'type') as string) ?? null,
                 colonia: (dig(o, 'property', 'address', 'neighborhood', 'name') as string) ?? null,
                 valor: num(dig(o, 'closeValue', 'value')), comision: num(dig(o, 'comission', 'value')), regalia: num(dig(o, 'pulppoComission', 'value')),
-                ...(() => { const fc = fuenteCapturada(dig(o, 'buyer', 'source')); return fc ? { fuente: fc } : deducir(o); })(),
+                ...(() => {
+                    const fc = fuenteCapturada(dig(o, 'buyer', 'source'));
+                    const r = fc ? { fuente: fc } : deducir(o);
+                    // cierre de i24 en el que participa NURA → su propio canal, igual que sus leads
+                    const nura = esNura(dig(o, 'seller', 'company', 'name')) || esNura(dig(o, 'buyer', 'company', 'name'));
+                    return r.fuente === 'Inmuebles24' && nura ? { ...r, fuente: I24_NURA } : r;
+                })(),
                 lado: ladoX, asesor: nombres.join(' / ') || '—',
             });
             if (!fuenteCapturada(dig(o, 'buyer', 'source'))) sinFuenteOrig += 1;
@@ -605,7 +619,7 @@ async function bloque(
             descSinSeg: c.descSinSeg, pctDescSinSeg: p1(c.descSinSeg, c.desc),
             brokerLeads: c.brk, pctBroker: p1(c.brk, c.leads), descFam: Object.fromEntries(c.descFam),
             telInvalido: c.telInv, pctTelInvalido: p1(c.telInv, c.leads),
-            ...(top ? { topFuente: KEY2NAME[top[0]] ?? 'Otras fuentes' } : {}),
+            ...(top ? { topFuente: top[0] === 'i24nura' ? I24_NURA : KEY2NAME[top[0]] ?? 'Otras fuentes' } : {}),
         };
     };
     const celdas = [...cells.values()];
