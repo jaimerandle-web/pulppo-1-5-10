@@ -27,7 +27,7 @@
 //   · Excluye Habi y cuentas de prueba siempre.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from '../data';
-import { CANALES, KEY2NAME, NOT, NOTP, classifySource, dig, isDate, num, oid } from './metrics';
+import { CANALES, KEY2NAME, NOT, NOTP, brokerContacts, classifySource, dig, isDate, num, oid } from './metrics';
 import { FAM_LBL, FAM_ORDEN, NO_ES_DESCARTE, etiquetaMotivo, familiaDe, motivoDe } from './descarte';
 import { ALIAS_IDS, ALIAS_INMO, ORDEN_INMOBILIARIAS, SIN_CUENTA, normInmo } from './ordenInmobiliarias';
 import type { Operacion } from './view';
@@ -73,13 +73,17 @@ export interface Fila {
     descSinSeg: number; pctDescSinSeg: number | null;
     /** teléfono que no sirve (menos de 10 dígitos, todos iguales o una secuencia) */
     telInvalido: number; pctTelInvalido: number | null;
+    /** leads cuyo contacto está etiquetado como broker (`contacts.tags ~ /broker/i`) */
+    brokerLeads: number; pctBroker: number | null;
+    /** descartados por familia (claves de FAM_ORDEN) */
+    descFam: Record<string, number>;
     /** fuente que más leads trae (sólo en filas de asesor / inmobiliaria) */
     topFuente?: string;
     nota?: string;
 }
 export interface Cierre {
     fecha: string; id: string; codigo: string | null; operacion: string; tipo: string | null;
-    colonia: string | null; valor: number; comision: number;
+    colonia: string | null; valor: number; comision: number; regalia: number;
     fuente: string; lado: 'vendedor' | 'comprador' | 'ambos'; asesor: string;
     /** la fuente no venía en la operación: se dedujo del primer lead del comprador */
     inferida?: boolean;
@@ -99,8 +103,8 @@ export interface Bloque {
         busquedas: number;
     };
     cierres: {
-        n: number; venta: number; renta: number; valor: number; comision: number;
-        porFuente: Array<{ fuente: string; n: number; venta: number; renta: number; comision: number; inferidas: number }>;
+        n: number; venta: number; renta: number; valor: number; comision: number; regalia: number;
+        porFuente: Array<{ fuente: string; n: number; venta: number; renta: number; comision: number; regalia: number; inferidas: number }>;
         /** cuántos cierres venían sin fuente (`other`) y cuántos quedaron sin poder atribuir */
         sinFuenteOriginal: number; sinAtribuir: number;
         lista: Cierre[];
@@ -214,11 +218,12 @@ interface Celda {
     leads: number; venta: number; renta: number; baseLab: number; lt60: number; sin: number; resp: number[];
     t0: Map<string, Date>; vis: Set<string>; ofe: Set<string>; clo: Set<string>;
     soloClic: number; conv: number; sinResp: number; fantTel: number; desc: number; descSinSeg: number; telInv: number;
+    brk: number; descFam: Map<string, number>;
     fuentes: Map<string, number>;
 }
 const nuevaCelda = (key: string, nombre: string, req: Set<string> | null): Celda => ({
     key, nombre, req, leads: 0, venta: 0, renta: 0, baseLab: 0, lt60: 0, sin: 0, resp: [],
-    t0: new Map(), vis: new Set(), ofe: new Set(), clo: new Set(), soloClic: 0, conv: 0, sinResp: 0, fantTel: 0, desc: 0, descSinSeg: 0, telInv: 0, fuentes: new Map(),
+    t0: new Map(), vis: new Set(), ofe: new Set(), clo: new Set(), soloClic: 0, conv: 0, sinResp: 0, fantTel: 0, desc: 0, descSinSeg: 0, telInv: 0, brk: 0, descFam: new Map(), fuentes: new Map(),
 });
 
 async function bloque(
@@ -439,8 +444,9 @@ async function bloque(
                     .filter((h) => h?.status === 'cancelled' && isDate(h.timestamp)).map((h) => h.timestamp as Date)
                     .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
                 descartadas.push({ id: s._id as ObjectId, motivo, fin });
+                const famM = familiaDe(motivo);
                 for (const r of porSearch.get(String(s._id)) ?? []) {
-                    for (const c of r.cells) c.desc += 1;
+                    for (const c of r.cells) { c.desc += 1; c.descFam.set(famM, (c.descFam.get(famM) ?? 0) + 1); }
                     motivosTot.set(motivo, (motivosTot.get(motivo) ?? 0) + 1);
                 }
             }
@@ -492,7 +498,7 @@ async function bloque(
         };
         const ops = await db.collection('operations').find(q, { projection: {
             id: 1, closedAt: 1, 'property.internalId': 1, 'property.listing.operation': 1, 'property.type': 1,
-            'property.address.neighborhood.name': 1, 'closeValue.value': 1, 'comission.value': 1, 'buyer.source': 1,
+            'property.address.neighborhood.name': 1, 'closeValue.value': 1, 'comission.value': 1, 'pulppoComission.value': 1, 'buyer.source': 1,
             'seller.company._id': 1, 'buyer.company._id': 1, 'buyer.company.external': 1, 'buyer.contact._id': 1, 'property._id': 1,
             'seller.broker._id': 1, 'seller.broker.firstName': 1, 'seller.broker.lastName': 1,
             'buyer.broker._id': 1, 'buyer.broker.firstName': 1, 'buyer.broker.lastName': 1,
@@ -564,7 +570,7 @@ async function bloque(
                 operacion: opx === 'sale' ? 'Venta' : opx === 'rent' ? 'Renta' : opx || '—',
                 tipo: (dig(o, 'property', 'type') as string) ?? null,
                 colonia: (dig(o, 'property', 'address', 'neighborhood', 'name') as string) ?? null,
-                valor: num(dig(o, 'closeValue', 'value')), comision: num(dig(o, 'comission', 'value')),
+                valor: num(dig(o, 'closeValue', 'value')), comision: num(dig(o, 'comission', 'value')), regalia: num(dig(o, 'pulppoComission', 'value')),
                 ...(() => { const fc = fuenteCapturada(dig(o, 'buyer', 'source')); return fc ? { fuente: fc } : deducir(o); })(),
                 lado: ladoX, asesor: nombres.join(' / ') || '—',
             });
@@ -573,7 +579,13 @@ async function bloque(
         return { out, sinFuenteOrig };
     })();
 
-    const [, , , cierresRes] = await Promise.all([Promise.all(tareasJoin), tareaFantasma, tareaDescarte, tareaCierres]);
+    // ── leads de brokers (contacto etiquetado broker), el mismo criterio del resto de /portales ──
+    const tareaBroker = (async () => {
+        const bset = await brokerContacts(new Set(refs.map((r) => r.cid).filter((x): x is string => !!x)));
+        for (const r of refs) if (r.cid && bset.has(r.cid)) for (const c of r.cells) c.brk += 1;
+    })();
+
+    const [, , , cierresRes] = await Promise.all([Promise.all(tareasJoin), tareaFantasma, tareaDescarte, tareaCierres, tareaBroker]);
     const lista = cierresRes.out;
 
     const fila = (c: Celda): Fila => {
@@ -591,6 +603,7 @@ async function bloque(
             soloClic: c.soloClic, pctSoloClic: p1(c.soloClic, c.leads),
             descartados: c.desc, pctDescartado: p1(c.desc, c.leads),
             descSinSeg: c.descSinSeg, pctDescSinSeg: p1(c.descSinSeg, c.desc),
+            brokerLeads: c.brk, pctBroker: p1(c.brk, c.leads), descFam: Object.fromEntries(c.descFam),
             telInvalido: c.telInv, pctTelInvalido: p1(c.telInv, c.leads),
             ...(top ? { topFuente: KEY2NAME[top[0]] ?? 'Otras fuentes' } : {}),
         };
@@ -614,10 +627,10 @@ async function bloque(
     const fam = new Map<string, number>();
     for (const [m, n] of motivosTot) { const k = familiaDe(m); fam.set(k, (fam.get(k) ?? 0) + n); }
 
-    const porFuente = new Map<string, { fuente: string; n: number; venta: number; renta: number; comision: number; inferidas: number }>();
+    const porFuente = new Map<string, { fuente: string; n: number; venta: number; renta: number; comision: number; regalia: number; inferidas: number }>();
     for (const x of lista) {
-        const r = porFuente.get(x.fuente) ?? porFuente.set(x.fuente, { fuente: x.fuente, n: 0, venta: 0, renta: 0, comision: 0, inferidas: 0 }).get(x.fuente)!;
-        r.n += 1; r.comision += x.comision; if (x.inferida) r.inferidas += 1;
+        const r = porFuente.get(x.fuente) ?? porFuente.set(x.fuente, { fuente: x.fuente, n: 0, venta: 0, renta: 0, comision: 0, regalia: 0, inferidas: 0 }).get(x.fuente)!;
+        r.n += 1; r.comision += x.comision; r.regalia += x.regalia; if (x.inferida) r.inferidas += 1;
         if (x.operacion === 'Venta') r.venta += 1; else if (x.operacion === 'Renta') r.renta += 1;
     }
     const bIncl = new Date(B.getTime() - DIA);
@@ -646,7 +659,7 @@ async function bloque(
         },
         cierres: {
             n: lista.length, venta: lista.filter((x) => x.operacion === 'Venta').length, renta: lista.filter((x) => x.operacion === 'Renta').length,
-            valor: lista.reduce((a, x) => a + x.valor, 0), comision: lista.reduce((a, x) => a + x.comision, 0),
+            valor: lista.reduce((a, x) => a + x.valor, 0), comision: lista.reduce((a, x) => a + x.comision, 0), regalia: lista.reduce((a, x) => a + x.regalia, 0),
             porFuente: [...porFuente.values()].sort((a, b) => b.n - a.n),
             sinFuenteOriginal: cierresRes.sinFuenteOrig, sinAtribuir: lista.filter((x) => x.fuente === F_SIN).length,
             lista: lista.slice(0, 60),

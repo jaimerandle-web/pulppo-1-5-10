@@ -17,9 +17,12 @@ import Presentacion, { SECCIONES, type SeccionP } from './Presentacion';
 type Vista = 'costo' | 'pulso' | 'historico' | 'periodo' | 'calidad';
 type Datos = { calidadQ?: string; pulsoQ?: string; costo?: PortalesView; pulso?: PulseView; historico?: HistoricoView; periodo?: PeriodoView; calidad?: CalidadView };
 
+// Sólo el pulso y el histórico usan vistas propias; las cuatro secciones nuevas (inversión,
+// leads, funnel, inmobiliarias) consultan su propia API compartida. «costo» queda SÓLO para el
+// modo presentación (el reporte que se le enseña a cada portal).
 const DE_SECCION: Record<Section, Vista | null> = {
-    costo: 'costo', funnel: 'costo', deal: 'costo',
-    calidad: 'calidad', pulso: 'pulso', historico: 'historico', inmobiliarias: null, comoleer: null,
+    inversion: null, leads: null, embudo: null, inmobiliarias: null,
+    pulso: 'pulso', historico: 'historico', comoleer: null,
 };
 
 const BLK = '#212322', GRY = '#B7B7B7', LGT = '#F3F3F3';
@@ -28,7 +31,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function PortalesShell() {
     const hoy = useMemo(() => new Date(Date.now() - 6 * 3600 * 1000), []);
-    const [section, setSection] = useState<Section>('costo');
+    const [section, setSection] = useState<Section>('inversion');
     const [modo, setModo] = useState<'analisis' | 'presentacion'>('analisis');
     const [portal, setPortal] = useState('i24');
     const [secs, setSecs] = useState<Set<SeccionP>>(new Set(['volumen', 'mezcla', 'atencion', 'embudo']));
@@ -76,8 +79,9 @@ export default function PortalesShell() {
     const qOper = `&operacion=${oper}`;
     const qPeriodo = `&desde=${pDesde}&hasta=${pHasta}`;
 
-    // La vista de costo se recarga cuando cambia el rango de meses.
-    useEffect(() => { cargar('costo', qCosto); }, [cargar, qCosto]);
+    // La vista de costo sólo hace falta para el modo presentación: antes se pedía al abrir la página
+    // y bloqueaba todo ~20 s aunque fueras a otra sección.
+    useEffect(() => { if (modo === 'presentacion') cargar('costo', qCosto); }, [cargar, qCosto, modo]);
     // Las demás, perezosas: sólo al entrar a su sección.
     useEffect(() => {
         const v = DE_SECCION[section];
@@ -99,7 +103,7 @@ export default function PortalesShell() {
     const OPS: Array<['todas' | 'sale' | 'rent', string]> = [['todas', 'Todo'], ['sale', 'Venta'], ['rent', 'Renta']];
     // Cada sección muestra SÓLO los filtros que de verdad la mueven: el pulso es semanal (no usa
     // meses) y el histórico no usa ninguno. Antes se veían los dos en todas y parecía que no cargaban.
-    const usaMeses = modo === 'presentacion' || section === 'costo' || section === 'funnel' || section === 'deal' || section === 'calidad';
+    const usaMeses = modo === 'presentacion';
     const usaOper = usaMeses || section === 'pulso';
     const controles = !usaOper ? (
         <span style={{ fontSize: 11.5, color: GRY }}>Esta vista no usa filtros: siempre muestra el histórico completo.</span>
@@ -125,13 +129,13 @@ export default function PortalesShell() {
     );
 
     if (err) return <div style={{ padding: 30, fontFamily: 'Nunito Sans, sans-serif', color: '#A52003' }}>No pude cargar los datos: {err}</div>;
-    if (!d.costo) return (
+    if (modo === 'presentacion' && !d.costo) return (
         <div style={{ padding: 30, fontFamily: 'Nunito Sans, sans-serif', color: GRY }}>
-            Consultando Mongo y el Sheet de inversión… la primera carga tarda unos segundos.
+            Preparando el modo presentación (Mongo + Sheet de inversión)… tarda unos segundos.
         </div>
     );
 
-    if (modo === 'presentacion') {
+    if (modo === 'presentacion' && d.costo) {
         return (
             <Presentacion
                 d={d.costo} periodo={d.periodo ?? null} portalKey={portal} secciones={secs}
@@ -168,11 +172,12 @@ export default function PortalesShell() {
     const vistaActual = DE_SECCION[section];
     return (
         <PortalesApp
-            d={d.costo} pulso={d.pulso ?? null} hist={d.historico ?? null} calidad={d.calidad ?? null}
+            pulso={d.pulso ?? null} hist={d.historico ?? null}
             section={section} setSection={setSection}
+            op={bOper} setOp={setBOper}
             cacheAt={(vistaActual && at[vistaActual]) ?? null}
             cargando={cargando !== null}
-            onRefresh={() => { if (vistaActual) cargar(vistaActual, vistaActual === 'costo' || vistaActual === 'calidad' ? qCosto : vistaActual === 'pulso' ? qOper : '', true); }}
+            onRefresh={() => { if (vistaActual) cargar(vistaActual, vistaActual === 'pulso' ? qOper : '', true); }}
             controles={controles}
             onPresentar={() => setModo('presentacion')}
         />

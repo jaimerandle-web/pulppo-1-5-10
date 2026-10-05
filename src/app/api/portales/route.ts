@@ -4,6 +4,8 @@ import { pulseView } from '@/lib/portales/pulse';
 import { historicoView } from '@/lib/portales/historico';
 import { periodoView } from '@/lib/portales/periodo';
 import { calidadView } from '@/lib/portales/calidad';
+import { inversionRango } from '@/lib/portales/inversion';
+import { dealMes } from '@/lib/portales/deal';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +22,7 @@ const TTL = 10 * 60 * 1000;
 // crece sin freno. Se tira la más vieja.
 const MAX = 40;
 
-const VISTAS = ['costo', 'pulso', 'historico', 'periodo', 'calidad'] as const;
+const VISTAS = ['costo', 'pulso', 'historico', 'periodo', 'calidad', 'inversion', 'deal'] as const;
 type Vista = (typeof VISTAS)[number];
 const MES = /^\d{4}-(0[1-9]|1[0-2])$/;
 const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -43,6 +45,9 @@ export async function GET(req: Request) {
         if (desde > hasta)
             return NextResponse.json({ error: 'el rango termina antes de empezar' }, { status: 400 });
     }
+    if ((vista === 'inversion' && (!MES.test(desde) || !MES.test(hasta) || desde > hasta)) || (vista === 'deal' && !MES.test(desde))) {
+        return NextResponse.json({ error: 'la inversión va en meses completos (YYYY-MM)' }, { status: 400 });
+    }
     if (vista === 'periodo' && (!FECHA.test(desde) || !FECHA.test(hasta))) {
         return NextResponse.json({ error: 'el periodo va en fechas YYYY-MM-DD' }, { status: 400 });
     }
@@ -59,6 +64,14 @@ export async function GET(req: Request) {
                 ? await calidadView(desde && hasta ? { desde, hasta, operacion } : { months, operacion })
             : vista === 'pulso' ? await pulseView({ operacion })
             : vista === 'historico' ? await historicoView()
+            : vista === 'deal' ? await dealMes(desde)
+            : vista === 'inversion' ? await (async () => {
+                const ms: string[] = [];
+                let [y, m] = desde.split('-').map(Number);
+                const [y1, m1] = hasta.split('-').map(Number);
+                while ((y < y1 || (y === y1 && m <= m1)) && ms.length < 24) { ms.push(`${y}-${String(m).padStart(2, '0')}`); [y, m] = m === 12 ? [y + 1, 1] : [y, m + 1]; }
+                return inversionRango(ms);
+            })()
             : await periodoView(desde, hasta);
         const at = Date.now();
         if (cache.size >= MAX) cache.delete(cache.keys().next().value as string);

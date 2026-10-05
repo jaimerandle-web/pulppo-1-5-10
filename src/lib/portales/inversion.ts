@@ -178,3 +178,37 @@ export async function inversionMeses(meses: string[]): Promise<Record<string, In
     const vals = await Promise.all(meses.map(inversionMes));
     return Object.fromEntries(vals.map((v) => [v.mes, v]));
 }
+
+/**
+ * Inversión de cada canal SUMADA sobre varios meses (para «Inversión y retorno» con cualquier
+ * periodo de meses completos). Mismas reglas que el scorecard:
+ *   · propiedades.com es gratis de verdad (0);
+ *   · MeLi = base fija + 6% del deal de cada mes (conciliado si existe; ver deal.ts);
+ *   · un canal con CUALQUIER mes sin cargar en el Sheet sale null (s/d), nunca un total parcial
+ *     que parezca completo.
+ */
+export interface InversionRango {
+    meses: string[];
+    porCanal: Record<string, number | null>;
+    /** meses cuyo tab del Sheet todavía no existe o está en ceros */
+    faltantes: string[];
+    meli: Array<{ mes: string; inversion: number; fuente: 'conciliado' | 'calculado' }>;
+}
+export async function inversionRango(meses: string[]): Promise<InversionRango> {
+    const { dealMes } = await import('./deal');
+    const inv = await inversionMeses(meses);
+    const deals = await Promise.all(meses.map((m) => dealMes(m)));
+    const faltantes = meses.filter((m) => !inv[m] || inv[m].faltante);
+    // Todos los canales que el Sheet conoce, aunque el mes no esté cargado: así un mes faltante
+    // sale s/d (null) y no "sin línea".
+    const claves = new Set<string>(Object.values(CANAL_KEY));
+    for (const m of meses) for (const k of Object.keys(inv[m]?.canales ?? {})) claves.add(k);
+    const porCanal: Record<string, number | null> = {};
+    for (const k of claves) {
+        if (k === 'meli') continue;
+        porCanal[k] = faltantes.length ? null : meses.reduce((a, m) => a + (inv[m].canales[k] ?? 0), 0);
+    }
+    for (const k of GRATIS) porCanal[k] = 0;
+    porCanal.meli = deals.reduce((a, d) => a + d.inversion, 0);
+    return { meses, porCanal, faltantes, meli: deals.map((d) => ({ mes: d.mes, inversion: d.inversion, fuente: d.fuente })) };
+}

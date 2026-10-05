@@ -9,6 +9,29 @@
 // pinta la respuesta de la ÚLTIMA. Mientras carga se queda la vista anterior, atenuada.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Bloque, Cierre, Comparar, Fila, InmoView } from '@/lib/portales/inmobiliaria';
+import type { InversionRango } from '@/lib/portales/inversion';
+import type { DealMes } from '@/lib/portales/deal';
+import type { SeccionV2 } from './PortalesApp';
+
+// Canales sin factura (mismo criterio que SIN_COSTO de metrics.ts, que no se puede importar aquí
+// porque arrastra mongodb al bundle del navegador).
+const SIN_COSTO = new Set(['whatsapp', 'pulppo', 'tokko', 'telefono', 'sitio']);
+const MESL = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const mesLargo = (mk: string) => `${MESL[Number(mk.slice(5))]} ${mk.slice(0, 4)}`;
+/** Meses 'YYYY-MM' que toca un rango de fechas. */
+const mesesDe = (desde: string, hasta: string) => {
+    const out: string[] = [];
+    let y = Number(desde.slice(0, 4)), m = Number(desde.slice(5, 7));
+    const y1 = Number(hasta.slice(0, 4)), m1 = Number(hasta.slice(5, 7));
+    while ((y < y1 || (y === y1 && m <= m1)) && out.length < 24) { out.push(`${y}-${String(m).padStart(2, '0')}`); [y, m] = m === 12 ? [y + 1, 1] : [y, m + 1]; }
+    return out;
+};
+const TITULOS: Record<SeccionV2, [string, string]> = {
+    inversion: ['Inversión y retorno', '¿Cuánto cuesta cada portal y qué nos regresa? Inversión del Sheet, leads del periodo y la regalía de los cierres del periodo.'],
+    leads: ['Leads y calidad', '¿Cuántos leads llegan, de dónde, y qué tan buenos son? Brokers, contacto con el lead y por qué se descartan.'],
+    embudo: ['Funnel y cierres', '¿Cuántos visitan, ofertan y cierran, por fuente? Y qué cerró en el periodo.'],
+    inmobiliarias: ['Inmobiliarias y asesores', 'Los mismos números por inmobiliaria (vista general) o por asesor (con una inmobiliaria elegida).'],
+};
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2;
@@ -130,7 +153,11 @@ function Embudo({ t, c }: { t: Fila; c: Fila | null }) {
     );
 }
 
-export default function InmobiliariasTab() {
+export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp }: {
+    section?: SeccionV2;
+    /** venta/renta compartido con el pulso (lo controla el contenedor) */
+    op?: Op; setOp?: (o: Op) => void;
+}) {
     const hoy = useMemo(hoyMx, []);
     const mesActual = iso(hoy).slice(0, 7);
     // Si el mes / trimestre en curso apenas empezó (<7 días), el default es el último completo:
@@ -144,7 +171,8 @@ export default function InmobiliariasTab() {
         anioQ: iniAnioQ, q: iniQ,
         rDesde: iso(new Date(hoy.getTime() - 29 * 86400000)), rHasta: iso(hoy), comparar: 'anterior',
     };
-    const [b, setB] = useState<Filtros>(ini);
+    const [bRaw, setB] = useState<Filtros>(ini);
+    const b = useMemo<Filtros>(() => (op ? { ...bRaw, op } : bRaw), [bRaw, op]);
     const [ops, setOps] = useState<Opcion[]>([]);
     const [asesores, setAsesores] = useState<Asesor[]>([]);
     const [v, setV] = useState<InmoView | null>(null);
@@ -184,6 +212,28 @@ export default function InmobiliariasTab() {
         return () => clearTimeout(t);
     }, [b, consultar]);
     useEffect(() => () => ctrl.current?.abort(), []);
+
+    // Inversión (del Sheet, mensual) para el periodo y el comparado. Sólo se pide en «Inversión y retorno».
+    const [inv, setInv] = useState<{ key: string; a: InversionRango | null; c: InversionRango | null } | null>(null);
+    const [deal, setDeal] = useState<{ mes: string; d: DealMes | null } | null>(null);
+    const [mesDeal, setMesDeal] = useState<string>('');
+    useEffect(() => {
+        if (section !== 'inversion' || !v) return;
+        const ma = mesesDe(v.actual.desde, v.actual.hasta), mc = v.comparado ? mesesDe(v.comparado.desde, v.comparado.hasta) : [];
+        const key = `${ma.join(',')}|${mc.join(',')}`;
+        if (inv?.key === key) return;
+        const pedir = (ms: string[]) => ms.length
+            ? fetch(`/api/portales?view=inversion&desde=${ms[0]}&hasta=${ms[ms.length - 1]}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+            : Promise.resolve(null);
+        setInv({ key, a: null, c: null });
+        Promise.all([pedir(ma), pedir(mc)]).then(([a, c]) => setInv({ key, a, c }));
+        setMesDeal((prev) => (ma.includes(prev) ? prev : (ma.filter((m) => m < iso(hoy).slice(0, 7)).pop() ?? ma[ma.length - 1])));
+    }, [section, v, inv?.key, hoy]);
+    useEffect(() => {
+        if (section !== 'inversion' || !mesDeal || deal?.mes === mesDeal) return;
+        setDeal({ mes: mesDeal, d: null });
+        fetch(`/api/portales?view=deal&desde=${mesDeal}`).then((r) => (r.ok ? r.json() : null)).then((d) => setDeal({ mes: mesDeal, d })).catch(() => {});
+    }, [section, mesDeal, deal?.mes]);
     const inp: CSSProperties = { padding: '6px 8px', border: `1px solid ${LGT}`, borderRadius: R, fontSize: 12, fontFamily: 'inherit', color: BLK, background: '#fff' };
     const lbl: CSSProperties = { fontSize: 10, color: GRY, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', display: 'block', marginBottom: 3 };
     const pills = <T extends string>(val: T, opts: Array<[T, string]>, set: (x: T) => void) => (
@@ -193,7 +243,10 @@ export default function InmobiliariasTab() {
             ))}
         </span>
     );
-    const set = <K extends keyof Filtros>(k: K, x: Filtros[K]) => setB((p) => ({ ...p, [k]: x, ...(k === 'inmo' ? { asesor: '' } : {}) }));
+    const set = <K extends keyof Filtros>(k: K, x: Filtros[K]) => {
+        if (k === 'op' && setOp) { setOp(x as Op); return; }
+        setB((p) => ({ ...p, [k]: x, ...(k === 'inmo' ? { asesor: '' } : {}) }));
+    };
     const anios = Array.from({ length: 4 }, (_, i) => hoy.getUTCFullYear() - i);
 
     const filtros = (
@@ -236,16 +289,16 @@ export default function InmobiliariasTab() {
                 ? <span style={{ fontSize: 11.5, color: '#8A6D00', fontWeight: 700, alignSelf: 'center' }}>Actualizando…</span>
                 : <button onClick={() => consultar(b, true)} title="Vuelve a consultar Mongo sin usar la caché de 10 min" style={{ ...inp, cursor: 'pointer', fontSize: 11 }}>Recargar</button>}
             {(b.inmo || b.asesor || b.op !== 'todas' || b.modo !== 'mes' || b.mes !== ini.mes || b.comparar !== 'anterior') && (
-                <button onClick={() => setB(ini)} style={{ ...inp, cursor: 'pointer', fontSize: 11, color: '#666' }}>Vista predeterminada</button>
+                <button onClick={() => { setB(ini); setOp?.('todas'); }} style={{ ...inp, cursor: 'pointer', fontSize: 11, color: '#666' }}>Vista predeterminada</button>
             )}
         </div>
     );
 
     const head = (
         <>
-            <h1 style={{ fontFamily: 'EB Garamond, serif', fontSize: 28, fontWeight: 400, margin: '0 0 4px' }}>Leads, funnel y cierres por inmobiliaria</h1>
+            <h1 style={{ fontFamily: 'EB Garamond, serif', fontSize: 28, fontWeight: 400, margin: '0 0 4px' }}>{TITULOS[section][0]}</h1>
             <div style={{ fontSize: 12.5, color: '#666', marginBottom: 14 }}>
-                Desempeño de los leads por fuente, por asesor y por inmobiliaria: funnel, contacto con el lead, descartados y cierres del periodo. Los filtros actualizan la vista solos.
+                {TITULOS[section][1]} Los filtros son los mismos en estas cuatro secciones y se aplican solos.
             </div>
             {filtros}
         </>
@@ -324,6 +377,43 @@ export default function InmobiliariasTab() {
 
     const ladoColor: Record<Cierre['lado'], string> = { ambos: SEA, vendedor: BLK, comprador: '#8A6D00' };
 
+    // ── Inversión y retorno: une leads (cohorte del periodo), cierres del periodo e inversión ──
+    const nombreCierre = (n: string) => A.cierres.porFuente.find((x) => x.fuente === n);
+    const ia = inv?.a ?? null, ic = inv?.c ?? null;
+    const invDe = (r: InversionRango | null, k: string): number | null | undefined => {
+        if (!r) return undefined;
+        if (k in r.porCanal) return r.porCanal[k];
+        return SIN_COSTO.has(k) ? 0 : undefined;
+    };
+    const sinCostoReal = v.filtro.operacion !== 'todas' || !!v.inmobiliaria;
+    // Con un mes sin cargar en el Sheet, el total sólo tendría MeLi: no se muestra un total engañoso.
+    const faltaInv = !!ia?.faltantes.length;
+    const periodoParcial = (() => {
+        const d0 = v.actual.desde, d1 = v.actual.hasta;
+        const finMes = new Date(Date.UTC(Number(d1.slice(0, 4)), Number(d1.slice(5, 7)), 0)).toISOString().slice(0, 10);
+        return !d0.endsWith('-01') || (d1 !== finMes && d1 !== iso(hoy));
+    })();
+    const mesEnCurso = v.actual.hasta === iso(hoy) && !periodoParcial;
+    const filasInv = A.fuentes.map((f) => {
+        const k = f.key.slice(2);
+        const ci = nombreCierre(f.nombre), cc = C ? C.cierres.porFuente.find((x) => x.fuente === f.nombre) : undefined;
+        const invA = invDe(ia, k), invC = invDe(ic, k);
+        const reg = ci?.regalia ?? 0, regC = cc?.regalia ?? 0;
+        return {
+            k, nombre: f.nombre, leads: f.leads, inv: invA, cierres: ci?.n ?? 0, regalia: reg,
+            cpl: invA && f.leads ? invA / f.leads : null, cpa: invA && ci?.n ? invA / ci.n : null,
+            roi: invA ? reg / invA : null, roiC: invC && C ? regC / invC : null,
+        };
+    });
+    const conInv = filasInv.filter((x) => typeof x.inv === 'number' && x.inv > 0);
+    const totInv = conInv.reduce((a, x) => a + (x.inv as number), 0);
+    const totLeadsInv = conInv.reduce((a, x) => a + x.leads, 0);
+    const totRegInv = conInv.reduce((a, x) => a + x.regalia, 0);
+    const otrasFuentesCierre = A.cierres.porFuente.filter((x) => !A.fuentes.some((f) => f.nombre === x.fuente));
+    const mesesA = mesesDe(A.desde, A.hasta);
+
+    const FAM = A.descarte.familias.map((x) => [x.key, x.label] as const);
+
     return (
         <>
             {head}
@@ -338,27 +428,108 @@ export default function InmobiliariasTab() {
                 {v.inmobiliaria && v.inmobiliaria.cuentas > 1 && <div style={{ fontSize: 11, color: GRY, marginTop: 3 }}>La cuenta está partida en {v.inmobiliaria.cuentas} compañías con el mismo nombre en Pulppo; aquí se suman todas.</div>}
             </div>
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-                <Kpi label="Leads" value={f0(T.leads)} sub={`${f0(T.unicos)} personas · ${f0(T.venta)} venta / ${f0(T.renta)} renta`} delta={<Delta a={T.leads} b={CT?.leads} />} />
-                <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
-                <Kpi label="Cierres de la cohorte" value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
-                <Kpi label="1ª respuesta" value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
-                <Kpi label="Sin respuesta visible" value={pc(T.pctSinRespuesta)} sub={`${pc(T.pctConConversacion)} con conversación · ${pc(T.pctFantasma)} fantasma`} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
-                <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
-            </div>
-            {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}
 
-            <Seccion titulo="Funnel comercial por fuente" onCopiar={() => tsvFunnel(A.fuentes, 'Fuente')}
-                sub={<>Cohorte: los leads que <b>entraron</b> en el periodo y lo que hicieron <b>después</b>{v.inmobiliaria ? <> — la visita, la oferta y el cierre tienen que ser con {v.inmobiliaria.nombre}</> : null}. Las tasas van sobre personas únicas, no sobre registros.</>}>
-                <Embudo t={T} c={CT} />
-                <div style={{ height: 14 }} />
-                <Tabla head={HEAD_FUNNEL}>
-                    {A.fuentes.map((x) => filaFunnel(x, buscar(C?.fuentes, x.key)))}
-                    {filaFunnel(T, CT)}
-                </Tabla>
-                {recienteCohorte && <Aviso>Los cierres de una cohorte reciente salen bajos por construcción: el ciclo de venta va de 43 a 144 días. Para juzgar cierres, compara periodos de hace 4 meses o más, o mira «Cierres del periodo» abajo.</Aviso>}
-            </Seccion>
+            {section === 'inversion' && (<>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                    <Kpi label="Inversión" value={sinCostoReal || periodoParcial ? '—' : faltaInv ? 's/d' : ia ? money(totInv) : '…'} sub={ia?.faltantes.length ? `falta cargar ${ia.faltantes.map(mesLargo).join(', ')}` : `${mesesA.length} ${mesesA.length === 1 ? 'mes' : 'meses'} · canales con costo`} />
+                    <Kpi label="CPL" value={!sinCostoReal && !periodoParcial && !faltaInv && totLeadsInv ? money(totInv / totLeadsInv) : '—'} sub={`${f0(totLeadsInv)} leads de canales pagados`} />
+                    <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
+                    <Kpi label="Regalía Pulppo" value={money(A.cierres.regalia)} sub="de los cierres del periodo" delta={<Delta a={A.cierres.regalia} b={C?.cierres.regalia} />} />
+                    <Kpi label="ROI" value={!sinCostoReal && !periodoParcial && !faltaInv && totInv ? `${(totRegInv / totInv).toFixed(2)}×` : '—'} sub="regalía de canales pagados ÷ su inversión" />
+                </div>
+                {sinCostoReal && <Aviso>La inversión es de <b>toda la red y de todas las operaciones</b>: los portales cobran por aviso, no por venta/renta ni por inmobiliaria. Con {v.inmobiliaria ? 'una inmobiliaria elegida' : 'venta o renta'} no hay un costo honesto que dividir, así que CPL, CPA y ROI se apagan. Los cierres y la regalía sí están filtrados.</Aviso>}
+                {periodoParcial && !sinCostoReal && <Aviso>La inversión es <b>mensual</b>. Con fechas que no empiezan el día 1, CPL, CPA y ROI saldrían inventados: elige Mes, Trimestre o YTD.</Aviso>}
+                {mesEnCurso && !sinCostoReal && <Aviso>El periodo incluye el <b>mes en curso</b>: su inversión ya está completa en el Sheet pero los leads y cierres no, así que el CPL se ve más caro y el ROI más bajo de lo que va a quedar.</Aviso>}
+                <Seccion titulo="Por canal" onCopiar={() => copiar([['Canal', 'Inversión', 'Leads', 'CPL', 'Cierres', 'CPA', 'Regalía', 'ROI'], ...filasInv.map((x) => [x.nombre, x.inv ?? '', x.leads, x.cpl ? Math.round(x.cpl) : '', x.cierres, x.cpa ? Math.round(x.cpa) : '', Math.round(x.regalia), x.roi != null ? Number(x.roi.toFixed(2)) : ''])])}
+                    sub={<>Leads = los que <b>entraron</b> en el periodo. Cierres y regalía = operaciones que <b>cerraron</b> en el periodo, por la fuente del comprador. ROI = regalía que retiene Pulppo ÷ inversión (no la comisión total, que es del broker).{C ? ' Debajo del ROI, la diferencia contra el periodo comparado.' : ''}</>}>
+                    <Tabla head={['Canal', 'Inversión', 'Leads', 'CPL', 'Cierres', 'CPA', 'Regalía', 'ROI']} min={760}>
+                        {filasInv.map((x) => {
+                            const invTxt = sinCostoReal || periodoParcial ? '—' : x.inv === undefined ? (ia ? 'sin línea' : '…') : x.inv === null ? 's/d' : x.inv === 0 ? (SIN_COSTO.has(x.k) ? 'sin costo' : 'gratis') : money(x.inv);
+                            const ok = !sinCostoReal && !periodoParcial;
+                            return (
+                                <tr key={x.k}>
+                                    <td style={td0}>{x.nombre}</td>
+                                    <td style={{ ...td, color: typeof x.inv === 'number' && x.inv > 0 && ok ? BLK : GRY }}>{invTxt}</td>
+                                    <td style={td}>{f0(x.leads)}</td>
+                                    <td style={td}>{ok && x.cpl ? money(x.cpl) : '—'}</td>
+                                    <td style={td}>{f0(x.cierres)}</td>
+                                    <td style={td}>{ok && x.cpa ? money(x.cpa) : '—'}</td>
+                                    <td style={td}>{money(x.regalia)}</td>
+                                    <td style={{ ...td, fontWeight: 700, color: ok && x.roi != null ? (x.roi >= 1 ? SEA : RED) : GRY }}>
+                                        {ok && x.roi != null ? `${x.roi.toFixed(2)}×` : '—'}
+                                        {ok && x.roi != null && x.roiC != null && <div style={{ fontSize: 10, fontWeight: 400 }}><Delta a={Math.round(x.roi * 100)} b={Math.round(x.roiC * 100)} /></div>}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </Tabla>
+                    {otrasFuentesCierre.length > 0 && (<>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '18px 0 6px' }}>Cierres que no vienen de un canal de leads</div>
+                        <Tabla head={['Fuente del comprador', 'Cierres', 'Regalía']} min={420}>
+                            {otrasFuentesCierre.map((x) => <tr key={x.fuente}><td style={td0}>{x.fuente}</td><td style={td}>{f0(x.n)}</td><td style={td}>{money(x.regalia)}</td></tr>)}
+                        </Tabla>
+                    </>)}
+                    {ia?.faltantes.length ? <Aviso><b>Falta cargar la inversión de {ia.faltantes.map(mesLargo).join(' y ')} en el Sheet.</b> Esos canales muestran <b>s/d</b>, no cero: cero diría que fue gratis.</Aviso> : null}
+                </Seccion>
 
+                {!v.inmobiliaria && v.filtro.operacion === 'todas' && (
+                    <Seccion titulo="Deal MercadoLibre" sub={<>MeLi cuesta <b>base fija $152,800 + 6%</b> de la comisión de las operaciones del deal cerradas en el mes. Ninguna regla de Mongo reproduce los meses ya conciliados, así que la tabla es una <b>lista de revisión</b>: las banderas dicen qué mirar antes de pagar.</>}>
+                        {ia && <Tabla head={['Mes', 'Inversión MeLi', 'De dónde sale']} min={420}>
+                            {ia.meli.map((m) => (
+                                <tr key={m.mes} onClick={() => setMesDeal(m.mes)} style={{ cursor: 'pointer', background: m.mes === mesDeal ? LGT : '#fff' }}>
+                                    <td style={td0}>{mesLargo(m.mes)}{m.mes === mesDeal ? ' ◂' : ''}</td><td style={td}>{money(m.inversion)}</td>
+                                    <td style={{ ...td0, color: m.fuente === 'conciliado' ? SEA : '#8A6D00' }}>{m.fuente === 'conciliado' ? 'base + 6% conciliado a mano' : 'base + 6% calculado (sin revisar)'}</td>
+                                </tr>
+                            ))}
+                        </Tabla>}
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '18px 0 6px' }}>Operaciones de {mesDeal ? mesLargo(mesDeal) : '…'} (clic en un mes para cambiar)</div>
+                        {!deal?.d ? <div style={{ fontSize: 12, color: GRY }}>Cargando…</div> : (
+                            <Tabla head={['Operación', 'Inmobiliaria', 'Comisión', '6%', 'Revisar']} min={760}>
+                                {deal.d.ops.map((o, i) => (
+                                    <tr key={(o.id ?? '') + i} style={{ background: o.banderas.length ? '#FFFBEF' : '#fff' }}>
+                                        <td style={{ ...td0, fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>{o.id ?? '—'}</td>
+                                        <td style={td0}>{o.inmobiliaria ?? '—'}</td>
+                                        <td style={td}>{money(o.comision)}</td>
+                                        <td style={td}>{money(o.seis)}</td>
+                                        <td style={{ ...td0, whiteSpace: 'normal', fontSize: 11, color: o.banderas.length ? '#8A5333' : GRY }}>{o.banderas.length ? o.banderas.join(' · ') : 'sin observaciones'}</td>
+                                    </tr>
+                                ))}
+                                {!deal.d.ops.length && <tr><td style={{ ...td0, color: GRY }} colSpan={5}>Sin operaciones del deal en el mes.</td></tr>}
+                            </Tabla>
+                        )}
+                    </Seccion>
+                )}
+            </>)}
+
+            {section === 'leads' && (<>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                    <Kpi label="Leads" value={f0(T.leads)} sub={`${f0(T.unicos)} personas · ${f0(T.venta)} venta / ${f0(T.renta)} renta`} delta={<Delta a={T.leads} b={CT?.leads} />} />
+                    <Kpi label="De brokers" value={pc(T.pctBroker)} sub={`${f0(T.brokerLeads)} leads de contactos broker`} delta={<Delta a={T.pctBroker} b={CT?.pctBroker} pts invertir />} />
+                    <Kpi label="Sin respuesta visible" value={pc(T.pctSinRespuesta)} sub={`${pc(T.pctConConversacion)} con conversación · ${pc(T.pctFantasma)} fantasma`} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
+                    <Kpi label="1ª respuesta" value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
+                    <Kpi label="Descartados" value={pc(T.pctDescartado)} sub={`${f0(T.descartados)} leads`} delta={descMaduro ? <Delta a={T.pctDescartado} b={CT?.pctDescartado} pts invertir /> : undefined} />
+                </div>
+                {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}
+                <Seccion titulo="Leads por fuente" onCopiar={() => copiar([['Fuente', 'Leads', 'Personas', 'Venta', 'Renta', '% broker', '< 60 min', '1ª resp. (min)'], ...A.fuentes.map((x) => [x.nombre, x.leads, x.unicos, x.venta, x.renta, x.pctBroker, x.pctLt60, x.respMed])])}
+                    sub="Broker = el contacto está etiquetado como broker en Pulppo. Atención: sólo leads que entraron de 9:00 a 20:59 de México; el «sin responder» partido por WhatsApp vinculado está en «La semana».">
+                    <Tabla head={['Fuente', 'Leads', 'Personas', 'Venta', 'Renta', '% broker', '< 60 min', '1ª resp.']}>
+                        {[...A.fuentes, T].map((x) => {
+                            const c = x === T ? CT : buscar(C?.fuentes, x.key);
+                            return (
+                                <tr key={x.key}>
+                                    <td style={td0}>{x.nombre}</td>
+                                    <td style={td}>{f0(x.leads)}{c && <div style={{ fontSize: 10 }}><Delta a={x.leads} b={c.leads} /></div>}</td>
+                                    <td style={td}>{f0(x.unicos)}</td>
+                                    <td style={td}>{f0(x.venta)}</td>
+                                    <td style={td}>{f0(x.renta)}</td>
+                                    <td style={{ ...td, color: (x.pctBroker ?? 0) >= 40 ? RED : BLK }}>{pc(x.pctBroker)}{c && <div style={{ fontSize: 10 }}><Delta a={x.pctBroker} b={c.pctBroker} pts invertir /></div>}</td>
+                                    <td style={td}>{pc(x.pctLt60)}</td>
+                                    <td style={td}>{mins(x.respMed)}</td>
+                                </tr>
+                            );
+                        })}
+                    </Tabla>
+                </Seccion>
             <Seccion titulo="Contacto con el lead y descartados" onCopiar={() => copiar([['Fuente', ...HEAD_CAL.slice(1)], ...A.fuentes.map((x) => [x.nombre, x.leads, x.pctConConversacion, x.pctSinRespuesta, x.pctFantasma, x.pctSoloClic, x.pctDescartado, x.pctSinResp])])}
                 sub={<>Cada lead cae en <b>una</b> de tres: <b>Con conversación</b> — hay plática real, en su registro o por otro lado (el comprador abrió WhatsApp, o ya venía platicando con nosotros: de 30 días antes a 14 después). <b>Sin respuesta visible</b> — tiene teléfono válido y se le puede escribir, pero no vemos que haya respondido: el asesor contesta desde su WhatsApp y ese chat no se guarda en Pulppo, así que <b>no es un lead perdido</b>. <b>Fantasma</b> — teléfono inválido (menos de 10 dígitos, todos iguales o una secuencia) y sin conversación: no hay cómo contactarlo. Las tres suman 100%. «Llegó sólo el clic» es un dato del portal: el lead entró únicamente con el evento («Vio teléfono», «Contactó por WhatsApp»), sin mensaje.</>}>
                 <Tabla head={['Fuente', ...HEAD_CAL.slice(1)]}>
@@ -405,22 +576,42 @@ export default function InmobiliariasTab() {
                 <Aviso>El descarte <b>madura</b>: un lead de esta semana casi no ha tenido tiempo de cancelarse, así que un periodo reciente siempre se ve más limpio de lo que va a terminar. Contra otro periodo, lee la <b>composición</b> (por qué se descartan), no el porcentaje total{!descMaduro && C ? <> — por eso, con un periodo que cerró hace menos de 45 días, la variación del % de descartados no se muestra</> : null}.</Aviso>
             </Seccion>
 
-            {v.inmobiliaria && (
-                <Seccion titulo="Por asesor" onCopiar={() => tsvEquipo(A.asesores, 'Asesor')} sub="Quién recibe los leads, de qué fuente le llegan sobre todo y cómo los convierte.">
-                    <Tabla head={['Asesor', ...HEAD_EQ.slice(1)]}>
-                        {A.asesores.map((x) => filaEquipo(x, buscar(C?.asesores, x.key)))}
-                    </Tabla>
-                </Seccion>
-            )}
 
-            {!v.inmobiliaria && (
-                <Seccion titulo="Por inmobiliaria" onCopiar={() => tsvEquipo(A.inmobiliarias, 'Inmobiliaria')}
-                    sub="Las 102 en el orden de siempre (se pega directo en el Excel de trabajo); las que no están en la lista van al final.">
-                    <Tabla head={['Inmobiliaria', ...HEAD_EQ.slice(1)]}>
-                        {A.inmobiliarias.map((x) => filaEquipo(x, buscar(C?.inmobiliarias, x.key)))}
+                <Seccion titulo="Por qué se descartan, por fuente" onCopiar={() => copiar([['Fuente', '% descartados', ...FAM.map(([, l]) => l)], ...A.fuentes.map((x) => [x.nombre, x.pctDescartado, ...FAM.map(([k]) => (x.descartados ? Math.round((100 * (x.descFam[k] ?? 0)) / x.descartados) : ''))])])}
+                    sub="De los leads descartados de cada fuente, en qué familia de motivo cayeron (cada fila suma 100%). Sirve para ver si un portal manda más brokers, más datos falsos o más gente que no responde.">
+                    <Tabla head={['Fuente', '% descartados', ...FAM.map(([, l]) => l)]} min={980}>
+                        {[...A.fuentes, T].map((x) => (
+                            <tr key={x.key}>
+                                <td style={td0}>{x.nombre}</td>
+                                <td style={{ ...td, fontWeight: 700 }}>{pc(x.pctDescartado)}</td>
+                                {FAM.map(([k]) => {
+                                    const p = x.descartados ? Math.round((100 * (x.descFam[k] ?? 0)) / x.descartados) : null;
+                                    return <td key={k} style={{ ...td, color: p == null || p === 0 ? GRY : BLK }}>{p == null ? '—' : `${p}%`}</td>;
+                                })}
+                            </tr>
+                        ))}
                     </Tabla>
                 </Seccion>
-            )}
+            </>)}
+
+            {section === 'embudo' && (<>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                    <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
+                    <Kpi label="Ofertaron" value={f0(T.ofertas)} sub={`${pc(T.pOferta)} de las personas`} delta={<Delta a={T.ofertas} b={CT?.ofertas} />} />
+                    <Kpi label="Cierres de la cohorte" value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
+                    <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
+                </div>
+                {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}
+            <Seccion titulo="Funnel comercial por fuente" onCopiar={() => tsvFunnel(A.fuentes, 'Fuente')}
+                sub={<>Cohorte: los leads que <b>entraron</b> en el periodo y lo que hicieron <b>después</b>{v.inmobiliaria ? <> — la visita, la oferta y el cierre tienen que ser con {v.inmobiliaria.nombre}</> : null}. Las tasas van sobre personas únicas, no sobre registros.</>}>
+                <Embudo t={T} c={CT} />
+                <div style={{ height: 14 }} />
+                <Tabla head={HEAD_FUNNEL}>
+                    {A.fuentes.map((x) => filaFunnel(x, buscar(C?.fuentes, x.key)))}
+                    {filaFunnel(T, CT)}
+                </Tabla>
+                {recienteCohorte && <Aviso>Los cierres de una cohorte reciente salen bajos por construcción: el ciclo de venta va de 43 a 144 días. Para juzgar cierres, compara periodos de hace 4 meses o más, o mira «Cierres del periodo» abajo.</Aviso>}
+            </Seccion>
 
             <Seccion titulo="Cierres del periodo" onCopiar={() => copiar([['Fecha', 'Operación', 'Código', 'Tipo', 'Colonia', 'Valor', 'Comisión', 'Fuente', 'Lado', 'Asesor', 'ID operación'],
                 ...A.cierres.lista.map((x) => [x.fecha, x.operacion, x.codigo, x.tipo, x.colonia, x.valor, x.comision, x.inferida ? `${x.fuente} (inferida)` : x.fuente, x.lado, x.asesor, x.id])])}
@@ -462,6 +653,39 @@ export default function InmobiliariasTab() {
                 </Tabla>
                 {A.cierres.n > A.cierres.lista.length && <div style={{ fontSize: 11, color: GRY, marginTop: 6 }}>Se muestran los {A.cierres.lista.length} más recientes de {f0(A.cierres.n)}.</div>}
             </Seccion>
+
+            </>)}
+
+            {section === 'inmobiliarias' && (<>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                <Kpi label="Leads" value={f0(T.leads)} sub={`${f0(T.unicos)} personas · ${f0(T.venta)} venta / ${f0(T.renta)} renta`} delta={<Delta a={T.leads} b={CT?.leads} />} />
+                <Kpi label="Lead → visita" value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
+                <Kpi label="Cierres de la cohorte" value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
+                <Kpi label="1ª respuesta" value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
+                <Kpi label="Sin respuesta visible" value={pc(T.pctSinRespuesta)} sub={`${pc(T.pctConConversacion)} con conversación · ${pc(T.pctFantasma)} fantasma`} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
+                <Kpi label="Cierres del periodo" value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
+            </div>
+            {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}
+
+            {v.inmobiliaria && (
+                <Seccion titulo="Por asesor" onCopiar={() => tsvEquipo(A.asesores, 'Asesor')} sub="Quién recibe los leads, de qué fuente le llegan sobre todo y cómo los convierte.">
+                    <Tabla head={['Asesor', ...HEAD_EQ.slice(1)]}>
+                        {A.asesores.map((x) => filaEquipo(x, buscar(C?.asesores, x.key)))}
+                    </Tabla>
+                </Seccion>
+            )}
+
+            {!v.inmobiliaria && (
+                <Seccion titulo="Por inmobiliaria" onCopiar={() => tsvEquipo(A.inmobiliarias, 'Inmobiliaria')}
+                    sub="Las 102 en el orden de siempre (se pega directo en el Excel de trabajo); las que no están en la lista van al final.">
+                    <Tabla head={['Inmobiliaria', ...HEAD_EQ.slice(1)]}>
+                        {A.inmobiliarias.map((x) => filaEquipo(x, buscar(C?.inmobiliarias, x.key)))}
+                    </Tabla>
+                </Seccion>
+            )}
+
+
+            </>)}
             <div style={{ fontSize: 10, color: GRY, marginTop: 26 }}>
                 Excluye Habi y cuentas de prueba. Calculado {new Date(v.generado).toLocaleString('es-MX')}.
             </div>
