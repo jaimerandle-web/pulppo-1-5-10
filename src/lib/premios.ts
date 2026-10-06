@@ -74,7 +74,10 @@ function levelAt(hist: [Date, Level][] | undefined, vivo: string | null | undefi
  *  lib/portales/ordenInmobiliarias.ts). `companies.status` en Mongo NO basta: Círculo Bienes
  *  Raíces ya es baja y en la base sigue 'active' con 25 asesores activos. Si entra o sale una
  *  inmobiliaria, se actualiza esa lista (no este archivo). */
-const VIGENTES = new Set(ORDEN_INMOBILIARIAS.map((x) => norm(x.nombre)));
+// De las que "no se quedan" en la lista, Ale saca de los premios sólo estas (oct-2026); las demás
+// siguen contando mientras sean clientes.
+const FUERA_DE_PREMIOS = ['Adamá Bienes Raíces', 'Zam Inmobiliaria'].map(norm);
+const VIGENTES = new Set(ORDEN_INMOBILIARIAS.map((x) => norm(x.nombre)).filter((k) => !FUERA_DE_PREMIOS.includes(k)));
 export const esVigente = (nombreInmobiliaria: string | null | undefined) => VIGENTES.has(norm(nombreInmobiliaria));
 
 /** Emails de asesores que NO cuentan: su cuenta está `inactive`, su inmobiliaria está de baja en
