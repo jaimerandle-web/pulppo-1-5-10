@@ -101,9 +101,11 @@ export async function fetchPremios(year: number): Promise<Premios> {
     // ── agentes: marca e insignias ──
     const agentBrand = new Map<string, string>();
     const badges = new Map<string, Record<string, unknown>>();
-    for await (const a of db.collection('agents').find({ email: { $exists: true } }, { projection: { email: 1, 'company._id': 1, badges: 1 } })) {
+    const brandFirstAgent = new Map<string, number>();   // cuenta de asesor más vieja de la marca
+    for await (const a of db.collection('agents').find({ email: { $exists: true } }, { projection: { email: 1, 'company._id': 1, badges: 1, createdAt: 1 } })) {
         const c = comp.get(String(((a.company as Document) ?? {})._id));
         if (c && !c.out) agentBrand.set(a.email as string, c.brand);
+        if (c && isDate(a.createdAt)) brandFirstAgent.set(c.brand, Math.min(brandFirstAgent.get(c.brand) ?? Infinity, a.createdAt.getTime()));
         if (a.badges && typeof a.badges === 'object') badges.set(a.email as string, a.badges as Record<string, unknown>);
     }
 
@@ -293,7 +295,11 @@ export async function fetchPremios(year: number): Promise<Premios> {
         .map(({ x, s }) => ({ name: nm(x.k), value: s, fmt: 'score',
             sub: `crec ${x.crec == null ? '—' : `${x.crec >= 0 ? '+' : ''}${Math.round(x.crec * 100)}%`} · conv ${x.conv == null ? '—' : (x.conv * 100).toFixed(1) + '%'}` }));
 
-    const nuevasInmo: Lugar[] = rows.filter((x) => (brandBorn.get(x.k) ?? 0) >= INI.getTime())
+    // Nueva = el registro de la inmobiliaria Y su asesor más antiguo son del año. Sólo con el
+    // registro, Reset Living salía como nueva (se creó en ene-2026) aunque Aline, su master
+    // broker, está en Pulppo desde feb-2024: no es una inmobiliaria nueva, es una cuenta nueva.
+    const nuevasInmo: Lugar[] = rows.filter((x) => (brandBorn.get(x.k) ?? 0) >= INI.getTime()
+        && (brandFirstAgent.get(x.k) ?? 0) >= INI.getTime())
         .sort((a, b) => b.r.cobrada - a.r.cobrada).slice(0, 3)
         .map((x) => ({ name: nm(x.k), value: x.r.cobrada, fmt: 'money', sub: `entró en ${MES[new Date(brandBorn.get(x.k)!).getUTCMonth()]}` }));
 

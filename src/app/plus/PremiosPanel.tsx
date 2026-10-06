@@ -167,7 +167,7 @@ export default function PremiosPanel({ year }: { year: number }) {
                 <Card titulo="Ticket promedio de facturación" nota="Valor promedio de lo vendido. Mínimo 5 ventas con cobro en el año.">
                     <Podio rows={p.ticket} color={BLK} />
                 </Card>
-                <Card titulo="Inmobiliarias nuevas · top 3" acento={YEL} nota="Las que entraron a Pulppo este año, por lo cobrado.">
+                <Card titulo="Inmobiliarias nuevas · top 3" acento={YEL} nota="Las que entraron a Pulppo este año (la inmobiliaria y su asesor más antiguo), por lo cobrado.">
                     <Podio rows={p.nuevasInmo} color={YEL} />
                 </Card>
                 <Card titulo="Mejor tasa de visita" acento={SEA} nota="De los contactos con lead en el año, cuántos llegaron a visita con la misma inmobiliaria. Mínimo 200 leads.">
