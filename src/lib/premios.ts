@@ -14,6 +14,7 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { agentMaps, hallOfFame, isDemo, paymentDate, splitByRole, type Level } from './plus';
+import { ORDEN_INMOBILIARIAS } from './portales/ordenInmobiliarias';
 
 const isDate = (v: unknown): v is Date => v instanceof Date && !isNaN(v.getTime());
 const ORD: Record<string, number> = { standard: 1, professional: 2, elite: 3 };
@@ -69,14 +70,22 @@ function levelAt(hist: [Date, Level][] | undefined, vivo: string | null | undefi
     return lv ?? (hist?.[0]?.[1] ?? vivo ?? null);
 }
 
-/** Emails de asesores dados de baja: su cuenta está `inactive` o su inmobiliaria está de baja
- *  (`companies.status = 'inactive'`). En los ascensos no tiene caso perseguirlos para el pin. */
+/** Clientes vigentes = la lista canónica de las 102 inmobiliarias (`_lista.txt`, copiada en
+ *  lib/portales/ordenInmobiliarias.ts). `companies.status` en Mongo NO basta: Círculo Bienes
+ *  Raíces ya es baja y en la base sigue 'active' con 25 asesores activos. Si entra o sale una
+ *  inmobiliaria, se actualiza esa lista (no este archivo). */
+const VIGENTES = new Set(ORDEN_INMOBILIARIAS.map((x) => norm(x.nombre)));
+export const esVigente = (nombreInmobiliaria: string | null | undefined) => VIGENTES.has(norm(nombreInmobiliaria));
+
+/** Emails de asesores que NO cuentan: su cuenta está `inactive`, su inmobiliaria está de baja en
+ *  Mongo (`companies.status = 'inactive'`) o su inmobiliaria no está entre las vigentes. */
 export async function asesoresDeBaja(): Promise<Set<string>> {
     const db = await getDb();
     const inact = new Set((await db.collection('companies').find({ status: 'inactive' }, { projection: { _id: 1 } }).toArray()).map((c) => String(c._id)));
     const out = new Set<string>();
-    for await (const a of db.collection('agents').find({ email: { $exists: true } }, { projection: { email: 1, status: 1, 'company._id': 1 } })) {
-        if (a.status === 'inactive' || inact.has(String(((a.company as Document) ?? {})._id))) out.add(a.email as string);
+    for await (const a of db.collection('agents').find({ email: { $exists: true } }, { projection: { email: 1, status: 1, 'company._id': 1, 'company.name': 1 } })) {
+        const co = (a.company as Document) ?? {};
+        if (a.status === 'inactive' || inact.has(String(co._id)) || !esVigente(co.name as string)) out.add(a.email as string);
     }
     return out;
 }
@@ -301,7 +310,7 @@ export async function fetchPremios(year: number): Promise<Premios> {
 
     // ══ armado ══
     const nm = (k: string) => brandName.get(k) ?? k;
-    const deBaja = (k: string) => brandBajaRec.has(k) && !brandActivaRec.has(k);
+    const deBaja = (k: string) => (brandBajaRec.has(k) && !brandActivaRec.has(k)) || !VIGENTES.has(k);
     const rows = [...inmo.entries()].filter(([k, r]) => r.cobrada > 0 && !deBaja(k)).map(([k, r]) => {
         const contactos = leadsC.get(k)?.size ?? 0;
         return {
