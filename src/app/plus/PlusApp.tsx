@@ -9,6 +9,7 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import type { PlusData, Level, Metric, BrokerRow } from '@/lib/plus';
 import RankingImages from './RankingImages';
 import PremiosPanel from './PremiosPanel';
+import AscensosPanel from './AscensosPanel';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2;
@@ -28,7 +29,7 @@ const LVL: Record<Level, { base: string; soft: string; ink: string }> = {
 };
 const ORDEN_LVL: Level[] = ['elite', 'professional', 'standard'];
 
-type Section = 'cierre' | 'fama' | 'carrera' | 'imagenes' | 'comoleer';
+type Section = 'cierre' | 'fama' | 'ascensos' | 'carrera' | 'imagenes' | 'comoleer';
 
 function Kpi({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
     return (
@@ -224,7 +225,7 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
 
             <div style={{ display: 'flex', gap: 22, padding: '20px 26px', alignItems: 'flex-start' }}>
                 <div style={{ width: 190, flexShrink: 0, position: 'sticky', top: 20 }}>
-                    {nav('cierre', 'Cierre del mes')}{nav('fama', 'Salón de la fama')}
+                    {nav('cierre', 'Cierre del mes')}{nav('fama', 'Salón de la fama')}{nav('ascensos', 'Ascensos y pines')}
                     {nav('carrera', 'La carrera')}{nav('imagenes', 'Imágenes del ranking')}
                     {nav('comoleer', 'Cómo leer esto')}
                 </div>
@@ -380,6 +381,8 @@ export default function PlusApp({ d, onChange }: { d: PlusData; onChange: (m: nu
                             )}
                         </div>
                     )}
+
+                    {section === 'ascensos' && <AscensosPanel year={d.year} />}
 
                     {section === 'carrera' && (
                         <div>

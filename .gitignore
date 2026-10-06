@@ -20,3 +20,6 @@ next-env.d.ts
 
 # respuestas de qué destacar (store local, ver lib/portales/seleccion.ts)
 .portales/
+
+# seguimiento de Pulppo Plus (contactado / pin) en local; en prod vive en Vercel Blob
+.plus/

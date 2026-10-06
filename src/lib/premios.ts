@@ -35,7 +35,7 @@ const MIN_VALOR_RAPIDA = 2_000_000;  // venta más rápida: sin terrenos ni tick
 
 // Un lugar en un podio. `value` es la métrica principal (formateada según `fmt`); `sub` va en chico.
 export interface Lugar { name: string; company?: string | null; photo?: string | null; value: number; fmt: 'money' | 'pct' | 'int' | 'dias' | 'min' | 'score'; sub?: string; nota?: string }
-export interface PremioNuevo { name: string; company: string | null; photo: string | null; mes: string; sigue: boolean }
+export interface PremioNuevo { email: string; name: string; company: string | null; photo: string | null; mes: string; sigue: boolean; levelHoy: string | null }
 export interface Premios {
     year: number; hasta: string;
     inmoDelAño: Lugar[]; brokerDelAño: Lugar | null;
@@ -67,6 +67,24 @@ function levelAt(hist: [Date, Level][] | undefined, vivo: string | null | undefi
     let lv: string | null = null;
     for (const [ts, l] of hist ?? []) if (ts.getTime() <= ref) lv = l;
     return lv ?? (hist?.[0]?.[1] ?? vivo ?? null);
+}
+
+/** Asesores que llegaron POR PRIMERA VEZ a `level` (o más arriba) con un corte del año. Los cortes
+ *  feb-año … ene-año+1 son el desempeño de ene–dic. Lo usan los premios y /plus → Ascensos. */
+export function nuevosDelAño(am: Awaited<ReturnType<typeof agentMaps>>, year: number, level: Level): PremioNuevo[] {
+    const lo = Date.UTC(year, 0, 31), hi = Date.UTC(year + 1, 0, 2);
+    const out: (PremioNuevo & { ts: number })[] = [];
+    for (const [e, hs] of am.hist) {
+        if (isDemo(am.company.get(e))) continue;
+        const antes = hs.some(([ts, l]) => ORD[l] >= ORD[level] && ts.getTime() < lo);
+        const llega = hs.filter(([ts, l]) => ORD[l] >= ORD[level] && ts.getTime() >= lo && ts.getTime() < hi);
+        if (antes || !llega.length) continue;
+        const ts = llega[0][0].getTime();
+        const hoy = am.level.get(e) ?? null;
+        out.push({ email: e, name: am.name.get(e) ?? e, company: am.company.get(e) ?? null, photo: am.photo.get(e) ?? null,
+            mes: MES[new Date(ts - 86_400_000).getUTCMonth()], sigue: (ORD[hoy ?? ''] ?? 0) >= ORD[level], levelHoy: hoy, ts });
+    }
+    return out.sort((a, b) => a.ts - b.ts).map(({ ts: _ts, ...r }) => r);
 }
 
 export async function fetchPremios(year: number): Promise<Premios> {
@@ -383,20 +401,6 @@ export async function fetchPremios(year: number): Promise<Premios> {
         .sort((a, b) => a.d! - b.d!).slice(0, 3)
         .map(({ x, d }) => ({ name: nm(x.brand), value: d!, fmt: 'dias', sub: `${am.name.get(x.e) ?? 'comprador externo'} · ${x.id}${x.v ? ` · $${(x.v / 1e6).toFixed(1)}M` : ''}` }));
 
-    // nuevos: primera vez en el nivel con un corte del año (feb-año … ene-año+1 = desempeño ene–dic)
-    const nuevos = (level: Level): PremioNuevo[] => {
-        const lo = Date.UTC(year, 0, 31), hi = Date.UTC(year + 1, 0, 2);
-        const out: (PremioNuevo & { ts: number })[] = [];
-        for (const [e, hs] of am.hist) {
-            if (fuera(e)) continue;
-            const antes = hs.some(([ts, l]) => ORD[l] >= ORD[level] && ts.getTime() < lo);
-            const llega = hs.filter(([ts, l]) => ORD[l] >= ORD[level] && ts.getTime() >= lo && ts.getTime() < hi);
-            if (antes || !llega.length) continue;
-            const ts = llega[0][0].getTime();
-            out.push({ ...persona(e), mes: MES[new Date(ts - 86_400_000).getUTCMonth()], sigue: (ORD[am.level.get(e) ?? ''] ?? 0) >= ORD[level], ts });
-        }
-        return out.sort((a, b) => a.ts - b.ts).map(({ ts: _ts, ...r }) => r);
-    };
 
     const pendiente = rows.filter((x) => x.r.pend > 250_000).sort((a, b) => b.r.pend - a.r.pend).slice(0, 5)
         .map((x) => ({ name: nm(x.k), porCobrar: x.r.pend }));
@@ -408,6 +412,6 @@ export async function fetchPremios(year: number): Promise<Premios> {
         desempeño, ticket, nuevasInmo, tasaVisita, calidad, conjunto,
         insignias, racha, revelacion, relampago, leadCierre, captador, rentas,
         ventaMayor, ventaRapida,
-        nuevosPro: nuevos('professional'), nuevosElite: nuevos('elite'), pendiente,
+        nuevosPro: nuevosDelAño(am, year, 'professional'), nuevosElite: nuevosDelAño(am, year, 'elite'), pendiente,
     };
 }
