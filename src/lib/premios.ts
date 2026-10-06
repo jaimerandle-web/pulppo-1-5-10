@@ -108,17 +108,20 @@ export async function fetchPremios(year: number): Promise<Premios> {
     const finPrev = hoy.getUTCFullYear() === year ? new Date(Date.UTC(year - 1, hoy.getUTCMonth(), hoy.getUTCDate())) : INI;
     const iniPrev = new Date(Date.UTC(year - 1, 0, 1));
     const persona = (e: string) => ({ name: am.name.get(e) ?? e, company: am.company.get(e) ?? null, photo: am.photo.get(e) ?? null });
-    const fuera = (e: string) => isDemo(am.company.get(e));
+    // fuera = demo, o asesor de baja / de inmobiliaria de baja (asesoresDeBaja)
+    const fuera = (e: string) => isDemo(am.company.get(e)) || bajas.has(e);
 
     // ── compañías → marca ──
     const comp = new Map<string, { brand: string; name: string; out: boolean; onb: boolean }>();
     const brandName = new Map<string, string>();
     const brandBorn = new Map<string, number>();   // primer registro de la marca (para "nuevas")
-    for await (const c of db.collection('companies').find({}, { projection: { name: 1, 'domain.host': 1, integratedAt: 1, createdAt: 1 } })) {
+    const statusId = new Map<string, 'active' | 'inactive'>();
+    for await (const c of db.collection('companies').find({}, { projection: { name: 1, 'domain.host': 1, integratedAt: 1, createdAt: 1, status: 1 } })) {
         const name = String(c.name ?? '').trim();
         const host = String(((c.domain as Document) ?? {}).host ?? '').toLowerCase();
         const brand = norm(name);
         comp.set(String(c._id), { brand, name, out: host.includes('tuhabi') || isDemo(name) || !brand, onb: !isDate(c.integratedAt) });
+        if (c.status === 'inactive') statusId.set(String(c._id), 'inactive'); else statusId.set(String(c._id), 'active');
         if (brand && !brandName.has(brand)) brandName.set(brand, name);
         if (brand && isDate(c.createdAt)) brandBorn.set(brand, Math.min(brandBorn.get(brand) ?? Infinity, c.createdAt.getTime()));
     }
@@ -133,9 +136,15 @@ export async function fetchPremios(year: number): Promise<Premios> {
     const agentBrand = new Map<string, string>();
     const badges = new Map<string, Record<string, unknown>>();
     const brandFirstAgent = new Map<string, number>();   // cuenta de asesor más vieja de la marca
+    // Marca de baja = tiene un registro dado de baja (companies.status='inactive') con asesores y
+    // NINGÚN registro activo con asesores. Hace falta mirar asesores porque la misma marca suele
+    // tener un registro activo vacío (importado del portal): "Inmuebles Proyecta" activo sin
+    // asesores + "Inmuebles proyecta" de baja con los asesores.
+    const brandBajaRec = new Set<string>(), brandActivaRec = new Set<string>();
     for await (const a of db.collection('agents').find({ email: { $exists: true } }, { projection: { email: 1, 'company._id': 1, badges: 1, createdAt: 1 } })) {
         const c = comp.get(String(((a.company as Document) ?? {})._id));
         if (c && !c.out) agentBrand.set(a.email as string, c.brand);
+        if (c) { const st = statusId.get(String(((a.company as Document) ?? {})._id)); (st === 'inactive' ? brandBajaRec : brandActivaRec).add(c.brand); }
         if (c && isDate(a.createdAt)) brandFirstAgent.set(c.brand, Math.min(brandFirstAgent.get(c.brand) ?? Infinity, a.createdAt.getTime()));
         if (a.badges && typeof a.badges === 'object') badges.set(a.email as string, a.badges as Record<string, unknown>);
     }
@@ -292,7 +301,8 @@ export async function fetchPremios(year: number): Promise<Premios> {
 
     // ══ armado ══
     const nm = (k: string) => brandName.get(k) ?? k;
-    const rows = [...inmo.entries()].filter(([, r]) => r.cobrada > 0).map(([k, r]) => {
+    const deBaja = (k: string) => brandBajaRec.has(k) && !brandActivaRec.has(k);
+    const rows = [...inmo.entries()].filter(([k, r]) => r.cobrada > 0 && !deBaja(k)).map(([k, r]) => {
         const contactos = leadsC.get(k)?.size ?? 0;
         return {
             k, r, leads: leadsN.get(k) ?? 0,
@@ -338,11 +348,11 @@ export async function fetchPremios(year: number): Promise<Premios> {
         .sort((a, b) => (b.tvis ?? 0) - (a.tvis ?? 0)).slice(0, 5)
         .map((x) => ({ name: nm(x.k), value: x.tvis!, fmt: 'pct', sub: `${(visC.get(x.k)?.size ?? 0).toLocaleString('es-MX')} de ${(leadsC.get(x.k)?.size ?? 0).toLocaleString('es-MX')} contactos` }));
 
-    const calidad: Lugar[] = [...cal.entries()].filter(([k, x]) => x.n >= MIN_PROPS_CALIDAD && inmo.has(k))
+    const calidad: Lugar[] = [...cal.entries()].filter(([k, x]) => x.n >= MIN_PROPS_CALIDAD && inmo.has(k) && !deBaja(k))
         .sort((a, b) => b[1].alta / b[1].n - a[1].alta / a[1].n).slice(0, 5)
         .map(([k, x]) => ({ name: nm(k), value: x.alta / x.n, fmt: 'pct', sub: `${x.alta} de ${x.n} fichas en Alta` }));
 
-    const conjunto: Lugar[] = [...pares.entries()].sort((a, b) => b[1].size - a[1].size).slice(0, 5)
+    const conjunto: Lugar[] = [...pares.entries()].filter(([k]) => !k.split('|').some(deBaja)).sort((a, b) => b[1].size - a[1].size).slice(0, 5)
         .map(([k, s]) => ({ name: k.split('|').map(nm).join(' + '), value: s.size, fmt: 'int', sub: 'operaciones juntas' }));
 
     // brokers: nivel de HOY, todo lo cobrado en el año
@@ -366,7 +376,7 @@ export async function fetchPremios(year: number): Promise<Premios> {
     // racha élite vigente (reusa el Salón de la fama)
     const byName = new Map<string, string>();
     for (const [e, n] of am.name) byName.set(n, e);
-    const racha: Lugar[] = hallOfFame(am).vigentes.filter((v) => !isDemo(v.company)).slice(0, 3).map((v) => {
+    const racha: Lugar[] = hallOfFame(am).vigentes.filter((v) => !isDemo(v.company) && !fuera(byName.get(v.name) ?? '')).slice(0, 3).map((v) => {
         const e = byName.get(v.name);
         return { name: v.name, company: v.company, photo: e ? am.photo.get(e) ?? null : null, value: v.months, fmt: 'int', sub: 'meses seguidos' };
     });
@@ -396,7 +406,7 @@ export async function fetchPremios(year: number): Promise<Premios> {
         .sort((a, b) => b[1].rentas.size - a[1].rentas.size || b[1].v - a[1].v).slice(0, 5)
         .map(([e, b]) => ({ ...persona(e), value: b.rentas.size, fmt: 'int', sub: 'rentas cobradas' }));
 
-    const ventaMayor: Lugar[] = ventas.sort((a, b) => b.v - a.v).slice(0, 3)
+    const ventaMayor: Lugar[] = ventas.filter((x) => !deBaja(x.brand) && !(x.e && fuera(x.e))).sort((a, b) => b.v - a.v).slice(0, 3)
         .map((x) => ({ name: nm(x.brand), value: x.v, fmt: 'money', sub: x.e ? `${am.name.get(x.e) ?? x.e} · ${x.id}` : x.id }));
 
     // venta más rápida: del primer lead del comprador al cierre. Sólo ventas de $2M+ y sin
@@ -410,7 +420,7 @@ export async function fetchPremios(year: number): Promise<Premios> {
         const ok = lead != null && (!x.created || lead <= x.created.getTime());
         return { x, d: ok ? (x.closed.getTime() - lead!) / 86_400_000 : null };
     })
-        .filter((y) => y.d != null && y.d >= 1)
+        .filter((y) => y.d != null && y.d >= 1 && !deBaja(y.x.brand) && !fuera(y.x.e))
         .sort((a, b) => a.d! - b.d!).slice(0, 3)
         .map(({ x, d }) => ({ name: nm(x.brand), value: d!, fmt: 'dias', sub: `${am.name.get(x.e) ?? 'comprador externo'} · ${x.id}${x.v ? ` · $${(x.v / 1e6).toFixed(1)}M` : ''}` }));
 
