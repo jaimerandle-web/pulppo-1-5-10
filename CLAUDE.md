@@ -345,5 +345,10 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   de día (entre semana vs fin de semana; caída ≤25% = integración rota). Umbrales en la ⓘ de la UI.
   La serie sale de `Bloque.porDia` (días en UTC, como los cortes del periodo) y la grafica
   `LeadsPorDia.tsx` (barras apiladas, diario/semanal/mensual, leads o % del total).
+- **Un solo cálculo en todo /portales** (oct-2026): «La semana» (`pulse.ts`) e «Histórico»
+  (`historico.ts`) clasifican leads con `canalDeLead` (NURA aparte) y los cierres salen de
+  `cierresEntre` (inmobiliaria.ts) — verificado: semana 28 sep–4 oct y septiembre cuadran al lead y al
+  peso con las pestañas de arriba. `cierresPorCanal` de metrics.ts ya NO se usa para cierres de
+  /portales (dejaba ~40% en «otros»). Brokers/descartes/ticket salieron de «La semana».
 - Tiempos: una inmobiliaria ~7 s; vista general de un mes ~7 s; general YTD vs año pasado ~2 min
   (cabe en `maxDuration` 300, y se cachea 10 min).

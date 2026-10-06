@@ -149,12 +149,11 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                 ) : (
                     <>
                         <h1 style={{ fontFamily: 'EB Garamond, serif', fontSize: 28, fontWeight: 400, margin: '0 0 4px' }}>
-                            Pulso de la semana
+                            La semana
                         </h1>
                         <div style={{ fontSize: 12.5, color: '#666', marginBottom: 16 }}>
-                            Semana de referencia <b>{pulso.semanaRef}</b>. Sólo indicadores adelantados:
-                            leads, atención, visitas y calidad. Un cierre no se mira semana a semana —
-                            el ciclo de venta va de 43 a 144 días.
+                            Última semana completa: <b>{pulso.semanaRef}</b>. Leads por fuente, atención y visitas,
+                            semana a semana. Un cierre no se mira semana a semana: el ciclo de venta va de 43 a 144 días.
                         </div>
 
                         {pulso.alerts.length > 0 && (
@@ -172,7 +171,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                             <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 720 }}>
                                 <thead>
                                     <tr>
-                                        <th style={tth0}>Portal</th>
+                                        <th style={tth0}>Fuente</th>
                                         <th style={tth0}>8 semanas</th>
                                         <th style={tth}>Última</th>
                                         <th style={tth}>vs previa</th>
@@ -254,94 +253,9 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                             </table>
                         </div>
 
-                        <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, fontWeight: 400, margin: '0 0 4px' }}>
-                            Cliente o broker · {pulso.p30Label}
-                        </h2>
-                        <div style={{ fontSize: 11.5, color: '#666', marginBottom: 10 }}>
-                            Global: <b>{pulso.broker.pctNow}%</b> de los leads son broker
-                            ({f0(pulso.broker.broker)} de {f0(pulso.broker.total)}), <Delta v={pulso.broker.delta} pts invertir /> vs
-                            los 30 días previos. Sólo se listan portales con 50+ leads en la ventana: con
-                            menos, un caso mueve el porcentaje entero.
+                        <div style={{ fontSize: 11.5, color: '#777' }}>
+                            Brokers, contacto con el lead y por qué se descartan están en <b>Leads y calidad</b>, con el periodo que elijas.
                         </div>
-                        <div style={{ overflowX: 'auto', marginBottom: 20 }}>
-                            <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 480 }}>
-                                <thead>
-                                    <tr>
-                                        <th style={tth0}>Portal</th>
-                                        <th style={tth}>% broker</th>
-                                        <th style={tth}>30d previos</th>
-                                        <th style={tth}>Δ</th>
-                                        <th style={tth}>Leads</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {pulso.broker.porPortal.map((p) => (
-                                        <tr key={p.canal}>
-                                            <td style={ttd0}>{p.canal}</td>
-                                            <td style={{ ...ttd, fontWeight: 700, color: p.pctNow >= 15 ? RED : BLK }}>{p.pctNow}%</td>
-                                            <td style={{ ...ttd, color: GRY }}>{p.pctPrev}%</td>
-                                            <td style={ttd}><Delta v={p.delta} pts invertir /></td>
-                                            <td style={{ ...ttd, color: GRY }}>{f0(p.total)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, fontWeight: 400, margin: '0 0 4px' }}>
-                            Por qué se descartan
-                        </h2>
-                        <div style={{ fontSize: 11.5, color: '#666', marginBottom: 10 }}>
-                            Composición de {f0(pulso.descartes.totalNow)} descartes de venta en los últimos
-                            30 días, contra los 30 previos. Se compara el <b>share</b>, no el volumen: así no
-                            confunde que un mes entren más leads.
-                        </div>
-                        <div style={{ overflowX: 'auto', marginBottom: 8 }}>
-                            <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 640 }}>
-                                <thead>
-                                    <tr>
-                                        <th style={tth0}>Motivo</th>
-                                        <th style={tth}>Casos</th>
-                                        <th style={tth}>Share</th>
-                                        <th style={tth}>Δ vs 30d</th>
-                                        <th style={tth0}>Portales detrás</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {pulso.descartes.rows.map((r) => (
-                                        <tr key={r.reason}>
-                                            <td style={ttd0}>{r.reason}</td>
-                                            <td style={ttd}>{f0(r.now)}</td>
-                                            <td style={{ ...ttd, fontWeight: 700 }}>{r.pctNow}%</td>
-                                            <td style={ttd}><Delta v={r.deltaPct} pts invertir /></td>
-                                            <td style={{ ...ttd0, whiteSpace: 'normal', fontSize: 11, color: '#555', maxWidth: 300 }}>
-                                                {r.portales.map((p) => `${p.canal} ${p.pct}%`).join(' · ') || '—'}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <Aviso>
-                            Los porcentajes por portal de un motivo <b>pueden pasar de 100 y está bien</b>:
-                            si una búsqueda tuvo leads de dos portales cuenta en los dos. La pregunta es qué
-                            portales aparecen detrás de cada motivo, no repartir culpa exacta.
-                        </Aviso>
-
-                        {pulso.descartes.comentarios.length > 0 && (
-                            <>
-                                <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, fontWeight: 400, margin: '24px 0 8px' }}>
-                                    Lo que escribieron los asesores
-                                </h2>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                    {pulso.descartes.comentarios.map((c, i) => (
-                                        <div key={i} style={{ border: `1px solid ${LGT}`, borderRadius: R, padding: '8px 12px', fontSize: 12, color: '#444', fontStyle: 'italic' }}>
-                                            «{c}»
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
                     </>
                 ))}
 
@@ -365,7 +279,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                             <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 820 }}>
                                 <thead>
                                     <tr>
-                                        <th style={tth0} rowSpan={2}>Portal</th>
+                                        <th style={tth0} rowSpan={2}>Fuente del comprador</th>
                                         <th style={{ ...tth, borderBottom: 'none' }} colSpan={3}>Año a la fecha</th>
                                         <th style={{ ...tth, borderBottom: 'none' }} colSpan={3}>{hist.mesCerrado}</th>
                                         <th style={tth} rowSpan={2}>Ticket YTD</th>
@@ -396,8 +310,9 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                             </table>
                         </div>
                         <div style={{ fontSize: 10.5, color: GRY, marginTop: -14, marginBottom: 22 }}>
-                            En «Cierres» el segundo número gris es el mismo periodo del año pasado.
-                            Regalía = <code>pulppoComission</code>, lo que Pulppo retiene.
+                            En «Cierres» el segundo número gris es el mismo periodo del año pasado. Regalía = lo que retiene Pulppo.
+                            Mismo cálculo que «Funnel y cierres»: los cierres sin fuente se atribuyen (broker externo, red Pulppo,
+                            primer lead del comprador o cartera).
                         </div>
 
                         <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, fontWeight: 400, margin: '0 0 10px' }}>
@@ -407,7 +322,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                             <table style={{ borderCollapse: 'collapse', fontSize: 11.5, width: '100%', minWidth: 860 }}>
                                 <thead>
                                     <tr>
-                                        <th style={tth0}>Portal</th>
+                                        <th style={tth0}>Fuente</th>
                                         <th style={tth0}>Tendencia</th>
                                         {hist.mlabels.map((m) => <th key={m} style={tth}>{m}</th>)}
                                     </tr>

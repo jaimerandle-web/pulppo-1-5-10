@@ -63,7 +63,7 @@ export async function GET(req: Request) {
             : vista === 'calidad'
                 ? await calidadView(desde && hasta ? { desde, hasta, operacion } : { months, operacion })
             : vista === 'pulso' ? await pulseView({ operacion })
-            : vista === 'historico' ? await historicoView()
+            : vista === 'historico' ? await historicoView({ operacion })
             : vista === 'deal' ? await dealMes(desde)
             : vista === 'inversion' ? await (async () => {
                 const ms: string[] = [];

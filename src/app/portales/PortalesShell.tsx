@@ -15,7 +15,7 @@ import PortalesApp, { type Section } from './PortalesApp';
 import Presentacion, { SECCIONES, type SeccionP } from './Presentacion';
 
 type Vista = 'costo' | 'pulso' | 'historico' | 'periodo' | 'calidad';
-type Datos = { calidadQ?: string; pulsoQ?: string; costo?: PortalesView; pulso?: PulseView; historico?: HistoricoView; periodo?: PeriodoView; calidad?: CalidadView };
+type Datos = { calidadQ?: string; pulsoQ?: string; historicoQ?: string; costo?: PortalesView; pulso?: PulseView; historico?: HistoricoView; periodo?: PeriodoView; calidad?: CalidadView };
 
 // Sólo el pulso y el histórico usan vistas propias; las cuatro secciones nuevas (inversión,
 // leads, funnel, inmobiliarias) consultan su propia API compartida. «costo» queda SÓLO para el
@@ -68,7 +68,7 @@ export default function PortalesShell() {
         fetch(`/api/portales?view=${v}${q}${refresh ? '&refresh=1' : ''}`)
             .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(j.error ?? r.statusText))))
             .then((j) => {
-                setD((p) => ({ ...p, [v]: j, ...(v === 'calidad' ? { calidadQ: q } : {}), ...(v === 'pulso' ? { pulsoQ: q } : {}) }));
+                setD((p) => ({ ...p, [v]: j, ...(v === 'calidad' ? { calidadQ: q } : {}), ...(v === 'pulso' ? { pulsoQ: q } : {}), ...(v === 'historico' ? { historicoQ: q } : {}) }));
                 setAt((p) => ({ ...p, [v]: j.cacheAt ?? Date.now() }));
             })
             .catch((e) => setErr(String(e)))
@@ -90,6 +90,8 @@ export default function PortalesShell() {
         if (v === 'calidad') { if (d.calidadQ !== qCosto) cargar('calidad', qCosto); return; }
         // El pulso es semanal: no usa el rango de meses, sólo venta/renta.
         if (v === 'pulso') { if (d.pulsoQ !== qOper) cargar('pulso', qOper); return; }
+        // El histórico tampoco usa meses (siempre 12 + YTD), pero sí venta/renta.
+        if (v === 'historico') { if (d.historicoQ !== qOper) cargar('historico', qOper); return; }
         if (!d[v]) cargar(v);
     }, [section, d, cargando, cargar, qCosto, qOper]);
     // El periodo sólo si está prendido en presentación.
@@ -102,9 +104,9 @@ export default function PortalesShell() {
 
     const OPS: Array<['todas' | 'sale' | 'rent', string]> = [['todas', 'Todo'], ['sale', 'Venta'], ['rent', 'Renta']];
     // Cada sección muestra SÓLO los filtros que de verdad la mueven: el pulso es semanal (no usa
-    // meses) y el histórico no usa ninguno. Antes se veían los dos en todas y parecía que no cargaban.
+    // meses) y el histórico tampoco; los dos sólo usan venta/renta. Antes se veían los dos en todas y parecía que no cargaban.
     const usaMeses = modo === 'presentacion';
-    const usaOper = usaMeses || section === 'pulso';
+    const usaOper = usaMeses || section === 'pulso' || section === 'historico';
     const controles = !usaOper ? (
         <span style={{ fontSize: 11.5, color: GRY }}>Esta vista no usa filtros: siempre muestra el histórico completo.</span>
     ) : (
