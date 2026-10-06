@@ -12,6 +12,8 @@ import type { Bloque, Cierre, Comparar, Fila, InmoView } from '@/lib/portales/in
 import type { InversionRango } from '@/lib/portales/inversion';
 import type { DealMes } from '@/lib/portales/deal';
 import type { SeccionV2 } from './PortalesApp';
+import LeadsPorDia from './LeadsPorDia';
+import { porFuente, senales } from '@/lib/portales/senales';
 
 // Canales sin factura (mismo criterio que SIN_COSTO de metrics.ts, que no se puede importar aquí
 // porque arrastra mongodb al bundle del navegador).
@@ -154,6 +156,16 @@ function Seccion({ titulo, sub, info, onCopiar, children }: { titulo: string; su
             <div style={{ width: 50, height: 1, background: YEL, margin: '8px 0 10px' }} />
             {sub && <div style={{ fontSize: 12, color: '#666', marginBottom: 10, lineHeight: 1.5 }}>{sub}</div>}
             {children}
+        </div>
+    );
+}
+
+function FilaFlag({ sev, titulo, items }: { sev: 'alta' | 'media'; titulo: string; items: string[] }) {
+    return (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '8px 0', borderBottom: `1px solid ${LGT}`, fontSize: 12.5, lineHeight: 1.5 }}>
+            <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.5px', color: sev === 'alta' ? RED : '#8A6D00', width: 44, flexShrink: 0 }}>{sev === 'alta' ? 'ALTA' : 'MEDIA'}</span>
+            <span style={{ width: 150, flexShrink: 0, fontWeight: 700 }}>{titulo}</span>
+            <span style={{ flex: 1 }}>{items.length === 1 ? items[0] : items.map((t, i) => <div key={i}>· {t}</div>)}</span>
         </div>
     );
 }
@@ -509,12 +521,20 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 ];
                 // Las alertas del pulso son de la última semana: sólo vienen al caso si el periodo la incluye.
                 const incluyeSemana = (Date.now() - new Date(A.hasta).getTime()) / 86400000 <= 14;
-                const atender: Array<{ sev: 'alta' | 'media'; txt: string }> = [
+                const flags = senales(A, C, C ? cmp : '', iso(hoy));
+                // alertas generales (la semana, el Sheet) + red flags agrupadas por fuente
+                const generales: Array<{ sev: 'alta' | 'media'; txt: string }> = [
                     ...(incluyeSemana ? alertasSemana?.a ?? [] : []),
-                    ...A.fuentes.filter((f) => f.leads >= 200 && (f.pctSinRespuesta ?? 0) >= 50)
-                        .map((f) => ({ sev: 'media' as const, txt: `${f.nombre}: en el ${pc(f.pctSinRespuesta)} de sus leads no vemos respuesta del cliente.` })),
                     ...(faltaInv && ia ? [{ sev: 'media' as const, txt: `Falta cargar la inversión de ${ia.faltantes.map(mesLargo).join(', ')} en el Sheet: CPL y ROI quedan en s/d.` }] : []),
                 ];
+                const conFlag = new Set(flags.map((x) => x.fuente));
+                const grupos = porFuente([
+                    ...flags,
+                    // nivel alto sostenido (no un cambio): sólo si la fuente no tiene ya otra señal
+                    ...A.fuentes.filter((f) => f.leads >= 200 && (f.pctSinRespuesta ?? 0) >= 50 && !conFlag.has(f.nombre))
+                        .map((f) => ({ sev: 'media' as const, fuente: f.nombre, txt: `En el ${pc(f.pctSinRespuesta)} de sus leads no vemos respuesta del cliente.` })),
+                ], A.fuentes.map((f) => f.nombre));
+                const atender = [...generales.filter((x) => x.sev === 'alta'), ...generales.filter((x) => x.sev === 'media')];
                 const top = A.fuentes.slice(0, 8);
                 return (<>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
@@ -533,15 +553,22 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                             </div>
                         ))}
                     </Seccion>
-                    <Seccion titulo="Para atender" sub={incluyeSemana ? 'Alertas de la última semana completa y de este periodo.' : 'Alertas de este periodo (las de la semana sólo salen si el periodo incluye las últimas dos semanas).'}>
-                        {!atender.length ? <div style={{ fontSize: 12.5, color: GRY }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
-                            : atender.map((x, i) => (
-                                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '7px 0', borderBottom: `1px solid ${LGT}`, fontSize: 12.5 }}>
-                                    <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.5px', color: x.sev === 'alta' ? RED : '#8A6D00', width: 44, flexShrink: 0 }}>{x.sev === 'alta' ? 'ALTA' : 'MEDIA'}</span>
-                                    <span>{x.txt}</span>
-                                </div>
-                            ))}
+                    <Seccion titulo="Para atender" sub={`Lo que se movió raro por fuente${C ? `, ${cmp}` : ''}, y los días fuera de lo normal.`}
+                        info={<>
+                            <b>Contra el periodo comparado</b> (fuentes con al menos 100 leads): volumen ×1.5 o −35%; asesor sin responder +5 pts; 1ª respuesta +50% (y +10 min); sin respuesta visible del cliente +8 pts; brokers +8 pts; fantasmas +5 pts; lead → visita −3 pts. Si el volumen se dispara <b>y</b> empeora la atención, sale como una sola alerta alta.
+                            <p style={{ margin: '6px 0 0' }}><b>Día por día</b> (fuentes con mediana de 5+ leads diarios): pico = el doble de su mediana; caída = una cuarta parte o menos (suele ser una integración rota o un paquete apagado). El día en curso no cuenta.</p>
+                            <p style={{ margin: '6px 0 0' }}>Las de la semana (respuesta, sin responder) salen sólo si el periodo incluye las últimas dos semanas.</p>
+                        </>}>
+                        {!atender.length && !grupos.length ? <div style={{ fontSize: 12.5, color: GRY }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
+                            : <>
+                                {grupos.filter((g) => g.sev === 'alta').map((g) => <FilaFlag key={g.fuente} sev="alta" titulo={g.fuente} items={g.items} />)}
+                                {atender.map((x, i) => <FilaFlag key={i} sev={x.sev} titulo="Toda la red" items={[x.txt]} />)}
+                                {grupos.filter((g) => g.sev === 'media').map((g) => <FilaFlag key={g.fuente} sev="media" titulo={g.fuente} items={g.items} />)}
+                            </>}
                     </Seccion>
+                    {A.porDia && <Seccion titulo="Leads por día" sub={`Por fuente${A.porDia.dias.length > 120 ? ', agrupado por semana' : ''}. Los puntos rojos son los días marcados en «Para atender».`}>
+                        <LeadsPorDia A={A} senales={flags} hoy={iso(hoy)} />
+                    </Seccion>}
                     <Seccion titulo="Por canal" sub={<>Lo esencial de cada canal. El detalle está en las otras secciones del menú.</>}>
                         <Tabla head={['Canal', 'Leads', '% visita', 'Cierres', 'Regalía', 'ROI']} min={600}>
                             {top.map((f) => {

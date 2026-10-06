@@ -109,6 +109,13 @@ export interface Bloque {
         sinFuenteOriginal: number; sinAtribuir: number;
         lista: Cierre[];
     };
+    /** Leads por día y por fuente (la gráfica del Resumen y las banderas de día raro). Días en UTC,
+     *  igual que los cortes del periodo, para que la suma cuadre con el total. */
+    porDia: {
+        dias: string[];
+        /** n = leads del día · lab = de ellos, los que entraron 9:00–20:59 MX · sin = de esos, sin respuesta del asesor */
+        series: Array<{ key: string; nombre: string; n: number[]; lab: number[]; sin: number[] }>;
+    };
 }
 export interface InmoView {
     filtro: FiltroInmo;
@@ -251,6 +258,8 @@ async function bloque(
     // leads → celdas; se guardan para los joins de después
     type LeadRef = { id: ObjectId; cells: Celda[]; t: Date; cid: string | null; inter: ObjectId | null; search: string | null; telMalo: boolean };
     const refs: LeadRef[] = [];
+    const nDias = Math.round((B.getTime() - A.getTime()) / DIA);
+    const serie = new Map<string, { n: number[]; lab: number[]; sin: number[] }>();
     const filtro: Document = {
         createdAt: { $gte: A, $lt: B }, ...NOT,
         ...(idsInmo ? { 'company._id': { $in: idsInmo } } : {}),
@@ -292,6 +301,12 @@ async function bloque(
         const cid = cidRaw != null ? String(cidRaw) : null;
         // `||` y no `??`: hay leads con phone = '' y el teléfono bueno en el contacto.
         const telMalo = telInvalido(l.phone || dig(l, 'contact', 'phone'));
+        const di = Math.floor((ca.getTime() - A.getTime()) / DIA);
+        if (di >= 0 && di < nDias) {
+            const sr = serie.get(canal) ?? serie.set(canal, { n: Array(nDias).fill(0), lab: Array(nDias).fill(0), sin: Array(nDias).fill(0) }).get(canal)!;
+            sr.n[di] += 1;
+            if (lab) { sr.lab[di] += 1; if (mins == null) sr.sin[di] += 1; }
+        }
         for (const c of mis) {
             c.leads += 1;
             if (telMalo) c.telInv += 1;
@@ -677,6 +692,11 @@ async function bloque(
             porFuente: [...porFuente.values()].sort((a, b) => b.n - a.n),
             sinFuenteOriginal: cierresRes.sinFuenteOrig, sinAtribuir: lista.filter((x) => x.fuente === F_SIN).length,
             lista: lista.slice(0, 60),
+        },
+        porDia: {
+            dias: Array.from({ length: nDias }, (_, i) => ymd(new Date(A.getTime() + i * DIA))),
+            series: [...serie.entries()].map(([k, x]) => ({ key: `f:${k}`, nombre: cells.get(`f:${k}`)?.nombre ?? k, ...x }))
+                .sort((a, b) => b.n.reduce((s, v) => s + v, 0) - a.n.reduce((s, v) => s + v, 0)),
         },
     };
 }
