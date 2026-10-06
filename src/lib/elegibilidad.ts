@@ -3,8 +3,8 @@
 // destacado en el portal es otra pregunta, la contesta el motor de portales y se mide distinto
 // (valor = P(venta 6m) × regalía). Mezclarlas daba dos respuestas a la misma pregunta.
 // Da un % de aceptación (precio competitivo vs mix ACM·oferta·cierres + calidad del aviso + comisión +
-// demanda de zona) sobre gates intrínsecos (venta · residencial; ser desarrollo NO descalifica: solo
-// dispara un disclaimer de "posible rechazo") y requisitos de material
+// demanda de zona) sobre gates intrínsecos (venta · residencial · NO ser un desarrollo en
+// comercialización: preventa / venta por unidades / entrega inmediata, ver señalesDesarrollo) y requisitos de material
 // (fotos · video · tour). computeEval() = datos estructurados (usado por scorecard y modo lote);
 // renderScorecard() = HTML on-brand imprimible.
 import { ObjectId, type Document } from 'mongodb';
@@ -35,7 +35,10 @@ export interface EvalResult {
     intr: { k: string; ok: boolean }[]; okIntr: boolean;
     /** comisión 5% + IVA y contrato de exclusiva firmado: no descalifican, pero sin ellos no se activa */
     contrato: { k: string; ok: boolean; v: string }[]; okContrato: boolean; faltaContrato: string[];
+    /** se comercializa como desarrollo (preventa, venta por unidades, entrega inmediata…): no aplica */
     esDesarrollo: boolean;
+    /** por qué: las señales que lo delataron (texto del aviso o unidades cargadas en bloque) */
+    desarrolloSeñales: string[];
     mat: { k: string; ok: boolean; v: string }[]; okMat: boolean; faltaMat: string[];
     sPrecio: number; sCalidad: number; sComision: number; sDemanda: number; score: number;
     banda: string; bandaTxt: string;
@@ -66,6 +69,51 @@ const ESTADO_CONTRATO: Record<string, string> = {
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const fdate = (d: Date) => `${d.getUTCDate()} ${MES[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 
+// ---- ¿se comercializa como desarrollo? ----
+// Regla de Ale (oct-2026): NO entran los desarrollos en comercialización — preventa, venta por
+// unidades, entrega inmediata, con renders. SÍ entra una unidad de reventa dentro de un edificio:
+// tener `development` en Mongo NO basta (2,224 de 5,684 ventas residenciales publicadas lo traen y
+// es sólo una etiqueta de nombre del edificio). Dos tipos de señal, cualquiera descalifica:
+//   1. TEXTO del título/descripción con lenguaje de comercialización de obra nueva.
+//   2. VENTA POR UNIDADES: la misma inmobiliaria tiene 3+ unidades publicadas del mismo desarrollo
+//      (o la misma calle y tipo) cargadas con ≤90 días entre sí — el desarrollador entregó el
+//      inventario de golpe; la reventa en un edificio se acumula en años.
+// Calibrado oct-2026: 764 de 5,684 ventas residenciales publicadas traen señal de texto.
+const MESES_ENTREGA = 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre';
+const SEÑALES_TEXTO: [RegExp, string][] = [
+    [/pre[\s-]?venta/i, 'preventa'],
+    [/entrega\s+inmediata/i, 'entrega inmediata'],
+    [new RegExp(`entrega\\s+(en|para|estimada)\\s+(${MESES_ENTREGA}|\\d{4}|q\\d|el\\s+(primer|segundo|tercer|cuarto)|\\d{1,2}\\s+meses)`, 'i'), 'fecha de entrega'],
+    [/venta\s+(de|por)\s+unidades|unidades\s+disponibles|[uú]ltimas\s+unidades/i, 'venta por unidades'],
+    [/lista\s+de\s+precios|plan(es)?\s+de\s+pagos?|esquemas?\s+de\s+pagos?/i, 'plan de pagos'],
+    [/en\s+construcci[oó]n|obra\s+negra/i, 'en construcción'],
+    [/renders?|im[aá]genes?\s+(son\s+)?(ilustrativas|de\s+referencia)/i, 'renders / imágenes ilustrativas'],
+    [/desde\s+\$/i, 'precio "desde"'],
+];
+async function señalesDesarrollo(db: Awaited<ReturnType<typeof getDb>>, P: Document): Promise<string[]> {
+    const out: string[] = [];
+    const txt = `${dig(P, 'listing', 'title') ?? ''} ${dig(P, 'listing', 'description') ?? ''}`;
+    for (const [rx, lbl] of SEÑALES_TEXTO) if (rx.test(txt)) out.push(lbl);
+    const created = P.createdAt instanceof Date ? P.createdAt : null;
+    const coId = dig(P, 'company', '_id');
+    if (created && coId) {
+        const vent = 90 * 86400000;
+        const devId = dig(P, 'development', '_id');
+        const street = (dig(P, 'address', 'street') as string)?.trim();
+        const q: Document = {
+            'company._id': coId, 'status.last': 'published', 'listing.operation': 'sale',
+            createdAt: { $gte: new Date(created.getTime() - vent), $lte: new Date(created.getTime() + vent) },
+        };
+        if (devId) q['development._id'] = devId;
+        else if (street) { q['address.street'] = street; q.type = P.type; }
+        if (devId || street) {
+            const n = await db.collection('properties').countDocuments(q, { maxTimeMS: 5000 }).catch(() => 0);
+            if (n >= 3) out.push(`${n} unidades del mismo ${devId ? 'desarrollo' : 'edificio'} cargadas en bloque por la inmobiliaria`);
+        }
+    }
+    return out;
+}
+
 // `contract.comission` viene en float crudo (3.4799999999999995): sin esto se imprime entero.
 const redondo = (n: number) => (Math.round(n * 100) / 100).toLocaleString('es-MX');
 
@@ -91,8 +139,8 @@ export async function computeEval(id: string, opts: { withBase?: boolean; detall
     const street = (dig(P, 'address', 'street') as string)?.trim() || null;
     const q = num(dig(P, 'portals', 'inmuebles24', 'quality'));
     const comm = num(dig(P, 'contract', 'comission'));
-    const devObj = P.development;
-    const esDesarrollo = !!(devObj && typeof devObj === 'object' && Object.keys(devObj as object).length > 0);
+    const desarrolloSeñales = await señalesDesarrollo(db, P);
+    const esDesarrollo = desarrolloSeñales.length > 0;
     const pics = ((P.pictures as Document[]) || []).filter((x) => x.public !== false).length;
     const video = Boolean((P.videos as unknown[])?.length) || Boolean(dig(P, 'marketing', 'Video', 'videoUrl'));
     const tour = Boolean(P.virtualTour);
@@ -214,11 +262,12 @@ export async function computeEval(id: string, opts: { withBase?: boolean; detall
     const sDemanda = dem >= 15 ? clamp(0.3 + 0.7 * clamp(ratio)) : clamp(dem / 15) * 0.4;
     const score = Math.round(40 * sPrecio + 25 * sCalidad + 20 * sComision + 15 * sDemanda);
 
-    // Ser desarrollo NO descalifica: solo dispara un disclaimer de "posible rechazo" (se revisa caso a
-    // caso). Los gates intrínsecos que sí descalifican son venta y residencial.
+    // Gates intrínsecos (descalifican): venta, residencial y NO ser un desarrollo en comercialización.
+    // Una unidad de reventa dentro de un edificio sí entra (ver señalesDesarrollo).
     const intr = [
         { k: 'En venta', ok: op === 'sale' },
-        { k: 'Residencial (casa/depto)', ok: !!typ && RESIDENCIAL.has(typ) }
+        { k: 'Residencial (casa/depto)', ok: !!typ && RESIDENCIAL.has(typ) },
+        { k: 'No es desarrollo en comercialización', ok: !esDesarrollo }
     ];
     const mat = [
         { k: '12+ fotos', ok: pics >= 12, v: `${pics} fotos` },
@@ -260,7 +309,7 @@ export async function computeEval(id: string, opts: { withBase?: boolean; detall
 
     return {
         id: String(P._id), code, title: (dig(P, 'listing', 'title') as string) ?? code, typ, op, col, city, street,
-        val, acm, m2, ppm2, intr, okIntr, contrato, okContrato, faltaContrato, esDesarrollo, mat, okMat, faltaMat,
+        val, acm, m2, ppm2, intr, okIntr, contrato, okContrato, faltaContrato, esDesarrollo, desarrolloSeñales, mat, okMat, faltaMat,
         sPrecio, sCalidad, sComision, sDemanda, score, banda, bandaTxt,
         sAcm, sSold, sOferta, askingMed, soldMed, vsAcm, vsOferta, vsCierre,
         q, comm, tipoOk, opOk, zonaOk, descOk, words, dem, ofe, velocidadMed, meses, nuevoPrecio,
@@ -337,7 +386,7 @@ export function renderScorecard(r: EvalResult): string {
 
   ${!r.okIntr ? `<div class="banner" style="background:${RED}">No aplica al programa: ${esc(r.intr.filter((x) => !x.ok).map((x) => x.k.toLowerCase()).join(', '))}.</div>` : ''}
   ${r.okIntr && !r.okContrato ? `<div class="banner" style="background:${YEL};color:${BLK}">Para activarla falta: ${esc(r.faltaContrato.map((k) => k === 'Comisión 5% + IVA' ? 'subir la comisión a 5% + IVA' : 'firmar el contrato de exclusiva').join(' y '))}.</div>` : ''}
-  ${r.esDesarrollo ? `<div class="banner" style="background:${YEL};color:${BLK}">⚠️ Es un desarrollo: posible rechazo. Revisar caso a caso con el equipo del programa antes de activar.</div>` : ''}
+  ${r.esDesarrollo ? `<div class="banner" style="background:${YEL};color:${BLK}">⚠️ Se comercializa como desarrollo (preventa / venta por unidades / entrega inmediata): no entra al programa. Señales: ${esc(r.desarrolloSeñales.join(' · '))}.</div>` : ''}
 
   <div class="sec"><div class="eyebrow">¿Aplica al programa?</div><div class="accent"></div>
     <div class="grid2">
@@ -388,7 +437,7 @@ export function renderScorecard(r: EvalResult): string {
     <div class="box"><ul>${r.lev.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>
   </div>
 
-  <div class="foot">Pulppo · 1·5·10 — Evaluación de elegibilidad generada ${new Date().toISOString().slice(0, 10)}. Datos en vivo. Requiere venta y residencial; si es desarrollo hay posible rechazo (revisar caso a caso); para activar: comisión 5% + IVA, contrato de exclusiva firmado y material (foto+video+tour).</div>
+  <div class="foot">Pulppo · 1·5·10 — Evaluación de elegibilidad generada ${new Date().toISOString().slice(0, 10)}. Datos en vivo. Requiere venta, residencial y que no sea un desarrollo en comercialización (preventa / venta por unidades / entrega inmediata; una unidad de reventa en un edificio sí aplica); para activar: comisión 5% + IVA, contrato de exclusiva firmado y material (foto+video+tour).</div>
 </div>`;
 }
 
