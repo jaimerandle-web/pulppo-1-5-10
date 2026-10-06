@@ -3,23 +3,22 @@
 //   · análisis     — todo, para nosotros
 //   · presentación — un solo portal, para enseñárselo a ese portal (ver Presentacion.tsx)
 //
-// Cada vista se carga aparte y sólo al entrar: abrir la página no debe pagar las cuatro
-// consultas. El rango de meses vuelve a pedir la vista de costo; el de fechas, la de periodo.
+// Cada vista se carga aparte y sólo al entrar: abrir la página no debe pagar todas las consultas.
+// La presentación usa el mismo motor que las pestañas de análisis (un InmoView por mes del rango +
+// la inversión del Sheet por mes); el rango de fechas exactas pide un InmoView más.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { PortalesView } from '@/lib/portales/view';
 import type { PulseView } from '@/lib/portales/pulse';
 import type { HistoricoView } from '@/lib/portales/historico';
-import type { PeriodoView } from '@/lib/portales/periodo';
-import type { CalidadView } from '@/lib/portales/calidad';
+import type { InmoView } from '@/lib/portales/inmobiliaria';
+import type { InversionRango } from '@/lib/portales/inversion';
 import PortalesApp, { type Section } from './PortalesApp';
-import Presentacion, { SECCIONES, type SeccionP } from './Presentacion';
+import Presentacion, { PORTALES_PAGADOS, SECCIONES, type MesP, type SeccionP } from './Presentacion';
 
-type Vista = 'costo' | 'pulso' | 'historico' | 'periodo' | 'calidad';
-type Datos = { calidadQ?: string; pulsoQ?: string; historicoQ?: string; costo?: PortalesView; pulso?: PulseView; historico?: HistoricoView; periodo?: PeriodoView; calidad?: CalidadView };
+type Vista = 'pulso' | 'historico';
+type Datos = { pulsoQ?: string; historicoQ?: string; pulso?: PulseView; historico?: HistoricoView };
 
-// Sólo el pulso y el histórico usan vistas propias; las cuatro secciones nuevas (inversión,
-// leads, funnel, inmobiliarias) consultan su propia API compartida. «costo» queda SÓLO para el
-// modo presentación (el reporte que se le enseña a cada portal).
+// Sólo el pulso y el histórico usan vistas propias; las cinco secciones de arriba consultan su
+// propia API compartida (InmobiliariasTab), igual que el modo presentación.
 const DE_SECCION: Record<Section, Vista | null> = {
     resumen: null, inversion: null, leads: null, embudo: null, inmobiliarias: null,
     pulso: 'pulso', historico: 'historico', comoleer: null,
@@ -34,9 +33,9 @@ export default function PortalesShell() {
     const [section, setSection] = useState<Section>('resumen');
     const [modo, setModo] = useState<'analisis' | 'presentacion'>('analisis');
     const [portal, setPortal] = useState('i24');
-    const [secs, setSecs] = useState<Set<SeccionP>>(new Set(['volumen', 'mezcla', 'atencion', 'embudo']));
+    const [secs, setSecs] = useState<Set<SeccionP>>(new Set(['volumen', 'mezcla', 'atencion', 'contacto', 'embudo']));
 
-    // Rango de MESES para todo lo que lleva costo (ver view.ts: la inversión es mensual).
+    // Rango de MESES de la presentación (la inversión es mensual).
     //
     // Hay dos estados: el BORRADOR (lo que estás moviendo) y lo APLICADO (lo que se consultó). Ya no
     // hay botón «Aplicar» (Ale, 2-oct-2026: «debería verse inmediato»): el borrador se aplica solo
@@ -68,37 +67,66 @@ export default function PortalesShell() {
         fetch(`/api/portales?view=${v}${q}${refresh ? '&refresh=1' : ''}`)
             .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(j.error ?? r.statusText))))
             .then((j) => {
-                setD((p) => ({ ...p, [v]: j, ...(v === 'calidad' ? { calidadQ: q } : {}), ...(v === 'pulso' ? { pulsoQ: q } : {}), ...(v === 'historico' ? { historicoQ: q } : {}) }));
+                setD((p) => ({ ...p, [v]: j, ...(v === 'pulso' ? { pulsoQ: q } : {}), ...(v === 'historico' ? { historicoQ: q } : {}) }));
                 setAt((p) => ({ ...p, [v]: j.cacheAt ?? Date.now() }));
             })
             .catch((e) => setErr(String(e)))
             .finally(() => setCargando(null));
     }, []);
 
-    const qCosto = `&desde=${desde}&hasta=${hasta}&operacion=${oper}`;
     const qOper = `&operacion=${oper}`;
-    const qPeriodo = `&desde=${pDesde}&hasta=${pHasta}`;
 
-    // La vista de costo sólo hace falta para el modo presentación: antes se pedía al abrir la página
-    // y bloqueaba todo ~20 s aunque fueras a otra sección.
-    useEffect(() => { if (modo === 'presentacion') cargar('costo', qCosto); }, [cargar, qCosto, modo]);
+    // ── modo presentación: un InmoView (vista general, sin comparar) + la inversión por mes ──
+    const mesesP = useMemo<MesP[]>(() => {
+        const out: MesP[] = [];
+        const ML = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+        let [y, m] = desde.split('-').map(Number);
+        const [y1, m1] = hasta.split('-').map(Number);
+        while ((y < y1 || (y === y1 && m <= m1)) && out.length < 24) {
+            const key = `${y}-${String(m).padStart(2, '0')}`;
+            out.push({ key, label: `${ML[m - 1]} ${y}`, parcial: key === mesKey(hoy) });
+            [y, m] = m === 12 ? [y + 1, 1] : [y, m + 1];
+        }
+        return out;
+    }, [desde, hasta, hoy]);
+    const [pres, setPres] = useState<{ q: string; porMes: Array<InmoView | null>; inv: Array<InversionRango | null> } | null>(null);
+    const [presPeriodo, setPresPeriodo] = useState<{ q: string; v: InmoView | null } | null>(null);
+    const datosMes = useCallback((a: string, b: string, op: string) =>
+        fetch(`/api/portales/inmobiliarias?view=datos&desde=${a}&hasta=${b}&operacion=${op}&comparar=nada`)
+            .then((r) => (r.ok ? r.json() : r.json().then((j) => Promise.reject(j.error ?? r.statusText)))), []);
+    useEffect(() => {
+        if (modo !== 'presentacion') return;
+        const q = `${mesesP.map((m) => m.key).join(',')}|${oper}`;
+        if (pres?.q === q) return;
+        setPres({ q, porMes: mesesP.map(() => null), inv: mesesP.map(() => null) });
+        mesesP.forEach((m, i) => {
+            const [y, mm] = m.key.split('-').map(Number);
+            const fin = m.parcial ? iso(hoy) : iso(new Date(Date.UTC(y, mm, 0)));
+            datosMes(`${m.key}-01`, fin, oper)
+                .then((v: InmoView) => setPres((p) => (p && p.q === q ? { ...p, porMes: p.porMes.map((x, k) => (k === i ? v : x)) } : p)))
+                .catch((e) => setErr(String(e)));
+            fetch(`/api/portales?view=inversion&desde=${m.key}&hasta=${m.key}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+                .then((r: InversionRango | null) => setPres((p) => (p && p.q === q ? { ...p, inv: p.inv.map((x, k) => (k === i ? r : x)) } : p)));
+        });
+    }, [modo, mesesP, oper, pres?.q, datosMes, hoy]);
+    // El periodo exacto sólo si está prendido en presentación.
+    useEffect(() => {
+        if (modo !== 'presentacion' || !secs.has('periodo') || !pDesde || !pHasta || pDesde > pHasta) return;
+        const q = `${pDesde}|${pHasta}|${oper}`;
+        if (presPeriodo?.q === q) return;
+        setPresPeriodo({ q, v: null });
+        datosMes(pDesde, pHasta, oper).then((v: InmoView) => setPresPeriodo((p) => (p?.q === q ? { q, v } : p))).catch((e) => setErr(String(e)));
+    }, [modo, secs, pDesde, pHasta, oper, presPeriodo?.q, datosMes]);
+
     // Las demás, perezosas: sólo al entrar a su sección.
     useEffect(() => {
         const v = DE_SECCION[section];
-        if (!v || v === 'costo' || cargando === v) return;
-        // Calidad usa el MISMO rango y filtro que costo, así que se repide cuando cambian.
-        if (v === 'calidad') { if (d.calidadQ !== qCosto) cargar('calidad', qCosto); return; }
+        if (!v || cargando === v) return;
         // El pulso es semanal: no usa el rango de meses, sólo venta/renta.
         if (v === 'pulso') { if (d.pulsoQ !== qOper) cargar('pulso', qOper); return; }
         // El histórico tampoco usa meses (siempre 12 + YTD), pero sí venta/renta.
         if (v === 'historico') { if (d.historicoQ !== qOper) cargar('historico', qOper); return; }
-        if (!d[v]) cargar(v);
-    }, [section, d, cargando, cargar, qCosto, qOper]);
-    // El periodo sólo si está prendido en presentación.
-    useEffect(() => {
-        if (modo === 'presentacion' && secs.has('periodo') && cargando !== 'periodo') cargar('periodo', qPeriodo);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [modo, secs.has('periodo'), qPeriodo]);
+    }, [section, d, cargando, cargar, qOper]);
 
     const inp: React.CSSProperties = { padding: '6px 8px', border: `1px solid ${LGT}`, borderRadius: 2, fontSize: 12, fontFamily: 'inherit', color: BLK };
 
@@ -131,21 +159,16 @@ export default function PortalesShell() {
     );
 
     if (err) return <div style={{ padding: 30, fontFamily: 'Nunito Sans, sans-serif', color: '#A52003' }}>No pude cargar los datos: {err}</div>;
-    if (modo === 'presentacion' && !d.costo) return (
-        <div style={{ padding: 30, fontFamily: 'Nunito Sans, sans-serif', color: GRY }}>
-            Preparando el modo presentación (Mongo + Sheet de inversión)… tarda unos segundos.
-        </div>
-    );
-
-    if (modo === 'presentacion' && d.costo) {
+    if (modo === 'presentacion') {
         return (
             <Presentacion
-                d={d.costo} periodo={d.periodo ?? null} portalKey={portal} secciones={secs}
-                meses={d.costo.meses} onSalir={() => setModo('analisis')}
+                meses={mesesP} porMes={pres?.porMes ?? mesesP.map(() => null)} inv={pres?.inv ?? mesesP.map(() => null)}
+                periodo={presPeriodo?.v ?? null} portalKey={portal} operacion={oper} secciones={secs}
+                onSalir={() => setModo('analisis')}
                 encabezado={
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontFamily: 'Nunito Sans, sans-serif' }}>
                         <select value={portal} onChange={(e) => setPortal(e.target.value)} style={{ ...inp, fontWeight: 700 }}>
-                            {d.costo.portales.filter((p) => p.pagado).map((p) => <option key={p.key} value={p.key}>{p.canal}</option>)}
+                            {PORTALES_PAGADOS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
                         </select>
                         {controles}
                         {secs.has('periodo') && (
@@ -164,7 +187,7 @@ export default function PortalesShell() {
                                 {label}
                             </label>
                         ))}
-                        {cargando && <span style={{ fontSize: 11, color: GRY }}>calculando…</span>}
+                        {(pres?.porMes.some((x) => !x) || (secs.has('periodo') && presPeriodo && !presPeriodo.v)) && <span style={{ fontSize: 11, color: GRY }}>calculando…</span>}
                     </div>
                 }
             />
@@ -179,7 +202,7 @@ export default function PortalesShell() {
             op={bOper} setOp={setBOper}
             cacheAt={(vistaActual && at[vistaActual]) ?? null}
             cargando={cargando !== null}
-            onRefresh={() => { if (vistaActual) cargar(vistaActual, vistaActual === 'pulso' ? qOper : '', true); }}
+            onRefresh={() => { if (vistaActual) cargar(vistaActual, qOper, true); }}
             controles={controles}
             onPresentar={() => setModo('presentacion')}
         />
