@@ -339,5 +339,11 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   `lead.interaction` (= `_id`). `answeredAt` NO prueba que hubo mensaje.
 - **Lista canónica** en `src/lib/portales/ordenInmobiliarias.ts` (copia de `_lista.txt`). Una
   inmobiliaria puede estar partida en varias compañías con el mismo nombre: se suman todas.
+- **Resumen → red flags** (`src/lib/portales/senales.ts`, lógica pura que corre en el cliente): por
+  fuente contra el periodo comparado (volumen ×1.5/−35% con base ≥100; si sube el volumen Y empeora la
+  atención → una sola alerta ALTA) y días raros dentro del periodo contra la mediana diaria de su tipo
+  de día (entre semana vs fin de semana; caída ≤25% = integración rota). Umbrales en la ⓘ de la UI.
+  La serie sale de `Bloque.porDia` (días en UTC, como los cortes del periodo) y la grafica
+  `LeadsPorDia.tsx` (barras apiladas, diario/semanal/mensual, leads o % del total).
 - Tiempos: una inmobiliaria ~7 s; vista general de un mes ~7 s; general YTD vs año pasado ~2 min
   (cabe en `maxDuration` 300, y se cachea 10 min).
