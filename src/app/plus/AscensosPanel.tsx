@@ -14,6 +14,8 @@ const LVL: Record<string, { base: string; soft: string; lbl: string }> = {
     professional: { base: '#868B8E', soft: '#E4E6E7', lbl: 'Profesional' },
     standard: { base: '#DEA37F', soft: '#F7E7DC', lbl: 'Estándar' },
 };
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+type Col = 'broker' | 'inmo' | 'corte' | 'sigue' | 'contactado' | 'pin';
 interface Datos { year: number; efimero: boolean; seguimiento: Seguimiento; elite: PremioNuevo[]; professional: PremioNuevo[] }
 
 const cuando = (iso: string) => new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
@@ -32,6 +34,8 @@ export default function AscensosPanel({ year }: { year: number }) {
     const [nivel, setNivel] = useState<Nivel>('elite');
     const [soloSiguen, setSoloSiguen] = useState(false);
     const [guardando, setGuardando] = useState<string | null>(null);
+    // Orden de la tabla: clic en el encabezado alterna ▲/▼. Por defecto, por corte (el orden de llegada).
+    const [orden, setOrden] = useState<{ col: Col; asc: boolean }>({ col: 'corte', asc: true });
 
     useEffect(() => {
         fetch(`/api/plus/ascensos?year=${year}`)
@@ -39,8 +43,27 @@ export default function AscensosPanel({ year }: { year: number }) {
             .then(setD).catch((e) => setErr(String(e)));
     }, [year]);
 
-    const filas = useMemo(() => (d ? d[nivel].filter((n) => !soloSiguen || n.sigue) : []), [d, nivel, soloSiguen]);
     const clave = (n: PremioNuevo) => `${year}:${nivel}:${n.email}`;
+    const filas = useMemo(() => {
+        if (!d) return [];
+        const k = (n: PremioNuevo) => `${year}:${nivel}:${n.email}`;
+        // valor ordenable por columna; las palomitas ordenan por fecha de marcado (sin marcar = al final en ▲)
+        const v = (n: PremioNuevo): string | number => {
+            switch (orden.col) {
+                case 'broker': return n.name.toLowerCase();
+                case 'inmo': return (n.company ?? '').toLowerCase();
+                case 'corte': return MESES.indexOf(n.mes);
+                case 'sigue': return n.sigue ? 1 : 0;
+                case 'contactado': case 'pin': { const m = d.seguimiento[k(n)]?.[orden.col]; return m ? Date.parse(m.at) : Infinity; }
+            }
+        };
+        const rows = d[nivel].filter((n) => !soloSiguen || n.sigue);
+        return [...rows].sort((a, b) => {
+            const x = v(a), y = v(b);
+            const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'es');
+            return (orden.asc ? c : -c) || a.name.localeCompare(b.name, 'es');
+        });
+    }, [d, nivel, soloSiguen, orden, year]);
 
     const toggle = async (n: PremioNuevo, campo: Campo) => {
         if (!d) return;
@@ -131,8 +154,16 @@ export default function AscensosPanel({ year }: { year: number }) {
             <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff' }}>
                     <thead><tr>
-                        <th style={th}>Broker</th><th style={th}>Inmobiliaria</th><th style={th}>Llegó en el corte de</th>
-                        <th style={th}>Sigue en {LVL[nivel].lbl.toLowerCase()}</th><th style={th}>Contactado</th><th style={th}>Pin entregado</th>
+                        {([['broker', 'Broker'], ['inmo', 'Inmobiliaria'], ['corte', 'Llegó en el corte de'],
+                            ['sigue', `Sigue en ${LVL[nivel].lbl.toLowerCase()}`], ['contactado', 'Contactado'], ['pin', 'Pin entregado']] as [Col, string][]).map(([c, lbl]) => {
+                            const on = orden.col === c;
+                            return (
+                                <th key={c} style={{ ...th, cursor: 'pointer', userSelect: 'none', color: on ? BLK : '#666' }}
+                                    onClick={() => setOrden((o) => ({ col: c, asc: o.col === c ? !o.asc : true }))}>
+                                    {lbl} <span style={{ color: on ? BLK : '#ccc' }}>{on ? (orden.asc ? '▲' : '▼') : '▲▼'}</span>
+                                </th>
+                            );
+                        })}
                     </tr></thead>
                     <tbody>
                         {filas.length === 0 && <tr><td colSpan={6} style={{ ...td, color: GRY, textAlign: 'center', padding: 18 }}>Nadie todavía.</td></tr>}
