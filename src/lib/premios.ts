@@ -69,13 +69,26 @@ function levelAt(hist: [Date, Level][] | undefined, vivo: string | null | undefi
     return lv ?? (hist?.[0]?.[1] ?? vivo ?? null);
 }
 
+/** Emails de asesores dados de baja: su cuenta está `inactive` o su inmobiliaria está de baja
+ *  (`companies.status = 'inactive'`). En los ascensos no tiene caso perseguirlos para el pin. */
+export async function asesoresDeBaja(): Promise<Set<string>> {
+    const db = await getDb();
+    const inact = new Set((await db.collection('companies').find({ status: 'inactive' }, { projection: { _id: 1 } }).toArray()).map((c) => String(c._id)));
+    const out = new Set<string>();
+    for await (const a of db.collection('agents').find({ email: { $exists: true } }, { projection: { email: 1, status: 1, 'company._id': 1 } })) {
+        if (a.status === 'inactive' || inact.has(String(((a.company as Document) ?? {})._id))) out.add(a.email as string);
+    }
+    return out;
+}
+
 /** Asesores que llegaron POR PRIMERA VEZ a `level` (o más arriba) con un corte del año. Los cortes
- *  feb-año … ene-año+1 son el desempeño de ene–dic. Lo usan los premios y /plus → Ascensos. */
-export function nuevosDelAño(am: Awaited<ReturnType<typeof agentMaps>>, year: number, level: Level): PremioNuevo[] {
+ *  feb-año … ene-año+1 son el desempeño de ene–dic. Lo usan los premios y /plus → Ascensos.
+ *  `bajas` (opcional) los saca de la lista: ver asesoresDeBaja(). */
+export function nuevosDelAño(am: Awaited<ReturnType<typeof agentMaps>>, year: number, level: Level, bajas?: Set<string>): PremioNuevo[] {
     const lo = Date.UTC(year, 0, 31), hi = Date.UTC(year + 1, 0, 2);
     const out: (PremioNuevo & { ts: number })[] = [];
     for (const [e, hs] of am.hist) {
-        if (isDemo(am.company.get(e))) continue;
+        if (isDemo(am.company.get(e)) || bajas?.has(e)) continue;
         const antes = hs.some(([ts, l]) => ORD[l] >= ORD[level] && ts.getTime() < lo);
         const llega = hs.filter(([ts, l]) => ORD[l] >= ORD[level] && ts.getTime() >= lo && ts.getTime() < hi);
         if (antes || !llega.length) continue;
@@ -89,7 +102,7 @@ export function nuevosDelAño(am: Awaited<ReturnType<typeof agentMaps>>, year: n
 
 export async function fetchPremios(year: number): Promise<Premios> {
     const db = await getDb();
-    const am = await agentMaps();
+    const [am, bajas] = await Promise.all([agentMaps(), asesoresDeBaja()]);
     const INI = new Date(Date.UTC(year, 0, 1)), FIN = new Date(Date.UTC(year + 1, 0, 1));
     const hoy = new Date();
     const finPrev = hoy.getUTCFullYear() === year ? new Date(Date.UTC(year - 1, hoy.getUTCMonth(), hoy.getUTCDate())) : INI;
@@ -412,6 +425,6 @@ export async function fetchPremios(year: number): Promise<Premios> {
         desempeño, ticket, nuevasInmo, tasaVisita, calidad, conjunto,
         insignias, racha, revelacion, relampago, leadCierre, captador, rentas,
         ventaMayor, ventaRapida,
-        nuevosPro: nuevosDelAño(am, year, 'professional'), nuevosElite: nuevosDelAño(am, year, 'elite'), pendiente,
+        nuevosPro: nuevosDelAño(am, year, 'professional', bajas), nuevosElite: nuevosDelAño(am, year, 'elite', bajas), pendiente,
     };
 }

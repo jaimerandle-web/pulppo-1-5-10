@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { agentMaps } from '@/lib/plus';
-import { nuevosDelAño } from '@/lib/premios';
+import { asesoresDeBaja, nuevosDelAño } from '@/lib/premios';
 import { esEfimero, leer, marcar, type Campo } from '@/lib/plusSeguimiento';
 import { currentUser } from '@/lib/companyAccess';
 
@@ -12,10 +12,11 @@ export async function GET(req: Request) {
     const year = Number(new URL(req.url).searchParams.get('year') ?? new Date().getFullYear());
     if (!(year >= 2023 && year <= 2100)) return NextResponse.json({ error: 'año inválido' }, { status: 400 });
     try {
-        const [am, seguimiento] = await Promise.all([agentMaps(), leer()]);
+        const [am, seguimiento, bajas] = await Promise.all([agentMaps(), leer(), asesoresDeBaja()]);
         return NextResponse.json({
             year, efimero: esEfimero(), seguimiento,
-            elite: nuevosDelAño(am, year, 'elite'), professional: nuevosDelAño(am, year, 'professional'),
+            // sin asesores dados de baja ni de inmobiliarias de baja: no hay a quién entregarle pin
+            elite: nuevosDelAño(am, year, 'elite', bajas), professional: nuevosDelAño(am, year, 'professional', bajas),
         });
     } catch (e) {
         return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });

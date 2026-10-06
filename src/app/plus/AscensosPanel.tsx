@@ -190,7 +190,7 @@ export default function AscensosPanel({ year }: { year: number }) {
                 </table>
             </div>
             <div style={{ fontSize: 10.5, color: GRY, marginTop: 8 }}>
-                "Llegó en el corte de" = el mes de desempeño con el que subió (el corte sale el día 1 del mes siguiente). Profesional incluye a quien subió directo a élite.
+                "Llegó en el corte de" = el mes de desempeño con el que subió (el corte sale el día 1 del mes siguiente). Profesional incluye a quien subió directo a élite. No aparecen asesores dados de baja ni de inmobiliarias de baja.
             </div>
         </div>
     );
