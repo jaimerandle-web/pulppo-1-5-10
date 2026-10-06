@@ -566,7 +566,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                                 {grupos.filter((g) => g.sev === 'media').map((g) => <FilaFlag key={g.fuente} sev="media" titulo={g.fuente} items={g.items} />)}
                             </>}
                     </Seccion>
-                    {A.porDia && <Seccion titulo="Leads por día" sub={`Por fuente${A.porDia.dias.length > 120 ? ', agrupado por semana' : ''}. Los puntos rojos son los días marcados en «Para atender».`}>
+                    {A.porDia && <Seccion titulo="Leads por fuente en el tiempo" sub="Cuántos leads entraron de cada fuente y qué parte del total fueron. En vista diaria, los puntos rojos son los días marcados en «Para atender».">
                         <LeadsPorDia A={A} senales={flags} hoy={iso(hoy)} />
                     </Seccion>}
                     <Seccion titulo="Por canal" sub={<>Lo esencial de cada canal. El detalle está en las otras secciones del menú.</>}>
