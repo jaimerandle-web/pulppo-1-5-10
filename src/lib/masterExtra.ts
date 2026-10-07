@@ -30,6 +30,9 @@ const FIJOS: Record<string, string> = {
     // SOSO INMOBILIARIA — pedido por Ale el 30-sep-2026. Mónica Ortiz está activa en la cuenta
     // como `associate`. Hay una sola compañía con ese nombre (4 asesores, 35 publicadas).
     'monica.ortiz@pulppo.com': '6819479028b0263f716baeb9',
+    // Diamond House — pedido por Ale el 7-oct-2026 para que revise el inventario. Diana Guerra
+    // está activa en la cuenta como `associate` (es el único agente activo con ese nombre ahí).
+    'informacion.dh@pulppo.com': '62bf49012367c77fc24d9220',
 };
 
 function delEntorno(): Record<string, string> {
