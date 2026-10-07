@@ -33,6 +33,10 @@ const FIJOS: Record<string, string> = {
     // Diamond House — pedido por Ale el 7-oct-2026 para que revise el inventario. Diana Guerra
     // está activa en la cuenta como `associate` (es el único agente activo con ese nombre ahí).
     'informacion.dh@pulppo.com': '62bf49012367c77fc24d9220',
+    // Miriam Cojab — pedido por Ale el 7-oct-2026: como `associate` el login la encerraba en
+    // /studio aunque abriera el link del panel. Diamond House tiene Studio, así que conserva
+    // las dos herramientas desde /inicio.
+    'miriam.cojab@pulppo.com': '62bf49012367c77fc24d9220',
 };
 
 function delEntorno(): Record<string, string> {
