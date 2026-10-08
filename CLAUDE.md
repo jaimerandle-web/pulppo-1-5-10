@@ -325,10 +325,12 @@ el PDF imprime las dos con las listas abiertas.
   (confirmadas + pendientes), **Funnel comercial | Búsquedas** por cambio de etapa de
   `searches.status.history` (NO es la cohorte de /portales, a propósito), cierres del LADO de la
   inmobiliaria con días por etapa del comprador. Mes y trimestre van completos (visitas futuras).
-- La fuente de cierres usa `atribuirFuente` (inmobiliaria.ts), la misma regla de /portales:
-  capturada (operación = búsqueda, 819/820) → otra inmobiliaria (sin compañía del comprador =
-  externo) → primer lead CON LA MISMA inmobiliaria del comprador (inferida) → «Búsqueda creada por
-  el asesor» (búsqueda válida sin fuente) → «Cartera del asesor».
+- La fuente de cierres usa `atribuirFuente` (inmobiliaria.ts), la misma regla de /portales. Fuente =
+  CANAL por el que llegó el comprador: capturada (operación = búsqueda, 819/820) → primer lead CON LA
+  inmobiliaria que trajo al comprador (inferida) → «Búsqueda creada por el asesor» (búsqueda válida sin
+  fuente) → «Cartera del asesor», o «Sin fuente registrada» si lo trajo otra inmobiliaria. Broker
+  externo / Red Pulppo NO son fuente (Ale, 8-oct): van en `comprador`, como etiqueta aparte; y
+  «broker externo» capturado a mano en la fuente cuenta como sin fuente.
 - Validado contra el Python de Lau (Andina, sep-2026 y ene–oct 2026): leads, visitas, funnel,
   cierres, comisión y días por etapa IGUALES; sólo cambian etiquetas de fuente («Contacto directo»).
 

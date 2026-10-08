@@ -74,6 +74,20 @@ function Pills<T extends string>({ val, opts, set }: { val: T; opts: Array<[T, s
 function Tabla({ children, min = 560 }: { children: ReactNode; min?: number }) {
     return <div style={{ overflowX: 'auto' }} className="print-wide"><table style={{ width: '100%', minWidth: min, borderCollapse: 'collapse' }}>{children}</table></div>;
 }
+/** Etiqueta de color (lado del cierre, quién trajo al comprador, asesor inactivo). */
+const TAGS: Record<string, CSSProperties> = {
+    Comprador: { background: SEA, color: '#fff' },
+    Vendedor: { background: YEL, color: BLK },
+    Ambos: { background: BLK, color: '#fff' },
+    'Broker externo': { background: '#fff', color: BLK, border: `1px solid ${BLK}` },
+    'Red Pulppo': { background: LGT, color: BLK },
+    inactivo: { background: '#fff', color: '#777', border: `1px solid ${GRY}` },
+};
+function Tag({ t, children }: { t: string; children?: ReactNode }) {
+    return <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: R, lineHeight: '15px', whiteSpace: 'nowrap',
+        border: '1px solid transparent', ...(TAGS[t] ?? { background: LGT, color: BLK }) }}>{children ?? t}</span>;
+}
+
 /** barra horizontal con su etiqueta (funnel y fuentes) */
 function Barra({ etq, detalle, valor, frac, extra }: { etq: string; detalle?: string; valor: string; frac: number; extra?: string }) {
     return (
@@ -141,10 +155,34 @@ export default function MBDesempeno({ companyId }: { companyId: string }) {
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         <Pills val={modo} set={setModo} opts={[['mes', 'Mes'], ['trimestre', 'Trimestre'], ['ytd', 'YTD'], ['rango', 'Fechas']]} />
                         {modo === 'mes' && <input type="month" value={mes} max={mesHoy} onChange={(e) => e.target.value && setMes(e.target.value)} style={inp} />}
-                        {modo === 'trimestre' && <>
-                            <select value={q} onChange={(e) => setQ(Number(e.target.value))} style={inp}>{[1, 2, 3, 4].map((x) => <option key={x} value={x}>T{x}</option>)}</select>
-                            <select value={anioQ} onChange={(e) => setAnioQ(Number(e.target.value))} style={inp}>{anios.map((y) => <option key={y} value={y}>{y}</option>)}</select>
-                        </>}
+                        {modo === 'trimestre' && (() => {
+                            // año con flechas + los 4 trimestres con sus meses; los que no han empezado, apagados
+                            const qHoy = Math.floor(hoy.getUTCMonth() / 3) + 1, yHoy = hoy.getUTCFullYear();
+                            const futuro = (y: number, x: number) => y > yHoy || (y === yHoy && x > qHoy);
+                            const flecha = (dy: number, off: boolean) => (
+                                <button type="button" disabled={off} onClick={() => { const y = anioQ + dy; setAnioQ(y); if (futuro(y, q)) setQ(qHoy); }}
+                                    style={{ border: 'none', background: 'none', cursor: off ? 'default' : 'pointer', color: off ? LGT : BLK, fontSize: 14, padding: '0 6px', fontFamily: 'inherit' }}>{dy < 0 ? '‹' : '›'}</button>
+                            );
+                            const MQ = ['ene – mar', 'abr – jun', 'jul – sep', 'oct – dic'];
+                            return (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${LGT}`, borderRadius: R }}>
+                                    {flecha(-1, anioQ <= anios[anios.length - 1])}
+                                    <span style={{ fontSize: 12, fontWeight: 700, minWidth: 34, textAlign: 'center' }}>{anioQ}</span>
+                                    {flecha(1, anioQ >= yHoy)}
+                                    {[1, 2, 3, 4].map((x) => {
+                                        const off = futuro(anioQ, x), on = q === x;
+                                        return (
+                                            <button key={x} type="button" disabled={off} onClick={() => setQ(x)} title={off ? 'Todavía no empieza' : ''}
+                                                style={{ border: 'none', borderLeft: `1px solid ${LGT}`, padding: '4px 10px', cursor: off ? 'default' : 'pointer', fontFamily: 'inherit', lineHeight: 1.15,
+                                                    background: on ? BLK : '#fff', color: on ? '#fff' : off ? GRY : BLK, textAlign: 'center' }}>
+                                                <span style={{ display: 'block', fontSize: 12, fontWeight: 700 }}>T{x}</span>
+                                                <span style={{ display: 'block', fontSize: 9.5, color: on ? '#ddd' : off ? GRY : '#777' }}>{MQ[x - 1]}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </span>
+                            );
+                        })()}
                         {modo === 'rango' && <>
                             <input type="date" value={rDesde} max={rHasta} onChange={(e) => e.target.value && setRDesde(e.target.value)} style={inp} />
                             <span style={{ color: GRY, fontSize: 12 }}>a</span>
@@ -219,7 +257,7 @@ function Comercial({ d, op, conAsesor }: { d: DesempenoMb; op: OpF; conAsesor: b
 
     // mapa de calor: leads únicos por asesor y mes
     const filasAsesor = d.porAsesor.map((a) => ({
-        nombre: a.nombre,
+        nombre: a.nombre, activo: a.activo,
         meses: d.meses.map((m) => ops.reduce((s, o) => s + (a.meses[m.mes]?.[o] ?? 0), 0)),
     })).map((a) => ({ ...a, total: a.meses.reduce((s, x) => s + x, 0) })).filter((a) => a.total > 0).sort((x, y) => y.total - x.total);
     const maxCelda = Math.max(1, ...filasAsesor.flatMap((a) => a.meses));
@@ -257,7 +295,7 @@ function Comercial({ d, op, conAsesor }: { d: DesempenoMb; op: OpF; conAsesor: b
                 <tbody>
                     {filasAsesor.map((a) => (
                         <tr key={a.nombre}>
-                            <td style={{ ...td, whiteSpace: 'nowrap' }}>{a.nombre}</td>
+                            <td style={{ ...td, whiteSpace: 'nowrap', color: a.activo ? BLK : '#777' }}>{a.nombre}{!a.activo && <span style={{ marginLeft: 6 }}><Tag t="inactivo" /></span>}</td>
                             {a.meses.map((v, i) => <td key={i} style={{ ...tdN, background: v ? `rgba(246,190,0,${(v / maxCelda) * .55})` : undefined }}>{v || ''}</td>)}
                             <td style={{ ...tdN, fontWeight: 700 }}>{f0(a.total)}</td>
                         </tr>
@@ -381,7 +419,7 @@ function Cierres({ d, op, conAsesor }: { d: DesempenoMb; op: OpF; conAsesor: boo
                 {(op === 'todas' ? (['sale', 'rent'] as Op[]) : [op as Op]).map(tile)}
             </div>
         </Seccion>
-        <Seccion titulo="Cierres por fuente" nota={<>La fuente que capturó el asesor (o la de la búsqueda del comprador). Si no hay: si el comprador lo trajo otra inmobiliaria, <b>Broker externo</b> o <b>Red Pulppo</b>; si tenía un lead previo con esta inmobiliaria, el canal de ese lead (<i>inferida</i>); si tiene búsqueda sin fuente, <b>Búsqueda creada por el asesor</b>; y si no, <b>Cartera del asesor</b>. Es la misma regla de /portales.</>}>
+        <Seccion titulo="Cierres por fuente" nota={<>El canal por el que llegó el comprador: el que capturó el asesor (o el de la búsqueda). Si no hay, el de su primer lead con la inmobiliaria que lo trajo (<i>inferida</i>); si tiene búsqueda sin fuente, <b>Búsqueda creada por el asesor</b>; y si no, <b>Cartera del asesor</b> (o <b>Sin fuente registrada</b> si al comprador lo trajo otra inmobiliaria). Que lo haya traído un broker externo u otra inmobiliaria de la red no es una fuente: sale como etiqueta en el detalle. Es la misma regla de /portales.</>}>
             {fuentes.map(([f, n]) => <Barra key={f} etq={f} frac={n / max} valor={f0(n)} extra={`${Math.round((100 * n) / cs.length)}%`} />)}
         </Seccion>
         <Seccion titulo="Detalle de cierres" nota="«Por etapa» mide cada paso desde el anterior; «acumulados», todo desde la creación de la búsqueda.">
@@ -428,10 +466,10 @@ function TablaCierres({ cs, conAsesor }: { cs: CierreMb[]; conAsesor: boolean })
             <tbody>
                 {cs.map((c) => (
                     <tr key={c.id + c.lado}>
-                        <td style={{ ...td, whiteSpace: 'nowrap' }}>{fechaCorta(c.fechaCierre)}<div style={sub}>{opTxt(c.op)} · lado {c.lado.toLowerCase()}</div>{c.estado === 'paying' && <div style={{ ...sub, color: '#8A6D00' }}>en cobranza</div>}</td>
+                        <td style={{ ...td, whiteSpace: 'nowrap' }}>{fechaCorta(c.fechaCierre)}<div style={sub}>{opTxt(c.op)}</div><div style={{ marginTop: 4 }}><Tag t={c.lado}>{c.lado === 'Ambos' ? 'Ambos lados' : `Lado ${c.lado.toLowerCase()}`}</Tag></div>{c.estado === 'paying' && <div style={{ ...sub, color: '#8A6D00' }}>en cobranza</div>}</td>
                         <td style={td}><b>{c.cliente === 'Sin nombre' && c.inmoComprador ? `Comprador de ${c.inmoComprador}` : c.cliente}</b>
                             <div style={sub}>{[c.codigo, c.tipo].filter(Boolean).join(' · ')}</div><div style={sub}>{c.direccion || 'Sin dirección'}</div></td>
-                        <td style={td}><b>{c.fuente}</b>{c.inferida && <div style={sub}>inferida del primer lead</div>}<div style={sub}>{inicioTxt(c)}</div></td>
+                        <td style={td}><b>{c.fuente}</b>{c.inferida && <div style={sub}>inferida del primer lead</div>}{c.comprador && <div style={{ marginTop: 4 }}><Tag t={c.comprador}>Comprador: {c.comprador.toLowerCase()}</Tag></div>}<div style={sub}>{inicioTxt(c)}</div></td>
                         <td style={tdN}>{money(c.monto, c.moneda)}{c.op === 'rent' && <div style={sub}>al mes</div>}</td>
                         <td style={tdN}>{money(c.comision)}</td>
                         <td style={{ ...tdN, ...g1 }}>{dia(c.etapaVisita)}</td><td style={tdN}>{dia(c.etapaOferta)}</td><td style={tdN}>{dia(c.etapaCierre)}</td>

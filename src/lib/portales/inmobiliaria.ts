@@ -87,6 +87,8 @@ export interface Cierre {
     fuente: string; lado: 'vendedor' | 'comprador' | 'ambos'; asesor: string;
     /** la fuente no venía en la operación: se dedujo del primer lead del comprador */
     inferida?: boolean;
+    /** quién trajo al comprador si no fue la inmobiliaria: «Broker externo» / «Red Pulppo» (no es fuente) */
+    comprador?: string | null;
 }
 export interface Bloque {
     desde: string; hasta: string; etiqueta: string; dias: number;
@@ -140,28 +142,34 @@ const FUENTE_RARA: Record<string, string> = {
     lonas: 'Lonas', tuportalonline: 'TuPortalOnline', contactodirecto: 'Contacto directo', referido: 'Referido',
     'doorvel.com': 'Doorvel', lamudi: 'Lamudi', brokerexternal: 'Broker externo',
 };
-const SIN_FUENTE = new Set(['other', '', 'none', 'null', 'undefined']);
-export const F_BROKER_EXT = 'Broker externo', F_RED = 'Red Pulppo (otra inmobiliaria)', F_SIN = 'Sin registrar';
+// «Broker externo» capturado a mano en la fuente dice QUIÉN trajo al comprador, no el canal (Ale,
+// 8-oct-2026): cuenta como sin fuente y la regla sigue buscando el canal.
+const SIN_FUENTE = new Set(['other', '', 'none', 'null', 'undefined', 'broker externo', 'broker', 'externo', 'otro broker', 'red pulppo']);
+export const F_BROKER_EXT = 'Broker externo', F_RED = 'Red Pulppo', F_SIN = 'Sin fuente registrada';
 export const F_BUSQ = 'Búsqueda creada por el asesor', F_CARTERA = 'Cartera del asesor';
 
 /**
- * Fuente de un cierre — UNA regla para /portales y para Desempeño de /mb (acordada con Ale y Lau,
- * 8-oct-2026). Medido en 2026: la fuente de la operación (`buyer.source`) y la de la búsqueda del
- * comprador coinciden en 819 de 820 cierres; la diferencia está sólo en los que llegan sin ninguna.
+ * Fuente de un cierre — UNA regla para /portales y para Desempeño de /mb (Ale y Lau, 8-oct-2026).
+ * La fuente es el CANAL por el que llegó el comprador. Quién lo trajo (un broker externo u otra
+ * inmobiliaria de la red) NO es una fuente: va aparte, en `comprador` (Ale: «Broker externo no es una
+ * fuente, la fuente es inmuebles24 y si es un broker externo es otra cosa»).
+ * Medido en 2026: la fuente de la operación (`buyer.source`) y la de la búsqueda coinciden en 819 de
+ * 820 cierres; la diferencia está sólo en los que llegan sin ninguna.
  *   1. la capturada (operación, o la búsqueda si la operación no la trae)
- *   2. el comprador lo trajo OTRA inmobiliaria → Broker externo (fuera de Pulppo) / Red Pulppo
- *   3. el primer lead del comprador CON SU MISMA INMOBILIARIA, antes del cierre → su canal (inferida).
+ *   2. el primer lead del comprador CON LA INMOBILIARIA QUE LO TRAJO, antes del cierre (inferida).
  *      Un lead que dejó meses antes con otra inmobiliaria no dice cómo llegó a ésta.
- *   4. tiene búsqueda pero sin fuente → el asesor dio de alta al contacto: «Búsqueda creada por el asesor»
- *   5. nada → «Cartera del asesor»
+ *   3. tiene búsqueda pero sin fuente → el asesor dio de alta al contacto: «Búsqueda creada por el asesor»
+ *   4. nada: si lo trajo otra inmobiliaria → «Sin fuente registrada» (no es cartera de nadie de la casa);
+ *      si es de la casa → «Cartera del asesor»
  */
 export function atribuirFuente(x: {
     capturada: string | null; otra: 'externo' | 'red' | null; primerLead: string | null; tieneBusqueda: boolean;
-}): { fuente: string; inferida?: boolean } {
-    if (x.capturada) return { fuente: x.capturada };
-    if (x.otra) return { fuente: x.otra === 'externo' ? F_BROKER_EXT : F_RED };
-    if (x.primerLead) return { fuente: x.primerLead, inferida: true };
-    return { fuente: x.tieneBusqueda ? F_BUSQ : F_CARTERA };
+}): { fuente: string; inferida?: boolean; comprador: string | null } {
+    const comprador = x.otra === 'externo' ? F_BROKER_EXT : x.otra === 'red' ? F_RED : null;
+    if (x.capturada) return { fuente: x.capturada, comprador };
+    if (x.primerLead) return { fuente: x.primerLead, inferida: true, comprador };
+    if (x.tieneBusqueda) return { fuente: F_BUSQ, comprador };
+    return { fuente: x.otra ? F_SIN : F_CARTERA, comprador };
 }
 /** Fuente capturada, o null si vino vacía / `other` (entonces se deduce, ver arriba). */
 export const fuenteCapturada = (raw: unknown): string | null => {
@@ -688,7 +696,7 @@ export async function cierresEntre(
             (leadsDe.get(k) ?? leadsDe.set(k, []).get(k)!).push({ t: l.createdAt, src: String(l.source ?? ''), comp: String(dig(l, 'company', '_id') ?? '') });
         }
     }
-    const fuenteDe = (o: Document): { fuente: string; inferida?: boolean } => {
+    const fuenteDe = (o: Document): { fuente: string; inferida?: boolean; comprador: string | null } => {
         const sc = String(dig(o, 'seller', 'company', '_id') ?? ''), bc = String(dig(o, 'buyer', 'company', '_id') ?? '');
         const sid = dig(o, 'buyer', 'search');
         // «otra» = el comprador lo trajo una inmobiliaria que no es la nuestra: con inmobiliaria elegida,

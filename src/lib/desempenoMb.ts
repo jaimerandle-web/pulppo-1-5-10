@@ -59,6 +59,8 @@ export interface CierreMb {
     monto: number | null; moneda: string; comision: number | null; fechaCierre: string;
     inicio: string | null; inicioTipo: 'busqueda' | 'visita' | 'oferta';
     fuente: string; inferida: boolean;
+    /** quién trajo al comprador si no fue esta inmobiliaria (no es fuente) */
+    comprador: string | null;
     etapaVisita: number | null; etapaOferta: number | null; etapaCierre: number | null;
     diasVisita: number | null; diasOferta: number | null; diasCierre: number | null;
 }
@@ -69,7 +71,7 @@ export interface DesempenoMb {
     totales: Record<'sale' | 'rent', PorOp>;
     sinOperacion: { leads: number; visitas: number };
     /** leads únicos por asesor y mes (mapa de calor), por operación */
-    porAsesor: Array<{ id: string; nombre: string; meses: Record<string, Record<Op, number>> }>;
+    porAsesor: Array<{ id: string; nombre: string; activo: boolean; meses: Record<string, Record<Op, number>> }>;
     /** atención: leads únicos que entraron 9:00–20:59 MX y cuántos quedaron sin respuesta del asesor */
     atencion: Record<Op, { base: number; sin: number }>;
     /** foto de HOY: operaciones en oferta o contrato */
@@ -262,11 +264,18 @@ export async function desempenoMb(companyId: string, desde: string, hasta: strin
         funnel: funTot[op],
     }])) as Record<'sale' | 'rent', PorOp>;
 
-    // mapa de calor: leads únicos por asesor y mes
+    // mapa de calor: leads únicos por asesor y mes. Un lead puede seguir asignado a un asesor que ya
+    // no está (borrado o movido de inmobiliaria): se busca su nombre igual y sale marcado inactivo.
+    const activos = new Set(asesores.filter((a) => a.activo).map((a) => a.id));
+    const faltan = [...new Set(leads.map((l) => l.agent).filter((x): x is string => !!x && !nombreAsesor.has(x)))];
+    for (const l of lotes(faltan.map((s) => new ObjectId(s))))
+        for await (const a of db.collection('agents').find({ _id: { $in: l } }, { projection: { firstName: 1, lastName: 1, email: 1 } }))
+            nombreAsesor.set(String(a._id), nombreDe(a) || String(a.email ?? ''));
     const pa = new Map<string, DesempenoMb['porAsesor'][number]>();
     for (const l of leads) {
         const k = l.agent ?? 'sin';
-        const e = pa.get(k) ?? pa.set(k, { id: k, nombre: l.agent ? nombreAsesor.get(l.agent) ?? '(asesor dado de baja)' : 'Sin asesor asignado', meses: {} }).get(k)!;
+        const e = pa.get(k) ?? pa.set(k, { id: k, nombre: l.agent ? nombreAsesor.get(l.agent) || 'Asesor sin nombre' : 'Sin asesor asignado',
+            activo: !l.agent || activos.has(l.agent), meses: {} }).get(k)!;
         const ym = ymMx(l.at);
         const c = e.meses[ym] ?? (e.meses[ym] = { sale: 0, rent: 0, otro: 0 });
         c[l.op] += 1;
@@ -369,7 +378,7 @@ async function cierresMb(ids: ObjectId[], idSet: Set<string>, A: Date, B: Date, 
         const oferta = ofertas.length ? new Date(Math.min(...ofertas.map((t) => t.getTime()))) : null;
         const [base, baseTipo]: [Date | null, CierreMb['inicioTipo']] = busqueda ? [busqueda, 'busqueda'] : visita ? [visita, 'visita'] : [oferta, 'oferta'];
 
-        // fuente: la regla única de /portales (capturada → otra inmobiliaria → primer lead con SU inmobiliaria → búsqueda del asesor → cartera)
+        // fuente: la regla única de /portales (capturada → primer lead con la inmobiliaria que trajo al comprador → búsqueda del asesor → cartera / sin fuente)
         const otra = !nuestra ? (dig(o, 'buyer', 'company', 'external') === true || !bc ? 'externo' : 'red') as 'externo' | 'red' : null;
         const compsLead = nuestra ? idSet : new Set([bc]);
         const primero = cid ? (leadsCon.get(cid) ?? []).filter((l) => l.t <= closed && compsLead.has(l.comp) && fuenteCapturada(l.src))
@@ -400,7 +409,7 @@ async function cierresMb(ids: ObjectId[], idSet: Set<string>, A: Date, B: Date, 
             monto: (dig(o, 'closeValue', 'value') as number | undefined) ?? null, moneda: String(dig(o, 'closeValue', 'currency') ?? 'MXN'),
             comision, fechaCierre: isoMx(closed),
             inicio: base ? isoMx(base) : null, inicioTipo: baseTipo,
-            fuente: f.fuente, inferida: !!f.inferida,
+            fuente: f.fuente, inferida: !!f.inferida, comprador: f.comprador,
             etapaVisita: baseTipo === 'busqueda' && visita ? dias(base, visita) : null,
             etapaOferta: visita && oferta && oferta >= visita ? dias(visita, oferta) : null,
             etapaCierre: dias(oferta, closed),

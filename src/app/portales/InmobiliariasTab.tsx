@@ -782,7 +782,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
             <Seccion titulo="Cierres del periodo" onCopiar={() => copiar([['Fecha', 'Operación', 'Código', 'Tipo', 'Colonia', 'Valor', 'Comisión', 'Fuente', 'Lado', 'Asesor', 'ID operación'],
                 ...A.cierres.lista.map((x) => [x.fecha, x.operacion, x.codigo, x.tipo, x.colonia, x.valor, x.comision, x.inferida ? `${x.fuente} (inferida)` : x.fuente, x.lado, x.asesor, x.id])])}
                 sub="Lo que cerró en el periodo, con la fuente del comprador."
-                info={<>Operaciones que <b>cerraron</b> en el periodo, vengan de leads de cuando sea{v.inmobiliaria ? <>, de los dos lados: donde {v.inmobiliaria.nombre} vende la propiedad y donde trae al comprador</> : null}. Cuando la operación no trae fuente (<code>other</code>) se atribuye: broker de fuera de Pulppo → <b>Broker externo</b>; otra inmobiliaria de la red → <b>Red Pulppo</b>; comprador con un lead previo con esa misma inmobiliaria → el canal de ese <b>primer lead</b> (columna «Inferidas»); búsqueda sin fuente → <b>Búsqueda creada por el asesor</b> (contacto que dio de alta el asesor); nada → <b>Cartera del asesor</b>.</>}>
+                info={<>Operaciones que <b>cerraron</b> en el periodo, vengan de leads de cuando sea{v.inmobiliaria ? <>, de los dos lados: donde {v.inmobiliaria.nombre} vende la propiedad y donde trae al comprador</> : null}. La fuente es el <b>canal</b> por el que llegó el comprador. Cuando la operación no la trae (<code>other</code>): el canal de su <b>primer lead</b> con la inmobiliaria que lo trajo (columna «Inferidas»); búsqueda sin fuente → <b>Búsqueda creada por el asesor</b>; nada → <b>Cartera del asesor</b>, o <b>Sin fuente registrada</b> si al comprador lo trajo otra inmobiliaria. Que lo trajera un broker externo u otra inmobiliaria de la red no es una fuente: sale aparte, debajo de la fuente.</>}>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <Kpi label="Cierres" info={DEF.cierresPeriodo} value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
                     <Kpi label="Comisión" info={DEF.comision} value={money(A.cierres.comision)} delta={<Delta a={A.cierres.comision} b={C?.cierres.comision} />} />
@@ -796,7 +796,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 </Tabla>
                 {A.cierres.sinFuenteOriginal > 0 && (
                     <div style={{ fontSize: 11.5, color: '#666', marginTop: 8 }}>
-                        <b>{f0(A.cierres.sinFuenteOriginal)} de {f0(A.cierres.n)}</b> cierres venían sin fuente y se atribuyeron (ver ⓘ).{A.cierres.sinAtribuir ? <> Quedan <b>{f0(A.cierres.sinAtribuir)}</b> sin poder atribuir.</> : null}
+                        <b>{f0(A.cierres.sinFuenteOriginal)} de {f0(A.cierres.n)}</b> cierres venían sin fuente y se atribuyeron (ver ⓘ).{A.cierres.sinAtribuir ? <> <b>{f0(A.cierres.sinAtribuir)}</b> quedan como «Sin fuente registrada»: al comprador lo trajo otra inmobiliaria y no hay rastro del canal.</> : null}
                     </div>
                 )}
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '20px 0 6px' }}>Últimos cierres</div>
@@ -808,7 +808,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                             <td style={{ ...td0, whiteSpace: 'normal' }}>{x.codigo ? <a href={`/ficha/${encodeURIComponent(x.codigo)}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>{x.codigo}</a> : '—'}<div style={{ fontSize: 10.5, color: '#666' }}>{[x.tipo, x.colonia].filter(Boolean).join(' · ')}</div></td>
                             <td style={td}>{money(x.valor)}</td>
                             <td style={td}>{money(x.comision)}</td>
-                            <td style={td0}>{x.fuente}{x.inferida && <div style={{ fontSize: 10, color: '#8A6D00' }}>inferida del 1er lead</div>}</td>
+                            <td style={td0}>{x.fuente}{x.inferida && <div style={{ fontSize: 10, color: '#8A6D00' }}>inferida del 1er lead</div>}{x.comprador && <div style={{ fontSize: 10, color: '#666' }}>comprador: {x.comprador.toLowerCase()}</div>}</td>
                             <td style={{ ...td0, color: ladoColor[x.lado], fontWeight: 700 }}>{x.lado}</td>
                             <td style={{ ...td0, whiteSpace: 'normal' }}>{x.asesor}</td>
                         </tr>
