@@ -327,7 +327,9 @@ el PDF imprime las dos con las listas abiertas.
   inmobiliaria con días por etapa del comprador. Mes y trimestre van completos (visitas futuras).
 - La fuente de cierres usa `atribuirFuente` (inmobiliaria.ts), la misma regla de /portales. Fuente =
   CANAL por el que llegó el comprador: capturada (operación = búsqueda, 819/820) → primer lead CON LA
-  inmobiliaria que trajo al comprador (inferida) → «Búsqueda creada por el asesor» (búsqueda válida sin
+  inmobiliaria que trajo al comprador (inferida) → lead del BROKER EXTERNO (`buyer.broker._id` es un
+  contacto: su lead sobre esa propiedad, o el más reciente con la vendedora en 365 d; sep-2026 bajó «sin
+  fuente» de 45 a 22 en la red y resolvió los 3 de Andina jul–sep, todos Inmuebles24) → «Búsqueda creada por el asesor» (búsqueda válida sin
   fuente) → «Cartera del asesor», o «Sin fuente registrada» si lo trajo otra inmobiliaria. Broker
   externo / Red Pulppo NO son fuente (Ale, 8-oct): van en `comprador`, como etiqueta aparte; y
   «broker externo» capturado a mano en la fuente cuenta como sin fuente.

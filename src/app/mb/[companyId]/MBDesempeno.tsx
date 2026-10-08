@@ -419,7 +419,7 @@ function Cierres({ d, op, conAsesor }: { d: DesempenoMb; op: OpF; conAsesor: boo
                 {(op === 'todas' ? (['sale', 'rent'] as Op[]) : [op as Op]).map(tile)}
             </div>
         </Seccion>
-        <Seccion titulo="Cierres por fuente" nota={<>El canal por el que llegó el comprador: el que capturó el asesor (o el de la búsqueda). Si no hay, el de su primer lead con la inmobiliaria que lo trajo (<i>inferida</i>); si tiene búsqueda sin fuente, <b>Búsqueda creada por el asesor</b>; y si no, <b>Cartera del asesor</b> (o <b>Sin fuente registrada</b> si al comprador lo trajo otra inmobiliaria). Que lo haya traído un broker externo u otra inmobiliaria de la red no es una fuente: sale como etiqueta en el detalle. Es la misma regla de /portales.</>}>
+        <Seccion titulo="Cierres por fuente" nota={<>El canal por el que llegó el comprador: el que capturó el asesor (o el de la búsqueda). Si no hay, el de su primer lead con la inmobiliaria que lo trajo, o el del lead que dejó el broker externo sobre esa propiedad (<i>inferida</i>); si tiene búsqueda sin fuente, <b>Búsqueda creada por el asesor</b>; y si no, <b>Cartera del asesor</b> (o <b>Sin fuente registrada</b> si al comprador lo trajo otra inmobiliaria). Que lo haya traído un broker externo u otra inmobiliaria de la red no es una fuente: sale como etiqueta en el detalle. Es la misma regla de /portales.</>}>
             {fuentes.map(([f, n]) => <Barra key={f} etq={f} frac={n / max} valor={f0(n)} extra={`${Math.round((100 * n) / cs.length)}%`} />)}
         </Seccion>
         <Seccion titulo="Detalle de cierres" nota="«Por etapa» mide cada paso desde el anterior; «acumulados», todo desde la creación de la búsqueda.">
@@ -469,7 +469,7 @@ function TablaCierres({ cs, conAsesor }: { cs: CierreMb[]; conAsesor: boolean })
                         <td style={{ ...td, whiteSpace: 'nowrap' }}>{fechaCorta(c.fechaCierre)}<div style={sub}>{opTxt(c.op)}</div><div style={{ marginTop: 4 }}><Tag t={c.lado}>{c.lado === 'Ambos' ? 'Ambos lados' : `Lado ${c.lado.toLowerCase()}`}</Tag></div>{c.estado === 'paying' && <div style={{ ...sub, color: '#8A6D00' }}>en cobranza</div>}</td>
                         <td style={td}><b>{c.cliente === 'Sin nombre' && c.inmoComprador ? `Comprador de ${c.inmoComprador}` : c.cliente}</b>
                             <div style={sub}>{[c.codigo, c.tipo].filter(Boolean).join(' · ')}</div><div style={sub}>{c.direccion || 'Sin dirección'}</div></td>
-                        <td style={td}><b>{c.fuente}</b>{c.inferida && <div style={sub}>inferida del primer lead</div>}{c.comprador && <div style={{ marginTop: 4 }}><Tag t={c.comprador}>Comprador: {c.comprador.toLowerCase()}</Tag></div>}<div style={sub}>{inicioTxt(c)}</div></td>
+                        <td style={td}><b>{c.fuente}</b>{c.inferida && <div style={sub}>{c.inferidaBroker ? 'inferida del lead del broker' : 'inferida del primer lead'}</div>}{c.comprador && <div style={{ marginTop: 4 }}><Tag t={c.comprador}>Comprador: {c.comprador.toLowerCase()}</Tag></div>}<div style={sub}>{inicioTxt(c)}</div></td>
                         <td style={tdN}>{money(c.monto, c.moneda)}{c.op === 'rent' && <div style={sub}>al mes</div>}</td>
                         <td style={tdN}>{money(c.comision)}</td>
                         <td style={{ ...tdN, ...g1 }}>{dia(c.etapaVisita)}</td><td style={tdN}>{dia(c.etapaOferta)}</td><td style={tdN}>{dia(c.etapaCierre)}</td>
