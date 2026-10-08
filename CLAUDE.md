@@ -330,7 +330,9 @@ el PDF imprime las dos con las listas abiertas.
   en la operación se busca evidencia y se guarda en `evidencia` con fecha: lead del comprador con su
   inmobiliaria → lead del broker externo (sobre la propiedad, o con la vendedora en 365 d) → búsqueda que
   la vendedora le abrió al broker con fuente («Lonas», «contacto directo») → lead de la propiedad con el
-  teléfono del broker → otra operación del mismo inmueble ±60 d. Sep-2026 en la red: «sin fuente» 45 → 19;
+  broker escribiéndole al asesor (WhatsApp/portal) desde 30 d antes de la oferta → lead de la propiedad con el
+  teléfono del broker → otra operación del mismo inmueble en la MISMA vuelta de publicación (≤120 d; un depto
+  rentado dos veces son dos tratos). Sep-2026 en la red: «Sin registro» 45 → 16;
   lo que queda son brokers dados de alta a mano sin fuente (sólo se arregla al capturar).
 - Validado contra el Python de Lau (Andina, sep-2026 y ene–oct 2026): leads, visitas, funnel,
   cierres, comisión y días por etapa IGUALES; sólo cambian etiquetas de fuente («Contacto directo»).

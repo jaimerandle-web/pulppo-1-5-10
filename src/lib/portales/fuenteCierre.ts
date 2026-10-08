@@ -12,12 +12,17 @@
 //      más reciente con la inmobiliaria vendedora en el año previo
 //   4. la búsqueda que la inmobiliaria vendedora le abrió al broker, si trae fuente («Lonas», «contacto
 //      directo»: el asesor sí lo capturó, pero en la búsqueda del broker, no en la operación)
-//   5. un lead sobre esa propiedad con el TELÉFONO del broker (el broker escribió desde otro contacto)
-//   6. otra operación del mismo inmueble (±60 días) que sí capturó la fuente (operación registrada dos veces)
-//   7. tiene búsqueda pero sin fuente → «Búsqueda creada por el asesor»
-//   8. nada → «Sin fuente registrada» si lo trajo otra inmobiliaria; «Cartera del asesor» si es de la casa
-// Medido en sep-2026 (toda la red): los pasos 3–6 bajan los «sin fuente» de 45 a ~17; los que quedan son
-// brokers dados de alta a mano con la búsqueda sin fuente — eso sólo se arregla al capturar.
+//   5. el broker le escribió al asesor (interacción por WhatsApp o desde un portal) en los 30 días antes
+//      de la oferta
+//   6. un lead sobre esa propiedad con el TELÉFONO del broker (el mismo broker con otro contacto en Pulppo)
+//   7. otra operación del mismo inmueble, de la MISMA vuelta de publicación (ninguna republicación entre
+//      las dos) y a ≤120 días, que sí capturó la fuente. Ojo: un departamento que se renta dos veces
+//      (DBU-431: jul-2025 y sep-2026) son dos tratos distintos y NO se cruzan.
+//   8. tiene búsqueda pero sin fuente → «Búsqueda creada por el asesor»
+//   9. nada → «Sin registro» si lo trajo otra inmobiliaria; «Cartera del asesor» si es de la casa
+// Medido en sep-2026 (toda la red): los pasos 3–7 bajan los «sin fuente» de 45 a ~15; los que quedan son
+// brokers dados de alta a mano sin decir cómo llegaron — sólo se arregla al capturar (Ale: NO asignarles
+// Inmuebles24 por default).
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from '../data';
 import { KEY2NAME, classifySource, dig, isDate, oid } from './metrics';
@@ -28,7 +33,7 @@ const FUENTE_RARA: Record<string, string> = {
 };
 // «Broker externo» capturado a mano dice QUIÉN trajo al comprador, no el canal: cuenta como sin fuente.
 const SIN_FUENTE = new Set(['other', '', 'none', 'null', 'undefined', 'broker externo', 'brokerexternal', 'broker', 'externo', 'otro broker', 'red pulppo']);
-export const F_BROKER_EXT = 'Broker externo', F_RED = 'Red Pulppo', F_SIN = 'Sin fuente registrada';
+export const F_BROKER_EXT = 'Broker externo', F_RED = 'Red Pulppo', F_SIN = 'Sin registro';
 export const F_BUSQ = 'Búsqueda creada por el asesor', F_CARTERA = 'Cartera del asesor';
 
 /** Fuente capturada, o null si vino vacía / `other` / un nombre de quién lo trajo. */
@@ -130,9 +135,35 @@ export async function resolverFuentes(ops: Document[], ctx: ContextoFuente): Pro
         resto.push(o);
     }
 
-    // 5. lead sobre esa propiedad con el teléfono del broker (uno por operación: son pocas)
-    const resto2: Document[] = [];
+    // 5. el broker le escribió al asesor en los 30 días previos a la oferta
+    const inter = new Map<string, Array<{ t: Date; src: unknown; med: unknown }>>();
+    for (const l of lotes(ids(resto.map((o) => dig(o, 'buyer', 'broker', '_id')))))
+        for await (const x of db.collection('interactions').find({ 'contact._id': { $in: l } }, { projection: { 'contact._id': 1, source: 1, medium: 1, createdAt: 1 } }))
+            if (isDate(x.createdAt)) (inter.get(s(dig(x, 'contact', '_id'))) ?? inter.set(s(dig(x, 'contact', '_id')), []).get(s(dig(x, 'contact', '_id')))!)
+                .push({ t: x.createdAt, src: x.source, med: x.medium });
+    // por el número de Pulppo («pulppo», vacío) por WhatsApp = el canal es WhatsApp
+    const canalInter = (i: { src: unknown; med: unknown }) => {
+        const src = s(i.src).trim().toLowerCase();
+        if (i.med === 'whatsapp' && (src === '' || src === 'pulppo' || src === 'whatsapp')) return 'WhatsApp';
+        return fuenteCapturada(i.src);
+    };
+    const restoI: Document[] = [];
     for (const o of resto) {
+        const ini = isDate(o.createdAt) ? o.createdAt : (o.closedAt as Date);
+        const it = (inter.get(s(dig(o, 'buyer', 'broker', '_id'))) ?? [])
+            .filter((i) => i.t >= new Date(ini.getTime() - 30 * DIA) && i.t <= (o.closedAt as Date) && canalInter(i))
+            .sort((a, b) => a.t.getTime() - b.t.getTime())[0];
+        if (it) {
+            const f = canalInter(it)!;
+            out.set(s(o._id), { fuente: f, comprador: comprador(o), inferida: true, evidencia: `El broker escribió por ${f} el ${fecha(it.t)}, durante el trato` });
+            continue;
+        }
+        restoI.push(o);
+    }
+
+    // 6. lead sobre esa propiedad con el teléfono del broker (uno por operación: son pocas)
+    const resto2: Document[] = [];
+    for (const o of restoI) {
         const tel = s(dig(o, 'buyer', 'broker', 'phone')).replace(/\D/g, '').slice(-10);
         const pid = dig(o, 'property', '_id');
         if (tel.length === 10 && pid) {
@@ -149,7 +180,14 @@ export async function resolverFuentes(ops: Document[], ctx: ContextoFuente): Pro
         resto2.push(o);
     }
 
-    // 6. otra operación del mismo inmueble (±60 días) que sí capturó la fuente
+    // 7. otra operación del mismo inmueble, de la misma vuelta de publicación, que sí capturó la fuente
+    const publicaciones = new Map<string, number[]>();
+    for (const l of lotes(ids(resto2.map((o) => dig(o, 'property', '_id')))))
+        for await (const p of db.collection('properties').find({ _id: { $in: l } }, { projection: { 'status.history': 1 } }))
+            publicaciones.set(s(p._id), (((dig(p, 'status', 'history') as Document[] | undefined) ?? [])
+                .filter((h) => h.status === 'published' && isDate(h.timestamp)).map((h) => (h.timestamp as Date).getTime())));
+    // la vuelta = la última publicación antes de la fecha
+    const vuelta = (pid: string, t: number) => Math.max(-1, ...(publicaciones.get(pid) ?? []).filter((x) => x <= t));
     const espejo = new Map<string, Document[]>();
     for (const l of lotes(ids(resto2.map((o) => dig(o, 'property', '_id')))))
         for await (const e of db.collection('operations').find({ 'property._id': { $in: l }, 'status.last': { $ne: 'cancelled' } },
@@ -159,16 +197,20 @@ export async function resolverFuentes(ops: Document[], ctx: ContextoFuente): Pro
     for (const l of lotes(ids([...espejo.values()].flat().map((e) => dig(e, 'buyer', 'search')))))
         for await (const b of db.collection('searches').find({ _id: { $in: l } }, { projection: { source: 1 } })) busEsp.set(s(b._id), b.source);
     for (const o of resto2) {
-        const cl = (o.closedAt as Date).getTime();
-        const e = (espejo.get(s(dig(o, 'property', '_id'))) ?? []).find((x) => s(x._id) !== s(o._id)
-            && Math.abs(((isDate(x.closedAt) ? x.closedAt : x.createdAt) as Date).getTime() - cl) <= 60 * DIA
-            && (fuenteCapturada(dig(x, 'buyer', 'source')) || fuenteCapturada(busEsp.get(s(dig(x, 'buyer', 'search'))))));
+        const pid = s(dig(o, 'property', '_id'));
+        const t0 = ((isDate(o.createdAt) ? o.createdAt : o.closedAt) as Date).getTime();
+        const e = (espejo.get(pid) ?? []).find((x) => {
+            if (s(x._id) === s(o._id)) return false;
+            const tx = ((isDate(x.createdAt) ? x.createdAt : x.closedAt) as Date).getTime();
+            return Math.abs(tx - t0) <= 120 * DIA && vuelta(pid, tx) === vuelta(pid, t0)
+                && !!(fuenteCapturada(dig(x, 'buyer', 'source')) || fuenteCapturada(busEsp.get(s(dig(x, 'buyer', 'search')))));
+        });
         if (e) {
             const f = fuenteCapturada(dig(e, 'buyer', 'source')) ?? fuenteCapturada(busEsp.get(s(dig(e, 'buyer', 'search'))))!;
             out.set(s(o._id), { fuente: f, comprador: comprador(o), inferida: true, evidencia: `Otra operación del mismo inmueble (${s(e.id) || 'sin ID'}) capturó «${f}»` });
             continue;
         }
-        // 7–8. sin evidencia
+        // 8–9. sin evidencia
         out.set(s(o._id), { fuente: busquedaValida(o) ? F_BUSQ : ctx.esNuestra(o) ? F_CARTERA : F_SIN, comprador: comprador(o), inferida: false, evidencia: null });
     }
     return out;

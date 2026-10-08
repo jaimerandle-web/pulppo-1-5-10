@@ -612,7 +612,7 @@ export async function cierresEntre(
         ...(opc.operacion === 'todas' ? {} : { 'property.listing.operation': opc.operacion }),
     };
     const ops = await db.collection('operations').find(q, { projection: {
-        id: 1, closedAt: 1, 'property.internalId': 1, 'property.listing.operation': 1, 'property.type': 1,
+        id: 1, closedAt: 1, createdAt: 1, 'property.internalId': 1, 'property.listing.operation': 1, 'property.type': 1,
         'property.address.neighborhood.name': 1, 'closeValue.value': 1, 'comission.value': 1, 'pulppoComission.value': 1, 'buyer.source': 1,
         'seller.company._id': 1, 'buyer.company._id': 1, 'buyer.company.external': 1, 'buyer.contact._id': 1, 'property._id': 1,
         'seller.company.name': 1, 'buyer.company.name': 1,
