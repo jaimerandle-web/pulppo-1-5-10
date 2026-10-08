@@ -27,6 +27,7 @@
 //   · Excluye Habi y cuentas de prueba siempre.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from '../data';
+import { F_SIN, fuenteCapturada, resolverFuentes } from './fuenteCierre';
 import { CANALES, KEY2NAME, NOT, NOTP, brokerContacts, classifySource, dig, isDate, num, oid } from './metrics';
 import { FAM_LBL, FAM_ORDEN, NO_ES_DESCARTE, etiquetaMotivo, familiaDe, motivoDe } from './descarte';
 import { ALIAS_IDS, ALIAS_INMO, ORDEN_INMOBILIARIAS, SIN_CUENTA, normInmo } from './ordenInmobiliarias';
@@ -87,8 +88,8 @@ export interface Cierre {
     fuente: string; lado: 'vendedor' | 'comprador' | 'ambos'; asesor: string;
     /** la fuente no venía en la operación: se dedujo del primer lead del comprador */
     inferida?: boolean;
-    /** la fuente inferida salió del lead del broker externo, no del comprador */
-    inferidaBroker?: boolean;
+    /** qué evidencia se usó cuando la fuente no venía en la operación (con fecha) */
+    evidencia?: string | null;
     /** quién trajo al comprador si no fue la inmobiliaria: «Broker externo» / «Red Pulppo» (no es fuente) */
     comprador?: string | null;
 }
@@ -129,72 +130,8 @@ export interface InmoView {
     generado: string;
 }
 
-// Fuente del CIERRE (`buyer.source`). En 2026, 544 de 1,341 cierres (41%) vienen como `other`. No es
-// un solo hueco — medido 1-oct-2026:
-//   · 276 lado vendedor con el comprador de una inmobiliaria EXTERNA (fuera de Pulppo) → «Broker
-//     externo». Ni siquiera hay contacto del comprador: no hay fuente que registrar.
-//   · 31 lado vendedor con el comprador de OTRA inmobiliaria de la red → «Red Pulppo».
-//   · ~82 con un lead previo del comprador → se INFIERE el canal de su primer lead antes del cierre
-//     (marcado como inferido: es una aproximación, no lo que capturó el asesor).
-//   · ~153 con contacto pero sin un solo lead antes del cierre → cliente de cartera, referido o
-//     contacto directo del asesor: hoy se parte en «Búsqueda creada por el asesor» (tiene búsqueda sin
-//     fuente) y «Cartera del asesor» (ni búsqueda). Ver atribuirFuente.
-// Las fuentes chicas con nombre (Lonas, TuPortalOnline…) se muestran tal cual.
-const FUENTE_RARA: Record<string, string> = {
-    lonas: 'Lonas', tuportalonline: 'TuPortalOnline', contactodirecto: 'Contacto directo', referido: 'Referido',
-    'doorvel.com': 'Doorvel', lamudi: 'Lamudi', brokerexternal: 'Broker externo',
-};
-// «Broker externo» capturado a mano en la fuente dice QUIÉN trajo al comprador, no el canal (Ale,
-// 8-oct-2026): cuenta como sin fuente y la regla sigue buscando el canal.
-const SIN_FUENTE = new Set(['other', '', 'none', 'null', 'undefined', 'broker externo', 'broker', 'externo', 'otro broker', 'red pulppo']);
-export const F_BROKER_EXT = 'Broker externo', F_RED = 'Red Pulppo', F_SIN = 'Sin fuente registrada';
-export const F_BUSQ = 'Búsqueda creada por el asesor', F_CARTERA = 'Cartera del asesor';
-
-/**
- * Fuente de un cierre — UNA regla para /portales y para Desempeño de /mb (Ale y Lau, 8-oct-2026).
- * La fuente es el CANAL por el que llegó el comprador. Quién lo trajo (un broker externo u otra
- * inmobiliaria de la red) NO es una fuente: va aparte, en `comprador` (Ale: «Broker externo no es una
- * fuente, la fuente es inmuebles24 y si es un broker externo es otra cosa»).
- * Medido en 2026: la fuente de la operación (`buyer.source`) y la de la búsqueda coinciden en 819 de
- * 820 cierres; la diferencia está sólo en los que llegan sin ninguna.
- *   1. la capturada (operación, o la búsqueda si la operación no la trae)
- *   2. el primer lead del comprador CON LA INMOBILIARIA QUE LO TRAJO, antes del cierre (inferida).
- *      Un lead que dejó meses antes con otra inmobiliaria no dice cómo llegó a ésta.
- *   3. el lead del BROKER EXTERNO (`buyer.broker._id` también es un contacto): sobre esa misma propiedad
- *      antes del cierre, o su lead más reciente con la inmobiliaria vendedora en el año previo. Medido
- *      oct-2026 en los 3 cierres «sin fuente» de Andina jul–sep: los 3 eran el broker escribiendo desde
- *      el aviso de Inmuebles24 de esa propiedad; sin este paso quedaban sin fuente.
- *   4. tiene búsqueda pero sin fuente → el asesor dio de alta al contacto: «Búsqueda creada por el asesor»
- *   5. nada: si lo trajo otra inmobiliaria → «Sin fuente registrada» (no es cartera de nadie de la casa);
- *      si es de la casa → «Cartera del asesor»
- */
-export function atribuirFuente(x: {
-    capturada: string | null; otra: 'externo' | 'red' | null; primerLead: string | null; leadBroker?: string | null; tieneBusqueda: boolean;
-}): { fuente: string; inferida?: boolean; inferidaBroker?: boolean; comprador: string | null } {
-    const comprador = x.otra === 'externo' ? F_BROKER_EXT : x.otra === 'red' ? F_RED : null;
-    if (x.capturada) return { fuente: x.capturada, comprador };
-    if (x.primerLead) return { fuente: x.primerLead, inferida: true, comprador };
-    if (x.leadBroker) return { fuente: x.leadBroker, inferida: true, inferidaBroker: true, comprador };
-    if (x.tieneBusqueda) return { fuente: F_BUSQ, comprador };
-    return { fuente: x.otra ? F_SIN : F_CARTERA, comprador };
-}
-/** Canal del lead del broker externo para un cierre: su lead sobre ESA propiedad antes del cierre (el
- *  primero), o si no, el más reciente con la inmobiliaria vendedora en los 365 días previos. */
-export function canalLeadBroker(leads: Array<{ t: Date; src: unknown; comp: string; pid: string }>, pid: string, comps: Set<string>, cierre: Date): string | null {
-    const ok = leads.filter((l) => l.t <= cierre && fuenteCapturada(l.src)).sort((a, b) => a.t.getTime() - b.t.getTime());
-    const misma = ok.find((l) => l.pid === pid);
-    if (misma) return fuenteCapturada(misma.src);
-    const conNosotros = ok.filter((l) => comps.has(l.comp) && cierre.getTime() - l.t.getTime() <= 365 * 86400000);
-    return conNosotros.length ? fuenteCapturada(conNosotros[conNosotros.length - 1].src) : null;
-}
-/** Fuente capturada, o null si vino vacía / `other` (entonces se deduce, ver arriba). */
-export const fuenteCapturada = (raw: unknown): string | null => {
-    const t = String(raw ?? '').trim();
-    if (SIN_FUENTE.has(t.toLowerCase())) return null;
-    const k = classifySource(t);
-    if (k !== 'otros') return KEY2NAME[k] ?? k;
-    return FUENTE_RARA[t.toLowerCase()] ?? t.charAt(0).toUpperCase() + t.slice(1);
-};
+// Fuente del CIERRE: toda la regla vive en fuenteCierre.ts (la comparten /portales y Desempeño de /mb).
+export { F_BROKER_EXT, F_RED, F_SIN, F_BUSQ, F_CARTERA, fuenteCapturada } from './fuenteCierre';
 
 /** Teléfono que no sirve para contactar. Medido jul–ago 2026: 1.5% de los leads (casi todos traen correo). */
 function telInvalido(p: unknown): boolean {
@@ -680,7 +617,7 @@ export async function cierresEntre(
         'seller.company._id': 1, 'buyer.company._id': 1, 'buyer.company.external': 1, 'buyer.contact._id': 1, 'property._id': 1,
         'seller.company.name': 1, 'buyer.company.name': 1,
         'seller.broker._id': 1, 'seller.broker.firstName': 1, 'seller.broker.lastName': 1,
-        'buyer.broker._id': 1, 'buyer.broker.firstName': 1, 'buyer.broker.lastName': 1,
+        'buyer.broker._id': 1, 'buyer.broker.phone': 1, 'buyer.broker.firstName': 1, 'buyer.broker.lastName': 1,
         'seller.company.external': 1, 'buyer.search': 1,
     } }).sort({ closedAt: -1 }).toArray();
     // Una misma venta a veces tiene DOS operaciones (paying + closed): 8 de 1,364 en 2026. Se queda
@@ -692,46 +629,13 @@ export async function cierresEntre(
     });
     const nombre = (o: Document, k: 'seller' | 'buyer') =>
         [dig(o, k, 'broker', 'firstName'), dig(o, k, 'broker', 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-    // Sin fuente en la operación: la de su búsqueda, y si tampoco, el primer lead del comprador con SU
-    // inmobiliaria. Consultas por lotes (searches por _id, leads por contact._id, los dos indexados).
-    const porDeducir = opsU.filter((o) => !fuenteCapturada(dig(o, 'buyer', 'source')));
-    const fuenteBusq = new Map<string, string>();
-    const sidsB = [...new Set(porDeducir.map((o) => dig(o, 'buyer', 'search')).filter(Boolean).map(String))].map(oid).filter((x): x is ObjectId => !!x);
-    for (let i = 0; i < sidsB.length; i += 3000)
-        for await (const sx of db.collection('searches').find({ _id: { $in: sidsB.slice(i, i + 3000) } }, { projection: { source: 1 } })) {
-            const f = fuenteCapturada(sx.source);
-            if (f) fuenteBusq.set(String(sx._id), f);
-        }
-    const leadsDe = new Map<string, Array<{ t: Date; src: string; comp: string; pid: string }>>();
-    const cidsB = [...new Set(porDeducir.flatMap((o) => [dig(o, 'buyer', 'contact', '_id'), dig(o, 'buyer', 'broker', '_id')]).filter(Boolean).map(String))].map(oid).filter((x): x is ObjectId => !!x);
-    for (let i = 0; i < cidsB.length; i += 3000) {
-        for await (const l of db.collection('leads').find({ 'contact._id': { $in: cidsB.slice(i, i + 3000) } },
-            { projection: { 'contact._id': 1, source: 1, createdAt: 1, 'company._id': 1, 'property._id': 1 } })) {
-            if (!isDate(l.createdAt)) continue;
-            const k = String(dig(l, 'contact', '_id'));
-            (leadsDe.get(k) ?? leadsDe.set(k, []).get(k)!).push({ t: l.createdAt, src: String(l.source ?? ''), comp: String(dig(l, 'company', '_id') ?? ''), pid: String(dig(l, 'property', '_id') ?? '') });
-        }
-    }
-    const fuenteDe = (o: Document): { fuente: string; inferida?: boolean; inferidaBroker?: boolean; comprador: string | null } => {
-        const sc = String(dig(o, 'seller', 'company', '_id') ?? ''), bc = String(dig(o, 'buyer', 'company', '_id') ?? '');
-        const sid = dig(o, 'buyer', 'search');
-        // «otra» = el comprador lo trajo una inmobiliaria que no es la nuestra: con inmobiliaria elegida,
-        // una que no es ella; en la vista de red, una distinta a la del vendedor.
-        // Sin inmobiliaria del comprador cuenta como externo (mismo criterio que el reporte de Lau).
-        const nuestra = reqInmo ? reqInmo.has(bc) : !!bc && bc === sc;
-        const otra = !nuestra ? (dig(o, 'buyer', 'company', 'external') === true || !bc ? 'externo' : 'red') : null;
-        const cid = dig(o, 'buyer', 'contact', '_id');
-        const cl = o.closedAt as Date;
-        // sólo leads con fuente útil: si el primero también vino `other`, se busca el siguiente
-        const primero = cid ? (leadsDe.get(String(cid)) ?? [])
-            .filter((l) => l.t <= cl && l.comp === bc && fuenteCapturada(l.src)).sort((a, b) => a.t.getTime() - b.t.getTime())[0] : undefined;
-        return atribuirFuente({
-            capturada: fuenteCapturada(dig(o, 'buyer', 'source')) ?? (sid ? fuenteBusq.get(String(sid)) ?? null : null),
-            otra, primerLead: primero ? fuenteCapturada(primero.src) : null, tieneBusqueda: !!sid,
-            leadBroker: dig(o, 'buyer', 'broker', '_id') ? canalLeadBroker(leadsDe.get(String(dig(o, 'buyer', 'broker', '_id'))) ?? [],
-                String(dig(o, 'property', '_id') ?? ''), reqInmo && reqInmo.has(sc) ? reqInmo : new Set([sc]), cl) : null,
-        });
-    };
+    const fuentes = await resolverFuentes(opsU, {
+        // con inmobiliaria elegida, «nuestra» = el comprador lo trajo ella; en la vista de red, la misma
+        // inmobiliaria de los dos lados
+        esNuestra: (o) => { const bc = String(dig(o, 'buyer', 'company', '_id') ?? ''); return reqInmo ? reqInmo.has(bc) : !!bc && bc === String(dig(o, 'seller', 'company', '_id') ?? ''); },
+        compsComprador: (o) => { const bc = String(dig(o, 'buyer', 'company', '_id') ?? ''); return reqInmo && reqInmo.has(bc) ? reqInmo : new Set([bc]); },
+        compsVendedora: (o) => { const sc = String(dig(o, 'seller', 'company', '_id') ?? ''); return reqInmo && reqInmo.has(sc) ? reqInmo : new Set([sc]); },
+    });
     const out: Cierre[] = [];
     let sinFuenteOrig = 0;
     for (const o of opsU) {
@@ -764,7 +668,7 @@ export async function cierresEntre(
             colonia: (dig(o, 'property', 'address', 'neighborhood', 'name') as string) ?? null,
             valor: num(dig(o, 'closeValue', 'value')), comision: num(dig(o, 'comission', 'value')), regalia: num(dig(o, 'pulppoComission', 'value')),
             ...(() => {
-                const r = fuenteDe(o);
+                const r = fuentes.get(String(o._id))!;
                 // cierre de i24 en el que participa NURA → su propio canal, igual que sus leads
                 const nura = esNura(dig(o, 'seller', 'company', 'name')) || esNura(dig(o, 'buyer', 'company', 'name'));
                 return r.fuente === 'Inmuebles24' && nura ? { ...r, fuente: I24_NURA } : r;

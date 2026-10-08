@@ -16,7 +16,8 @@
 //     comprador (búsqueda → visita → oferta → cierre).
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
-import { atribuirFuente, canalLeadBroker, fuenteCapturada, opcionesInmobiliarias } from './portales/inmobiliaria';
+import { opcionesInmobiliarias } from './portales/inmobiliaria';
+import { resolverFuentes } from './portales/fuenteCierre';
 
 const MX = 6 * 3600 * 1000;
 const DIA = 86400000;
@@ -58,7 +59,9 @@ export interface CierreMb {
     asesor: string; agentes: string[]; codigo: string | null; tipo: string | null; direccion: string;
     monto: number | null; moneda: string; comision: number | null; fechaCierre: string;
     inicio: string | null; inicioTipo: 'busqueda' | 'visita' | 'oferta';
-    fuente: string; inferida: boolean; inferidaBroker: boolean;
+    fuente: string; inferida: boolean;
+    /** qué evidencia se usó cuando la fuente no venía en la operación (con fecha) */
+    evidencia: string | null;
     /** quién trajo al comprador si no fue esta inmobiliaria (no es fuente) */
     comprador: string | null;
     etapaVisita: number | null; etapaOferta: number | null; etapaCierre: number | null;
@@ -349,15 +352,18 @@ async function cierresMb(ids: ObjectId[], idSet: Set<string>, A: Date, B: Date, 
     // contactos del comprador y del broker externo (el broker también es un contacto y deja leads)
     const cids = [...new Set(ops.flatMap((o) => [dig(o, 'buyer', 'contact', '_id'), dig(o, 'buyer', 'broker', '_id')]).filter(Boolean).map(String))].map((s) => new ObjectId(s));
     const visCon = new Map<string, Array<{ t: Date; comp: string }>>();
-    const leadsCon = new Map<string, Array<{ t: Date; src: unknown; comp: string; pid: string }>>();
     for (const l of lotes(cids)) {
         for await (const v of db.collection('visits').find({ 'contact._id': { $in: l }, 'status.last': { $ne: 'cancelled' } }, { projection: { 'contact._id': 1, 'agent.company._id': 1, startTime: 1 } }))
             if (isDate(v.startTime)) (visCon.get(String(dig(v, 'contact', '_id'))) ?? visCon.set(String(dig(v, 'contact', '_id')), []).get(String(dig(v, 'contact', '_id')))!)
                 .push({ t: v.startTime, comp: String(dig(v, 'agent', 'company', '_id') ?? '') });
-        for await (const x of db.collection('leads').find({ 'contact._id': { $in: l } }, { projection: { 'contact._id': 1, source: 1, createdAt: 1, 'company._id': 1, 'property._id': 1 } }))
-            if (isDate(x.createdAt)) (leadsCon.get(String(dig(x, 'contact', '_id'))) ?? leadsCon.set(String(dig(x, 'contact', '_id')), []).get(String(dig(x, 'contact', '_id')))!)
-                .push({ t: x.createdAt, src: x.source, comp: String(dig(x, 'company', '_id') ?? ''), pid: String(dig(x, 'property', '_id') ?? '') });
     }
+
+    const comp = (o: Document, lado: 'buyer' | 'seller') => String(dig(o, lado, 'company', '_id') ?? '');
+    const fuentes = await resolverFuentes(ops, {
+        esNuestra: (o) => idSet.has(comp(o, 'buyer')),
+        compsComprador: (o) => (idSet.has(comp(o, 'buyer')) ? idSet : new Set([comp(o, 'buyer')])),
+        compsVendedora: (o) => (idSet.has(comp(o, 'seller')) ? idSet : new Set([comp(o, 'seller')])),
+    });
 
     return ops.map((o): CierreMb => {
         const cid = dig(o, 'buyer', 'contact', '_id') ? String(dig(o, 'buyer', 'contact', '_id')) : null;
@@ -379,19 +385,7 @@ async function cierresMb(ids: ObjectId[], idSet: Set<string>, A: Date, B: Date, 
         const oferta = ofertas.length ? new Date(Math.min(...ofertas.map((t) => t.getTime()))) : null;
         const [base, baseTipo]: [Date | null, CierreMb['inicioTipo']] = busqueda ? [busqueda, 'busqueda'] : visita ? [visita, 'visita'] : [oferta, 'oferta'];
 
-        // fuente: la regla única de /portales (capturada → primer lead con la inmobiliaria que trajo al comprador → búsqueda del asesor → cartera / sin fuente)
-        const otra = !nuestra ? (dig(o, 'buyer', 'company', 'external') === true || !bc ? 'externo' : 'red') as 'externo' | 'red' : null;
-        const compsLead = nuestra ? idSet : new Set([bc]);
-        const primero = cid ? (leadsCon.get(cid) ?? []).filter((l) => l.t <= closed && compsLead.has(l.comp) && fuenteCapturada(l.src))
-            .sort((a, b) => a.t.getTime() - b.t.getTime())[0] : undefined;
-        const f = atribuirFuente({
-            capturada: fuenteCapturada(dig(o, 'buyer', 'source')) ?? (busqueda ? fuenteCapturada(bq?.source) : null),
-            otra, primerLead: primero ? fuenteCapturada(primero.src) : null,
-            leadBroker: dig(o, 'buyer', 'broker', '_id') ? canalLeadBroker(leadsCon.get(String(dig(o, 'buyer', 'broker', '_id'))) ?? [],
-                String(dig(o, 'property', '_id') ?? ''), idSet.has(String(dig(o, 'seller', 'company', '_id') ?? '')) ? idSet : new Set([String(dig(o, 'seller', 'company', '_id') ?? '')]), closed) : null,
-            // búsqueda válida = creada antes del cierre (si se creó después, no es el inicio de este trato)
-            tieneBusqueda: !!busqueda,
-        });
+        const f = fuentes.get(String(o._id))!;
 
         const pagos = (o.payments as Document[] | undefined) ?? [];
         const comision = pagos.length ? pagos.reduce((s, p) => s + (Number(dig(p, 'comission', 'value')) || 0), 0) : (dig(o, 'comission', 'value') as number | undefined) ?? null;
@@ -412,7 +406,7 @@ async function cierresMb(ids: ObjectId[], idSet: Set<string>, A: Date, B: Date, 
             monto: (dig(o, 'closeValue', 'value') as number | undefined) ?? null, moneda: String(dig(o, 'closeValue', 'currency') ?? 'MXN'),
             comision, fechaCierre: isoMx(closed),
             inicio: base ? isoMx(base) : null, inicioTipo: baseTipo,
-            fuente: f.fuente, inferida: !!f.inferida, inferidaBroker: !!f.inferidaBroker, comprador: f.comprador,
+            fuente: f.fuente, inferida: f.inferida, evidencia: f.evidencia, comprador: f.comprador,
             etapaVisita: baseTipo === 'busqueda' && visita ? dias(base, visita) : null,
             etapaOferta: visita && oferta && oferta >= visita ? dias(visita, oferta) : null,
             etapaCierre: dias(oferta, closed),
