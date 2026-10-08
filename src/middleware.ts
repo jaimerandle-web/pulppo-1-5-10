@@ -66,6 +66,15 @@ export async function middleware(req: NextRequest) {
         if (p === '/studio' || p.startsWith('/studio/') || p.startsWith('/api/studio')) return NextResponse.next();
         if (p.startsWith('/api')) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         const url = req.nextUrl.clone();
+        // Un asesor que abre el link de un panel /mb pudo haber recibido ese acceso DESPUÉS de
+        // iniciar sesión (masterExtra.ts): su cookie cm-asesor es vieja y lo encerraba en Studio
+        // sin decirle nada (Miriam Cojab, 7-oct-2026). Se le manda a /login para que la sesión se
+        // recalcule; si sigue siendo sólo asesor, el login lo regresa a Studio.
+        if (p === '/mb' || p.startsWith('/mb/')) {
+            url.pathname = '/login';
+            url.search = '';
+            return NextResponse.redirect(url);
+        }
         url.pathname = '/studio/index.html';
         url.search = '';
         return NextResponse.redirect(url);
