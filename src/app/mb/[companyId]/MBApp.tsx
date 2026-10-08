@@ -840,8 +840,8 @@ export default function MBApp({ d }: { d: MBData }) {
                             ¿Qué está pasando con tus leads?
                         </div>
                         <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 660 }}>
-                            Leads por asesor y mes, y qué tanto avanzan: respuesta, visita, oferta y
-                            cierre. Del año en curso, leído en vivo.
+                            Leads, visitas, cómo avanzan las búsquedas y el recorrido de cada cierre,
+                            por periodo y asesor. Leído en vivo.
                         </div>
                         <MBDesempeno companyId={d.companyId} />
                     </div>

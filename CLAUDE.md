@@ -314,6 +314,24 @@ guarde `demanda` y `competencia` con fecha (ver `PROPUESTA_MOTOR.md` en el repo 
 El doc canónico del criterio es `SPEC_SCORING.md` en
 `~/Documents/Pulppo/Análisis de Portales/analisis/optimizacion-avisos/`.
 
+## /mb → Desempeño (piloto: Andina y Diamond House, `CON_DESEMPENO` en MBApp.tsx)
+
+Port del reporte de Lau (KAM; app Flask «dashboard-inmobiliarias», nunca publicada). Motor
+`src/lib/desempenoMb.ts`, API `/api/mb-desempeno?company&desde&hasta[&asesor]` (barrera
+`canAccessCompany`), UI `src/app/mb/[companyId]/MBDesempeno.tsx`. Sub-pestañas Comercial y Cierres;
+el PDF imprime las dos con las listas abiertas.
+
+- Definiciones de Lau, tal cual: **leads únicos** (contacto + propiedad), visitas por `startTime`
+  (confirmadas + pendientes), **Funnel comercial | Búsquedas** por cambio de etapa de
+  `searches.status.history` (NO es la cohorte de /portales, a propósito), cierres del LADO de la
+  inmobiliaria con días por etapa del comprador. Mes y trimestre van completos (visitas futuras).
+- La fuente de cierres usa `atribuirFuente` (inmobiliaria.ts), la misma regla de /portales:
+  capturada (operación = búsqueda, 819/820) → otra inmobiliaria (sin compañía del comprador =
+  externo) → primer lead CON LA MISMA inmobiliaria del comprador (inferida) → «Búsqueda creada por
+  el asesor» (búsqueda válida sin fuente) → «Cartera del asesor».
+- Validado contra el Python de Lau (Andina, sep-2026 y ene–oct 2026): leads, visitas, funnel,
+  cierres, comisión y días por etapa IGUALES; sólo cambian etiquetas de fuente («Contacto directo»).
+
 ## Portales → "Leads, funnel y cierres" por inmobiliaria
 
 `/portales` → **Por inmobiliaria**. Filtros: inmobiliaria (o «Todas» = vista general con la tabla
