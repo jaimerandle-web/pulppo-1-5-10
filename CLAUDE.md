@@ -170,6 +170,13 @@ src/app/marketing/     La app. El CALENDARIO es el home a propósito: es la úni
                        `plan` implementa el flujo de garantía de renta, que son DOS mensajes encadenados
                        por el permiso: paso 1 al asesor que captó la renta, paso 2 al propietario sólo si
                        el asesor autorizó. Lo que no pasa el permiso o el techo sale igual, con motivo.
+src/lib/alertasOfertas.ts Alertas de ofertas 1·5·10 al grupo de Google Chat del bot del formulario:
+                       oferta ACEPTADA (offer_blocked), CIERRE (closed) y oferta aceptada que se CAYÓ
+                       (cancelled con offer_blocked previo). La oferta suelta (offer) NO se avisa. Lo
+                       DISPARA el Apps Script del Sheet de Control cada 15 min (Vercel Hobby = 1 cron/día):
+                       llama a GET /api/alertas/ofertas (fuera del middleware, Bearer ALERTAS_TOKEN),
+                       dedup contra la pestaña "Log ofertas" y manda al webhook. Código del Apps Script
+                       versionado en scripts/apps-script/alertas-ofertas.gs.
 src/lib/kam.ts         Lookup estático inmobiliaria → KAM (generado del Sheet TARGETS).
 src/lib/access.ts      Allowlist cerrado de emails (hardcodeado; env ALLOWED_EMAILS lo pisa si está seteada).
 src/lib/firebase.ts    Firebase Auth de Pulppo (config JSON en NEXT_PUBLIC_FIREBASE).
@@ -225,6 +232,7 @@ src/components/        CarteraTab (pipeline, métricas, gráficas, alertas, tabl
 | `SENDGRID_SANDBOX` | `1` = valida sin enviar; vacío = envía de verdad |
 | `SENDGRID_SENDER_ID` | (Fase 2, opc.) id del Sender de marketing; si vacío se busca por `SENDGRID_FROM_EMAIL` |
 | `SENDGRID_UNSUB_GROUP_ID` | (Fase 2, opc.) id del grupo de baja; si vacío se crea "Exclusivas 1·5·10" |
+| `ALERTAS_TOKEN` | Secreto compartido con el Apps Script de alertas de ofertas (mismo valor en Script Properties) |
 | `SENDGRID_FOOTER_ADDRESS` | (Fase 2, opc.) dirección física del footer legal (default: Pulppo · CDMX) |
 
 **Fase 2 requiere** que el `SENDGRID_API_KEY` tenga scope de **Marketing Campaigns** y un **Sender verificado**.
