@@ -427,6 +427,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                     <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 17, marginBottom: 2 }}>Funnel comercial</div>
                     <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>
                         Vistas/leads únicos/visitas/ofertas/cierres: <b>{ovr ? rango.toLowerCase() : 'histórico'}</b>.
+                        {' '}<b>Leads de tu inventario activo y de lo vendido en el periodo</b>: por eso es menos que en Desempeño, que cuenta todos los leads que recibió la inmobiliaria (también de propiedades ya despublicadas, desarrollos y búsquedas generales).
                         {fueraFiltrada.length > 0 && <> Incluye <b>{f(fueraFiltrada.length)}</b> {fueraFiltrada.length === 1 ? 'propiedad que ya salió' : 'propiedades que ya salieron'} del inventario
                             {nFueraCierres > 0 && <> ({f(nFueraCierres)} {nFueraCierres === 1 ? 'cierre' : 'cierres'})</>}: al venderse dejan de estar publicadas, pero su actividad es de este período. Por eso el funnel puede no cuadrar con la suma de la tabla.</>}
                         {compradorFiltrado.length > 0 && <> Los cierres incluyen <b>{f(compradorFiltrado.length)}</b> donde tu inmobiliaria trajo al comprador sobre una propiedad de otra: no tienen fila en la tabla.</>}
