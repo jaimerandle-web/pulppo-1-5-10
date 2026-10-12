@@ -542,7 +542,6 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const asesor = [dig(ag, 'firstName'), dig(ag, 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim() || '—';
         const diag: string[] = [];
         if (op === 'sale' && (sp && sp > 1.15 || (vsOferta != null && vsOferta > 15))) diag.push('Bajar precio');
-        if (calidad !== 'Alta') diag.push('Mejorar ficha');
         if (op === 'sale') nVenta++; else if (op === 'rent') nRenta++;
         if (dias != null && dias <= 90) captaciones90++;
         if (calidad === 'Alta') { nAlta++; if (op === 'sale') nAltaV++; else if (op === 'rent') nAltaR++; }
@@ -550,6 +549,19 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const respondidos = ansMap.get(hex) ?? 0;
         const fi = fichaMap.get(hex);
         const fotos = (fi?.fotos as number) ?? 0, video = !!fi?.video, tour = !!fi?.tour, amenidades = (fi?.amen as number) ?? 0;
+        // Qué mejorar de la ficha, puntual (Ale, oct-2026: no sólo «Mejorar ficha»). El video es EL
+        // factor que separa Media de Alta en la red; luego fotos (<8) y amenidades. Si la calificación
+        // no es Alta y no falta nada de eso, queda el genérico: la plataforma no dice qué más pesa.
+        if (calidad !== 'Alta') {
+            const antes = diag.length;
+            if (!video) diag.push('Subir video');
+            if (fotos < 8) diag.push(`Más fotos (${fotos})`);
+            if (!amenidades) diag.push('Agregar amenidades');
+            // descripción corta: mismo umbral que el generador de análisis (lib/analisis.ts)
+            if (String(dig(p, 'listing', 'description') ?? '').replace(/<[^>]+>/g, '').trim().length < 400) diag.push('Alargar descripción');
+            if (diag.length === antes && !tour) diag.push('Agregar tour');
+            if (diag.length === antes) diag.push('Mejorar ficha');
+        }
         // Expediente. `files[].type` no es el formato del archivo, es la CATEGORÍA del
         // documento: 'title' (escritura), 'contract', 'identification'.
         const tiposDoc = new Set(((p.files as Document[]) ?? []).map((f) => String(f?.type)));

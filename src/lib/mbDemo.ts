@@ -112,7 +112,13 @@ export function demoData(): MBData {
 
         const diag: string[] = [];
         if (esVenta && vsOferta > 15) diag.push('Bajar precio');
-        if (calidad !== 'Alta') diag.push('Mejorar ficha');
+        if (calidad !== 'Alta') {
+            const antes = diag.length;
+            if (!video) diag.push('Subir video');
+            if (fotos < 8) diag.push(`Más fotos (${fotos})`);
+            if (!amenidades) diag.push('Agregar amenidades');
+            if (diag.length === antes) diag.push('Mejorar ficha');
+        }
 
         // Renta llega peor que venta al expediente: 87% vs 74% sin documento en la red real.
         exp.push({

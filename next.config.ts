@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
     // desarrollo por venir de otro origen: la página pinta pero NO hidrata, así que ningún
     // clic ni useEffect corre y parece que la app está rota cuando no lo está.
     allowedDevOrigins: ['127.0.0.1', 'localhost'],
+    // El diccionario del corrector ortográfico se lee de disco en el servidor: sin esto Vercel no lo
+    // empaca en la función y /api/mb-ortografia truena con ENOENT.
+    outputFileTracingIncludes: { '/api/mb-ortografia': ['./src/lib/ortografia/**'] },
     // /inventario sirve el reporte estático self-contained (public/inventario.html).
     // Queda detrás del login por el middleware (la ruta no está en la allowlist del matcher).
     async rewrites() {

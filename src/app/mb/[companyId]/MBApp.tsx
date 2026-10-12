@@ -1,4 +1,5 @@
 'use client';
+import type { ErrorOrto } from '@/lib/ortografia';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import type { MBData, MBProp, MBFuera, RespKey } from '@/lib/mb';
@@ -25,13 +26,20 @@ const vsCell = (v: number | null) => {
 const DIAG_STYLE: Record<string, { bg: string; fg: string }> = {
     'Bajar precio': { bg: '#F3D9D3', fg: RED },
     'Mejorar ficha': { bg: YEL, fg: BLK },
+    'Subir video': { bg: YEL, fg: BLK },
+    'Más fotos': { bg: YEL, fg: BLK },
+    'Agregar amenidades': { bg: YEL, fg: BLK },
+    'Alargar descripción': { bg: YEL, fg: BLK },
+    'Agregar tour': { bg: YEL, fg: BLK },
+    'Corregir ortografía': { bg: '#F3D9D3', fg: RED },
     'Corregir datos': { bg: '#F3D9D3', fg: RED },
     'Contestar más rápido': { bg: '#DCEBEB', fg: '#2f6b6b' },
     'Convertir a visita': { bg: '#DCEBEB', fg: '#2f6b6b' },
     'Cerrar la visita': { bg: '#DCEBEB', fg: '#2f6b6b' },
     'Compartir similares': { bg: '#DCEBEB', fg: '#2f6b6b' }
 };
-const diagPill = (t: string) => { const s = DIAG_STYLE[t] ?? { bg: '#DCEBEB', fg: '#2f6b6b' }; return <span key={t} style={{ background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 2, marginRight: 4, whiteSpace: 'nowrap' }}>{t}</span>; };
+// el estilo se busca sin el detalle entre paréntesis: «Más fotos (5)» usa el de «Más fotos»
+const diagPill = (t: string, title?: string) => { const s = DIAG_STYLE[t.replace(/ \(.*\)$/, '')] ?? { bg: '#DCEBEB', fg: '#2f6b6b' }; return <span key={t} title={title} style={{ background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 2, marginRight: 4, whiteSpace: 'nowrap' }}>{t}</span>; };
 // "Media" se leía como promedio, no como intermedia. Ahora los rangos se llaman por lo que
 // significan y siempre traen el tiempo a la vista.
 const RESP_LBL: Record<RespKey, string> = { flash: 'Flash', rapida: 'Rápida', media: 'Aceptable', lento: 'Fuera de SLA', sin: 'Sin responder' };
@@ -58,12 +66,19 @@ const CON_DESEMPENO = new Set([
     '62bf49012367c77fc24d9220',   // Diamond House
 ]);
 type Seg = '' | 'p1510' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre'
-    | 'sinVideo' | 'pocasFotos' | 'sinAmenidades' | 'sinAcm' | 'sinTour' | 'conErrores';
+    | 'sinVideo' | 'pocasFotos' | 'sinAmenidades' | 'sinAcm' | 'sinTour' | 'conErrores' | 'conOrtografia';
 // El reporte tiene dos versiones. Master Brokers abre la SIMPLE, que esconde Difusión y la
 // referencia de $/m². Las exclusivas del programa 1·5·10 abren la LARGA: es el reporte que
 // justifica la exclusiva, y esconderle secciones al titular que la firmó no tiene sentido.
 const urlFicha = (p: MBProp) =>
     `/ficha/${p.id}?${p.p1510 ? '' : 'v=simple&'}token=${p.token}`;
+
+// Faltas de ortografía por código de propiedad. Llegan DESPUÉS de pintar (/api/mb-ortografia tarda unos
+// segundos) y las leen funciones de módulo (segmentos, acciones), por eso viven aquí y no en el estado;
+// el componente guarda una copia en estado sólo para volver a pintar cuando llegan.
+let ORTO: Record<string, ErrorOrto[]> = {};
+const tipOrto = (p: MBProp, t: string) => (t === 'Corregir ortografía'
+    ? (ORTO[p.code] ?? []).map((e) => `${e.palabra} → ${e.bien}${e.tipo === 'dedo' ? ' (posible)' : ''} · ${e.donde}`).join('\n') : undefined);
 
 const SEG_TEST: Record<string, (p: MBProp) => boolean> = {
     p1510: (p) => p.p1510,
@@ -80,7 +95,8 @@ const SEG_TEST: Record<string, (p: MBProp) => boolean> = {
     sinAmenidades: (p) => !p.amenidades,
     sinAcm: (p) => p.estado === 'Haz ACM',
     sinTour: (p) => !p.tour,
-    conErrores: (p) => p.errores.length > 0
+    conErrores: (p) => p.errores.length > 0,
+    conOrtografia: (p) => !!ORTO[p.code]
 };
 // cada hueco de ficha del overview abre el listado ya filtrado
 const FALTA_SEG: Record<string, Seg> = { video: 'sinVideo', fotos: 'pocasFotos', amenidades: 'sinAmenidades', acm: 'sinAcm', tour: 'sinTour' };
@@ -89,7 +105,7 @@ const SEG_LABEL: Record<string, string> = {
     sinleads: 'Sin leads', caroSinLeads: 'Caro sin leads', visitasSinOferta: 'Visitas sin oferta', mas12: '+12 meses', respLenta: 'Respuesta lenta',
     muchasVisitas: 'Muchas visitas, 0 ofertas', altaDemanda: 'Alta demanda, sin leads', ofertasSinCierre: 'Ofertas sin cierre',
     sinVideo: 'Sin video', pocasFotos: 'Menos de 8 fotos', sinAmenidades: 'Sin amenidades', sinAcm: 'Sin ACM',
-    sinTour: 'Sin tour virtual', conErrores: 'Con errores de captura'
+    sinTour: 'Sin tour virtual', conErrores: 'Con errores de captura', conOrtografia: 'Con faltas de ortografía'
 };
 // Los segmentos que SÍ son un problema: alimentan el bloque "necesitan tu atención".
 const ATENCION_SEGS: Seg[] = ['sinleads', 'caroSinLeads', 'visitasSinOferta', 'mas12', 'respLenta'];
@@ -103,6 +119,7 @@ const CHIP_SEGS: Seg[] = ['p1510', ...ATENCION_SEGS];
 const accionesDe = (p: MBProp): string[] => {
     const a = [...p.diag];
     if (p.errores.length) a.push('Corregir datos');
+    if (ORTO[p.code]) a.push('Corregir ortografía');
     if (p.respMedMin != null && p.respMedMin > 1440) a.push('Contestar más rápido');
     if (p.leads >= 5 && p.visitas === 0) a.push('Convertir a visita');
     if (p.visitas >= 3 && p.ofertas === 0) a.push('Cerrar la visita');
@@ -447,7 +464,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                     <td style={{ ...td, textAlign: 'right', color: p.respMedMin == null ? GRY : p.respMedMin > 1440 ? RED : BLK }}>{dur(p.respMedMin)}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
-                                    <td style={td}>{(() => { const t = accionesDe(p); return t.length ? t.map(diagPill) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
+                                    <td style={td}>{(() => { const t = accionesDe(p); return t.length ? t.map((x) => diagPill(x, tipOrto(p, x))) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
                                     <td className="no-print" style={{ ...td, textAlign: 'right' }}><a href={urlFicha(p)} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
                                 </tr>
                             ))}
@@ -461,6 +478,21 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
 }
 
 export default function MBApp({ d }: { d: MBData }) {
+    const [orto, setOrto] = useState<Record<string, ErrorOrto[]>>({});
+    useEffect(() => {
+        if (d.companyId === 'demo') return;
+        let vivo = true;
+        fetch(`/api/mb-ortografia?company=${d.companyId}`).then((r) => (r.ok ? r.json() : null))
+            .then((j) => { if (vivo && j?.porProp) { ORTO = j.porProp; setOrto(j.porProp); } }).catch(() => {});
+        return () => { vivo = false; };
+    }, [d.companyId]);
+    const nOrto = Object.keys(orto).length;
+    // ejemplos más repetidos para la tarjeta de errores
+    const ortoTop = useMemo(() => {
+        const c = new Map<string, number>();
+        for (const xs of Object.values(orto)) for (const e of xs) { const k = `${e.palabra} → ${e.bien}`; c.set(k, (c.get(k) ?? 0) + 1); }
+        return [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k]) => k);
+    }, [orto]);
     const [section, setSection] = useState<Section>('overview');
     // sólo se ve en celular (el CSS esconde el botón arriba de 860px)
     const [menuAbierto, setMenuAbierto] = useState(false);
@@ -658,7 +690,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                 </div>
                             </div>
                             <div style={{ marginTop: 9, fontSize: 11.5 }}>
-                                {diagPill('Mejorar ficha')} <span style={{ color: '#666' }}>es el tag que verás en el listado sobre estas mismas propiedades.</span>
+                                {diagPill('Subir video')}{diagPill('Más fotos')}{diagPill('Agregar amenidades')} <span style={{ color: '#666' }}>son los tags que verás en el listado: cada propiedad dice puntualmente qué le falta.</span>
                             </div>
                         </div>
 
@@ -774,7 +806,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{p.leads}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{f(p.demanda)}</td>
-                                            <td style={ttd}>{(() => { const a = accionesDe(p); return a.length ? a.map(diagPill) : <span style={{ color: GRY }}>revisar</span>; })()}</td>
+                                            <td style={ttd}>{(() => { const a = accionesDe(p); return a.length ? a.map((x) => diagPill(x, tipOrto(p, x))) : <span style={{ color: GRY }}>revisar</span>; })()}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -783,7 +815,7 @@ export default function MBApp({ d }: { d: MBData }) {
                         {/* Errores de CAPTURA, no de venta: una propiedad en $30 o con 7 millones
                             de m² no es un problema comercial, es un dedazo que además rompe todo
                             el análisis de precio de esa propiedad. */}
-                        {d.nErrores > 0 && (
+                        {(d.nErrores > 0 || nOrto > 0) && (
                             <>
                                 <h2 style={{ ...h2, marginTop: 30 }}>¡Ojo con estas!</h2>
                                 <div style={sub}><b>{f(d.nErrores)}</b> {d.nErrores === 1 ? 'propiedad tiene' : 'propiedades tienen'} algo mal capturado. No es que se vendan mal: es que el dato está mal escrito, y mientras siga así esa propiedad no se puede comparar contra el mercado.</div>
@@ -798,6 +830,16 @@ export default function MBApp({ d }: { d: MBData }) {
                                             </div>
                                         </div>
                                     ))}
+                                    {nOrto > 0 && (
+                                        <div onClick={() => goSeg('conOrtografia')} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, border: `1px solid ${LGT}`, borderLeft: `3px solid ${RED}`, borderRadius: R, padding: '12px 14px', cursor: 'pointer' }}>
+                                            <b style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, width: 44, color: RED }}>{f(nOrto)}</b>
+                                            <div>
+                                                <div style={{ fontSize: 13, fontWeight: 700 }}>Faltas de ortografía ↗</div>
+                                                <div style={{ fontSize: 11.5, color: '#666', marginTop: 2 }}>en el título o la descripción: acentos que faltan y errores de dedo. Un aviso con faltas se ve descuidado y baja la confianza del comprador.</div>
+                                                {ortoTop.length > 0 && <div style={{ fontSize: 11, color: BLK, marginTop: 4, background: LGT, padding: '4px 7px', borderRadius: R }}>Ej. {ortoTop.join(' · ')}</div>}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                                 <div style={{ fontSize: 11, color: GRY, marginTop: 8 }}>Clic para ver la lista completa. Una propiedad puede tener más de un error, por eso la suma de los bloques puede pasar de {f(d.nErrores)}.</div>
                             </>
