@@ -93,7 +93,7 @@ export async function historialDe(companyId: string): Promise<Historial> {
         }
 
         const nom = [dig(p, 'agent', 'firstName'), dig(p, 'agent', 'lastName')]
-            .filter(Boolean).join(' ').trim();
+            .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 
         return {
             id: hex,

@@ -349,7 +349,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                 <select value={op} onChange={(e) => setOp(e.target.value)} style={sel}><option value="">Operación: todas</option><option>Venta</option><option>Renta</option></select>
                 <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={sel}><option value="">Tipo: todos</option>{tipos.map((x) => <option key={x}>{x}</option>)}</select>
                 <select value={estado} onChange={(e) => setEstado(e.target.value)} style={sel}><option value="">Precio: todos</option>{['Óptimo', 'No competitivo', 'Fuera de mercado', 'Haz ACM'].map((x) => <option key={x}>{x}</option>)}</select>
-                <select value={asesor} onChange={(e) => setAsesor(e.target.value)} style={sel}><option value="">Asesor: todos</option>{asesores.map((x) => <option key={x}>{x}</option>)}</select>
+                <select value={asesor} onChange={(e) => setAsesor(e.target.value)} style={sel}><option value="">Asesor: todos</option>{asesores.map((x) => <option key={x} value={x}>{x}</option>)}</select>
                 <select value={rango} onChange={(e) => setRango(e.target.value)} style={sel} title="Ventana de fechas para vistas/leads/visitas/ofertas">{['Todo (histórico)', 'Últimos 30 días', 'Últimos 90 días', 'Este año', 'Personalizado'].map((x) => <option key={x}>{x}</option>)}</select>
                 {rango === 'Personalizado' && <><input type="date" value={cfrom} onChange={(e) => setCfrom(e.target.value)} style={sel} /><span style={{ color: GRY, fontSize: 12 }}>→</span><input type="date" value={cto} onChange={(e) => setCto(e.target.value)} style={sel} /></>}
                 {rloading && <span style={{ fontSize: 11, color: GRY }}>calculando…</span>}

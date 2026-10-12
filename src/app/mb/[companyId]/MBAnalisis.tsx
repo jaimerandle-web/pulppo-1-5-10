@@ -111,7 +111,7 @@ export default function MBAnalisis({ companyId, name, asesores = [] }: { company
                             <div style={lbl}>Asesor</div>
                             <select value={asesor} onChange={(e) => setAsesor(e.target.value)} style={sel} title="Acota TODO el reporte a la cartera de un asesor">
                                 <option value="">Toda la inmobiliaria</option>
-                                {asesores.map((a) => <option key={a}>{a}</option>)}
+                                {asesores.map((a) => <option key={a} value={a}>{a}</option>)}
                             </select>
                         </div>
                     )}

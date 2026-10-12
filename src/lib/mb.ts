@@ -537,7 +537,9 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const demanda = nb ? ((op === 'sale' ? demandSale.get(nb) : op === 'rent' ? demandRent.get(nb) : 0) ?? 0) : 0;
         const calidad = CAL[num(dig(p, 'qualityScore')) ?? 2] ?? 'Media';
         const ag = dig(p, 'agent') as Document | undefined;
-        const asesor = [dig(ag, 'firstName'), dig(ag, 'lastName')].filter(Boolean).join(' ').trim() || '—';
+        // colapsar espacios: hay nombres guardados con espacio al final («Angelina ») y el <select> los
+        // colapsa, así que «Angelina  Ortiz» nunca coincidía con su opción y el filtro no traía nada.
+        const asesor = [dig(ag, 'firstName'), dig(ag, 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim() || '—';
         const diag: string[] = [];
         if (op === 'sale' && (sp && sp > 1.15 || (vsOferta != null && vsOferta > 15))) diag.push('Bajar precio');
         if (calidad !== 'Alta') diag.push('Mejorar ficha');

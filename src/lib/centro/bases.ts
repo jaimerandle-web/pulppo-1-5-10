@@ -32,7 +32,7 @@ import { BANDAS, type BaseId, type BaseResultado, type Cluster, type FiltroDeman
 const LIMITE = 500; // filas que se mandan al navegador; el total sí es real
 
 const nombreDe = (o: Document | null | undefined, fb = 'Sin nombre'): string =>
-    [o?.firstName, o?.lastName].filter(Boolean).join(' ').trim() || fb;
+    [o?.firstName, o?.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim() || fb;
 
 /** Primer teléfono utilizable de un contacts.phones[] (prefiere el de WhatsApp). */
 function telDeContacto(c: Document): string | null {

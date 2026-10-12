@@ -78,7 +78,7 @@ export async function POST(req: Request) {
                     code: (p.internalId as string) ?? hex, type: (p.type as string) ?? '—',
                     op: pop === 'sale' ? 'Venta' : pop === 'rent' ? 'Renta' : '—',
                     colonia: nb ?? '—',
-                    asesor: [ag?.firstName, ag?.lastName].filter(Boolean).join(' ').trim() || '—',
+                    asesor: [ag?.firstName, ag?.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim() || '—',
                     vistas: oVw[hex] ?? 0, leads: oLd[hex] ?? 0, respondidos: oAns[hex] ?? 0,
                     visitas: oVis[hex] ?? 0, ofertas: oOf[hex] ?? 0, cierres: oClo[hex] ?? 0
                 });
