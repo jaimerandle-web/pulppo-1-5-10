@@ -93,7 +93,7 @@ export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
                         <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('nProps')}>Props{arrow('nProps')}</th>
                         <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('nVenta')}>Venta / Renta{arrow('nVenta')}</th>
                         <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('calAltaPct')}>% Alta calidad{arrow('calAltaPct')}</th>
-                        <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('leads30')}>Leads 30d{arrow('leads30')}</th>
+                        <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('leads30')} title="Leads únicos: mismo cliente + misma propiedad = 1">Leads únicos 30d{arrow('leads30')}</th>
                         <th style={{ ...th, textAlign: 'right' }} onClick={() => onSort('leadsProp')}>Leads / prop{arrow('leadsProp')}</th>
                         <th style={{ ...th, textAlign: 'right', cursor: 'default' }}>Abrir</th>
                     </tr></thead>

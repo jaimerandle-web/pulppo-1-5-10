@@ -6,6 +6,7 @@ import { getDb } from './data';
 import { getKam, esBaja } from './kam';
 import { refComps, idxPool, sanePpm, type PoolItem, type Subj } from './comparables';
 import { fichaToken } from './token';
+import { VISITA_OK, claveLead, cierresInmobiliaria, enHorario, ladoVendedor } from './mbComun';
 
 const ADVANCED = new Set(['offer', 'offer_blocked', 'contract', 'paying', 'closed']);
 // Cierre = 'closed' + 'paying' (la operación ya cerró y está en cobranza). Mismo criterio en /api/mb-metrics.
@@ -52,6 +53,9 @@ export interface MBProp {
     precio: number | null; estado: string; demanda: number; vsOferta: number | null; vsCierres: number | null;
     compite: number | null; calidad: string; dias: number | null; mesesPub: number | null;
     vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number;
+    /** leads únicos que entraron 9:00–20:59 MX y, de ésos, cuántos siguen sin respuesta (tasa de respuesta) */
+    lab: number; labSin: number;
+    /** mediana de 1ª respuesta en minutos, sólo leads en horario */
     respMedMin: number | null; oppScore: number; diag: string[]; tier: string;
     // Token de la ficha: los master brokers (externos) no pasan el middleware con la URL pelada
     // —los rebota a su overview—, así que la liga tiene que ir firmada. Ver src/lib/token.ts.
@@ -69,7 +73,8 @@ export interface MBProp {
 }
 // Desempeño por asesor para el recap de flags del overview. Solo asesores de la inmobiliaria.
 export interface MBAsesor {
-    name: string; leads: number; respondidos: number; fueraSla: number; respMedMin: number | null;
+    /** leads únicos (90 días); `respondidos`, `fueraSla` y `respMedMin` son sobre `leadsHorario` (9:00–20:59 MX) */
+    name: string; leads: number; leadsHorario: number; respondidos: number; fueraSla: number; respMedMin: number | null;
     visitas: number; cierres: number; comision: number; busquedas: number; clientes: number; propsCompartidas: number;
     green: string[]; red: string[];
     // `agents.whatsapp` = si el asesor tiene su WhatsApp vinculado a la plataforma. Cuando NO
@@ -154,7 +159,11 @@ export interface MBZona {
 export interface MBFuera {
     code: string; type: string; op: string; colonia: string; asesor: string;
     vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number;
+    lab: number; labSin: number;
 }
+/** Cierre donde la inmobiliaria SÓLO trajo al comprador: la propiedad es de otra, así que no tiene fila
+ *  en el listado, pero sí es un cierre suyo (Ale, oct-2026: «sí hay que contarlas»). */
+export interface MBCierreComprador { fecha: string; op: string; asesor: string; codigo: string | null }
 export interface MBData {
     companyId: string; name: string; nProps: number; nVenta: number; nRenta: number; captaciones90: number;
     vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number; sinLeads: number;
@@ -180,6 +189,8 @@ export interface MBData {
     asesores: MBAsesor[];
     // --- ofertas/cierres fuera del inventario vivo: SOLO para el funnel (ver MBFuera) ---
     fuera: MBFuera[];
+    // --- cierres donde sólo trajo al comprador (histórico): se suman al funnel y al KPI ---
+    cierresComprador: MBCierreComprador[];
 }
 
 const countBy = async (coll: string, field: string, match: Document): Promise<Map<string, number>> => {
@@ -220,8 +231,10 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const nbids = [...new Set(props.map((p) => dig(p, 'address', 'neighborhood', 'id')).filter(Boolean))] as string[];
 
     // --- leads: conteo, 30d vs previos, y tiempo de 1ª respuesta (answeredAt - createdAt) ---
-    const leadDocs = await db.collection('leads').find({ 'property._id': { $in: ids } },
-        { projection: { 'property._id': 1, createdAt: 1, answeredAt: 1, agent: 1 } }).toArray();
+    // LEADS ÚNICOS (contacto + propiedad), en orden de llegada: cuenta el primero de cada par.
+    const leadDocs = (await db.collection('leads').find({ 'property._id': { $in: ids } },
+        { projection: { 'property._id': 1, 'contact._id': 1, createdAt: 1, answeredAt: 1, agent: 1 } }).toArray())
+        .sort((a, b) => ((a.createdAt as Date)?.getTime?.() ?? 0) - ((b.createdAt as Date)?.getTime?.() ?? 0));
     const pidOp = new Map(props.map((p) => [String(p._id), dig(p, 'listing', 'operation') as string]));
     // asesores DE la inmobiliaria (por el inventario que traen). Un broker de otra inmobiliaria
     // puede atender un lead sobre tu inventario y no debe aparecer como si fuera de tu equipo.
@@ -260,54 +273,83 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     // premia al inventario viejo por el solo hecho de llevar más tiempo publicado.
     const leads90Map = new Map<string, number>();
     const ansMap = new Map<string, number>();       // leads RESPONDIDOS por propiedad
+    const labMap = new Map<string, number>(), labSinMap = new Map<string, number>();   // en horario / sin respuesta
     const respByProp = new Map<string, number[]>();
     const zero = (): Record<RespKey, number> => ({ flash: 0, rapida: 0, media: 0, lento: 0, sin: 0 });
     const resp = zero(), respV = zero(), respR = zero();
     const allResp: number[] = [];
     let leads30 = 0, leads30prev = 0, leads30V = 0, leads30R = 0, leads30prevV = 0, leads30prevR = 0;
+    // cada ventana deduplica por su cuenta: un contacto que escribió hace 4 meses y otra vez esta
+    // semana sobre la misma propiedad es un lead único de ESTOS 30 días
+    const vistoHist = new Set<string>(), visto90 = new Set<string>(), visto30 = new Set<string>(), visto60 = new Set<string>();
     // acumulador por asesor, en los últimos 90 días (ventana con volumen suficiente y aún accionable)
-    type Ac = { name: string; leads: number; resp: number; fueraSla: number; mins: number[];
+    type Ac = { name: string; leads: number; lab: number; resp: number; fueraSla: number; mins: number[];
         visitas: number; cierres: number; comision: number; busquedas: number; clientes: number; props: number };
     const ases = new Map<string, Ac>();
     const accA = (name: string | null): Ac | null => {
         if (!name) return null;
         const k = normName(name);
         let e = ases.get(k);
-        if (!e) { e = { name, leads: 0, resp: 0, fueraSla: 0, mins: [], visitas: 0, cierres: 0, comision: 0, busquedas: 0, clientes: 0, props: 0 }; ases.set(k, e); }
+        if (!e) { e = { name, leads: 0, lab: 0, resp: 0, fueraSla: 0, mins: [], visitas: 0, cierres: 0, comision: 0, busquedas: 0, clientes: 0, props: 0 }; ases.set(k, e); }
         return e;
     };
     for (const [, n] of internos) accA(n);          // todo asesor con inventario aparece
     for (const l of leadDocs) {
         const pid = String(dig(l, 'property', '_id'));
-        leadsMap.set(pid, (leadsMap.get(pid) ?? 0) + 1);
-        if (dig(l, 'createdAt') instanceof Date && (dig(l, 'createdAt') as Date) >= D90) leads90Map.set(pid, (leads90Map.get(pid) ?? 0) + 1);
-        const lop = pidOp.get(pid);
+        const k = claveLead(l);
         const ca = dig(l, 'createdAt'), aa = dig(l, 'answeredAt');
+        const lop = pidOp.get(pid);
         const mins = ca instanceof Date && aa instanceof Date ? Math.max(0, (aa.getTime() - ca.getTime()) / 60000) : null;
-        const b = respBucket(mins);
-        resp[b]++; if (lop === 'sale') respV[b]++; else if (lop === 'rent') respR[b]++;
-        if (aa instanceof Date) ansMap.set(pid, (ansMap.get(pid) ?? 0) + 1);
-        if (mins != null) { pushMap(respByProp, pid, mins); allResp.push(mins); }
-        if (ca instanceof Date) {
-            if (ca >= D30) { leads30++; if (lop === 'sale') leads30V++; else if (lop === 'rent') leads30R++; }
-            else if (ca >= D60) { leads30prev++; if (lop === 'sale') leads30prevV++; else if (lop === 'rent') leads30prevR++; }
+        const horario = ca instanceof Date && enHorario(ca);
+        // histórico por propiedad (la tabla con «Todo (histórico)»)
+        if (!vistoHist.has(k)) {
+            vistoHist.add(k);
+            leadsMap.set(pid, (leadsMap.get(pid) ?? 0) + 1);
+            if (aa instanceof Date) ansMap.set(pid, (ansMap.get(pid) ?? 0) + 1);
+            if (horario) {
+                labMap.set(pid, (labMap.get(pid) ?? 0) + 1);
+                if (!(aa instanceof Date)) labSinMap.set(pid, (labSinMap.get(pid) ?? 0) + 1);
+                if (mins != null) pushMap(respByProp, pid, mins);
+            }
+        }
+        if (!(ca instanceof Date)) continue;
+        if (ca >= D90 && !visto90.has(k)) { visto90.add(k); leads90Map.set(pid, (leads90Map.get(pid) ?? 0) + 1); }
+        if (ca >= D30) {
+            if (visto30.has(k)) continue;
+            visto30.add(k);
+            leads30++; if (lop === 'sale') leads30V++; else if (lop === 'rent') leads30R++;
+            // atención del Overview: últimos 30 días y sólo en horario
+            if (horario) {
+                const b = respBucket(mins);
+                resp[b]++; if (lop === 'sale') respV[b]++; else if (lop === 'rent') respR[b]++;
+                if (mins != null) allResp.push(mins);
+            }
+        } else if (ca >= D60 && !visto60.has(k)) {
+            visto60.add(k);
+            leads30prev++; if (lop === 'sale') leads30prevV++; else if (lop === 'rent') leads30prevR++;
         }
     }
 
     // --- por asesor (90d) sobre TODO el inventario de la inmobiliaria, no solo lo publicado ---
-    for (const l of await db.collection('leads').find(
+    const vistoAs = new Set<string>();
+    for (const l of (await db.collection('leads').find(
         { 'property._id': { $in: allIds }, createdAt: { $gte: D90 } },
-        { projection: { 'property._id': 1, createdAt: 1, answeredAt: 1, agent: 1 } }
-    ).toArray()) {
+        { projection: { 'property._id': 1, 'contact._id': 1, createdAt: 1, answeredAt: 1, agent: 1 } }
+    ).toArray()).sort((a, b) => ((a.createdAt as Date)?.getTime?.() ?? 0) - ((b.createdAt as Date)?.getTime?.() ?? 0))) {
         const pid = String(dig(l, 'property', '_id'));
         const ca = dig(l, 'createdAt'), aa = dig(l, 'answeredAt');
         if (!(ca instanceof Date)) continue;
+        const k = claveLead(l);
+        if (vistoAs.has(k)) continue;           // leads únicos
+        vistoAs.add(k);
         // el responsable de atenderlo; si ese es de otra inmobiliaria, el dueño del inventario
         const la = dig(l, 'agent') as Document | undefined;
         const usable = la && internos.has(String(dig(la, '_id'))) ? la : allAgent.get(pid);
         const e = accA(agName(usable));
         if (!e) continue;
         e.leads++;
+        if (!enHorario(ca)) continue;           // la atención se mide sólo en horario (9:00–20:59 MX)
+        e.lab++;
         if (aa instanceof Date) {
             const mins = Math.max(0, (aa.getTime() - ca.getTime()) / 60000);
             e.resp++; e.mins.push(mins);
@@ -317,7 +359,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
 
     // --- desempeño por propiedad ---
     const visRows = await db.collection('visits').aggregate([
-        { $match: { 'steps.property._id': { $in: ids }, 'status.last': 'confirmed' } },
+        { $match: { 'steps.property._id': { $in: ids }, 'status.last': { $in: VISITA_OK } } },
         { $unwind: '$steps' }, { $match: { 'steps.property._id': { $in: ids } } },
         { $group: { _id: { p: '$steps.property._id', c: { $ifNull: ['$contact._id', { $ifNull: ['$contact.email', '$_id'] }] } } } },
         { $group: { _id: '$_id.p', n: { $sum: 1 } } }
@@ -337,7 +379,8 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const fichaMap = new Map(fichaRows.map((r) => [String(r._id), r]));
     // visitas y cierres por ASESOR en los últimos 90 días (para las flags del overview)
     const visAgRows = await db.collection('visits').aggregate([
-        { $match: { 'steps.property._id': { $in: allIds }, 'status.last': 'confirmed', createdAt: { $gte: D90 } } },
+        // por FECHA DE LA VISITA (startTime), confirmadas + pendientes: la misma regla que Desempeño
+        { $match: { 'steps.property._id': { $in: allIds }, 'status.last': { $in: VISITA_OK }, startTime: { $gte: D90, $lt: new Date() } } },
         { $group: { _id: '$agent._id', n: { $sum: 1 } } },
     ]).toArray();
     for (const r of visAgRows) {
@@ -362,9 +405,14 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     }
     const viewMap = await countBy('metrics', 'property', { property: { $in: ids }, type: 'view' });
     const ofMap = await countBy('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': { $in: [...ADVANCED] } });
-    // 'paying' cuenta como cierre: la operación ya se cerró y está en cobranza. Van juntos aquí y en
-    // /api/mb-metrics (antes el histórico contaba solo 'closed' y el filtro de fechas los dos).
-    const cloMap = await countBy('operations', 'property._id', { 'property._id': { $in: ids }, 'status.last': { $in: CERRADAS } });
+    // CIERRES = los de Desempeño (cierresMb): ambos lados, sin duplicar (propiedad + comprador + lado).
+    // A cada propiedad se le asignan los de su lado VENDEDOR; los que sólo trajo al comprador (la
+    // propiedad es de otra inmobiliaria) van aparte en `cierresComprador`.
+    const cierresHist = await cierresInmobiliaria(String(cid), new Date(0), new Date(Date.now() + 864e5));
+    const cloMap = new Map<string, number>();
+    for (const c of cierresHist) if (ladoVendedor(c)) cloMap.set(c.propertyId, (cloMap.get(c.propertyId) ?? 0) + 1);
+    const cierresComprador = cierresHist.filter((c) => !ladoVendedor(c))
+        .map((c) => ({ fecha: c.closedAt, op: c.op === 'sale' ? 'Venta' : c.op === 'rent' ? 'Renta' : '—', asesor: c.asesor, codigo: c.codigo }));
 
     // --- actividad de propiedades que ya salieron del inventario publicado (ver MBFuera) ---
     const pubSet = new Set(ids.map((x) => String(x)));
@@ -376,19 +424,26 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const outDocs = await db.collection('properties').find({ _id: { $in: outIds } },
             { projection: { internalId: 1, type: 1, 'listing.operation': 1, 'address.neighborhood.name': 1, agent: 1 } }).toArray();
         const outVisRows = await db.collection('visits').aggregate([
-            { $match: { 'steps.property._id': { $in: outIds }, 'status.last': 'confirmed' } },
+            { $match: { 'steps.property._id': { $in: outIds }, 'status.last': { $in: VISITA_OK } } },
             { $unwind: '$steps' }, { $match: { 'steps.property._id': { $in: outIds } } },
             { $group: { _id: { p: '$steps.property._id', c: { $ifNull: ['$contact._id', { $ifNull: ['$contact.email', '$_id'] }] } } } },
             { $group: { _id: '$_id.p', n: { $sum: 1 } } }
         ]).toArray();
         const outVis = new Map(outVisRows.map((r) => [String(r._id), r.n as number]));
-        const [outVw, outLd, outAns, outOf, outClo] = await Promise.all([
+        const [outVw, outOf] = await Promise.all([
             countBy('metrics', 'property', { property: { $in: outIds }, type: 'view' }),
-            countBy('leads', 'property._id', { 'property._id': { $in: outIds } }),
-            countBy('leads', 'property._id', { 'property._id': { $in: outIds }, answeredAt: { $type: 'date' } }),
             countBy('operations', 'property._id', { 'property._id': { $in: outIds }, 'status.last': { $in: [...ADVANCED] } }),
-            countBy('operations', 'property._id', { 'property._id': { $in: outIds }, 'status.last': { $in: CERRADAS } })
         ]);
+        // leads únicos, respondidos y atención en horario de lo que ya salió del inventario
+        const outLd = new Map<string, number>(), outAns = new Map<string, number>(), outLab = new Map<string, number>(), outLabSin = new Map<string, number>();
+        const vistoOut = new Set<string>();
+        for (const l of await db.collection('leads').find({ 'property._id': { $in: outIds } }, { projection: { 'property._id': 1, 'contact._id': 1, createdAt: 1, answeredAt: 1 } }).toArray()) {
+            const k = claveLead(l); if (vistoOut.has(k)) continue; vistoOut.add(k);
+            const pid = String(dig(l, 'property', '_id')), ca = dig(l, 'createdAt'), ok = dig(l, 'answeredAt') instanceof Date;
+            outLd.set(pid, (outLd.get(pid) ?? 0) + 1);
+            if (ok) outAns.set(pid, (outAns.get(pid) ?? 0) + 1);
+            if (ca instanceof Date && enHorario(ca)) { outLab.set(pid, (outLab.get(pid) ?? 0) + 1); if (!ok) outLabSin.set(pid, (outLabSin.get(pid) ?? 0) + 1); }
+        }
         for (const p of outDocs) {
             const hex = String(p._id);
             const ag = dig(p, 'agent') as Document | undefined;
@@ -399,7 +454,8 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
                 colonia: (dig(p, 'address', 'neighborhood', 'name') as string) ?? '—',
                 asesor: agName(ag) ?? '—',
                 vistas: outVw.get(hex) ?? 0, leads: outLd.get(hex) ?? 0, respondidos: outAns.get(hex) ?? 0,
-                visitas: outVis.get(hex) ?? 0, ofertas: outOf.get(hex) ?? 0, cierres: outClo.get(hex) ?? 0
+                visitas: outVis.get(hex) ?? 0, ofertas: outOf.get(hex) ?? 0, cierres: cloMap.get(hex) ?? 0,
+                lab: outLab.get(hex) ?? 0, labSin: outLabSin.get(hex) ?? 0
             });
         }
     }
@@ -495,16 +551,14 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     }
     const benchAltaPct = await communityAltaPct(db);
 
-    // comisión y cierres por asesor (90d) para las flags
-    const closeAg = await db.collection('operations').find(
-        { 'property._id': { $in: allIds }, 'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: D90 } },
-        { projection: { 'property._id': 1, 'comission.value': 1, 'seller.broker': 1, 'buyer.broker': 1 } }
-    ).toArray();
-    for (const o of closeAg) {
-        const cands = [dig(o, 'seller', 'broker'), dig(o, 'buyer', 'broker')] as (Document | undefined)[];
-        const dentro = cands.find((c) => c && internos.has(String(dig(c, '_id'))));
-        const e = accA(agName(dentro ?? allAgent.get(String(dig(o, 'property', '_id')))));
-        if (e) { e.cierres++; e.comision += num(dig(o, 'comission', 'value')) ?? 0; }
+    // comisión y cierres por asesor (90d) para las flags: los cierres de Desempeño (ambos lados), al
+    // asesor del lado de la inmobiliaria, con la comisión COBRADA de ese lado
+    const internosN = new Set([...internos.values()].map(normName));
+    for (const c of cierresHist) {
+        if (Date.parse(c.closedAt) < D90.getTime()) continue;
+        const nom = c.asesor && internosN.has(normName(c.asesor)) ? c.asesor : null;
+        const e = accA(nom ?? agName(allAgent.get(c.propertyId)));
+        if (e) { e.cierres++; e.comision += c.comision ?? 0; }
     }
 
     const now = Date.now();
@@ -546,7 +600,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         if (dias != null && dias <= 90) captaciones90++;
         if (calidad === 'Alta') { nAlta++; if (op === 'sale') nAltaV++; else if (op === 'rent') nAltaR++; }
         const calle = (dig(p, 'address', 'street') as string)?.trim() || (dig(p, 'address', 'neighborhood', 'name') as string) || '—';
-        const respondidos = ansMap.get(hex) ?? 0;
+        const respondidos = ansMap.get(hex) ?? 0, lab = labMap.get(hex) ?? 0, labSin = labSinMap.get(hex) ?? 0;
         const fi = fichaMap.get(hex);
         const fotos = (fi?.fotos as number) ?? 0, video = !!fi?.video, tour = !!fi?.tour, amenidades = (fi?.amen as number) ?? 0;
         // Qué mejorar de la ficha, puntual (Ale, oct-2026: no sólo «Mejorar ficha»). El video es EL
@@ -603,7 +657,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             vsCierres: ppm && cloR.med ? (ppm / cloR.med - 1) * 100 : null,
             compite: op === 'sale' ? (offR.n || null) : null,
             calidad, dias, mesesPub: dias != null ? dias / 30 : null,
-            vistas, leads, respondidos, visitas: vis, ofertas, cierres,
+            vistas, leads, respondidos, visitas: vis, ofertas, cierres, lab, labSin,
             respMedMin: median(respByProp.get(hex) ?? []),
             oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag,
             tier: TIER[dig(p, 'portals', 'inmuebles24', 'type') as string] ?? 'Simple',
@@ -653,10 +707,11 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const med = median(e.mins);
         const pxc = e.clientes ? e.props / e.clientes : null;
         const green: string[] = [], red: string[] = [];
-        if (e.leads >= MIN_LEADS) {
-            if (e.fueraSla / e.leads >= 0.25) red.push(`${Math.round((100 * e.fueraSla) / e.leads)}% de sus leads fuera de 24 h`);
-            const sin = e.leads - e.resp;
-            if (sin / e.leads >= 0.15) red.push(`abandona ${Math.round((100 * sin) / e.leads)}% de sus leads`);
+        // respuesta y abandono, sobre sus leads en horario (9:00–20:59 MX); visitas, sobre todos
+        if (e.leads >= MIN_LEADS && e.lab > 0) {
+            if (e.fueraSla / e.lab >= 0.25) red.push(`${Math.round((100 * e.fueraSla) / e.lab)}% de sus leads fuera de 24 h`);
+            const sin = e.lab - e.resp;
+            if (sin / e.lab >= 0.15) red.push(`abandona ${Math.round((100 * sin) / e.lab)}% de sus leads`);
             if (e.visitas / e.leads < 0.07 && e.leads >= 20) red.push('casi no convierte a visita');
             if (med != null && med <= 15 && sin === 0) green.push('responde en minutos y no abandona');
             if (e.visitas / e.leads >= 0.14) green.push(`${Math.round((100 * e.visitas) / e.leads)}% de sus leads llega a visita`);
@@ -666,7 +721,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             if (pxc >= 3) green.push(`comparte ${pxc.toFixed(1)} propiedades por cliente`);
         }
         if (e.cierres >= 1) green.push(`${e.cierres} ${e.cierres === 1 ? 'cierre' : 'cierres'} en 90 días`);
-        return { name: e.name, leads: e.leads, respondidos: e.resp, fueraSla: e.fueraSla, respMedMin: med,
+        return { name: e.name, leads: e.leads, leadsHorario: e.lab, respondidos: e.resp, fueraSla: e.fueraSla, respMedMin: med,
             whatsapp: waByName.get(normName(e.name)) ?? true,
             visitas: e.visitas, cierres: e.cierres, comision: e.comision, busquedas: e.busquedas,
             clientes: e.clientes, propsCompartidas: e.props, green, red };
@@ -683,7 +738,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         falta, faltaVenta: faltaV, faltaRenta: faltaR,
         errores: Object.entries(errCount).map(([tipo, n]) => ({ tipo, n, nota: ERROR_NOTA[tipo] ?? '', ejemplo: errEjemplo[tipo] ?? null })).sort((a, b) => b.n - a.n),
         nErrores: rows.filter((r) => r.errores.length).length,
-        zonas, demandaLabel: DEMANDA_LABEL, asesores, fuera
+        zonas, demandaLabel: DEMANDA_LABEL, asesores, fuera, cierresComprador
     };
 }
 
@@ -705,9 +760,11 @@ export async function fetchIndex(): Promise<MBIndexRow[]> {
         { $group: { _id: '$company._id', n: { $sum: 1 } } }
     ]).toArray();
     const masterSet = new Set(masters.map((m) => String(m._id)));
+    // leads ÚNICOS (contacto + propiedad), igual que el Overview y Desempeño
     const l30 = await db.collection('leads').aggregate([
         { $match: { 'company._id': { $in: cids }, createdAt: { $gte: D30 } } },
-        { $group: { _id: '$company._id', n: { $sum: 1 } } }
+        { $group: { _id: { c: '$company._id', k: { $cond: [{ $and: ['$contact._id', '$property._id'] }, { a: '$contact._id', p: '$property._id' }, '$_id'] } } } },
+        { $group: { _id: '$_id.c', n: { $sum: 1 } } }
     ], { allowDiskUse: true }).toArray();
     const l30Map = new Map(l30.map((r) => [String(r._id), r.n as number]));
     // Habi se excluye SIEMPRE por el email (`admin@inmobiliaria.tuhabi.mx`): sus ~121 inmobiliarias

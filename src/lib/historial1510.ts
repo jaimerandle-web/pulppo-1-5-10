@@ -51,22 +51,31 @@ export async function historialDe(companyId: string): Promise<Historial> {
 
     const ids = docs.map((d) => d._id as ObjectId);
     // Sin propiedades no hay nada que contar, y un $in vacío recorrería la colección entera.
-    const [leadRows, visRows] = ids.length ? await Promise.all([
+    const [leadRows, visRows, cierreRows] = ids.length ? await Promise.all([
+        // leads ÚNICOS: mismo contacto + misma propiedad = 1 (como el resto de /mb)
         db.collection('leads').aggregate([
             { $match: { 'property._id': { $in: ids } } },
-            { $group: { _id: '$property._id', n: { $sum: 1 } } },
+            { $group: { _id: { p: '$property._id', c: { $ifNull: ['$contact._id', '$_id'] } } } },
+            { $group: { _id: '$_id.p', n: { $sum: 1 } } },
         ]).toArray(),
         // `visits` NO tiene `property._id` en la raíz: el camino es `steps.property._id`.
         // Con el camino equivocado sale 0 en todo. Se deduplica por persona, igual que mb.ts.
         db.collection('visits').aggregate([
-            { $match: { 'steps.property._id': { $in: ids }, 'status.last': 'confirmed' } },
+            { $match: { 'steps.property._id': { $in: ids }, 'status.last': { $in: ['confirmed', 'pending'] } } },
             { $unwind: '$steps' },
             { $match: { 'steps.property._id': { $in: ids } } },
             { $group: { _id: { p: '$steps.property._id',
                                c: { $ifNull: ['$contact._id', { $ifNull: ['$contact.email', '$_id'] }] } } } },
             { $group: { _id: '$_id.p', n: { $sum: 1 } } },
         ]).toArray(),
-    ]) : [[], []];
+        // VENDIDA = tiene una operación cerrada o en cobranza (como todos los cierres de /mb), no la
+        // propiedad marcada `completed`: el estado de la propiedad se mueve a mano y a destiempo.
+        db.collection('operations').aggregate([
+            { $match: { 'property._id': { $in: ids }, 'status.last': { $in: ['closed', 'paying'] } } },
+            { $group: { _id: '$property._id', cierre: { $min: '$closedAt' } } },
+        ]).toArray(),
+    ]) : [[], [], []];
+    const cierreMap = new Map(cierreRows.map((r) => [String(r._id), fecha(r.cierre)]));
     const leadMap = new Map(leadRows.map((r) => [String(r._id), r.n as number]));
     const visMap = new Map(visRows.map((r) => [String(r._id), r.n as number]));
 
@@ -75,21 +84,15 @@ export async function historialDe(companyId: string): Promise<Historial> {
         const hex = String(p._id);
         const last = String(dig(p, 'status', 'last') ?? '');
         const estado: Hist1510['estado'] =
-            last === 'completed' ? 'vendida' : last === 'published' ? 'publicada' : 'fuera';
+            cierreMap.has(hex) ? 'vendida' : last === 'published' ? 'publicada' : 'fuera';
 
         const pub = fecha(p.publishedAt);
         let diasVenta: number | null = null;
-        if (estado === 'vendida' && pub) {
-            // 🔴 `status.history[].timestamp` a veces viene como TEXTO, no como Date: hay que
-            // filtrar por tipo o la resta revienta con "str - datetime".
-            const cierres = ((dig(p, 'status', 'history') as Document[]) ?? [])
-                .filter((h) => h.status === 'completed')
-                .map((h) => fecha(h.timestamp))
-                .filter((d): d is Date => d != null);
-            if (cierres.length) {
-                const d = Math.round((Math.max(...cierres.map((x) => x.getTime())) - pub.getTime()) / 86400000);
-                if (d > 0 && d < 2000) { diasVenta = d; dias.push(d); }
-            }
+        // días en venderse = de la publicación al cierre de la operación
+        const cierre = cierreMap.get(hex);
+        if (estado === 'vendida' && pub && cierre) {
+            const d = Math.round((cierre.getTime() - pub.getTime()) / 86400000);
+            if (d > 0 && d < 2000) { diasVenta = d; dias.push(d); }
         }
 
         const nom = [dig(p, 'agent', 'firstName'), dig(p, 'agent', 'lastName')]

@@ -1,6 +1,7 @@
 // Motor del "Análisis general" — port de gen_reporte_plus.py (Track B ampliado).
 // Fase 1: Inventario (P1) + Precio × calidad (P2). Lee Mongo en vivo (read-only).
 // Las secciones YoY / Top 10 / destacados / funnel se irán agregando después.
+import { VISITA_OK, cierresInmobiliaria, enHorario } from './mbComun';
 import { ObjectId, type Db, type Document } from 'mongodb';
 import { getDb } from './data';
 import { refComps, idxPool, type PoolItem, type Subj } from './comparables';
@@ -189,20 +190,21 @@ const legacyDesempeno = (cfg: AnalisisConfig): { win: string; comparar: string }
 export type PorOp = { sale: number; rent: number };
 export interface AsesorRow {
     id: string; name: string;
-    leads: PorOp;                 // leads únicos que le tocaron
-    resp: PorOp;                  // de esos, los que respondió
+    leads: PorOp;                 // leads únicos que le tocaron (contacto + propiedad)
+    lab: PorOp;                   // de esos, los que entraron en horario (9:00–20:59 MX): base de la atención
+    resp: PorOp;                  // de los de horario, los que respondió
     fueraSla: PorOp;              // respondidos DESPUÉS de 24 h + los que nunca respondió
     respMinAvg: { sale: number | null; rent: number | null };   // minutos a la 1ª respuesta (promedio)
     respMinMed: { sale: number | null; rent: number | null };   // ídem (mediana: el promedio lo rompen los outliers)
     visitas: PorOp; ofertas: PorOp; cierres: PorOp;
-    comision: PorOp;              // comisión de las operaciones cerradas
+    comision: PorOp;              // comisión COBRADA del lado de la inmobiliaria (como Desempeño)
     gmv: PorOp;                   // valor de cierre (para ticket promedio y % de comisión)
     busquedas: number;            // búsquedas de comprador abiertas en el período (pipeline de demanda)
     propsCompartidas: number;     // propiedades que le compartió a sus clientes
     clientes: number;             // clientes distintos con búsqueda en el período
     // mismos números en el PERÍODO BASE, para el ▲▼ (null = sin comparación elegida).
     // El tiempo de respuesta se lee al revés: bajar es mejorar.
-    prev: { leads: number; resp: number; visitas: number; cierres: number; respMinMed: number | null } | null;
+    prev: { leads: number; lab: number; resp: number; visitas: number; cierres: number; respMinMed: number | null } | null;
 }
 // Actividad sobre TU inventario que hizo un broker de OTRA inmobiliaria (la red Pulppo es un MLS
 // compartido). No va en la tabla de asesores, pero es información: la red trabajando tu inventario.
@@ -493,8 +495,8 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     for await (const l of leadCur) {
         const pid = String(gv(l, 'property', '_id'));
         const d = asDt(l.createdAt);
-        const who = gv(l, 'contact', 'phone') || gv(l, 'contact', 'email') || String(gv(l, 'contact', '_id') || l._id);
-        const k = `${pid}|${who}`;
+        // lead único = contacto + propiedad (como Desempeño y el resto de /mb)
+        const k = `${pid}|${String(gv(l, 'contact', '_id') || l._id)}`;
         const nb = pid2nb.get(pid);
         const po = pid2opPub.get(pid);
         if (inPerfW(d) && !invSeen.has(k)) {
@@ -682,12 +684,12 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     // --- asesores: acumulador por persona (se agrupa por nombre normalizado: la misma persona
     //     puede tener dos cuentas de agente y al dueño le interesa la persona, no la cuenta) ---
-    type Ac = { id: string; name: string; leads: Record<string, number>; resp: Record<string, number>;
+    type Ac = { id: string; name: string; leads: Record<string, number>; lab: Record<string, number>; resp: Record<string, number>;
         fueraSla: Record<string, number>;
         mins: Record<string, number[]>; visitas: Record<string, number>; ofertas: Record<string, number>;
         cierres: Record<string, number>; comision: Record<string, number>; gmv: Record<string, number>;
         busquedas: number; propsCompartidas: number; clientes: Set<string>;
-        pLeads: number; pResp: number; pVis: number; pClo: number; pMins: number[] };
+        pLeads: number; pLab: number; pResp: number; pVis: number; pClo: number; pMins: number[] };
     const ases = new Map<string, Ac>();
     // Primer candidato USABLE (con _id y nombre). No basta con `a ?? b`: en Mongo hay `agent: {}`
     // y `agent: null`, y un objeto vacío cortaría la cadena de fallback perdiendo el evento.
@@ -703,10 +705,10 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const k = norm(name);
         let e = ases.get(k);
         if (!e) {
-            e = { id, name, leads: zero(), resp: zero(), fueraSla: zero(), mins: { sale: [], rent: [] }, visitas: zero(),
+            e = { id, name, leads: zero(), lab: zero(), resp: zero(), fueraSla: zero(), mins: { sale: [], rent: [] }, visitas: zero(),
                 ofertas: zero(), cierres: zero(), comision: zero(), gmv: zero(),
                 busquedas: 0, propsCompartidas: 0, clientes: new Set<string>(),
-                pLeads: 0, pResp: 0, pVis: 0, pClo: 0, pMins: [] };
+                pLeads: 0, pLab: 0, pResp: 0, pVis: 0, pClo: 0, pMins: [] };
             ases.set(k, e);
         }
         return e;
@@ -749,8 +751,9 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const pid = String(gv(l, 'property', '_id'));
         const op = pid2op.get(pid);
         const phone = gv(l, 'contact', 'phone'), email = gv(l, 'contact', 'email');
-        const who = phone || email || String(gv(l, 'contact', '_id') || l._id);
-        const kk = `${pid}|${who}`;
+        // lead único = contacto + propiedad (antes era teléfono/correo: el mismo contacto con dos
+        // teléfonos contaba doble y no cuadraba con Desempeño)
+        const kk = `${pid}|${String(gv(l, 'contact', '_id') || l._id)}`;
         if (inPerf(d) && (op === 'sale' || op === 'rent')) {
             // duplicado = mismo contacto en la misma propiedad → se descarta de TODO el funnel
             if (dupSet.has(kk)) { compDup++; }
@@ -769,11 +772,15 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
                 const e = accInterno(la);
                 if (e) {
                     e.leads[op]++;
+                    // atención: sólo leads que entraron de 9:00 a 20:59 hora México
+                    if (enHorario(d)) {
+                    e.lab[op]++;
                     if (ans) {
                         const min = Math.max(0, (ans.getTime() - d.getTime()) / 60000);
                         e.resp[op]++; e.mins[op].push(min);
                         if (min > 1440) e.fueraSla[op]++;       // contestado, pero después de 24 h
                     } else e.fueraSla[op]++;                    // nunca contestado = el peor caso
+                    }
                 } else if (la) extLeads++;
             }
         }
@@ -787,8 +794,11 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
             const ep = accInterno(lap);
             if (ep) {
                 ep.pLeads++;
+                if (enHorario(d)) {
+                ep.pLab++;
                 const ansP = asDt(l.answeredAt);
                 if (ansP) { ep.pResp++; ep.pMins.push(Math.max(0, (ansP.getTime() - d.getTime()) / 60000)); }
+                }
             }
         }
         // comparación de períodos (leads únicos dentro de cada rango)
@@ -797,13 +807,14 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     }
     const visByOp = zero();
     // se escanea desde el inicio de la ventana más vieja para poder llenar también el período base
-    const vc = db.collection('visits').find({ 'steps.property._id': { $in: allpids }, 'status.last': { $ne: 'cancelled' }, createdAt: { $gte: leadScanStart, $lt: PERF.end } },
-        { projection: { 'steps.property._id': 1, agent: 1, createdAt: 1 } });
+    // por FECHA DE LA VISITA (startTime), confirmadas + pendientes: la misma regla que Desempeño
+    const vc = db.collection('visits').find({ 'steps.property._id': { $in: allpids }, 'status.last': { $in: VISITA_OK }, startTime: { $gte: leadScanStart, $lt: PERF.end } },
+        { projection: { 'steps.property._id': 1, agent: 1, startTime: 1 } });
     for await (const v of vc) {
         const steps = (v.steps || []) as Document[];
         const mine = steps.map((s) => String(gv(s, 'property', '_id'))).find((id) => pid2op.has(id));
         if (!mine) continue;
-        const vd = asDt(v.createdAt);
+        const vd = asDt(v.startTime);
         const op = pid2op.get(mine);
         if (inCmp(vd) && (op === 'sale' || op === 'rent')) {
             visPrev[op]++;
@@ -833,34 +844,39 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const cd = asDt(o.createdAt), xd = asDt(gv(o, 'closedAt'));
         const abierta = inPerf(cd) || inPerf(xd);
         if (abierta) offersByOp[t]++;
-        const last = gv(o, 'status', 'last');
-        const cerrada = (last === 'closed' || last === 'paying') && inPerf(xd);
-        if (cerrada) closesByOp[t]++;
         // mismos pasos en el período base
         if (inCmp(cd) || inCmp(xd)) offPrev[t]++;
-        const cerradaPrev = (last === 'closed' || last === 'paying') && inCmp(xd);
-        if (cerradaPrev) {
-            cloPrev[t]++;
-            const candsP = [gv(o, 'seller', 'broker'), gv(o, 'buyer', 'broker'), gv(o, 'property', 'agent')];
-            const dentroP = candsP.find((c) => esInterno(c as Document | null | undefined));
-            const ep = accInterno(pickAgent(dentroP, pid2agent.get(pid)));
-            if (ep) ep.pClo++;
-        }
-        if (!abierta && !cerrada) continue;
+        if (!abierta) continue;
         // la operación se atribuye al primer broker que SÍ es de la inmobiliaria (puede ser el
         // captador o el que trajo al comprador); si ninguno lo es, al asesor de la propiedad.
         const cands = [gv(o, 'seller', 'broker'), gv(o, 'buyer', 'broker'), gv(o, 'property', 'agent')];
         const dentro = cands.find((c) => esInterno(c as Document | null | undefined));
         const oa = pickAgent(dentro, pid2agent.get(pid));
         const e = accInterno(oa);
-        if (e) {
-            if (abierta) e.ofertas[t]++;
-            if (cerrada) {
-                e.cierres[t]++;
-                e.comision[t] += num(gv(o, 'comission', 'value')) || 0;
-                e.gmv[t] += num(gv(o, 'closeValue', 'value')) || 0;
-            }
+        if (e) e.ofertas[t]++;
+    }
+    // CIERRES = los de Desempeño (cierresMb): los dos lados — donde la inmobiliaria vende Y donde trae
+    // al comprador sobre una propiedad de otra —, sin duplicar, por fecha de cierre, con la comisión
+    // COBRADA de su lado. Antes sólo se veían los cierres sobre propiedades propias.
+    const pidSet = new Set(allpids.map(String));
+    const idPorNombre = new Map([...internos.entries()].map(([id, n]) => [norm(n), id]));
+    const cierresAll = (await cierresInmobiliaria(String(CID), leadScanStart, PERF.end))
+        // con filtro por asesor: los de su cartera, más los que él trajo como comprador
+        .filter((c) => !asesorSel || pidSet.has(c.propertyId) || norm(c.asesor) === norm(asesorSel));
+    const asesorDe = (c: { asesor: string; propertyId: string }): Ac | null => {
+        const id = idPorNombre.get(norm(c.asesor));
+        return id ? acc(internos.get(id) ?? c.asesor, id) : accInterno(pid2agent.get(c.propertyId));
+    };
+    for (const c of cierresAll) {
+        const t = c.op;
+        if (t !== 'sale' && t !== 'rent') continue;
+        const xd = new Date(c.closedAt);
+        if (inPerf(xd)) {
+            closesByOp[t]++;
+            const e = asesorDe(c);
+            if (e) { e.cierres[t]++; e.comision[t] += c.comision ?? 0; e.gmv[t] += c.monto ?? 0; }
         }
+        if (inCmp(xd)) { cloPrev[t]++; const ep = asesorDe(c); if (ep) ep.pClo++; }
     }
     // --- pipeline del lado COMPRADOR por asesor: búsquedas abiertas en el período y cuántas
     //     propiedades le compartió a cada cliente. `searches.properties[]` = lo que el asesor le
@@ -892,6 +908,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const asesores: AsesorRow[] = [...ases.values()].map((e) => ({
         id: e.id, name: e.name,
         leads: { sale: e.leads.sale, rent: e.leads.rent },
+        lab: { sale: e.lab.sale, rent: e.lab.rent },
         resp: { sale: e.resp.sale, rent: e.resp.rent },
         fueraSla: { sale: e.fueraSla.sale, rent: e.fueraSla.rent },
         respMinAvg: { sale: avg(e.mins.sale), rent: avg(e.mins.rent) },
@@ -902,7 +919,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         comision: { sale: e.comision.sale, rent: e.comision.rent },
         gmv: { sale: e.gmv.sale, rent: e.gmv.rent },
         busquedas: e.busquedas, propsCompartidas: e.propsCompartidas, clientes: e.clientes.size,
-        prev: CMP ? { leads: e.pLeads, resp: e.pResp, visitas: e.pVis, cierres: e.pClo, respMinMed: median(e.pMins) } : null,
+        prev: CMP ? { leads: e.pLeads, lab: e.pLab, resp: e.pResp, visitas: e.pVis, cierres: e.pClo, respMinMed: median(e.pMins) } : null,
     })).sort((a, b) =>
         (b.leads.sale + b.leads.rent) - (a.leads.sale + a.leads.rent)
         || (b.cierres.sale + b.cierres.rent) - (a.cierres.sale + a.cierres.rent)
@@ -921,11 +938,11 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         + r.cierres.sale + r.cierres.rent + r.busquedas + r.propsCompartidas > 0;
     const asesoresOut = asesores.filter((r) =>
         asesorSel ? norm(r.name) === norm(asesorSel) : (conInventario.has(norm(r.name)) || activo(r)));
-    // "Leads" en vez de "Únicos" (el dedup se explica al pie, no en la etiqueta del paso).
+    // "Leads únicos": mismo contacto + misma propiedad = 1 (como Desempeño y el resto de /mb).
     // `prev` = el mismo paso en el período base → la sección muestra el ▲▼ sin salir de ella.
     const buildFunnel = (title: string, op: string) => {
         const raw: [string, number, number][] = [
-            ['Leads', leadsByOp[op], leadsPrev[op]],
+            ['Leads únicos', leadsByOp[op], leadsPrev[op]],
             ['Respondidos', contByOp[op], contPrev[op]],
             ['Visitas', visByOp[op], visPrev[op]],
             ['Ofertas', offersByOp[op], offPrev[op]],
@@ -960,7 +977,6 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     // --- recomendaciones a nivel cartera (nunca priorizan renta sobre venta) ---
     const altaNow = items.filter((it) => it.q3 === 3).length / (N || 1);
-    const nNoTour = items.filter((it) => !it.tour).length;
     const visRate = perfLeadsAll ? perfVis / perfLeadsAll : 0;
     const recos: { enfoque: string; title: string; body: string; sev: number }[] = [];
     if (pctCaro >= 0.30) recos.push({ enfoque: 'Precio', sev: 5, title: 'Ajusta el precio de tu inventario en venta',
@@ -968,7 +984,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     if (visRate < 0.14) recos.push({ enfoque: 'Ficha', sev: 4, title: 'Sube tu tasa de visita',
         body: `Solo el ${pct(visRate)} de tus leads llega a visita${mb ? ', por debajo de una referencia sana de mercado' : ' (benchmark Pulppo 14%)'}. Mejora las primeras 3 fotos, el orden de la galería y la descripción — ahí se decide si el interesado agenda.` });
     if (altaNow < 0.25) recos.push({ enfoque: 'Ficha', sev: 3, title: 'Sube la calidad de tus fichas',
-        body: `Solo ${pct(altaNow)} de tus fichas son calidad Alta. Fotos profesionales, video y tour virtual (hoy ${nNoTour} sin tour) elevan la exposición y la conversión sin cambiar el precio.` });
+        body: `Solo ${pct(altaNow)} de tus fichas son calidad Alta. El video es lo que separa Media de Alta; luego fotos profesionales (8 o más) y una descripción completa. Eso eleva la exposición y la conversión sin cambiar el precio.` });
     if (!mb) recos.push({ enfoque: 'Visibilidad', sev: 2, title: 'Enfoca la inversión en visibilidad donde rinde',
         body: `Destacar solo rinde cuando la propiedad ya está bien puesta (precio óptimo + ficha completa). Concentra el impulso en tus ${joyas} propiedades listas — no en las que están fuera de mercado.` });
     if (mb) recos.push({ enfoque: 'Canales', sev: 2, title: 'Diversifica tus canales de captación de leads',
@@ -992,15 +1008,15 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     };
     const propMeta = allprops.map((p) => ({ pub: firstPub(p), term: terminal(p), q3: num(p.qualityScore) }));
     const activeAt = (end: Date) => propMeta.filter((p) => p.pub && p.pub < end && (p.term === null || p.term > end));
+    // cierres y comisión cobrada = los de Desempeño (ambos lados), dentro de cada rango
     const closeWindow = (a: Date, b: Date) => {
         const r = { n: 0, sale: 0, rent: 0, com: 0, gmv: 0 };
-        for (const o of opsAll) {
-            const last = gv(o, 'status', 'last'); const xd = asDt(gv(o, 'closedAt'));
-            if (!(last === 'closed' || last === 'paying') || !xd || xd < a || xd >= b) continue;
-            const t = pid2op.get(String(gv(o, 'property', '_id')));
-            r.n++; if (t === 'sale') r.sale++; else r.rent++;
-            r.com += num(gv(o, 'comission', 'value')) || 0;
-            if (t === 'sale') r.gmv += num(gv(o, 'closeValue', 'value')) || 0;
+        for (const c of cierresAll) {
+            const xd = new Date(c.closedAt);
+            if (xd < a || xd >= b) continue;
+            r.n++; if (c.op === 'sale') r.sale++; else r.rent++;
+            r.com += c.comision ?? 0;
+            if (c.op === 'sale') r.gmv += c.monto ?? 0;
         }
         return r;
     };
@@ -1018,7 +1034,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         { label: 'Leads por propiedad', a: leadsA / (invA || 1), b: leadsB / (invB || 1), fmt: 'dec', goodUp: true },
         { label: 'Calidad Alta (ficha de hoy)', a: altaA, b: altaB, fmt: 'pct', goodUp: true },
         { label: 'Cierres', a: clA.n, b: clB.n, fmt: 'int', goodUp: true },
-        { label: 'Comisión', a: clA.com, b: clB.com, fmt: 'money', goodUp: true },
+        { label: 'Comisión cobrada', a: clA.com, b: clB.com, fmt: 'money', goodUp: true },
         { label: 'Tasa de cierre (leads→cierre)', a: tcA, b: tcB, fmt: 'pct2', goodUp: true },
     ];
     const yoyMix = !hasComp ? [] : [{ period: rngA.label, sale: clA.sale, rent: clA.rent, com: clA.com }, { period: PERF.label, sale: clB.sale, rent: clB.rent, com: clB.com }];
@@ -1028,7 +1044,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         : clB.com > 0 ? 'sin base para comparar' : 'sin comisión en ninguno de los dos';
     const yoyReading = !hasComp
         ? `Estás viendo ${PERF.label} sin comparación. Elige una base ("período anterior" o "mismo período del año pasado") para ver la variación.`
-        : `Comisión ${money(clA.com)} → ${money(clB.com)} (${deltaTxt}) de ${rngA.label} a ${PERF.label}. El motor son las ventas: en ${PERF.label} se cerraron ${clB.sale}.`;
+        : `Comisión cobrada ${money(clA.com)} → ${money(clB.com)} (${deltaTxt}) de ${rngA.label} a ${PERF.label}. El motor son las ventas: en ${PERF.label} se cerraron ${clB.sale}.`;
 
     // ===================== Top 10 críticas =====================
     const cand10 = [];
@@ -1043,12 +1059,14 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         // Destacar solo si el precio NO está fuera de mercado (la visibilidad no arregla el sobreprecio). No en MB.
         if (!mb && (it.tier === null || it.tier === 'Simple' || it.tier === 'Offline') && !fueraMercado) lev.push('Destacar');
         // Mejorar ficha: detallar qué falta en vez de decirlo genérico.
+        // El tour NO mueve la calificación (el video es lo que separa Media de Alta): sólo se sugiere
+        // si no falta nada más, igual que las etiquetas del listado de /mb.
         const falta: string[] = [];
-        if (it.fotos < 8) falta.push('fotos');
-        if (!it.tour) falta.push('tour');
-        if (it.descLen < 400) falta.push('descripción');
         if (!it.video) falta.push('video');
-        if (((it.q3 || 2) <= 2 || !it.tour || it.fotos < 8) && falta.length) lev.push(`Mejorar ficha: ${falta.join(', ')}`);
+        if (it.fotos < 8) falta.push('fotos');
+        if (it.descLen < 400) falta.push('descripción');
+        if (!falta.length && !it.tour && (it.q3 || 2) <= 2) falta.push('tour');
+        if (((it.q3 || 2) <= 2 || it.fotos < 8) && falta.length) lev.push(`Mejorar ficha: ${falta.join(', ')}`);
         if (!lev.length || dz <= 0) continue;
         cand10.push({ code: it.code || '—', nb: it.nb || '—', val: it.val, sp: spV, leads, dz, lev, score: dz / (1 + leads) });
     }

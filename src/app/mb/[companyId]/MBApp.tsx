@@ -2,7 +2,7 @@
 import type { ErrorOrto } from '@/lib/ortografia';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import type { MBData, MBProp, MBFuera, RespKey } from '@/lib/mb';
+import type { MBData, MBProp, MBFuera, MBCierreComprador, RespKey } from '@/lib/mb';
 import MBAnalisis from './MBAnalisis';
 import MBDestacados from './MBDestacados';
 import MBDesempeno from './MBDesempeno';
@@ -152,14 +152,14 @@ function OpSplit({ venta, renta }: { venta: number; renta: number }) {
     );
 }
 
-function Funnel({ vistas, leads, respondidos, visitas, ofertas, cierres, respMed, n }:
-    { vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number; respMed: number | null; n: number }) {
+function Funnel({ vistas, leads, respondidos, visitas, ofertas, cierres, respMed, n, lab, labSin }:
+    { vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number; respMed: number | null; n: number; lab: number; labSin: number }) {
     const max = Math.max(vistas, leads, respondidos, visitas, ofertas, 1);
     const rate = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)}%` : '—');
     // Respondidos entra en el funnel: es el primer paso que el equipo controla.
     const stages: [string, number, string, string][] = [
         ['Vistas', vistas, GRY, ''],
-        ['Leads', leads, SEA, `${rate(leads, vistas)} de vistas`],
+        ['Leads únicos', leads, SEA, `${rate(leads, vistas)} de vistas`],
         ['Respondidos', respondidos, '#3f8080', `${rate(respondidos, leads)} de leads`],
         ['Visitas', visitas, '#2f6b6b', `${rate(visitas, respondidos)} de respondidos`],
         ['Ofertas', ofertas, BLK, `${rate(ofertas, visitas)} de visitas`],
@@ -176,10 +176,11 @@ function Funnel({ vistas, leads, respondidos, visitas, ofertas, cierres, respMed
         <div>
             <div style={{ fontSize: 11, color: GRY, marginBottom: 10 }}>Sobre las <b>{f(n)}</b> propiedades filtradas. Tasas contra el paso anterior.</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                {kpi('Tasa de respuesta', rate(respondidos, leads), `${f(leads - respondidos)} sin responder`, leads && respondidos / leads < 0.8 ? RED : BLK)}
-                {kpi('1ª respuesta (mediana)', dur(respMed), 'meta ≤ 24 horas', respMed != null && respMed > 1440 ? RED : BLK)}
-                {kpi('Tasa de visita', rate(visitas, leads), 'visitas ÷ leads')}
-                {kpi('Lead → cierre', leads ? `${((100 * cierres) / leads).toFixed(2)}%` : '—', 'cierres ÷ leads')}
+                {/* la atención se mide sólo con leads de 9:00 a 20:59 (hora México), como en /portales */}
+                {kpi('Tasa de respuesta', rate(lab - labSin, lab), `${f(labSin)} sin responder · 9 a 21 h`, lab && (lab - labSin) / lab < 0.8 ? RED : BLK)}
+                {kpi('1ª respuesta (mediana)', dur(respMed), 'meta ≤ 24 horas · 9 a 21 h', respMed != null && respMed > 1440 ? RED : BLK)}
+                {kpi('Tasa de visita', rate(visitas, leads), 'visitas ÷ leads únicos')}
+                {kpi('Lead → cierre', leads ? `${((100 * cierres) / leads).toFixed(2)}%` : '—', 'cierres ÷ leads únicos')}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {stages.map(([lbl, v, c, note]) => (
@@ -231,10 +232,12 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     const [rango, setRango] = useState('Últimos 30 días');
     const [cfrom, setCfrom] = useState('');
     const [cto, setCto] = useState('');
-    type Ovr = Record<string, { vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number }>;
+    type Ovr = Record<string, { vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number; lab: number; labSin: number; respMed: number | null }>;
     const [ovr, setOvr] = useState<Ovr | null>(null);
     // Actividad del rango en propiedades que ya salieron del inventario (ver MBFuera en lib/mb.ts).
     const [ovrFuera, setOvrFuera] = useState<MBFuera[] | null>(null);
+    // Cierres del rango donde la inmobiliaria sólo trajo al comprador (la propiedad es de otra).
+    const [ovrComprador, setOvrComprador] = useState<MBCierreComprador[] | null>(null);
     const [rloading, setRloading] = useState(false);
     useEffect(() => {
         const now = new Date();
@@ -243,24 +246,29 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
         else if (rango === 'Últimos 90 días') from = new Date(Date.now() - 90 * 864e5);
         else if (rango === 'Este año') from = new Date(now.getFullYear(), 0, 1);
         else if (rango === 'Personalizado' && cfrom && cto) { from = new Date(cfrom); to = new Date(`${cto}T23:59:59`); }
-        if (!from) { setOvr(null); setOvrFuera(null); return; }
+        if (!from) { setOvr(null); setOvrFuera(null); setOvrComprador(null); return; }
         let cancel = false; setRloading(true);
         fetch('/api/mb-metrics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId: d.companyId, from: from.toISOString(), to: to.toISOString() }) })
             .then((r) => r.json())
-            .then((m: { error?: string; leads?: Record<string, number>; respondidos?: Record<string, number>; vistas?: Record<string, number>; visitas?: Record<string, number>; ofertas?: Record<string, number>; cierres?: Record<string, number>; fuera?: MBFuera[] }) => {
+            .then((m: { error?: string; leads?: Record<string, number>; respondidos?: Record<string, number>; vistas?: Record<string, number>; visitas?: Record<string, number>; ofertas?: Record<string, number>; cierres?: Record<string, number>;
+                lab?: Record<string, number>; labSin?: Record<string, number>; respMed?: Record<string, number>; fuera?: MBFuera[]; cierresComprador?: MBCierreComprador[] }) => {
                 if (cancel || m.error) return;
                 const o: Ovr = {};
                 const ids = new Set([...Object.keys(m.leads || {}), ...Object.keys(m.vistas || {}), ...Object.keys(m.visitas || {}), ...Object.keys(m.ofertas || {}), ...Object.keys(m.cierres || {})]);
-                ids.forEach((id) => { o[id] = { vistas: m.vistas?.[id] ?? 0, leads: m.leads?.[id] ?? 0, respondidos: m.respondidos?.[id] ?? 0, visitas: m.visitas?.[id] ?? 0, ofertas: m.ofertas?.[id] ?? 0, cierres: m.cierres?.[id] ?? 0 }; });
+                ids.forEach((id) => { o[id] = { vistas: m.vistas?.[id] ?? 0, leads: m.leads?.[id] ?? 0, respondidos: m.respondidos?.[id] ?? 0, visitas: m.visitas?.[id] ?? 0, ofertas: m.ofertas?.[id] ?? 0, cierres: m.cierres?.[id] ?? 0,
+                    lab: m.lab?.[id] ?? 0, labSin: m.labSin?.[id] ?? 0, respMed: m.respMed?.[id] ?? null }; });
                 setOvr(o);
                 setOvrFuera(m.fuera ?? []);
+                setOvrComprador(m.cierresComprador ?? []);
             }).finally(() => { if (!cancel) setRloading(false); });
         return () => { cancel = true; };
     }, [rango, cfrom, cto, d.companyId]);
     // props con las métricas del rango (si hay rango); si no, históricas
     const dprops = useMemo(() => ovr ? d.props.map((p) => ({ ...p,
         vistas: ovr[p.id]?.vistas ?? 0, leads: ovr[p.id]?.leads ?? 0, respondidos: ovr[p.id]?.respondidos ?? 0,
-        visitas: ovr[p.id]?.visitas ?? 0, ofertas: ovr[p.id]?.ofertas ?? 0, cierres: ovr[p.id]?.cierres ?? 0 })) : d.props, [d.props, ovr]);
+        visitas: ovr[p.id]?.visitas ?? 0, ofertas: ovr[p.id]?.ofertas ?? 0, cierres: ovr[p.id]?.cierres ?? 0,
+        // la 1ª respuesta también respeta el rango (antes se quedaba con la histórica)
+        lab: ovr[p.id]?.lab ?? 0, labSin: ovr[p.id]?.labSin ?? 0, respMedMin: ovr[p.id]?.respMed ?? null })) : d.props, [d.props, ovr]);
 
     const filtered = useMemo(() => {
         const ql = q.trim().toLowerCase();
@@ -316,16 +324,25 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
         });
     }, [fueraSrc, fueraAplica, q, op, tipo, asesor]);
 
+    // Cierres donde sólo trajo al comprador: no tienen fila (la propiedad es de otra inmobiliaria), pero
+    // son cierres suyos y entran al funnel. Responden a operación y asesor, como las que ya salieron.
+    const compradorFiltrado = useMemo(() => {
+        if (!fueraAplica || q.trim() || tipo) return [];
+        return ((ovr ? ovrComprador : d.cierresComprador) ?? []).filter((c) => (!op || c.op === op) && (!asesor || c.asesor === asesor));
+    }, [fueraAplica, q, tipo, ovr, ovrComprador, d.cierresComprador, op, asesor]);
     const fn = useMemo(() => {
         const base = filtered.reduce((a, p) => ({
             vistas: a.vistas + p.vistas, leads: a.leads + p.leads, respondidos: a.respondidos + p.respondidos,
             visitas: a.visitas + p.visitas, ofertas: a.ofertas + p.ofertas, cierres: a.cierres + p.cierres,
-        }), { vistas: 0, leads: 0, respondidos: 0, visitas: 0, ofertas: 0, cierres: 0 });
-        return fueraFiltrada.reduce((a, x) => ({
+            lab: a.lab + p.lab, labSin: a.labSin + p.labSin,
+        }), { vistas: 0, leads: 0, respondidos: 0, visitas: 0, ofertas: 0, cierres: 0, lab: 0, labSin: 0 });
+        const conFuera = fueraFiltrada.reduce((a, x) => ({
             vistas: a.vistas + x.vistas, leads: a.leads + x.leads, respondidos: a.respondidos + x.respondidos,
             visitas: a.visitas + x.visitas, ofertas: a.ofertas + x.ofertas, cierres: a.cierres + x.cierres,
+            lab: a.lab + (x.lab ?? 0), labSin: a.labSin + (x.labSin ?? 0),
         }), base);
-    }, [filtered, fueraFiltrada]);
+        return { ...conFuera, cierres: conFuera.cierres + compradorFiltrado.length };
+    }, [filtered, fueraFiltrada, compradorFiltrado]);
     const nFueraCierres = useMemo(() => fueraFiltrada.reduce((a, x) => a + x.cierres, 0), [fueraFiltrada]);
     // mediana de las medianas por propiedad (no se pueden promediar medianas)
     const fnRespMed = useMemo(() => {
@@ -409,12 +426,13 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                 <div style={{ background: LGT, padding: '14px 16px', borderRadius: R, marginBottom: 16 }}>
                     <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 17, marginBottom: 2 }}>Funnel comercial</div>
                     <div style={{ fontSize: 11, color: GRY, marginBottom: 8 }}>
-                        Vistas/leads/visitas/ofertas: <b>{ovr ? rango.toLowerCase() : 'histórico'}</b>.
+                        Vistas/leads únicos/visitas/ofertas/cierres: <b>{ovr ? rango.toLowerCase() : 'histórico'}</b>.
                         {fueraFiltrada.length > 0 && <> Incluye <b>{f(fueraFiltrada.length)}</b> {fueraFiltrada.length === 1 ? 'propiedad que ya salió' : 'propiedades que ya salieron'} del inventario
                             {nFueraCierres > 0 && <> ({f(nFueraCierres)} {nFueraCierres === 1 ? 'cierre' : 'cierres'})</>}: al venderse dejan de estar publicadas, pero su actividad es de este período. Por eso el funnel puede no cuadrar con la suma de la tabla.</>}
+                        {compradorFiltrado.length > 0 && <> Los cierres incluyen <b>{f(compradorFiltrado.length)}</b> donde tu inmobiliaria trajo al comprador sobre una propiedad de otra: no tienen fila en la tabla.</>}
                         {!fueraAplica && fueraSrc.length > 0 && <> Con este filtro sólo se cuenta el inventario publicado, así que <b>ofertas y cierres salen incompletos</b>.</>}
                     </div>
-                    <Funnel vistas={fn.vistas} leads={fn.leads} respondidos={fn.respondidos} visitas={fn.visitas} ofertas={fn.ofertas} cierres={fn.cierres} respMed={fnRespMed} n={filtered.length} />
+                    <Funnel vistas={fn.vistas} leads={fn.leads} respondidos={fn.respondidos} visitas={fn.visitas} ofertas={fn.ofertas} cierres={fn.cierres} respMed={fnRespMed} n={filtered.length} lab={fn.lab} labSin={fn.labSin} />
                 </div>
 
                 {/* Fila de filtros por columna: va sobre fondo gris claro y con su propio rótulo, para que
@@ -594,12 +612,12 @@ export default function MBApp({ d }: { d: MBData }) {
                         {/* KPIs */}
                         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                             <Kpi label="Inventario activo" value={f(d.nProps)} sub={`${d.nVenta} venta · ${d.nRenta} renta`} />
-                            <Kpi label="Leads · últimos 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED}
+                            <Kpi label="Leads únicos · últimos 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED}
                                 sub={`${dl >= 0 ? '▲' : '▼'} ${dlPct == null ? `${dl >= 0 ? '+' : ''}${f(dl)}` : `${dl >= 0 ? '+' : ''}${dlPct}%`} vs. los 30 días anteriores (${f(d.leads30prev)}) · venta ${f(d.leads30V)} · renta ${f(d.leads30R)}`} />
-                            <Kpi label="Sin responder" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`} />
-                            <Kpi label="1ª respuesta (mediana)" value={dur(d.respMedMin)}
+                            <Kpi label="Sin responder · últimos 30 días" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`leads de 9 a 21 h · venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`} />
+                            <Kpi label="1ª respuesta (mediana · 30 días)" value={dur(d.respMedMin)}
                                 color={d.respMedMin == null ? GRY : d.respMedMin <= 60 ? SEA : d.respMedMin > 1440 ? RED : BLK}
-                                sub={`la mitad de tus leads se contesta antes de eso · el grupo más común es ${RESP_LBL[domResp].toLowerCase()} (${RESP_RANGO[domResp]})`} />
+                                sub={`leads de 9 a 21 h · la mitad se contesta antes de eso · el grupo más común es ${RESP_LBL[domResp].toLowerCase()} (${RESP_RANGO[domResp]})`} />
                         </div>
 
                         {/* Venta vs renta */}
@@ -763,7 +781,7 @@ export default function MBApp({ d }: { d: MBData }) {
                                             {lista.length === 0 && <div style={{ fontSize: 12, color: GRY }}>Nada que destacar en esta ventana.</div>}
                                             {lista.map((a) => (
                                                 <div key={a.name} style={{ padding: '6px 0', borderBottom: `1px solid ${LGT}` }}>
-                                                    <div style={{ fontSize: 12.5, fontWeight: 700 }}>{a.name} <span style={{ fontWeight: 400, color: GRY }}>· {f(a.leads)} leads</span>
+                                                    <div style={{ fontSize: 12.5, fontWeight: 700 }}>{a.name} <span style={{ fontWeight: 400, color: GRY }}>· {f(a.leads)} leads únicos</span>
                                                         {/* Sin WhatsApp vinculado contesta por fuera y la plataforma no lo registra:
                                                             sus tiempos de respuesta salen peores de lo que son. Es una advertencia
                                                             sobre el dato, no una excusa — por eso va en gris y no en rojo. */}
@@ -793,7 +811,7 @@ export default function MBApp({ d }: { d: MBData }) {
 
                         {/* Empieza por aquí */}
                         <h2 style={{ ...h2, marginTop: 30 }}>Empieza por aquí</h2>
-                        <div style={sub}>Buena demanda de zona pero sin generar leads, con un freno claro. Demanda = búsquedas de venta de la zona (2026) · Leads = históricos · vs. oferta = tu $/m² contra el asking del <b>MLS</b> en <b>propiedades comparables</b> (mismo tipo, tamaño ±30% y recámaras).</div>
+                        <div style={sub}>Buena demanda de zona pero sin generar leads, con un freno claro. Demanda = búsquedas de venta de la zona en los últimos 3 meses · Leads únicos = históricos · vs. oferta = tu $/m² contra el asking del <b>MLS</b> en <b>propiedades comparables</b> (mismo tipo, tamaño ±30% y recámaras).</div>
                         <div style={{ overflowX: 'auto', border: `1px solid ${LGT}`, borderRadius: R }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fff' }}>
                                 <thead><tr>{['Código', 'Zona', 'Operación', 'Precio', 'vs. oferta', 'Leads', 'Demanda', 'Diagnóstico'].map((h, i) => <th key={h} style={{ ...tth, textAlign: i === 3 || i === 4 || i === 5 || i === 6 ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
@@ -939,15 +957,17 @@ export default function MBApp({ d }: { d: MBData }) {
                         <h2 style={{ ...h2, marginTop: 20 }}>De dónde salen los datos</h2>
                         <div>
                             {dfn('Inventario', 'tus propiedades publicadas en Pulppo (precio, superficie, calidad de ficha, destacado).')}
-                            {dfn('Leads', 'contactos reales de todos los canales. Tiempo de 1ª respuesta = answeredAt − createdAt del lead.')}
-                            {dfn('Visitas', 'visitantes únicos confirmados (una misma persona no cuenta doble).')}
+                            {dfn('Leads únicos', 'contactos de todos los canales, contando una vez a la misma persona sobre la misma propiedad (si escribe tres veces por el mismo depa, es 1). Es el mismo conteo que Desempeño.')}
+                            {dfn('Sin responder y 1ª respuesta', 'sólo leads que entraron de 9:00 a 20:59 (hora de México) y del periodo que estás viendo: de madrugada nadie contesta y el histórico esconde cómo vas hoy. 1ª respuesta = el tiempo hasta la primera respuesta del asesor; se muestra la MEDIANA.')}
+                            {dfn('Visitas', 'por la FECHA DE LA VISITA (no la de cuándo se agendó), confirmadas y pendientes de confirmar; una misma persona no cuenta doble en la misma propiedad.')}
+                            {dfn('Cierres', 'operaciones cerradas o en cobranza, por fecha de cierre, de los DOS lados: donde tu inmobiliaria vende la propiedad y donde trae al comprador sobre una propiedad de otra (ésas no tienen fila en el listado, pero sí suman en el funnel). Son los mismos cierres que Desempeño. El dinero es la comisión COBRADA de tu lado.')}
                             {dfn('Vistas', 'vistas del anuncio en los sitios de Pulppo (pulppo.com y broker.pulppo.com) y en Inmuebles24. NO incluye otros portales (Mercado Libre, propiedades.com, etc.): es lo único que hoy nos reporta vistas.')}
                             {dfn('Demanda', 'búsquedas de compradores en tu zona en los ÚLTIMOS 3 MESES, partidas por operación: a cada propiedad se le asigna la demanda de su operación (venta/renta).')}
                             {dfn('vs. oferta / vs. cierres', 'tu $/m² contra la MEDIANA de tus propiedades COMPARABLES (nunca el promedio: un solo anuncio con precio absurdo lo movería). Comparable = misma colonia, mismo tipo, tamaño ±30% y mismas recámaras. "Oferta" = lo que se PIDE hoy en el MLS completo (Inmuebles24 + otras fuentes) + red Pulppo, con filtro de extremos que descarta $/m² imposibles; "cierres" = lo que realmente se VENDIÓ vía Pulppo (24m) en comparables (solo Pulppo: no hay data de cierres de mercado). Si no hay suficientes comparables, ampliamos el criterio (quitamos recámaras, luego tamaño, luego tipo) hasta juntar al menos 3.')}
                             {dfn('Compite', 'cuántos anuncios COMPARABLES (mismos filtros de arriba) hay hoy en el MLS de la zona. Es tu competencia directa, no todo el inventario de la colonia.')}
                             {dfn('Calidad de ficha', 'clasificación Pulppo (Alta/Media/Baja), siempre partida entre venta y renta porque suelen estar muy desparejas. El benchmark es la media de las mejores inmobiliarias de la comunidad (top 20%). Medimos toda la red y el VIDEO es el único factor que separa Media de Alta: 100% de las Alta lo tiene contra 32% de las Media. Fotos, descripción y tour están casi iguales en los tres niveles, así que subir un tour NO mejora la calificación.')}
-                            {dfn('Errores de captura', 'datos evidentemente mal escritos: venta por debajo de $100,000, renta por debajo de $1,000 o arriba de $500,000 al mes, sin superficie, superficie fuera de rango, $/m² imposible, más de 15 recámaras o sin fotos. No es un problema de venta: mientras el dato esté mal, esa propiedad no se puede comparar contra el mercado.')}
-                            {dfn('Respondidos', 'leads que sí tienen fecha de primera respuesta. Ojo: esa fecha se llena tarde, así que "sin responder" se encoge con el tiempo; el número estable es cuántos se contestaron fuera de las 24 horas.')}
+                            {dfn('Errores de captura', 'datos evidentemente mal escritos: venta por debajo de $10,000, renta por debajo de $1,000 o arriba de $500,000 al mes, sin superficie, superficie fuera de rango, $/m² imposible, más de 15 recámaras o sin fotos. No es un problema de venta: mientras el dato esté mal, esa propiedad no se puede comparar contra el mercado.')}
+                            {dfn('Respondidos', 'leads únicos que sí tienen fecha de primera respuesta. Ojo: esa fecha se llena tarde, así que "sin responder" se encoge con el tiempo; el número estable es cuántos se contestaron fuera de las 24 horas.')}
                         </div>
                         <h2 style={{ ...h2, marginTop: 22 }}>Cómo se leen las secciones</h2>
                         <div>
@@ -956,10 +976,10 @@ export default function MBApp({ d }: { d: MBData }) {
                             {dfn('Calidad de tus fichas', 'cuántas propiedades hay en cada nivel, partido venta/renta. Debajo, qué le falta a las que no son Alta; haz clic en cualquiera para ver esa lista.')}
                             {dfn('Tus zonas', 'dónde está tu inventario y qué tan competitivo es tu precio ahí. "Tus props / Pulppo" es cuánto del inventario que la red tiene en esa colonia es tuyo — es tu peso dentro de Pulppo, no dentro del mercado. "Mercado en la colonia" son las propiedades distintas en venta que hay hoy (red Pulppo + MLS de portales), contando cada una una sola vez: el mismo inmueble se re-publica en varios portales y por varias agencias, así que el número de anuncios es bastante mayor. Incluye las de Pulppo, que también son oferta. "Leads 90d" son los leads de tu inventario en esa colonia en los últimos 90 días (misma ventana que la demanda), y al lado cuántos toca por propiedad: el total premia a la zona donde tienes más inventario, el promedio dice dónde rinde mejor cada una. En zonas con menos de 8 propiedades ese promedio va atenuado porque un solo lead lo mueve mucho.')}
                             {dfn('Cómo va tu equipo', 'últimos 90 días, solo asesores de tu inmobiliaria y con al menos 10 leads. Son señales, no un ranking: el que más cierra puede a la vez estar quemando leads, y por eso aparece en "ojo con estos" en vez de en la columna verde.')}
-                            {dfn('Empieza por aquí', 'ordenado por oportunidad (demanda ÷ (1+leads)). El diagnóstico dice el freno más probable (bajar precio / mejorar ficha).')}
+                            {dfn('Empieza por aquí', 'ordenado por oportunidad (demanda ÷ (1+leads)). El diagnóstico dice el freno más probable: bajar precio o qué le falta a la ficha.')}
                             {dfn('¡Ojo con estas!', 'propiedades con errores de captura. Una propiedad puede tener más de un error, por eso la suma de los bloques puede pasar del total.')}
                             {dfn('Tu inventario (listado)', 'por default muestra los ÚLTIMOS 30 DÍAS; cámbialo en el filtro de fechas si quieres otra ventana. La fila gris debajo de los encabezados filtra por columna: en las de texto escribe parte de la palabra, en las de número el mínimo (3 = 3 o más), salvo "1ª respuesta" donde es el máximo. Clic en un encabezado ordena.')}
-                            {dfn('Acción', 'qué hacer con esa propiedad. De precio y ficha (bajar precio, mejorar ficha, corregir datos) y de desempeño (contestar más rápido, convertir a visita, cerrar la visita, compartir con clientes).')}
+                            {dfn('Acción', 'qué hacer con esa propiedad. De precio y ficha (bajar precio; lo puntual que le falta a la ficha: subir video, más fotos, agregar amenidades, alargar descripción, agregar tour; corregir ortografía; corregir datos) y de desempeño (contestar más rápido, convertir a visita, cerrar la visita, compartir con clientes).')}
                             {dfn('Generador de análisis', 'las fechas van en dos bloques. DESEMPEÑO = tu operación (funnel, asesores, leads, sin actividad): un período y contra qué compararlo. COMPARABLES = el mercado (cierres mín. 6 meses, demanda mín. 1 mes); la oferta es siempre foto de hoy porque no se guarda su historia.')}
                         </div>
                         <div style={{ fontSize: 10, color: GRY, marginTop: 18 }}>Corte: hoy, datos en vivo. Borrador.</div>

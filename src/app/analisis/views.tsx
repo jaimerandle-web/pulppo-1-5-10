@@ -76,7 +76,7 @@ export function InventarioView({ d, referencias, cortes, mb = false }: { d: Anal
             {v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`}
         </span>
     );
-    const cols = ['Colonia', 'Tus props', 'Oferta zona', ...(showOferta ? ['vs. oferta'] : []), ...(showCierres ? ['vs. cierres'] : []), 'Demanda', 'Leads'];
+    const cols = ['Colonia', 'Tus props', 'Oferta zona', ...(showOferta ? ['vs. oferta'] : []), ...(showCierres ? ['vs. cierres'] : []), 'Demanda', 'Leads únicos'];
     // barra simple reutilizable (# de props + leads) para los cortes por tipo/operación
     const maxTipo = Math.max(...d.segTipo.map((t) => t.n), 1);
     const maxOp = Math.max(...d.segOp.map((o) => o.n), 1);
@@ -536,7 +536,7 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
     const pair = (f: (r: AsesorRow) => { sale: number; rent: number }) =>
         d.asesores.reduce((a, r) => ({ sale: a.sale + f(r).sale, rent: a.rent + f(r).rent }), { sale: 0, rent: 0 });
     const tot = {
-        leads: pair((r) => r.leads), resp: pair((r) => r.resp), fueraSla: pair((r) => r.fueraSla),
+        leads: pair((r) => r.leads), lab: pair((r) => r.lab), resp: pair((r) => r.resp), fueraSla: pair((r) => r.fueraSla),
         visitas: pair((r) => r.visitas), ofertas: pair((r) => r.ofertas), cierres: pair((r) => r.cierres),
         comision: pair((r) => r.comision), gmv: pair((r) => r.gmv),
         busquedas: d.asesores.reduce((a, r) => a + r.busquedas, 0),
@@ -548,9 +548,9 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
         .map((r) => pickN(vista, r.respMinMed, r.resp))
         .filter((x): x is number => x != null));
 
-    const COLS = ['Asesor', 'Leads', 'Sin responder', 'Abandono', 'Fuera de SLA 24h', '1ª respuesta (mediana)',
+    const COLS = ['Asesor', 'Leads únicos', 'Sin responder (9–21 h)', 'Abandono', 'Fuera de SLA 24h', '1ª respuesta (mediana, 9–21 h)',
         'Búsquedas', 'Props x cliente', 'Visitas', 'Tasa visita', 'Ofertas', 'Cierres', 'Visita→cierre',
-        'Comisión', '% com. venta', '% com. renta', 'Ticket venta', 'Ticket renta'];
+        'Comisión cobrada', '% com. venta', '% com. renta', 'Ticket venta', 'Ticket renta'];
     const pctCom = (com: number, gmv: number) => (gmv > 0 ? `${(100 * com / gmv).toFixed(1)}%` : '—');
     const ticket = (gmv: number, n: number) => (n > 0 ? money(gmv / n) : '—');
     const benchVis = d.bench.tasaVisita;
@@ -559,25 +559,27 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
     // Total: comparar "leads de venta de julio" contra "leads totales de junio" sería falso.
     const totPrev = d.asesores.some((a) => a.prev)
         ? d.asesores.reduce((acc, a) => ({
-            leads: acc.leads + (a.prev?.leads ?? 0), resp: acc.resp + (a.prev?.resp ?? 0),
+            leads: acc.leads + (a.prev?.leads ?? 0), lab: acc.lab + (a.prev?.lab ?? 0), resp: acc.resp + (a.prev?.resp ?? 0),
             visitas: acc.visitas + (a.prev?.visitas ?? 0), cierres: acc.cierres + (a.prev?.cierres ?? 0),
             respMinMed: acc.respMinMed,
-        }), { leads: 0, resp: 0, visitas: 0, cierres: 0, respMinMed: median(d.asesores.map((a) => a.prev?.respMinMed ?? null).filter((x): x is number => x != null)) })
+        }), { leads: 0, lab: 0, resp: 0, visitas: 0, cierres: 0, respMinMed: median(d.asesores.map((a) => a.prev?.respMinMed ?? null).filter((x): x is number => x != null)) })
         : null;
 
     const cells = (r: AsesorRow | typeof tot, name: string, bold = false) => {
         const pv = vista === 'Total' ? ('prev' in r ? r.prev : totPrev) : null;
         const L = pick(vista, r.leads), R = pick(vista, r.resp), V = pick(vista, r.visitas);
         const O = pick(vista, r.ofertas), C = pick(vista, r.cierres);
-        const sla = pick(vista, r.fueraSla), sin = L - R;
+        // atención (sin responder, abandono, fuera de 24 h) sobre los leads de 9:00 a 20:59 hora México
+        const LB = pick(vista, r.lab);
+        const sla = pick(vista, r.fueraSla), sin = LB - R;
         const med = 'respMinMed' in r ? pickN(vista, r.respMinMed, r.resp) : totMed;
         const bus = 'busquedas' in r ? r.busquedas : tot.busquedas;
         const pxc = 'clientes' in r ? (r.clientes ? r.propsCompartidas / r.clientes : null)
             : (tot.clientes ? tot.propsCompartidas / tot.clientes : null);
         const cls = `py-1 text-right${bold ? ' font-bold' : ''}`;
         // umbrales: abandono ≥15% y fuera de SLA ≥25% son incumplimientos, no matices
-        const colAband = L >= 10 && sin / L >= 0.15 ? RED : SOFT;
-        const colSla = L >= 10 && sla / L >= 0.25 ? RED : SOFT;
+        const colAband = L >= 10 && LB > 0 && sin / LB >= 0.15 ? RED : SOFT;
+        const colSla = L >= 10 && LB > 0 && sla / LB >= 0.25 ? RED : SOFT;
         const colVis = benchVis != null && L >= 20 ? (V / L >= benchVis ? SEA : V / L < benchVis / 2 ? RED : SOFT) : SOFT;
         return (
             <tr key={name} className={bold ? 'border-t' : 'border-b border-neutral-100'} style={bold ? { borderColor: SOFT } : undefined}>
@@ -586,10 +588,10 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
                 <td className={cls}>{f0(L)}{pv && <div><Delta now={L} prev={pv.leads} /></div>}</td>
                 <td className={cls} style={{ color: colAband }}>{f0(sin)}</td>
                 <td className={cls} style={{ color: colAband }}>
-                    {rate(sin, L)}
-                    {pv && <div><DeltaPts now={L ? sin / L : null} prev={pv.leads ? (pv.leads - pv.resp) / pv.leads : null} goodUp={false} /></div>}
+                    {rate(sin, LB)}
+                    {pv && <div><DeltaPts now={LB ? sin / LB : null} prev={pv.lab ? (pv.lab - pv.resp) / pv.lab : null} goodUp={false} /></div>}
                 </td>
-                <td className={cls} style={{ color: colSla }}>{rate(sla, L)}</td>
+                <td className={cls} style={{ color: colSla }}>{rate(sla, LB)}</td>
                 <td className={cls}>{dur(med)}{pv && <div><DeltaTiempo now={med} prev={pv.respMinMed} /></div>}</td>
                 <td className={cls} style={{ color: GRAY }}>{f0(bus)}</td>
                 <td className={cls} style={{ color: GRAY }}>{pxc == null ? '—' : pxc.toFixed(1)}</td>
@@ -679,13 +681,14 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
                 // recap de la sección: los hechos que se ven en la tabla, dichos en una línea
                 const conVol = d.asesores.filter((r) => r.leads.sale + r.leads.rent >= 10);
                 if (!conVol.length) return null;
+                // sobre los leads de horario (9:00–20:59 MX), como la tabla
                 const malSla = conVol.filter((r) => {
-                    const L = r.leads.sale + r.leads.rent;
-                    return (r.fueraSla.sale + r.fueraSla.rent) / L >= 0.25;
+                    const LB = r.lab.sale + r.lab.rent;
+                    return LB > 0 && (r.fueraSla.sale + r.fueraSla.rent) / LB >= 0.25;
                 });
                 const abandona = conVol.filter((r) => {
-                    const L = r.leads.sale + r.leads.rent;
-                    return (L - r.resp.sale - r.resp.rent) / L >= 0.15;
+                    const LB = r.lab.sale + r.lab.rent;
+                    return LB > 0 && (LB - r.resp.sale - r.resp.rent) / LB >= 0.15;
                 });
                 const pxc = tot.clientes ? tot.propsCompartidas / tot.clientes : null;
                 const L = tot.leads.sale + tot.leads.rent, V = tot.visitas.sale + tot.visitas.rent;

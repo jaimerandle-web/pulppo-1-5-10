@@ -55,7 +55,9 @@ export interface VisitaMb {
     propiedades: Array<{ codigo: string | null; titulo: string | null; colonia: string | null }>;
 }
 export interface CierreMb {
-    id: string; estado: string; op: Op; lado: string; cliente: string; inmoComprador: string | null; compradorOtraInmo: boolean;
+    id: string; estado: string; op: Op; lado: string; cliente: string;
+    /** `property._id` (hex): /mb asigna a cada propiedad los cierres de su lado vendedor */
+    propertyId: string; closedAt: string; inmoComprador: string | null; compradorOtraInmo: boolean;
     asesor: string; agentes: string[]; codigo: string | null; tipo: string | null; direccion: string;
     monto: number | null; moneda: string; comision: number | null; fechaCierre: string;
     inicio: string | null; inicioTipo: 'busqueda' | 'visita' | 'oferta';
@@ -119,7 +121,7 @@ function tasas(bs: Busq[], t0: Date, t1: Date): Record<'sale' | 'rent', Funnel> 
 }
 
 /** Compañías con el mismo nombre que `companyId` (una inmobiliaria puede estar partida en varias). */
-async function grupoDe(companyId: string): Promise<{ nombre: string; ids: string[] }> {
+export async function grupoDe(companyId: string): Promise<{ nombre: string; ids: string[] }> {
     const ops = await opcionesInmobiliarias();
     const g = ops.find((o) => o.ids.includes(companyId));
     if (g) return { nombre: g.nombre, ids: g.ids };
@@ -297,8 +299,9 @@ export async function desempenoMb(companyId: string, desde: string, hasta: strin
     };
 }
 
-/** Cierres del periodo, del lado en que participa la inmobiliaria, con el recorrido del comprador. */
-async function cierresMb(ids: ObjectId[], idSet: Set<string>, A: Date, B: Date, aid: ObjectId | null): Promise<CierreMb[]> {
+/** Cierres del periodo, del lado en que participa la inmobiliaria, con el recorrido del comprador.
+ *  Exportada: /mb (Overview, Propiedades, Generador) cuenta los cierres con ESTA misma función. */
+export async function cierresMb(ids: ObjectId[], idSet: Set<string>, A: Date, B: Date, aid: ObjectId | null): Promise<CierreMb[]> {
     const db = await getDb();
     const q: Document = {
         'status.last': { $in: CERRADA }, closedAt: { $gte: A, $lt: B },
@@ -396,6 +399,7 @@ async function cierresMb(ids: ObjectId[], idSet: Set<string>, A: Date, B: Date, 
         const op = opDe(dig(o, 'property', 'listing', 'operation'));
         return {
             id: String(o.id ?? o._id), estado: String(dig(o, 'status', 'last') ?? ''), op, lado,
+            propertyId: String(dig(o, 'property', '_id') ?? ''), closedAt: closed.toISOString(),
             cliente: nombreDe(dig(o, 'buyer', 'contact')) || 'Sin nombre',
             inmoComprador: String(dig(o, 'buyer', 'company', 'name') ?? '').trim() || null, compradorOtraInmo: !nuestra,
             asesor: nombreDe(asesor),

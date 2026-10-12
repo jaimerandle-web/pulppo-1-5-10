@@ -140,7 +140,14 @@ export async function mercado(): Promise<Mercado> {
     }
 
     const cierres: Cierre[] = [];
-    for (const o of ops) {
+    // Una misma venta puede estar registrada dos veces: los dos lados (vendedor y comprador, cuando son
+    // inmobiliarias distintas de la red) o «en cobranza» + «cerrada». Se cuenta una vez por propiedad +
+    // valor + mes de cierre (un depa que se vuelve a rentar meses después sí es otro cierre).
+    const vistos = new Set<string>();
+    for (const o of ops.sort((a, b) => new Date(a.closedAt as Date).getTime() - new Date(b.closedAt as Date).getTime())) {
+        const llave = `${String(pick(o, 'property', '_id') ?? o._id)}|${Math.round(num(pick(o, 'closeValue', 'value')) ?? 0)}|${new Date(new Date(o.closedAt as Date).getTime() - MX_OFFSET_MS).toISOString().slice(0, 7)}`;
+        if (vistos.has(llave)) continue;
+        vistos.add(llave);
         const comp = String(pick(o, 'company', 'name') ?? '');
         const pcomp = String(pick(o, 'property', 'company', 'name') ?? '');
         if (TEST_RE.test(comp) || TEST_RE.test(pcomp)) continue;

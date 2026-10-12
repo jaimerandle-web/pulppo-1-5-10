@@ -134,6 +134,7 @@ export function demoData(): MBData {
             compite: esVenta ? ent(2, 48) : null,
             calidad, dias, mesesPub: dias / 30,
             vistas, leads, respondidos, visitas, ofertas, cierres, respMedMin,
+            lab: Math.round(leads * 0.8), labSin: Math.max(0, Math.round(leads * 0.8) - Math.round(respondidos * 0.8)),
             oppScore: demandaZona / (1 + leads), diag, tier: 'SIMPLE',
             fotos, video, tour, amenidades, errores, sugerencia, p1510: false, comision: 4, token: '',
         });
@@ -203,7 +204,7 @@ export function demoData(): MBData {
         if (rm != null && rm > 1440) red.push(`${Math.round((fueraSla / Math.max(xs.length, 1)) * 100)}% de sus leads fuera de 24 h`);
         if (leads && visitas / leads < 0.12) red.push(`solo ${Math.round((visitas / leads) * 100)}% de sus leads llega a visita`);
         return {
-            name, leads, respondidos: sum(xs, (p) => p.respondidos), fueraSla, respMedMin: rm,
+            name, leads, leadsHorario: Math.round(leads * 0.8), respondidos: sum(xs, (p) => p.respondidos), fueraSla, respMedMin: rm,
             visitas, cierres: ent(0, 4), comision: 0, busquedas: ent(4, 40),
             clientes: ent(3, 28), propsCompartidas: 1 + r() * 4, green, red,
             // en la red real ~6% de los asesores con volumen no tiene WhatsApp vinculado, y
@@ -243,6 +244,6 @@ export function demoData(): MBData {
         calidad: cal(props), calidadVenta: cal(V), calidadRenta: cal(R),
         falta: fal(iTodas), faltaVenta: fal(iVenta), faltaRenta: fal(iRenta),
         errores: errTipos, nErrores: conError.length,
-        zonas, demandaLabel: 'últimos 3 meses', asesores, props, fuera: [],
+        zonas, demandaLabel: 'últimos 3 meses', asesores, props, fuera: [], cierresComprador: [],
     };
 }
