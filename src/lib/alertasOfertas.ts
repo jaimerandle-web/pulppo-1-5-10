@@ -45,7 +45,8 @@ const STATUS: Record<string, TipoAlerta> = { offer_blocked: 'aceptada', closed: 
 
 const money = (n: number | null) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('es-MX'));
 const persona = (p?: Document | null) =>
-    [p?.firstName, p?.lastName].map((s) => String(s ?? '').trim()).filter(Boolean).join(' ') || '—';
+    // se limpia la puntuación suelta que a veces se captura como apellido ("Erika Cabrera .")
+    [p?.firstName, p?.lastName].map((s) => String(s ?? '').replace(/[\s.,-]+$/, '').trim()).filter(Boolean).join(' ') || '—';
 const fechaMx = (d: Date) =>
     d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Mexico_City' });
 
@@ -104,6 +105,14 @@ export async function fetchAlertasOfertas(horas = 72): Promise<AlertaOferta[]> {
     return out;
 }
 
+// apartado en $0 es "no capturado", no un dato: se omite y queda sólo la fecha esperada de cierre
+function lineaApartado(o: Document): string {
+    const partes: string[] = [];
+    if (o.reserveValue?.value > 0) partes.push(`🔒 Apartado ${money(o.reserveValue.value)}`);
+    if (o.expectedClosedAt instanceof Date) partes.push(`${partes.length ? '' : '📅 '}cierre esperado ${fechaMx(o.expectedClosedAt)}`);
+    return partes.join(' · ');
+}
+
 function armar(tipo: TipoAlerta, fecha: Date, o: Document, P: Document): AlertaOferta {
     const codigo = (P.internalId as string) || String(P._id);
     const inmobiliaria = P.company?.name || o.seller?.company?.name || '—';
@@ -128,10 +137,7 @@ function armar(tipo: TipoAlerta, fecha: Date, o: Document, P: Document): AlertaO
         `*${codigo}* · ${inmobiliaria} · KAM: ${kam}`,
         zona ? `📍 ${zona}` : '',
         `💰 ${tipo === 'cerrada' ? 'Cierre' : 'Oferta'} ${money(monto)} · publicada en ${money(precio)}${vsPrecio}`,
-        tipo === 'aceptada' && (o.reserveValue?.value || o.expectedClosedAt)
-            ? `🔒 Apartado ${money(o.reserveValue?.value ?? null)}` +
-              (o.expectedClosedAt instanceof Date ? ` · cierre esperado ${fechaMx(o.expectedClosedAt)}` : '')
-            : '',
+        tipo === 'aceptada' ? lineaApartado(o) : '',
         `👤 Vende: ${vende}`,
         `🤝 Trae comprador: ${compra}${compraInmo && compraInmo !== inmobiliaria ? ` (${compraInmo})` : ''}`,
         `🔗 <${url}|Ver propiedad>`
