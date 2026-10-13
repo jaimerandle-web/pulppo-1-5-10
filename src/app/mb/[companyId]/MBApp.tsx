@@ -6,6 +6,8 @@ import type { MBData, MBProp, MBFuera, MBCierreComprador, RespKey } from '@/lib/
 import MBAnalisis from './MBAnalisis';
 import MBDestacados from './MBDestacados';
 import MBDesempeno from './MBDesempeno';
+import MBBusquedas from './MBBusquedas';
+import { NURA_ID } from '@/lib/nura';
 import MBMercado from './MBMercado';
 import { tieneMercado } from '@/lib/mercadoPiloto';
 import MB1510 from './MB1510';
@@ -47,11 +49,11 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 // minutos → texto corto legible
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
-type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'mercado' | 'p1510' | 'analisis' | 'comoleer';
+type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'busquedas' | 'mercado' | 'p1510' | 'analisis' | 'comoleer';
 // El botón de menú en celular muestra en qué sección estás; sin esto sólo dice "Menú" y te
 // pierdes al navegar.
 const SECTION_LABEL: Record<Section, string> = {
-    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño', mercado: 'Mercado',
+    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño', busquedas: 'Búsquedas', mercado: 'Mercado',
     p1510: '1·5·10', analisis: 'Generador de análisis', comoleer: 'Cómo leer esto',
 };
 
@@ -61,6 +63,9 @@ const CON_DESTACADOS = new Set(['649083c1c7528092d68c84c4']);
 // Desempeño está encendido para TODAS las inmobiliarias (Lau dio el visto bueno, oct-2026). La
 // demo no tiene datos reales en Mongo, así que ahí no se muestra.
 const conDesempeno = (companyId: string) => companyId !== 'demo';
+// Búsquedas: tablero propio de NURA (hand-over de Sofía, oct-2026). Hay TRES compañías «Nura» en Mongo;
+// la del /mb y la de las búsquedas es 69ea8f6d35a3ebb3a075d405 («NURA», la única con inventario).
+const conBusquedas = (companyId: string) => companyId === NURA_ID;
 type Seg = '' | 'p1510' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre'
     | 'sinVideo' | 'pocasFotos' | 'sinAmenidades' | 'sinAcm' | 'sinTour' | 'conErrores' | 'conOrtografia';
 // El reporte tiene dos versiones. Master Brokers abre la SIMPLE, que esconde Difusión y la
@@ -583,7 +588,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <span style={{ fontSize: 13.5, fontWeight: 600 }}>{SECTION_LABEL[section]}</span>
                 </button>
                 <div className={`mb-nav${menuAbierto ? ' abierto' : ''}`}>
-                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{conDesempeno(d.companyId) && nav('desempeno', 'Desempeño')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{conDesempeno(d.companyId) && nav('desempeno', 'Desempeño')}{conBusquedas(d.companyId) && nav('busquedas', 'Búsquedas')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 </div>
                 <div className="mb-side-pie" style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
@@ -887,6 +892,20 @@ export default function MBApp({ d }: { d: MBData }) {
                             destacar y guarda: la respuesta queda registrada con tu nombre y la fecha.
                         </div>
                         <MBDestacados nombre={d.name} />
+                    </div>
+                )}
+
+                {section === 'busquedas' && conBusquedas(d.companyId) && (
+                    <div>
+                        <div style={eyebrow}>Búsquedas</div><div style={accent} />
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
+                            ¿Qué pasa con tus búsquedas?
+                        </div>
+                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 660 }}>
+                            Todas las búsquedas de tus asesores: cuántas llegan a visita, oferta y cierre, por qué se
+                            cancelan, de qué fuente vienen y quién les da seguimiento. Leído en vivo.
+                        </div>
+                        <MBBusquedas companyId={d.companyId} />
                     </div>
                 )}
 
