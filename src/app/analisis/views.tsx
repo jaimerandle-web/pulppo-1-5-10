@@ -569,7 +569,7 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
         const pv = vista === 'Total' ? ('prev' in r ? r.prev : totPrev) : null;
         const L = pick(vista, r.leads), R = pick(vista, r.resp), V = pick(vista, r.visitas);
         const O = pick(vista, r.ofertas), C = pick(vista, r.cierres);
-        // atención (sin responder, abandono, fuera de 24 h) sobre los leads de 9:00 a 20:59 hora México
+        // atención (sin responder, abandono, fuera de 24 h) sobre los leads de 8 am a 8 pm hora México
         const LB = pick(vista, r.lab);
         const sla = pick(vista, r.fueraSla), sin = LB - R;
         const med = 'respMinMed' in r ? pickN(vista, r.respMinMed, r.resp) : totMed;
@@ -681,7 +681,7 @@ export function AsesoresView({ d }: { d: AnalisisData }) {
                 // recap de la sección: los hechos que se ven en la tabla, dichos en una línea
                 const conVol = d.asesores.filter((r) => r.leads.sale + r.leads.rent >= 10);
                 if (!conVol.length) return null;
-                // sobre los leads de horario (9:00–20:59 MX), como la tabla
+                // sobre los leads de horario (8 am – 8 pm MX), como la tabla
                 const malSla = conVol.filter((r) => {
                     const LB = r.lab.sale + r.lab.rent;
                     return LB > 0 && (r.fueraSla.sale + r.fueraSla.rent) / LB >= 0.25;

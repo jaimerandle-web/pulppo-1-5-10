@@ -195,7 +195,7 @@ export default function Presentacion({
                                 ))}
                             </tbody>
                         </table>
-                        <Nota>Sobre leads que entraron entre 9:00 y 20:59 hora de México.</Nota>
+                        <Nota>Sobre leads que entraron entre 8 am y 8 pm hora de México.</Nota>
                     </>
                 )}
 
@@ -336,7 +336,7 @@ export default function Presentacion({
 
                 <div style={{ marginTop: 30, paddingTop: 12, borderTop: `1px solid ${LGT}`, fontSize: 10, color: GRY, lineHeight: 1.6 }}>
                     Fuente: base de datos de Pulppo, consultada en vivo. Excluye cuentas de prueba.
-                    Atención medida sobre leads en horario 9:00–20:59 de México.
+                    Atención medida sobre leads en horario 8 am – 8 pm de México.
                 </div>
             </div>
             )}

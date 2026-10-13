@@ -122,7 +122,7 @@ export interface Bloque {
      *  igual que los cortes del periodo, para que la suma cuadre con el total. */
     porDia: {
         dias: string[];
-        /** n = leads del día · lab = de ellos, los que entraron 9:00–20:59 MX · sin = de esos, sin respuesta del asesor */
+        /** n = leads del día · lab = de ellos, los que entraron 8 am – 8 pm MX · sin = de esos, sin respuesta del asesor */
         series: Array<{ key: string; nombre: string; n: number[]; lab: number[]; sin: number[] }>;
     };
 }
@@ -280,7 +280,7 @@ async function bloque(
         }
         const oper = dig(l, 'property', 'listing', 'operation');
         const h = new Date(ca.getTime() - MX_MS).getUTCHours();
-        const lab = h >= 9 && h <= 20;
+        const lab = h >= 8 && h <= 19;
         const ans = l.answeredAt;
         const mins = isDate(ans) ? (ans.getTime() - ca.getTime()) / 60000 : null;
         const cidRaw = dig(l, 'contact', '_id');

@@ -329,8 +329,7 @@ Port del reporte de Lau (KAM; app Flask «dashboard-inmobiliarias», nunca publi
 `canAccessCompany`), UI `src/app/mb/[companyId]/MBDesempeno.tsx`. Sub-pestañas Comercial y Cierres;
 el PDF imprime las dos con las listas abiertas.
 
-- «Asesor sin responder» en Desempeño = leads de 8 am a 8 pm (pedido de Lau); /portales y el resto de /mb
-  usan 9:00–20:59.
+- Horario de atención en TODO /portales y /mb: leads de 8 am a 8 pm (8:00–19:59 MX), pedido de Lau oct-2026.
 - Definiciones de Lau, tal cual: **leads únicos** (contacto + propiedad), visitas por `startTime`
   (confirmadas + pendientes), **Funnel comercial | Búsquedas** por cambio de etapa de
   `searches.status.history` (NO es la cohorte de /portales, a propósito), cierres del LADO de la

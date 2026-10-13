@@ -2,6 +2,7 @@
 // Fase 1: Inventario (P1) + Precio × calidad (P2). Lee Mongo en vivo (read-only).
 // Las secciones YoY / Top 10 / destacados / funnel se irán agregando después.
 import { VISITA_OK, cierresInmobiliaria, enHorario } from './mbComun';
+import { CANALES_TODOS, canalDeLead } from './portales/inmobiliaria';
 import { ObjectId, type Db, type Document } from 'mongodb';
 import { getDb } from './data';
 import { refComps, idxPool, type PoolItem, type Subj } from './comparables';
@@ -90,21 +91,11 @@ export interface AnalisisConfig {
 // Las opciones de los selectores viven en src/lib/ventanas.ts (sin dependencias, para que los
 // formularios 'use client' las puedan importar sin arrastrar el driver de mongodb al navegador).
 
-// clasificador de fuente con etiquetas limpias (alineadas a los chips del form)
-const srcLabel = (s: unknown): string => {
-    const t = String(s || '').toLowerCase();
-    if (t.includes('inmueble') || t.includes('i24')) return 'Inmuebles24';
-    if (t.includes('meli') || t.includes('mercado')) return 'MercadoLibre';
-    if (t.includes('easybroker')) return 'EasyBroker';
-    if (t.includes('whats')) return 'WhatsApp';
-    if (t.includes('pulppo')) return 'Pulppo';
-    if (t.includes('propiedades.com')) return 'propiedades.com';
-    if (t.includes('face') || t.includes('insta') || t.includes('tiktok')) return 'Redes';
-    if (t.includes('tel') || t.includes('phone')) return 'Teléfono';
-    if (t.includes('lamudi')) return 'Lamudi';
-    if (t.includes('web')) return 'Website';
-    return 'Otros';
-};
+// Fuente de un lead: la MISMA clasificación que /portales (canalDeLead: NURA aparte; Tokko, Teléfono
+// Pulppo, Doorvel, Sitio propio con su nombre). Lo que no cae en ningún canal sale como «Otros», que es
+// el nombre del chip del formulario de /analisis.
+const NOMBRE_CANAL = new Map(CANALES_TODOS.map(([n, k]) => [k, n]));
+const srcLabel = (s: unknown, empresa?: unknown): string => NOMBRE_CANAL.get(canalDeLead(s, empresa)) ?? 'Otros';
 
 // ---------- ventana de DESEMPEÑO + su base de comparación ----------
 const MES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -191,7 +182,7 @@ export type PorOp = { sale: number; rent: number };
 export interface AsesorRow {
     id: string; name: string;
     leads: PorOp;                 // leads únicos que le tocaron (contacto + propiedad)
-    lab: PorOp;                   // de esos, los que entraron en horario (9:00–20:59 MX): base de la atención
+    lab: PorOp;                   // de esos, los que entraron en horario (8 am – 8 pm MX): base de la atención
     resp: PorOp;                  // de los de horario, los que respondió
     fueraSla: PorOp;              // respondidos DESPUÉS de 24 h + los que nunca respondió
     respMinAvg: { sale: number | null; rent: number | null };   // minutos a la 1ª respuesta (promedio)
@@ -745,7 +736,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const seenA = new Set<string>(), seenB = new Set<string>();   // dedup por período de comparación
     const srcCount: Record<string, number> = {};   // leads únicos por fuente (ventana de desempeño)
     const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: leadScanStart, $lt: PERF.end } },
-        { projection: { 'property._id': 1, 'property.agent': 1, agent: 1, answeredAt: 1, createdAt: 1, source: 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1 } });
+        { projection: { 'property._id': 1, 'property.agent': 1, agent: 1, answeredAt: 1, createdAt: 1, source: 1, 'company.name': 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1 } });
     for await (const l of lc) {
         const d = asDt(l.createdAt); if (!d) continue;
         const pid = String(gv(l, 'property', '_id'));
@@ -766,13 +757,13 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
                 if (broker) compBroker++; else compCliente++;
                 const ans = asDt(l.answeredAt);
                 if (l.answeredAt) contByOp[op]++;
-                const sl = srcLabel(l.source); srcCount[sl] = (srcCount[sl] || 0) + 1;
+                const sl = srcLabel(l.source, gv(l, 'company', 'name')); srcCount[sl] = (srcCount[sl] || 0) + 1;
                 // asesor RESPONSABLE del lead (agent asignado); si no hay, el de la propiedad
                 const la = pickAgent(gv(l, 'agent'), gv(l, 'property', 'agent'), pid2agent.get(pid));
                 const e = accInterno(la);
                 if (e) {
                     e.leads[op]++;
-                    // atención: sólo leads que entraron de 9:00 a 20:59 hora México
+                    // atención: sólo leads que entraron de 8 am a 8 pm hora México
                     if (enHorario(d)) {
                     e.lab[op]++;
                     if (ans) {

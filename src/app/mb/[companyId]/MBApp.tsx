@@ -172,9 +172,9 @@ function Funnel({ vistas, leads, respondidos, visitas, ofertas, cierres, respMed
         <div>
             <div style={{ fontSize: 11, color: GRY, marginBottom: 10 }}>Sobre las <b>{f(n)}</b> propiedades filtradas. Tasas contra el paso anterior.</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                {/* la atención se mide sólo con leads de 9:00 a 20:59 (hora México), como en /portales */}
-                {kpi('Tasa de respuesta', rate(lab - labSin, lab), `${f(labSin)} sin responder · 9 a 21 h`, lab && (lab - labSin) / lab < 0.8 ? RED : BLK)}
-                {kpi('1ª respuesta (mediana)', dur(respMed), 'meta ≤ 24 horas · 9 a 21 h', respMed != null && respMed > 1440 ? RED : BLK)}
+                {/* la atención se mide sólo con leads de 8 am a 8 pm (hora México), como en /portales */}
+                {kpi('Tasa de respuesta', rate(lab - labSin, lab), `${f(labSin)} sin responder · 8 am a 8 pm`, lab && (lab - labSin) / lab < 0.8 ? RED : BLK)}
+                {kpi('1ª respuesta (mediana)', dur(respMed), 'meta ≤ 24 horas · 8 am a 8 pm', respMed != null && respMed > 1440 ? RED : BLK)}
                 {kpi('Tasa de visita', rate(visitas, leads), 'visitas ÷ leads únicos')}
                 {kpi('Lead → cierre', leads ? `${((100 * cierres) / leads).toFixed(2)}%` : '—', 'cierres ÷ leads únicos')}
             </div>
@@ -479,7 +479,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                     <td style={{ ...td, textAlign: 'right', color: p.respMedMin == null ? GRY : p.respMedMin > 1440 ? RED : BLK }}>{dur(p.respMedMin)}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
-                                    <td style={td}>{(() => { const t = accionesDe(p); return t.length ? t.map((x) => diagPill(x, tipOrto(p, x))) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
+                                    <td style={td}>{(() => { const t = accionesDe(p); return t.length ? <>{t.map((x) => diagPill(x, tipOrto(p, x)))}{ORTO[p.code] && <div style={{ fontSize: 10, color: RED, marginTop: 4, whiteSpace: 'normal', lineHeight: 1.35 }}>{ORTO[p.code].slice(0, 3).map((e) => `${e.palabra} → ${e.bien}`).join(' · ')}{ORTO[p.code].length > 3 ? ` · y ${ORTO[p.code].length - 3} más (ver ficha)` : ''}</div>}</> : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
                                     <td className="no-print" style={{ ...td, textAlign: 'right' }}><a href={urlFicha(p)} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
                                 </tr>
                             ))}
@@ -611,10 +611,10 @@ export default function MBApp({ d }: { d: MBData }) {
                             <Kpi label="Inventario activo" value={f(d.nProps)} sub={`${d.nVenta} venta · ${d.nRenta} renta`} />
                             <Kpi label="Leads únicos · últimos 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED}
                                 sub={`${dl >= 0 ? '▲' : '▼'} ${dlPct == null ? `${dl >= 0 ? '+' : ''}${f(dl)}` : `${dl >= 0 ? '+' : ''}${dlPct}%`} vs. los 30 días anteriores (${f(d.leads30prev)}) · venta ${f(d.leads30V)} · renta ${f(d.leads30R)}`} />
-                            <Kpi label="Sin responder · últimos 30 días" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`leads de 9 a 21 h · venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`} />
+                            <Kpi label="Sin responder · últimos 30 días" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`leads de 8 am a 8 pm · venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`} />
                             <Kpi label="1ª respuesta (mediana · 30 días)" value={dur(d.respMedMin)}
                                 color={d.respMedMin == null ? GRY : d.respMedMin <= 60 ? SEA : d.respMedMin > 1440 ? RED : BLK}
-                                sub={`leads de 9 a 21 h · la mitad se contesta antes de eso · el grupo más común es ${RESP_LBL[domResp].toLowerCase()} (${RESP_RANGO[domResp]})`} />
+                                sub={`leads de 8 am a 8 pm · la mitad se contesta antes de eso · el grupo más común es ${RESP_LBL[domResp].toLowerCase()} (${RESP_RANGO[domResp]})`} />
                         </div>
 
                         {/* Venta vs renta */}
@@ -955,7 +955,7 @@ export default function MBApp({ d }: { d: MBData }) {
                         <div>
                             {dfn('Inventario', 'tus propiedades publicadas en Pulppo (precio, superficie, calidad de ficha, destacado).')}
                             {dfn('Leads únicos', 'contactos de todos los canales, contando una vez a la misma persona sobre la misma propiedad (si escribe tres veces por el mismo depa, es 1). Es el mismo conteo que Desempeño.')}
-                            {dfn('Sin responder y 1ª respuesta', 'sólo leads que entraron de 9:00 a 20:59 (hora de México) y del periodo que estás viendo: de madrugada nadie contesta y el histórico esconde cómo vas hoy. 1ª respuesta = el tiempo hasta la primera respuesta del asesor; se muestra la MEDIANA.')}
+                            {dfn('Sin responder y 1ª respuesta', 'sólo leads que entraron de 8 am a 8 pm (hora de México) y del periodo que estás viendo: de madrugada nadie contesta y el histórico esconde cómo vas hoy. 1ª respuesta = el tiempo hasta la primera respuesta del asesor; se muestra la MEDIANA.')}
                             {dfn('Visitas', 'por la FECHA DE LA VISITA (no la de cuándo se agendó), confirmadas y pendientes de confirmar; una misma persona no cuenta doble en la misma propiedad.')}
                             {dfn('Cierres', 'operaciones cerradas o en cobranza, por fecha de cierre, de los DOS lados: donde tu inmobiliaria vende la propiedad y donde trae al comprador sobre una propiedad de otra (ésas no tienen fila en el listado, pero sí suman en el funnel). Son los mismos cierres que Desempeño. El dinero es la comisión COBRADA de tu lado.')}
                             {dfn('Vistas', 'vistas del anuncio en los sitios de Pulppo (pulppo.com y broker.pulppo.com) y en Inmuebles24. NO incluye otros portales (Mercado Libre, propiedades.com, etc.): es lo único que hoy nos reporta vistas.')}

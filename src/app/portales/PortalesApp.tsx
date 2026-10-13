@@ -204,7 +204,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
 
                         <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, fontWeight: 400, margin: '0 0 4px' }}>Atención</h2>
                         <div style={{ fontSize: 11.5, color: '#666', marginBottom: 10 }}>
-                            Sólo leads que entraron entre 9:00 y 20:59 de México. Sin ese filtro, los de
+                            Sólo leads que entraron entre 8 am y 8 pm de México. Sin ese filtro, los de
                             madrugada disparan el «sin responder» y el número deja de significar algo.
                             El «sin responder» va partido por asesor <b>con</b> y <b>sin</b> WhatsApp vinculado: sin vincular,
                             el asesor contesta por fuera y Pulppo no lo registra, así que su porcentaje es en buena parte

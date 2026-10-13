@@ -2,6 +2,7 @@
 // imprimible on-brand con salud del anuncio, funnel, mercado/competencia y plan de acción.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb, classifySource } from './data';
+import { revisarAviso } from './ortografia';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 
@@ -441,6 +442,9 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const title = (dig(P, 'listing', 'title') as string) ?? '';
     const desc = (dig(P, 'listing', 'description') as string) ?? (dig(P, 'listing', 'extra', 'description') as string) ?? '';
     const words = desc.trim() ? desc.trim().split(/\s+/).length : 0;
+    // faltas de ortografía del título y la descripción (mismo corrector que /mb → «¡Ojo con estas!»)
+    const orto = await revisarAviso({ titulo: title, descripcion: desc, calle: dig(P, 'address', 'street') });
+    const ortoTxt = (n: number) => orto.slice(0, n).map((e) => `${e.palabra} → ${e.bien}${e.tipo === 'dedo' ? ' (posible)' : ''}`).join(' · ') + (orto.length > n ? ` · y ${orto.length - n} más` : '');
     // Ale, 17-sep: el mínimo va en CARACTERES y son 400. Medido sobre 6,000 publicadas, la
     // descripción mediana tiene 833 caracteres (131 palabras) y sólo el 1% queda por debajo
     // de 400 — o sea, este piso casi nunca se va a marcar. Lo que de verdad pinta amarillo es
@@ -733,6 +737,13 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     }
     // El piso de caracteres necesita su propia recomendación: sin esto la salud del anuncio
     // marcaba "corta" en amarillo y no había ninguna tarjeta que dijera qué hacer al respecto.
+    if (orto.length) {
+        cand.push({
+            w: 39, title: `Corregir ortografía (${orto.length} ${orto.length === 1 ? 'palabra' : 'palabras'})`, who: 'Marketing', when: 'Esta semana',
+            detail: `En ${[...new Set(orto.map((e) => (e.donde === 'título' ? 'el título' : 'la descripción')))].join(' y ')}: ${ortoTxt(12)}. Un aviso con faltas se ve descuidado y baja la confianza del comprador.`,
+            umbral: 'Sin costo. Se corrige en una sesión.'
+        });
+    }
     if (chars > 0 && chars < MIN_CHARS) {
         cand.push({
             w: 43, title: 'Ampliar la descripción', who: 'Marketing', when: 'Esta semana',
@@ -770,6 +781,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const health = [
         rowH('Calidad del anuncio', q != null ? `${q.toFixed(0)}/100` : '—', q != null && q >= 85 ? 'ok' : 'warn'),
         rowH('Título', esc(title.slice(0, 60)) || '—', tipoOk && opOk && zonaOk ? 'ok' : 'warn', tcheck),
+        rowH('Ortografía', orto.length ? `${orto.length} ${orto.length === 1 ? 'falta' : 'faltas'}` : 'sin faltas', orto.length ? 'warn' : 'ok', esc(ortoTxt(4))),
         rowH('Descripción', `${chars} caracteres · ${words} palabras`,
             chars >= MIN_CHARS && words <= 200 ? 'ok' : 'warn',
             chars < MIN_CHARS ? `corta: el mínimo son ${MIN_CHARS} caracteres`

@@ -89,7 +89,7 @@ const DEF = {
     inversion: <>Sale del Sheet «Investment Strategy 2026», bloque de resultados de cada mes. MeLi = base $152,800 + 6% de la comisión del deal.</>,
     sinRespuesta: <>Tiene teléfono válido y se le puede escribir, pero no vemos que haya contestado. El asesor responde desde su WhatsApp y ese chat no se guarda en Pulppo: <b>no es un lead perdido</b>, es un lead sin conversación visible.</>,
     brokers: <>Leads cuyo contacto está etiquetado como broker en Pulppo: no son compradores finales.</>,
-    respuesta: <>Mediana de minutos a la primera respuesta, sólo de leads que entraron de 9:00 a 20:59 (hora de México).</>,
+    respuesta: <>Mediana de minutos a la primera respuesta, sólo de leads que entraron de 8 am a 8 pm (hora de México).</>,
     descartados: <>Leads cuya búsqueda se cerró como descartada o cancelada. El descarte madura: un periodo reciente siempre se ve más limpio de lo que va a terminar, por eso la variación se apaga si el periodo cerró hace menos de 45 días.</>,
     comision: <>Comisión total de los cierres del periodo (de la operación, no sólo la regalía).</>,
     valor: <>Suma del valor de las propiedades cerradas en el periodo.</>,
@@ -677,7 +677,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}
                 <Seccion titulo="Leads por fuente" onCopiar={() => copiar([['Fuente', 'Leads', 'Personas', 'Venta', 'Renta', '% broker', '< 60 min', '1ª resp. (min)'], ...A.fuentes.map((x) => [x.nombre, x.leads, x.unicos, x.venta, x.renta, x.pctBroker, x.pctLt60, x.respMed])])}
                     sub="Cuántos llegan de cada canal y qué tan rápido se contestan."
-                    info={<><b>% broker</b>: {DEF.brokers} <b>&lt; 60 min</b> y <b>1ª resp.</b>: sólo leads que entraron de 9:00 a 20:59 de México. El «sin responder» partido por WhatsApp vinculado / no vinculado está en «La semana».</>}>
+                    info={<><b>% broker</b>: {DEF.brokers} <b>&lt; 60 min</b> y <b>1ª resp.</b>: sólo leads que entraron de 8 am a 8 pm de México. El «sin responder» partido por WhatsApp vinculado / no vinculado está en «La semana».</>}>
                     <Tabla head={['Fuente', 'Leads', 'Personas', 'Venta', 'Renta', '% broker', '< 60 min', '1ª resp.']}>
                         {[...A.fuentes, T].map((x) => {
                             const c = x === T ? CT : buscar(C?.fuentes, x.key);

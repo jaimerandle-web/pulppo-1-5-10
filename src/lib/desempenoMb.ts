@@ -78,7 +78,7 @@ export interface DesempenoMb {
     /** leads únicos por asesor y mes (mapa de calor), por operación */
     porAsesor: Array<{ id: string; nombre: string; activo: boolean; meses: Record<string, Record<Op, number>> }>;
     /** atención: leads únicos que entraron de 8 am a 8 pm (8:00–19:59 MX) y cuántos quedaron sin respuesta del asesor.
-     *  Horario pedido por Lau (oct-2026) para Desempeño; /portales y el resto de /mb usan 9:00–20:59. */
+     *  Mismo horario en todo /portales y /mb (Lau, oct-2026). */
     atencion: Record<Op, { base: number; sin: number }>;
     /** foto de HOY: operaciones en oferta o contrato */
     ofertasActivas: Record<Op, number>;

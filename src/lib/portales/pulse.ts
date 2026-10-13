@@ -95,9 +95,9 @@ export async function pulseView(opts: { operacion?: 'todas' | 'sale' | 'rent'; n
                 const arr = weekly.get(canal) ?? weekly.set(canal, Array(nweeks).fill(0)).get(canal)!;
                 arr[i] += 1;
                 colocado = true;
-                // Atención sólo en horario laboral de México (9:00–20:59).
+                // Atención sólo en horario laboral de México (8 am – 8 pm).
                 const hh = new Date(ca.getTime() - 6 * 3600 * 1000).getUTCHours();
-                if (hh >= 9 && hh <= 20) {
+                if (hh >= 8 && hh <= 19) {
                     resp[i].tot += 1;
                     const ans = l.answeredAt;
                     const sinR = !isDate(ans);

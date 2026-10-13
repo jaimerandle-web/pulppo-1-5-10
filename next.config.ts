@@ -8,7 +8,11 @@ const nextConfig: NextConfig = {
     allowedDevOrigins: ['127.0.0.1', 'localhost'],
     // El diccionario del corrector ortográfico se lee de disco en el servidor: sin esto Vercel no lo
     // empaca en la función y /api/mb-ortografia truena con ENOENT.
-    outputFileTracingIncludes: { '/api/mb-ortografia': ['./src/lib/ortografia/**'] },
+    outputFileTracingIncludes: {
+        '/api/mb-ortografia': ['./src/lib/ortografia/**'],
+        '/ficha/[id]': ['./src/lib/ortografia/**'],
+        '/ficha/[id]/comparables': ['./src/lib/ortografia/**'],
+    },
     // /inventario sirve el reporte estático self-contained (public/inventario.html).
     // Queda detrás del login por el middleware (la ruta no está en la allowlist del matcher).
     async rewrites() {

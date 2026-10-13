@@ -6,7 +6,7 @@ import { VISITA_OK, claveLead, cierresInmobiliaria, enHorario, ladoVendedor } fr
 // Métricas por propiedad (vistas/leads/visitas/ofertas) para un RANGO de fechas, para el filtro de
 // fechas del listado /mb. Devuelve mapas { propId: n }. Datos en vivo, read-only.
 // Mismas reglas que el resto de /mb (lib/mbComun.ts): leads ÚNICOS, atención sólo en horario
-// (9:00–20:59 MX), visitas por fecha de la visita (confirmadas + pendientes) y los cierres de
+// (8 am – 8 pm MX), visitas por fecha de la visita (confirmadas + pendientes) y los cierres de
 // Desempeño (ambos lados, sin duplicar). Las ofertas siguen por fecha de creación (Ale: el funnel
 // se queda acumulado, no por cohorte).
 export const dynamic = 'force-dynamic';

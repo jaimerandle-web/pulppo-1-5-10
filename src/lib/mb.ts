@@ -53,7 +53,7 @@ export interface MBProp {
     precio: number | null; estado: string; demanda: number; vsOferta: number | null; vsCierres: number | null;
     compite: number | null; calidad: string; dias: number | null; mesesPub: number | null;
     vistas: number; leads: number; respondidos: number; visitas: number; ofertas: number; cierres: number;
-    /** leads únicos que entraron 9:00–20:59 MX y, de ésos, cuántos siguen sin respuesta (tasa de respuesta) */
+    /** leads únicos que entraron 8 am – 8 pm MX y, de ésos, cuántos siguen sin respuesta (tasa de respuesta) */
     lab: number; labSin: number;
     /** mediana de 1ª respuesta en minutos, sólo leads en horario */
     respMedMin: number | null; oppScore: number; diag: string[]; tier: string;
@@ -73,7 +73,7 @@ export interface MBProp {
 }
 // Desempeño por asesor para el recap de flags del overview. Solo asesores de la inmobiliaria.
 export interface MBAsesor {
-    /** leads únicos (90 días); `respondidos`, `fueraSla` y `respMedMin` son sobre `leadsHorario` (9:00–20:59 MX) */
+    /** leads únicos (90 días); `respondidos`, `fueraSla` y `respMedMin` son sobre `leadsHorario` (8 am – 8 pm MX) */
     name: string; leads: number; leadsHorario: number; respondidos: number; fueraSla: number; respMedMin: number | null;
     visitas: number; cierres: number; comision: number; busquedas: number; clientes: number; propsCompartidas: number;
     green: string[]; red: string[];
@@ -348,7 +348,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const e = accA(agName(usable));
         if (!e) continue;
         e.leads++;
-        if (!enHorario(ca)) continue;           // la atención se mide sólo en horario (9:00–20:59 MX)
+        if (!enHorario(ca)) continue;           // la atención se mide sólo en horario (8 am – 8 pm MX)
         e.lab++;
         if (aa instanceof Date) {
             const mins = Math.max(0, (aa.getTime() - ca.getTime()) / 60000);
@@ -707,7 +707,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
         const med = median(e.mins);
         const pxc = e.clientes ? e.props / e.clientes : null;
         const green: string[] = [], red: string[] = [];
-        // respuesta y abandono, sobre sus leads en horario (9:00–20:59 MX); visitas, sobre todos
+        // respuesta y abandono, sobre sus leads en horario (8 am – 8 pm MX); visitas, sobre todos
         if (e.leads >= MIN_LEADS && e.lab > 0) {
             if (e.fueraSla / e.lab >= 0.25) red.push(`${Math.round((100 * e.fueraSla) / e.lab)}% de sus leads fuera de 24 h`);
             const sin = e.lab - e.resp;
