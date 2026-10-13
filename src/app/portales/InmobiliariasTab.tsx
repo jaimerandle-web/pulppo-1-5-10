@@ -818,6 +818,27 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 {A.cierres.n > A.cierres.lista.length && <div style={{ fontSize: 11, color: GRY, marginTop: 6 }}>Se muestran los {A.cierres.lista.length} más recientes de {f0(A.cierres.n)}.</div>}
             </Seccion>
 
+            {(A.cierres.sinRegistro?.length ?? 0) > 0 && (
+                <Seccion titulo="Cierres sin registro" onCopiar={() => copiar([['Fecha', 'Código', 'Operación', 'Inmobiliaria que vende', 'Asesor', 'Comprador traído por', 'ID operación'],
+                    ...A.cierres.sinRegistro.map((x) => [x.fecha, x.codigo, x.operacion, x.vende, x.asesor, x.comprador, x.id])])}
+                    sub="Cierres donde no hay ningún rastro de cómo llegó el comprador. Para que el KAM le pregunte al asesor y corrija la fuente en Pulppo."
+                    info={<>Al comprador lo trajo otra inmobiliaria (casi siempre un broker externo) y nadie capturó el canal: ni en la operación, ni en la búsqueda, ni hay un lead del comprador o del broker. Sólo el asesor sabe cómo llegó. Cuando corrija la fuente de la operación en Pulppo, este tablero la toma solo en la siguiente carga y el cierre sale de esta lista.</>}>
+                    <Tabla head={['Fecha', 'Propiedad', 'Operación', 'Inmobiliaria que vende', 'Asesor', 'Comprador traído por', 'ID operación']} min={880}>
+                        {A.cierres.sinRegistro.map((x) => (
+                            <tr key={'sr' + x.id + x.fecha}>
+                                <td style={td0}>{x.fecha}</td>
+                                <td style={td0}>{x.codigo ? <a href={`/ficha/${encodeURIComponent(x.codigo)}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>{x.codigo}</a> : '—'}</td>
+                                <td style={td0}>{x.operacion}</td>
+                                <td style={{ ...td0, whiteSpace: 'normal' }}>{x.vende ?? '—'}</td>
+                                <td style={{ ...td0, whiteSpace: 'normal' }}>{x.asesor}</td>
+                                <td style={td0}>{x.comprador ?? '—'}</td>
+                                <td style={{ ...td0, color: GRY }}>{x.id}</td>
+                            </tr>
+                        ))}
+                    </Tabla>
+                </Seccion>
+            )}
+
             </>)}
 
             {section === 'inmobiliarias' && (<>

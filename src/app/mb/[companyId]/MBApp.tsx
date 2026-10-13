@@ -58,13 +58,9 @@ const SECTION_LABEL: Record<Section, string> = {
 // La pestaña Destacados es un PILOTO con una sola cuenta: sólo aparece en Casane. Cuando se
 // abra al resto, basta agregar su companyId acá (o quitar el gate).
 const CON_DESTACADOS = new Set(['649083c1c7528092d68c84c4']);
-// Desempeño es otro PILOTO de una sola cuenta: sólo Andina Real Estate. Ojo con el id —
-// existe otra compañía llamada sólo "andina" (`6a545c24ecc8f755fefe2a7d`, creada el
-// 2026-07-13) que es un duplicado VACÍO. Ésta es la buena.
-const CON_DESEMPENO = new Set([
-    '62b4b39abd1764a48e09f01f',   // Andina Real Estate
-    '62bf49012367c77fc24d9220',   // Diamond House
-]);
+// Desempeño está encendido para TODAS las inmobiliarias (Lau dio el visto bueno, oct-2026). La
+// demo no tiene datos reales en Mongo, así que ahí no se muestra.
+const conDesempeno = (companyId: string) => companyId !== 'demo';
 type Seg = '' | 'p1510' | 'sinleads' | 'caroSinLeads' | 'visitasSinOferta' | 'mas12' | 'respLenta' | 'muchasVisitas' | 'altaDemanda' | 'ofertasSinCierre'
     | 'sinVideo' | 'pocasFotos' | 'sinAmenidades' | 'sinAcm' | 'sinTour' | 'conErrores' | 'conOrtografia';
 // El reporte tiene dos versiones. Master Brokers abre la SIMPLE, que esconde Difusión y la
@@ -587,7 +583,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <span style={{ fontSize: 13.5, fontWeight: 600 }}>{SECTION_LABEL[section]}</span>
                 </button>
                 <div className={`mb-nav${menuAbierto ? ' abierto' : ''}`}>
-                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{CON_DESEMPENO.has(d.companyId) && nav('desempeno', 'Desempeño')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{conDesempeno(d.companyId) && nav('desempeno', 'Desempeño')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 </div>
                 <div className="mb-side-pie" style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
@@ -894,7 +890,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     </div>
                 )}
 
-                {section === 'desempeno' && CON_DESEMPENO.has(d.companyId) && (
+                {section === 'desempeno' && conDesempeno(d.companyId) && (
                     <div>
                         <div style={eyebrow}>Desempeño</div><div style={accent} />
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>

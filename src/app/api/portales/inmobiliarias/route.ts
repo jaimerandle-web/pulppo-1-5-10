@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { asesoresDe, inmobiliariaView, opcionesInmobiliarias, type Comparar } from '@/lib/portales/inmobiliaria';
-import type { Operacion } from '@/lib/portales/view';
+import type { Operacion } from '@/lib/portales/metrics';
 
 // Pestaña "Inmobiliarias" de /portales. Sólo equipo Pulppo: el middleware no deja pasar a un master
 // broker a /api/portales (no está en su lista de APIs), así que no hace falta otra barrera aquí.

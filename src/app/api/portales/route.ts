@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
-import { portalesView, type Operacion } from '@/lib/portales/view';
+import type { Operacion } from '@/lib/portales/metrics';
 import { pulseView } from '@/lib/portales/pulse';
 import { historicoView } from '@/lib/portales/historico';
-import { periodoView } from '@/lib/portales/periodo';
-import { calidadView } from '@/lib/portales/calidad';
 import { inversionRango } from '@/lib/portales/inversion';
 import { dealMes } from '@/lib/portales/deal';
 
 export const dynamic = 'force-dynamic';
 
-// ⚠️ Tiempos medidos (10-sep-2026), en caliente: costo 20 s · pulso 9 s · histórico 3 s.
+// Vistas propias de esta ruta: la semana, el histórico, la inversión del Sheet y el deal de MeLi. Las
+// demás pestañas de /portales salen de /api/portales/inmobiliarias (un solo cálculo). Las vistas viejas
+// (costo, periodo, calidad) se borraron en oct-2026: ya ninguna pantalla las usaba.
+// ⚠️ Tiempos medidos (10-sep-2026), en caliente: pulso 9 s · histórico 3 s.
 // En FRÍO la primera consulta del proceso paga muchísimo más (se midió pulso en 228 s con el
 // working set de Atlas fuera de RAM). Por eso el límite va explícito y generoso, y por eso la
 // caché importa: quien entra después no vuelve a pagarlo.
@@ -22,57 +23,41 @@ const TTL = 10 * 60 * 1000;
 // crece sin freno. Se tira la más vieja.
 const MAX = 40;
 
-const VISTAS = ['costo', 'pulso', 'historico', 'periodo', 'calidad', 'inversion', 'deal'] as const;
+const VISTAS = ['pulso', 'historico', 'inversion', 'deal'] as const;
 type Vista = (typeof VISTAS)[number];
 const MES = /^\d{4}-(0[1-9]|1[0-2])$/;
-const FECHA = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 export async function GET(req: Request) {
     const u = new URL(req.url);
-    const vista = (u.searchParams.get('view') ?? 'costo') as Vista;
+    const vista = (u.searchParams.get('view') ?? 'pulso') as Vista;
     if (!VISTAS.includes(vista)) {
         return NextResponse.json({ error: `vista inválida: ${vista}` }, { status: 400 });
     }
     const desde = u.searchParams.get('desde') ?? '';
     const hasta = u.searchParams.get('hasta') ?? '';
-    const months = Math.min(Math.max(Number(u.searchParams.get('months') ?? 6), 1), 24);
     const opParam = u.searchParams.get('operacion') ?? 'todas';
     const operacion = (['todas', 'sale', 'rent'].includes(opParam) ? opParam : 'todas') as Operacion;
 
-    if ((vista === 'costo' || vista === 'calidad') && (desde || hasta)) {
-        if (!MES.test(desde) || !MES.test(hasta))
-            return NextResponse.json({ error: 'el rango de costo va en meses completos (YYYY-MM)' }, { status: 400 });
-        if (desde > hasta)
-            return NextResponse.json({ error: 'el rango termina antes de empezar' }, { status: 400 });
-    }
     if ((vista === 'inversion' && (!MES.test(desde) || !MES.test(hasta) || desde > hasta)) || (vista === 'deal' && !MES.test(desde))) {
         return NextResponse.json({ error: 'la inversión va en meses completos (YYYY-MM)' }, { status: 400 });
     }
-    if (vista === 'periodo' && (!FECHA.test(desde) || !FECHA.test(hasta))) {
-        return NextResponse.json({ error: 'el periodo va en fechas YYYY-MM-DD' }, { status: 400 });
-    }
 
-    const key = `${vista}|${desde}|${hasta}|${months}|${operacion}`;
+    const key = `${vista}|${desde}|${hasta}|${operacion}`;
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < TTL && u.searchParams.get('refresh') !== '1') {
         return NextResponse.json({ ...(hit.data as object), cacheAt: hit.at });
     }
     try {
-        const data = vista === 'costo'
-                ? await portalesView(desde && hasta ? { desde, hasta, operacion } : { months, operacion })
-            : vista === 'calidad'
-                ? await calidadView(desde && hasta ? { desde, hasta, operacion } : { months, operacion })
-            : vista === 'pulso' ? await pulseView({ operacion })
+        const data = vista === 'pulso' ? await pulseView({ operacion })
             : vista === 'historico' ? await historicoView({ operacion })
             : vista === 'deal' ? await dealMes(desde)
-            : vista === 'inversion' ? await (async () => {
+            : await (async () => {
                 const ms: string[] = [];
                 let [y, m] = desde.split('-').map(Number);
                 const [y1, m1] = hasta.split('-').map(Number);
                 while ((y < y1 || (y === y1 && m <= m1)) && ms.length < 24) { ms.push(`${y}-${String(m).padStart(2, '0')}`); [y, m] = m === 12 ? [y + 1, 1] : [y, m + 1]; }
                 return inversionRango(ms);
-            })()
-            : await periodoView(desde, hasta);
+            })();
         const at = Date.now();
         if (cache.size >= MAX) cache.delete(cache.keys().next().value as string);
         cache.set(key, { at, data });

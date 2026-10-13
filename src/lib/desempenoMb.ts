@@ -77,7 +77,8 @@ export interface DesempenoMb {
     sinOperacion: { leads: number; visitas: number };
     /** leads únicos por asesor y mes (mapa de calor), por operación */
     porAsesor: Array<{ id: string; nombre: string; activo: boolean; meses: Record<string, Record<Op, number>> }>;
-    /** atención: leads únicos que entraron 9:00–20:59 MX y cuántos quedaron sin respuesta del asesor */
+    /** atención: leads únicos que entraron de 8 am a 8 pm (8:00–19:59 MX) y cuántos quedaron sin respuesta del asesor.
+     *  Horario pedido por Lau (oct-2026) para Desempeño; /portales y el resto de /mb usan 9:00–20:59. */
     atencion: Record<Op, { base: number; sin: number }>;
     /** foto de HOY: operaciones en oferta o contrato */
     ofertasActivas: Record<Op, number>;
@@ -180,7 +181,7 @@ export async function desempenoMb(companyId: string, desde: string, hasta: strin
             const h = new Date(l.createdAt.getTime() - MX).getUTCHours();
             const ag = dig(l, 'agent', '_id');
             out.push({ op: opDe(dig(l, 'property', 'listing', 'operation')), at: l.createdAt, agent: ag ? String(ag) : null,
-                sinResp: h >= 9 && h <= 20 ? !isDate(l.answeredAt) : null });
+                sinResp: h >= 8 && h <= 19 ? !isDate(l.answeredAt) : null });
         }
         return out;
     })();

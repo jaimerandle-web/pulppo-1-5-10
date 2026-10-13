@@ -14,6 +14,9 @@ import { getDb } from '../data';
 /** Desfase fijo México (UTC−6, sin DST) en milisegundos. */
 export const MX_MS = 6 * 3600 * 1000;
 
+/** Filtro de operación de /portales. */
+export type Operacion = 'todas' | 'sale' | 'rent';
+
 // «Otros» dejó de ser un cajón (Ale, 2-oct-2026): eran ~490 leads/30d con nombre propio —
 // tokko 208 (Tokko Broker, llega por email) · teléfono principal 148 (conmutador de Pulppo) ·
 // doorvel 28 · Sitio Web/Website 31 (sitios propios). Lo que queda en «otros» son restos (~20).
@@ -148,32 +151,3 @@ export async function brokerContacts(ids: Iterable<string>): Promise<Set<string>
     return out;
 }
 
-// ── cierres + regalía por canal (atribución por buyer.source) ──────
-export interface CierreCanal { n: number; comision: number; regalia: number; gmv: number; ticket: number }
-
-/** Cierres (closed/paying con closedAt en [a,b)) por canal. regalia = pulppoComission.
- *  Para el 6% del deal MeLi NO se usa esto: ver `deal.ts`. */
-export async function cierresPorCanal(a: Date, b: Date): Promise<Record<string, CierreCanal>> {
-    const db = await getDb();
-    const agg: Record<string, CierreCanal> = {};
-    const mk = (): CierreCanal => ({ n: 0, comision: 0, regalia: 0, gmv: 0, ticket: 0 });
-    for (const k of [...KEYS, 'otros']) agg[k] = mk();
-    const cur = db.collection('operations').find({
-        'status.last': { $in: ['closed', 'paying'] }, closedAt: { $gte: a, $lt: b }, ...NOTP,
-    }, { projection: { 'buyer.source': 1, 'comission.value': 1, 'pulppoComission.value': 1, 'closeValue.value': 1 } });
-    for await (const o of cur) {
-        const k = classifySource(dig(o, 'buyer', 'source') as string);
-        const r = agg[k] ?? agg.otros;
-        r.n += 1;
-        r.comision += num(dig(o, 'comission', 'value'));
-        r.regalia += num(dig(o, 'pulppoComission', 'value'));
-        r.gmv += num(dig(o, 'closeValue', 'value'));
-    }
-    for (const k of Object.keys(agg)) {
-        const r = agg[k];
-        r.ticket = r.n ? Math.round(r.gmv / r.n) : 0;
-        r.comision = Math.round(r.comision);
-        r.regalia = Math.round(r.regalia);
-    }
-    return agg;
-}

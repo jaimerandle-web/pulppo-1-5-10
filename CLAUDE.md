@@ -322,13 +322,15 @@ guarde `demanda` y `competencia` con fecha (ver `PROPUESTA_MOTOR.md` en el repo 
 El doc canónico del criterio es `SPEC_SCORING.md` en
 `~/Documents/Pulppo/Análisis de Portales/analisis/optimizacion-avisos/`.
 
-## /mb → Desempeño (piloto: Andina y Diamond House, `CON_DESEMPENO` en MBApp.tsx)
+## /mb → Desempeño (encendido para TODAS las inmobiliarias desde oct-2026; no en la demo)
 
 Port del reporte de Lau (KAM; app Flask «dashboard-inmobiliarias», nunca publicada). Motor
 `src/lib/desempenoMb.ts`, API `/api/mb-desempeno?company&desde&hasta[&asesor]` (barrera
 `canAccessCompany`), UI `src/app/mb/[companyId]/MBDesempeno.tsx`. Sub-pestañas Comercial y Cierres;
 el PDF imprime las dos con las listas abiertas.
 
+- «Asesor sin responder» en Desempeño = leads de 8 am a 8 pm (pedido de Lau); /portales y el resto de /mb
+  usan 9:00–20:59.
 - Definiciones de Lau, tal cual: **leads únicos** (contacto + propiedad), visitas por `startTime`
   (confirmadas + pendientes), **Funnel comercial | Búsquedas** por cambio de etapa de
   `searches.status.history` (NO es la cohorte de /portales, a propósito), cierres del LADO de la
@@ -368,6 +370,10 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   clic» (el portal mandó sólo el evento «Vio teléfono»/«Contactó por WhatsApp»/«Es un lead de…»).
   La regla corre EN MONGO (`$regexMatch`). `interactions` NO tiene índice por `lead`: entrar por
   `lead.interaction` (= `_id`). `answeredAt` NO prueba que hubo mensaje.
+- **Cierres sin registro** (Funnel y cierres): la lista completa de cierres sin ningún rastro de fuente,
+  con inmobiliaria vendedora, asesor y quién trajo al comprador, para que el KAM corrija la fuente.
+- Las vistas viejas de la API (`costo`, `periodo`, `calidad`: view.ts, periodo.ts, calidad.ts) y
+  `cierresPorCanal` se BORRARON en oct-2026; `/api/portales` sólo sirve pulso, histórico, inversión y deal.
 - **Lista canónica** en `src/lib/portales/ordenInmobiliarias.ts` (copia de `_lista.txt`). Una
   inmobiliaria puede estar partida en varias compañías con el mismo nombre: se suman todas.
 - **Resumen → red flags** (`src/lib/portales/senales.ts`, lógica pura que corre en el cliente): por

@@ -269,7 +269,7 @@ function Comercial({ d, op, conAsesor }: { d: DesempenoMb; op: OpF; conAsesor: b
             <Kpi label="Visitas agendadas" value={f0(suma('confirmadas') + suma('pendientes'))} nota={`${f0(suma('confirmadas'))} confirmadas · ${f0(suma('pendientes'))} pendientes`} />
             <Kpi label="Ofertas activas" value={f0(ofertas)} nota="foto de hoy: en oferta o contrato" />
             <Kpi label="Cierres del periodo" value={f0(cierres.length)} nota={`${f0(cierres.filter((c) => c.op === 'sale').length)} venta · ${f0(cierres.filter((c) => c.op === 'rent').length)} renta`} />
-            <Kpi label="Asesor sin responder" value={aten.base ? `${Math.round((1000 * aten.sin) / aten.base) / 10}%` : '—'} nota="leads de 9:00 a 20:59" />
+            <Kpi label="Asesor sin responder" value={aten.base ? `${Math.round((1000 * aten.sin) / aten.base) / 10}%` : '—'} nota="leads de 8 am a 8 pm" />
         </div>
 
         <Seccion titulo="Leads únicos por mes" nota="Consultas de compradores o arrendatarios. Un mismo cliente sobre la misma propiedad cuenta una vez.">

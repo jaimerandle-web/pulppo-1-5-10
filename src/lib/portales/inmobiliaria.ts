@@ -31,7 +31,7 @@ import { F_SIN, fuenteCapturada, resolverFuentes } from './fuenteCierre';
 import { CANALES, KEY2NAME, NOT, NOTP, brokerContacts, classifySource, dig, isDate, num, oid } from './metrics';
 import { FAM_LBL, FAM_ORDEN, NO_ES_DESCARTE, etiquetaMotivo, familiaDe, motivoDe } from './descarte';
 import { ALIAS_IDS, ALIAS_INMO, ORDEN_INMOBILIARIAS, SIN_CUENTA, normInmo } from './ordenInmobiliarias';
-import type { Operacion } from './view';
+import type { Operacion } from './metrics';
 
 const DIA = 86400000;
 const MX_MS = 6 * 3600 * 1000;
@@ -88,6 +88,8 @@ export interface Cierre {
     fuente: string; lado: 'vendedor' | 'comprador' | 'ambos'; asesor: string;
     /** la fuente no venía en la operación: se dedujo del primer lead del comprador */
     inferida?: boolean;
+    /** inmobiliaria del lado vendedor (para la lista de «Sin registro» que revisan los KAMs) */
+    vende?: string | null;
     /** qué evidencia se usó cuando la fuente no venía en la operación (con fecha) */
     evidencia?: string | null;
     /** quién trajo al comprador si no fue la inmobiliaria: «Broker externo» / «Red Pulppo» (no es fuente) */
@@ -113,6 +115,8 @@ export interface Bloque {
         /** cuántos cierres venían sin fuente (`other`) y cuántos quedaron sin poder atribuir */
         sinFuenteOriginal: number; sinAtribuir: number;
         lista: Cierre[];
+        /** TODOS los cierres «Sin registro» del periodo: la lista que el KAM revisa con el asesor */
+        sinRegistro: Cierre[];
     };
     /** Leads por día y por fuente (la gráfica del Resumen y las banderas de día raro). Días en UTC,
      *  igual que los cortes del periodo, para que la suma cuadre con el total. */
@@ -577,6 +581,7 @@ async function bloque(
             porFuente: [...porFuente.values()].sort((a, b) => b.n - a.n),
             sinFuenteOriginal: cierresRes.sinFuenteOrig, sinAtribuir: lista.filter((x) => x.fuente === F_SIN).length,
             lista: lista.slice(0, 60),
+            sinRegistro: lista.filter((x) => x.fuente === F_SIN),
         },
         porDia: {
             dias: Array.from({ length: nDias }, (_, i) => ymd(new Date(A.getTime() + i * DIA))),
@@ -632,7 +637,13 @@ export async function cierresEntre(
     const fuentes = await resolverFuentes(opsU, {
         // con inmobiliaria elegida, «nuestra» = el comprador lo trajo ella; en la vista de red, la misma
         // inmobiliaria de los dos lados
-        esNuestra: (o) => { const bc = String(dig(o, 'buyer', 'company', '_id') ?? ''); return reqInmo ? reqInmo.has(bc) : !!bc && bc === String(dig(o, 'seller', 'company', '_id') ?? ''); },
+        // si quien VENDE es de fuera de Pulppo (asesor independiente), el comprador lo trajo la red: es nuestro
+        esNuestra: (o) => {
+            const bc = String(dig(o, 'buyer', 'company', '_id') ?? '');
+            if (reqInmo) return reqInmo.has(bc);
+            const sExt = dig(o, 'seller', 'company', 'external') === true || !dig(o, 'seller', 'company', '_id');
+            return !!bc && (bc === String(dig(o, 'seller', 'company', '_id') ?? '') || (sExt && dig(o, 'buyer', 'company', 'external') !== true));
+        },
         compsComprador: (o) => { const bc = String(dig(o, 'buyer', 'company', '_id') ?? ''); return reqInmo && reqInmo.has(bc) ? reqInmo : new Set([bc]); },
         compsVendedora: (o) => { const sc = String(dig(o, 'seller', 'company', '_id') ?? ''); return reqInmo && reqInmo.has(sc) ? reqInmo : new Set([sc]); },
     });
@@ -674,6 +685,7 @@ export async function cierresEntre(
                 return r.fuente === 'Inmuebles24' && nura ? { ...r, fuente: I24_NURA } : r;
             })(),
             lado: ladoX, asesor: nombres.join(' / ') || '—',
+            vende: String(dig(o, 'seller', 'company', 'name') ?? '').trim() || null,
         });
         if (!fuenteCapturada(dig(o, 'buyer', 'source'))) sinFuenteOrig += 1;
     }
