@@ -35,9 +35,12 @@ export async function middleware(req: NextRequest) {
         // veía "No se pudo calcular. No autorizado" justo en la herramienta hecha para ella.
         // La ruta ya no depende de este filtro para estar protegida: `lib/portales/acceso.ts`
         // recalcula contra Mongo que sólo pueda pedir SU inmobiliaria.
-        const mbApi = p.startsWith('/api/mb-analisis') || p.startsWith('/api/mb-metrics')
-            || p.startsWith('/api/avisos') || p.startsWith('/api/mb-desempeno')
-            || p.startsWith('/api/mb-1510') || p.startsWith('/api/mb-mercado');
+        // Todas las APIs del panel viven bajo /api/mb-* y CADA una valida con canAccessCompany que sólo
+        // pida su inmobiliaria. Antes la lista iba ruta por ruta y cada pestaña nueva nacía bloqueada para
+        // los master brokers (oct-2026: Búsquedas de NURA y ortografía salían vacías para Mariel, aunque
+        // para el equipo interno funcionaban). 🔴 Regla: toda ruta nueva /api/mb-* DEBE llamar a
+        // canAccessCompany antes de leer datos.
+        const mbApi = p.startsWith('/api/mb-') || p.startsWith('/api/avisos');
         // El titular de la inmobiliaria también es asesor: publica contenido igual que su
         // equipo. Sin esto tenía perfil dentro del bundle de Studio y ninguna ruta que lo
         // llevara a él. /inicio es el menú donde elige entre las dos herramientas que ya
