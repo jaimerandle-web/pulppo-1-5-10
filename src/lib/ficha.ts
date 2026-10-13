@@ -759,7 +759,12 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
         });
     }
 
-    const plan = cand.sort((a, b) => a.w - b.w).slice(0, 6);
+    const orden = cand.sort((a, b) => a.w - b.w);
+    const plan = orden.slice(0, 6);
+    // La ortografía SIEMPRE entra al plan (Ale, oct-2026: la tabla de /mb sólo trae la etiqueta y aquí
+    // es donde el asesor ve qué corregir). Si quedó fuera por el tope de 6, toma el último lugar.
+    const pasoOrto = orden.find((p) => p.title.startsWith('Corregir ortografía'));
+    if (pasoOrto && !plan.includes(pasoOrto)) plan[plan.length - 1] = pasoOrto;
 
     // ---------- HTML ----------
     const dot = (s: 'ok' | 'warn' | 'bad' | 'na') => `<span class="dt" style="background:${{ ok: SEA, warn: YEL, bad: RED, na: GRY }[s]}"></span>`;

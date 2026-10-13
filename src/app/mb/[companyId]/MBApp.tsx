@@ -484,7 +484,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                     <td style={{ ...td, textAlign: 'right', color: p.respMedMin == null ? GRY : p.respMedMin > 1440 ? RED : BLK }}>{dur(p.respMedMin)}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{f(p.visitas)}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{p.ofertas || ''}</td>
-                                    <td style={td}>{(() => { const t = accionesDe(p); return t.length ? <>{t.map((x) => diagPill(x, tipOrto(p, x)))}{ORTO[p.code] && <div style={{ fontSize: 10, color: RED, marginTop: 4, whiteSpace: 'normal', lineHeight: 1.35 }}>{ORTO[p.code].slice(0, 3).map((e) => `${e.palabra} → ${e.bien}`).join(' · ')}{ORTO[p.code].length > 3 ? ` · y ${ORTO[p.code].length - 3} más (ver ficha)` : ''}</div>}</> : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
+                                    <td style={td}>{(() => { const t = accionesDe(p); return t.length ? t.map((x) => diagPill(x, tipOrto(p, x))) : <span style={{ color: SEA, fontSize: 10.5, fontWeight: 700 }}>OK</span>; })()}</td>
                                     <td className="no-print" style={{ ...td, textAlign: 'right' }}><a href={urlFicha(p)} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>Abrir ↗</a></td>
                                 </tr>
                             ))}
