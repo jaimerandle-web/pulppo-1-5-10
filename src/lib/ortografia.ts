@@ -65,13 +65,15 @@ function revisarPalabra(lw: string): { bien: string; tipo: 'acento' | 'dedo' } |
     const sp = spell();
     let r: { bien: string; tipo: 'acento' | 'dedo' } | null = null;
     if (!sp.correct(lw)) {
-        // acento en la sílaba equivocada («creditó» → «crédito»): sin acento, o con el acento en otra vocal
+        // acento en la sílaba equivocada («creditó» → «crédito»): sin acento, o con el acento en otra vocal.
+        // Sale como «posible» (tipo 'dedo'): depende de la frase — «tramitamos tu creditó» es «crédito»,
+        // pero «se creditó» sería «acreditó». Quien corrige lee la frase antes de cambiarla.
         const base = sinAcento(lw);
         if (base !== lw) {
-            if (sp.correct(base)) r = { bien: base, tipo: 'acento' };
+            if (sp.correct(base)) r = { bien: base, tipo: 'dedo' };
             for (let i = 0; i < base.length && !r; i++) {
                 const c = ACC[base[i]] ? base.slice(0, i) + ACC[base[i]] + base.slice(i + 1) : null;
-                if (c && c !== lw && sp.correct(c)) r = { bien: c, tipo: 'acento' };
+                if (c && c !== lw && sp.correct(c)) r = { bien: c, tipo: 'dedo' };
             }
         }
         for (let i = 0; i < lw.length && !r; i++) {
