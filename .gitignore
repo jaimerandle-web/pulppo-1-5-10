@@ -23,3 +23,8 @@ next-env.d.ts
 
 # seguimiento de Pulppo Plus (contactado / pin) en local; en prod vive en Vercel Blob
 .plus/
+
+# Duplicados que crea Finder al copiar ("archivo 2.ts"): rompen el build si se suben
+* 2.ts
+* 2.tsx
+* 2.d.ts
