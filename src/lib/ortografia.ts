@@ -45,7 +45,8 @@ departamento departamentos casa casas oficina oficinas bodega bodegas alberca gi
 ubicado excelente espacios espacio amplio amplia amplios amplias luminoso luminosa iluminación ventilación construcción privada
 condominio escuelas centros comerciales encontrar mejores mejor cerca acceso calle avenida piso pisos nivel niveles precio renta venta
 abierta abierto abiertos estudio servicio servicios cisterna calentador tinaco medidor seguridad privada familia familiar
-pérgola parking encontrar`.split(/\s+/).filter(Boolean);
+pérgola parking encontrar mascota mascotas crédito créditos hipotecario hipotecaria contado
+escriturada escriturado escrituras predial vigilancia`.split(/\s+/).filter(Boolean);
 const ACC: Record<string, string> = { a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú' };
 const sinAcento = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const lev = (a: string, b: string) => {
@@ -64,6 +65,15 @@ function revisarPalabra(lw: string): { bien: string; tipo: 'acento' | 'dedo' } |
     const sp = spell();
     let r: { bien: string; tipo: 'acento' | 'dedo' } | null = null;
     if (!sp.correct(lw)) {
+        // acento en la sílaba equivocada («creditó» → «crédito»): sin acento, o con el acento en otra vocal
+        const base = sinAcento(lw);
+        if (base !== lw) {
+            if (sp.correct(base)) r = { bien: base, tipo: 'acento' };
+            for (let i = 0; i < base.length && !r; i++) {
+                const c = ACC[base[i]] ? base.slice(0, i) + ACC[base[i]] + base.slice(i + 1) : null;
+                if (c && c !== lw && sp.correct(c)) r = { bien: c, tipo: 'acento' };
+            }
+        }
         for (let i = 0; i < lw.length && !r; i++) {
             const c = ACC[lw[i]] ? lw.slice(0, i) + ACC[lw[i]] + lw.slice(i + 1) : lw[i] === 'n' ? lw.slice(0, i) + 'ñ' + lw.slice(i + 1) : null;
             if (c && sp.correct(c)) r = { bien: c, tipo: 'acento' };
