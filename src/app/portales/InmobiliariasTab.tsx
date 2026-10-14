@@ -537,7 +537,9 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
         { h: 'Sin respuesta · WhatsApp', v: (x) => x.pctSinRespuestaWa, flag: (x, c) => pv(x.pctSinRespuestaWa) - pv(c.pctSinRespuestaWa) >= 8 },
         { h: 'Descartados', v: (x) => x.pctDescartado, flag: (x, c) => pv(x.pctDescartado) - pv(c.pctDescartado) >= 8, madura: true },
         { h: 'Brokers', v: (x) => x.pctBroker, flag: (x, c) => pv(x.pctBroker) - pv(c.pctBroker) >= 8 },
-        { h: 'Ráfagas', v: (x) => x.pctRafaga, flag: (x, c) => pv(x.pctRafaga) >= 3 && pv(x.pctRafaga) >= 2 * pv(c.pctRafaga) },
+        // las ráfagas son normales en i24/MeLi (los portales mandan leads en tandas): dato, no alarma; sólo
+        // cuentan como una de las señales de «posible spam» (Ale, 14-oct-2026)
+        { h: 'Ráfagas', v: (x) => x.pctRafaga, flag: () => false },
         { h: 'Madrugada', v: (x) => x.pctMadrugada, flag: (x, c) => pv(x.pctMadrugada) >= 8 && pv(x.pctMadrugada) >= 1.8 * pv(c.pctMadrugada) },
         { h: 'Correos con dígitos', v: (x) => x.pctMailDigitos, flag: (x, c) => pv(x.pctMailDigitos) - pv(c.pctMailDigitos) >= 15 },
         { h: 'Contactos nuevos', v: (x) => x.pctContactoNuevo, flag: (x, c) => pv(x.pctContactoNuevo) - pv(c.pctContactoNuevo) >= 15 },

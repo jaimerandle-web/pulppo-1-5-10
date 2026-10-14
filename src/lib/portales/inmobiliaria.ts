@@ -879,7 +879,10 @@ async function enriquecer(A: Bloque, C: Bloque | null): Promise<void> {
         if (pct(p.nuevo, p.n) >= SPAM.nuevo) sen.push(`${Math.round(pct(p.nuevo, p.n))}% contactos nuevos`);
         const cf = convFuente.get(p.fuenteKey);
         if (cf != null && pct(p.conv, p.n) <= cf / 2) sen.push(`conversa el ${Math.round(pct(p.conv, p.n))}% (su fuente ${Math.round(cf)}%)`);
-        if (sen.length >= 2) spam.push({ pid: p.pid, codigo: null, fuente: p.fuente, fuenteKey: p.fuenteKey, inmo: p.inmo, n: p.n, prev, senales: sen, sev: sen.length >= 3 ? 'alta' : 'media' });
+        // «publicación nueva + madrugada» sola es la combinación más débil: marcaba publicaciones nuevas que
+        // simplemente atraen mucho. Con esas dos, se pide una tercera señal (Ale, 14-oct-2026).
+        const soloNuevaYMadrugada = sen.length === 2 && sen.some((x) => x.startsWith('publicación nueva')) && sen.some((x) => x.endsWith('de madrugada'));
+        if (sen.length >= 2 && !soloNuevaYMadrugada) spam.push({ pid: p.pid, codigo: null, fuente: p.fuente, fuenteKey: p.fuenteKey, inmo: p.inmo, n: p.n, prev, senales: sen, sev: sen.length >= 3 ? 'alta' : 'media' });
     }
     spam.sort((a, b) => (a.sev === b.sev ? b.n - a.n : a.sev === 'alta' ? -1 : 1));
     // códigos de propiedad: spam + publicaciones del detalle
