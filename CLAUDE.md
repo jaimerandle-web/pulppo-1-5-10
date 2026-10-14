@@ -385,6 +385,9 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   con inmobiliaria vendedora, asesor y quién trajo al comprador, para que el KAM corrija la fuente.
 - Las vistas viejas de la API (`costo`, `periodo`, `calidad`: view.ts, periodo.ts, calidad.ts) y
   `cierresPorCanal` se BORRARON en oct-2026; `/api/portales` sólo sirve pulso, histórico, inversión y deal.
+- **«Sin respuesta» por canal** (`canalContacto` en inmobiliaria.ts: medium + mensaje de pcom): el KPI y las
+  alertas usan SÓLO WhatsApp/formulario (`pctSinRespuestaWa`, confiable). Teléfono va aparte como «sin contacto
+  visible»: la llamada va al celular del asesor y no se registra (i24 oct-2026: 22.6% WA vs 73.3% teléfono).
 - **Lista canónica** en `src/lib/portales/ordenInmobiliarias.ts` (copia de `_lista.txt`). Una
   inmobiliaria puede estar partida en varias compañías con el mismo nombre: se suman todas.
 - **Resumen → red flags** (`src/lib/portales/senales.ts`, lógica pura que corre en el cliente): por

@@ -87,7 +87,7 @@ const DEF = {
     roi: <>Regalía de los cierres de canales pagados ÷ inversión de esos canales. Sólo se calcula con meses completos, sin inmobiliaria y con «Todo» en operación: la inversión es de toda la red.</>,
     cpl: <>Inversión ÷ leads de los canales que cuestan (WhatsApp, Pulppo, sitio, etc. no entran).</>,
     inversion: <>Sale del Sheet «Investment Strategy 2026», bloque de resultados de cada mes. MeLi = base $152,800 + 6% de la comisión del deal.</>,
-    sinRespuesta: <>Tiene teléfono válido y se le puede escribir, pero no vemos que haya contestado. El asesor responde desde su WhatsApp y ese chat no se guarda en Pulppo: <b>no es un lead perdido</b>, es un lead sin conversación visible.</>,
+    sinRespuesta: <>De los leads que llegaron por <b>WhatsApp o formulario</b>, en cuántos el cliente nunca escribió ni llamó (teléfono válido, sin conversación). Es confiable: cuando el cliente escribe, el mensaje queda guardado. <b>Por teléfono</b> se mide aparte y no es comparable: el cliente ve el número y llama al celular del asesor, y esa llamada no se registra (sólo ~5% de los «ver teléfono» de Inmuebles24 tienen llamada en el call center). Ahí el % es «sin contacto visible», no «no contestó».</>,
     brokers: <>Leads cuyo contacto está etiquetado como broker en Pulppo: no son compradores finales.</>,
     respuesta: <>Mediana de minutos a la primera respuesta, sólo de leads que entraron de 8 am a 8 pm (hora de México).</>,
     descartados: <>Leads cuya búsqueda se cerró como descartada o cancelada. El descarte madura: un periodo reciente siempre se ve más limpio de lo que va a terminar, por eso la variación se apaga si el periodo cerró hace menos de 45 días.</>,
@@ -184,14 +184,15 @@ function FilaFlag({ sev, titulo, items, spam, etiqueta, detalle, onAbrir }: {
 /** Desplegable de una alerta por fuente: la acción sugerida, quién (asesores) y dónde (publicaciones). */
 function DetalleAlerta({ d, fuente, red }: { d: DetalleFuente | undefined; fuente: Fila | undefined; red?: boolean }) {
     if (!d) return <div style={{ fontSize: 12, color: GRY }}>Calculando el detalle…</div>;
-    const totSin = fuente?.sinRespuesta || d.asesores.reduce((a, x) => a + x.sinRespuesta, 0) || 1;
-    const base = fuente?.pctSinRespuesta ?? null;
+    // sin respuesta = la de WhatsApp/formulario (la de teléfono no es medible: la llamada no se registra)
+    const totSin = fuente?.sinRespuestaWa || d.asesores.reduce((a, x) => a + x.sinRespuestaWa, 0) || 1;
+    const base = fuente?.pctSinRespuestaWa ?? null;
     const acciones: string[] = [];
-    const top = d.asesores.filter((a) => a.sinRespuesta > 0).slice(0, 2);
-    const shareTop = top.reduce((a, x) => a + x.sinRespuesta, 0) / totSin;
+    const top = d.asesores.filter((a) => a.sinRespuestaWa > 0).slice(0, 2);
+    const shareTop = top.reduce((a, x) => a + x.sinRespuestaWa, 0) / totSin;
     if (top.length && shareTop > 0.5) acciones.push(`Habla con ${top.map((a) => a.nombre).join(' y ')}: ${top.length === 1 ? 'concentra' : 'concentran'} el ${Math.round(100 * shareTop)}% de los leads sin respuesta.`);
     // si los asesores SÍ contestan, decirlo: el problema es el lead, no la atención (NURA, oct-2026)
-    if (!red && (fuente?.pctSinResp ?? 100) <= 5 && (fuente?.pctSinRespuesta ?? 0) >= 30)
+    if (!red && (fuente?.pctSinResp ?? 100) <= 5 && (fuente?.pctSinRespuestaWa ?? 0) >= 30)
         acciones.push(`Los asesores sí contestan (${fuente?.pctSinResp}% sin responder en horario, 1ª respuesta ${mins(fuente?.respMed)}): el que no contesta es el cliente. Es un tema de calidad del lead, no de atención.`);
     if ((fuente?.pctSoloClic ?? 0) >= 70) acciones.push(`El portal manda sólo el clic en el ${fuente?.pctSoloClic}% de los leads: que el asesor escriba primero por WhatsApp en los primeros minutos, y revisarlo con el portal.`);
     const p0 = d.pubs[0];
@@ -210,15 +211,15 @@ function DetalleAlerta({ d, fuente, red }: { d: DetalleFuente | undefined; fuent
             {acciones.length ? acciones.map((t, i) => <div key={i} style={{ fontSize: 12, margin: '2px 0' }}>→ {t}</div>) : <div style={{ fontSize: 12, color: '#666' }}>No hay un responsable claro: el cambio está repartido.</div>}
             <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '12px 0 4px' }}>{red ? 'Por asesor (toda la red)' : 'Por asesor'}</div>
             <div style={{ overflowX: 'auto' }}><table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 620 }}>
-                <thead><tr><th style={th0}>Asesor</th><th style={th}>Leads</th><th style={th}>Sin respuesta visible</th><th style={th}>Aporta</th><th style={th}>Asesor sin responder</th><th style={th}>1ª respuesta</th><th style={th}>WhatsApp</th></tr></thead>
+                <thead><tr><th style={th0}>Asesor</th><th style={th}>Leads</th><th style={th}>Sin respuesta · WhatsApp</th><th style={th}>Aporta</th><th style={th}>Asesor sin responder</th><th style={th}>1ª respuesta</th><th style={th}>WhatsApp</th></tr></thead>
                 <tbody>{d.asesores.map((a) => {
-                    const alto = base != null && a.pctSinRespuesta != null && a.leads >= 5 && a.pctSinRespuesta >= base + 15;
+                    const alto = base != null && a.pctSinRespuestaWa != null && a.baseWa >= 5 && a.pctSinRespuestaWa >= base + 15;
                     return (
                         <tr key={a.key}>
                             <td style={{ ...c0, color: alto ? RED : BLK, fontWeight: alto ? 700 : 400 }}>{a.nombre}</td>
                             <td style={c}>{f0(a.leads)}</td>
-                            <td style={{ ...c, color: alto ? RED : BLK }}>{pc(a.pctSinRespuesta)}</td>
-                            <td style={c}>{Math.round((100 * a.sinRespuesta) / totSin)}%</td>
+                            <td style={{ ...c, color: alto ? RED : BLK }}>{pc(a.pctSinRespuestaWa)}</td>
+                            <td style={c}>{Math.round((100 * a.sinRespuestaWa) / totSin)}%</td>
                             <td style={{ ...c, color: (a.pctSinResp ?? 0) >= 20 ? RED : BLK }}>{pc(a.pctSinResp)}</td>
                             <td style={c}>{mins(a.respMed)}</td>
                             <td style={{ ...c, color: a.whatsapp === false ? RED : '#777' }}>{a.whatsapp == null ? '—' : a.whatsapp ? 'vinculado' : 'sin vincular'}</td>
@@ -519,19 +520,21 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
             <td style={td}>{pc(x.pctConConversacion)}{c && <div style={{ fontSize: 10 }}><Delta a={x.pctConConversacion} b={c.pctConConversacion} pts /></div>}</td>
             <td style={{ ...td, fontWeight: 700, color: (x.pctSinRespuesta ?? 0) >= 30 ? RED : BLK }}>{pc(x.pctSinRespuesta)}{c && <div style={{ fontSize: 10, fontWeight: 400 }}><Delta a={x.pctSinRespuesta} b={c.pctSinRespuesta} pts invertir /></div>}</td>
             <td style={{ ...td, color: (x.pctFantasma ?? 0) >= 3 ? RED : BLK }}>{pc(x.pctFantasma)}</td>
+            <td style={{ ...td, fontWeight: 700, color: (x.pctSinRespuestaWa ?? 0) >= 30 ? RED : BLK }}>{pc(x.pctSinRespuestaWa)}<div style={{ fontSize: 10, fontWeight: 400, color: GRY }}>de {f0(x.baseWa)}</div>{c && <div style={{ fontSize: 10, fontWeight: 400 }}><Delta a={x.pctSinRespuestaWa} b={c.pctSinRespuestaWa} pts invertir /></div>}</td>
+            <td style={{ ...td, color: '#666' }}>{pc(x.pctSinRespuestaTel)}<div style={{ fontSize: 10, color: GRY }}>de {f0(x.baseTel)}</div></td>
             <td style={{ ...td, color: '#666' }}>{pc(x.pctSoloClic)}</td>
             <td style={td}>{pc(x.pctDescartado)}{c && descMaduro && <div style={{ fontSize: 10 }}><Delta a={x.pctDescartado} b={c.pctDescartado} pts invertir /></div>}</td>
             <td style={td}>{pc(x.pctSinResp)}</td>
         </tr>
     );
-    const HEAD_CAL = ['', 'Leads', 'Con conversación', 'Sin respuesta visible', 'Fantasma', 'Llegó sólo el clic', 'Descartados', 'Asesor sin responder'];
+    const HEAD_CAL = ['', 'Leads', 'Con conversación', 'Sin respuesta visible', 'Fantasma', 'Sin resp. · WhatsApp', 'Por teléfono (sin contacto visible)', 'Llegó sólo el clic', 'Descartados', 'Asesor sin responder'];
     // Calidad del lead por fuente: % y Δ en pts; la celda va en rojo cuando dispara la misma red flag de «Para atender».
     const pv = (n: number | null | undefined) => n ?? 0;
     const QCOLS: Array<{ h: string; v: (x: Fila) => number | null | undefined; flag: (x: Fila, c: Fila) => boolean; madura?: boolean }> = [
         { h: 'Sin contacto', v: (x) => x.pctSinContacto, flag: (x, c) => pv(x.pctSinContacto) - pv(c.pctSinContacto) >= 3 },
         { h: 'Fantasma', v: (x) => x.pctFantasma, flag: (x, c) => pv(x.pctFantasma) - pv(c.pctFantasma) >= 5 },
         { h: 'Sólo el clic', v: (x) => x.pctSoloClic, flag: (x, c) => pv(x.pctSoloClic) - pv(c.pctSoloClic) >= 8 },
-        { h: 'Sin respuesta visible', v: (x) => x.pctSinRespuesta, flag: (x, c) => pv(x.pctSinRespuesta) - pv(c.pctSinRespuesta) >= 8 },
+        { h: 'Sin respuesta · WhatsApp', v: (x) => x.pctSinRespuestaWa, flag: (x, c) => pv(x.pctSinRespuestaWa) - pv(c.pctSinRespuestaWa) >= 8 },
         { h: 'Descartados', v: (x) => x.pctDescartado, flag: (x, c) => pv(x.pctDescartado) - pv(c.pctDescartado) >= 8, madura: true },
         { h: 'Brokers', v: (x) => x.pctBroker, flag: (x, c) => pv(x.pctBroker) - pv(c.pctBroker) >= 8 },
         { h: 'Ráfagas', v: (x) => x.pctRafaga, flag: (x, c) => pv(x.pctRafaga) >= 3 && pv(x.pctRafaga) >= 2 * pv(c.pctRafaga) },
@@ -563,14 +566,14 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
             <td style={td}>{f0(x.cierres)}</td>
             <td style={td}>{pc(x.pctLt60)}</td>
             <td style={td}>{mins(x.respMed)}</td>
-            <td style={td}>{pc(x.pctSinRespuesta)}</td>
+            <td style={td}>{pc(x.pctSinRespuestaWa)}</td>
             <td style={td}>{pc(x.pctDescartado)}</td>
             <td style={{ ...td, color: (x.pctDescSinSeg ?? 0) >= 75 ? RED : BLK }}>{pc(x.pctDescSinSeg)}</td>
         </tr>
     );
-    const HEAD_EQ = ['', 'Leads', 'Fuente #1', '% visita', 'Visitas', 'Cierres', '< 60 min', '1ª resp.', 'Sin resp. visible', 'Descartados', 'Desc. sin toque'];
+    const HEAD_EQ = ['', 'Leads', 'Fuente #1', '% visita', 'Visitas', 'Cierres', '< 60 min', '1ª resp.', 'Sin resp. · WhatsApp', 'Descartados', 'Desc. sin toque'];
     const tsvEquipo = (xs: Fila[], primera: string) => copiar([[primera, ...HEAD_EQ.slice(1), 'Nota'],
-        ...xs.map((x) => [x.nombre, x.leads, x.topFuente, x.pVisita, x.visitas, x.cierres, x.pctLt60, x.respMed, x.pctSinRespuesta, x.pctDescartado, x.pctDescSinSeg, x.nota])]);
+        ...xs.map((x) => [x.nombre, x.leads, x.topFuente, x.pVisita, x.visitas, x.cierres, x.pctLt60, x.respMed, x.pctSinRespuestaWa, x.pctDescartado, x.pctDescSinSeg, x.nota])]);
 
     const ladoColor: Record<Cierre['lado'], string> = { ambos: SEA, vendedor: BLK, comprador: '#8A6D00' };
 
@@ -643,7 +646,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                     ['Volumen', <>Entraron <b>{f0(T.leads)}</b> leads ({f0(T.unicos)} personas){C ? <>, <b>{signo(pctD(T.leads, CT?.leads))}</b> {cmp}</> : null}.{mov && mov.d !== 0 ? <> El que más lo movió: <b>{mov.n}</b> ({mov.d > 0 ? '+' : ''}{f0(mov.d)}).</> : null}</>],
                     ['Conversión', <>Visitó el <b>{pc(T.pVisita)}</b> de las personas{C && T.pVisita != null && CT?.pVisita != null ? <> ({signo(Math.round((T.pVisita - CT.pVisita) * 10) / 10, ' pts')} {cmp})</> : null}.{conv && Math.abs(conv.d) >= 1 ? <> Mayor cambio: <b>{conv.n}</b> {signo(conv.d, ' pts')} (hoy {pc(conv.v)}).</> : null}{recienteCohorte ? ' Los cierres de esta cohorte todavía están madurando.' : ''}</>],
                     ['Resultado', <>Cerraron <b>{f0(A.cierres.n)}</b> operaciones con <b>{money(A.cierres.regalia)}</b> de regalía{C ? <> ({signo(pctD(A.cierres.regalia, C.cierres.regalia))})</> : null}{topReg ? <>; la fuente que más aportó fue <b>{topReg.fuente}</b> ({money(topReg.regalia)})</> : null}.{roiTot != null ? <> ROI de los canales pagados: <b>{roiTot.toFixed(2)}×</b>.</> : null}</>],
-                    ['Calidad', <><b>{pc(T.pctBroker)}</b> de los leads vienen de brokers y en el <b>{pc(T.pctSinRespuesta)}</b> no vemos respuesta del cliente{C && T.pctSinRespuesta != null && CT?.pctSinRespuesta != null ? <> ({signo(Math.round((T.pctSinRespuesta - CT.pctSinRespuesta) * 10) / 10, ' pts')})</> : null}. Primera respuesta mediana: <b>{mins(T.respMed)}</b>.</>],
+                    ['Calidad', <><b>{pc(T.pctBroker)}</b> de los leads vienen de brokers y de los que escribieron por WhatsApp, en el <b>{pc(T.pctSinRespuestaWa)}</b> el cliente no volvió a escribir{C && T.pctSinRespuestaWa != null && CT?.pctSinRespuestaWa != null ? <> ({signo(Math.round((T.pctSinRespuestaWa - CT.pctSinRespuestaWa) * 10) / 10, ' pts')})</> : null}. Primera respuesta mediana: <b>{mins(T.respMed)}</b>.</>],
                 ];
                 // Las alertas del pulso son de la última semana: sólo vienen al caso si el periodo la incluye.
                 const incluyeSemana = (Date.now() - new Date(A.hasta).getTime()) / 86400000 <= 14;
@@ -657,8 +660,8 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 const grupos = porFuente([
                     ...flags,
                     // nivel alto sostenido (no un cambio): sólo si la fuente no tiene ya otra señal
-                    ...A.fuentes.filter((f) => f.leads >= 200 && (f.pctSinRespuesta ?? 0) >= 50 && !conFlag.has(f.nombre))
-                        .map((f) => ({ sev: 'media' as const, fuente: f.nombre, txt: `En el ${pc(f.pctSinRespuesta)} de sus leads no vemos respuesta del cliente.` })),
+                    ...A.fuentes.filter((f) => f.baseWa >= 200 && (f.pctSinRespuestaWa ?? 0) >= 50 && !conFlag.has(f.nombre))
+                        .map((f) => ({ sev: 'media' as const, fuente: f.nombre, txt: `De los que escribieron por WhatsApp, en el ${pc(f.pctSinRespuestaWa)} el cliente no volvió a escribir.` })),
                 ], A.fuentes.map((f) => f.nombre));
                 const atender = [...generales.filter((x) => x.sev === 'alta'), ...generales.filter((x) => x.sev === 'media')];
                 // cada alerta por fuente abre su detalle: quién (asesores) y dónde (publicaciones)
@@ -682,7 +685,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                         <Kpi label="Cierres del periodo" info={DEF.cierresPeriodo} value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
                         <Kpi label="Regalía Pulppo" info={DEF.regalia} value={money(A.cierres.regalia)} delta={<Delta a={A.cierres.regalia} b={C?.cierres.regalia} />} />
                         <Kpi label="ROI" info={DEF.roi} value={roiTot != null ? `${roiTot.toFixed(2)}×` : '—'} sub={roiTot != null ? 'canales pagados' : sinCostoReal ? 'sólo con «Todo» y sin inmobiliaria' : faltaInv ? 'falta la inversión del mes' : periodoParcial ? 'elige meses completos' : '…'} />
-                        <Kpi label="Sin respuesta visible" info={DEF.sinRespuesta} value={pc(T.pctSinRespuesta)} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
+                        <Kpi label="Sin respuesta · WhatsApp" info={DEF.sinRespuesta} value={pc(T.pctSinRespuestaWa)} sub={`Por teléfono: ${pc(T.pctSinRespuestaTel)} sin contacto visible (las llamadas al celular del asesor no se registran)`} delta={<Delta a={T.pctSinRespuestaWa} b={CT?.pctSinRespuestaWa} pts invertir />} />
                     </div>
                     <Seccion titulo="Qué cambió">
                         {lineas.map(([k, txt]) => (
@@ -815,7 +818,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
                     <Kpi label="Leads" info={DEF.leads} value={f0(T.leads)} sub={`${f0(T.unicos)} personas · ${f0(T.venta)} venta / ${f0(T.renta)} renta`} delta={<Delta a={T.leads} b={CT?.leads} />} />
                     <Kpi label="De brokers" info={DEF.brokers} value={pc(T.pctBroker)} sub={`${f0(T.brokerLeads)} leads de contactos broker`} delta={<Delta a={T.pctBroker} b={CT?.pctBroker} pts invertir />} />
-                    <Kpi label="Sin respuesta visible" info={DEF.sinRespuesta} value={pc(T.pctSinRespuesta)} sub={`${pc(T.pctConConversacion)} con conversación · ${pc(T.pctFantasma)} fantasma`} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
+                    <Kpi label="Sin respuesta · WhatsApp" info={DEF.sinRespuesta} value={pc(T.pctSinRespuestaWa)} sub={`Por teléfono: ${pc(T.pctSinRespuestaTel)} sin contacto visible (las llamadas al celular del asesor no se registran)`} delta={<Delta a={T.pctSinRespuestaWa} b={CT?.pctSinRespuestaWa} pts invertir />} />
                     <Kpi label="1ª respuesta" info={DEF.respuesta} value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
                     <Kpi label="Descartados" info={DEF.descartados} value={pc(T.pctDescartado)} sub={`${f0(T.descartados)} leads`} delta={descMaduro ? <Delta a={T.pctDescartado} b={CT?.pctDescartado} pts invertir /> : undefined} />
                 </div>
@@ -841,7 +844,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                         })}
                     </Tabla>
                 </Seccion>
-            <Seccion titulo="Contacto con el lead y descartados" onCopiar={() => copiar([['Fuente', ...HEAD_CAL.slice(1)], ...A.fuentes.map((x) => [x.nombre, x.leads, x.pctConConversacion, x.pctSinRespuesta, x.pctFantasma, x.pctSoloClic, x.pctDescartado, x.pctSinResp])])}
+            <Seccion titulo="Contacto con el lead y descartados" onCopiar={() => copiar([['Fuente', ...HEAD_CAL.slice(1)], ...A.fuentes.map((x) => [x.nombre, x.leads, x.pctConConversacion, x.pctSinRespuesta, x.pctFantasma, x.pctSinRespuestaWa, x.pctSinRespuestaTel, x.pctSoloClic, x.pctDescartado, x.pctSinResp])])}
                 sub="Cada lead cae en una de tres — con conversación, sin respuesta visible o fantasma — y suman 100%."
                 info={<>Cada lead cae en <b>una</b> de tres: <b>Con conversación</b> — hay plática real, en su registro o por otro lado (el comprador abrió WhatsApp, o ya venía platicando con nosotros: de 30 días antes a 14 después). <b>Sin respuesta visible</b> — tiene teléfono válido y se le puede escribir, pero no vemos que haya respondido: el asesor contesta desde su WhatsApp y ese chat no se guarda en Pulppo, así que <b>no es un lead perdido</b>. <b>Fantasma</b> — teléfono inválido (menos de 10 dígitos, todos iguales o una secuencia) y sin conversación: no hay cómo contactarlo. Las tres suman 100%. «Llegó sólo el clic» es un dato del portal: el lead entró únicamente con el evento («Vio teléfono», «Contactó por WhatsApp»), sin mensaje.</>}>
                 <Tabla head={['Fuente', ...HEAD_CAL.slice(1)]}>
@@ -1001,7 +1004,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 <Kpi label="Lead → visita" info={DEF.visita} value={pc(T.pVisita)} sub={`${f0(T.visitas)} de ${f0(T.unicos)} personas visitaron`} delta={<Delta a={T.pVisita} b={CT?.pVisita} pts />} />
                 <Kpi label="Cierres de la cohorte" info={DEF.cierresCohorte} value={f0(T.cierres)} sub={`${pc(T.pCierre)} de las personas`} delta={<Delta a={T.cierres} b={CT?.cierres} />} />
                 <Kpi label="1ª respuesta" info={DEF.respuesta} value={mins(T.respMed)} sub={`${pc(T.pctLt60)} en < 60 min`} delta={<Delta a={T.respMed} b={CT?.respMed} invertir />} />
-                <Kpi label="Sin respuesta visible" info={DEF.sinRespuesta} value={pc(T.pctSinRespuesta)} sub={`${pc(T.pctConConversacion)} con conversación · ${pc(T.pctFantasma)} fantasma`} delta={<Delta a={T.pctSinRespuesta} b={CT?.pctSinRespuesta} pts invertir />} />
+                <Kpi label="Sin respuesta · WhatsApp" info={DEF.sinRespuesta} value={pc(T.pctSinRespuestaWa)} sub={`Por teléfono: ${pc(T.pctSinRespuestaTel)} sin contacto visible (las llamadas al celular del asesor no se registran)`} delta={<Delta a={T.pctSinRespuestaWa} b={CT?.pctSinRespuestaWa} pts invertir />} />
                 <Kpi label="Cierres del periodo" info={DEF.cierresPeriodo} value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
             </div>
             {cmpTxt && <div style={{ fontSize: 10.5, color: GRY, marginTop: 6 }}>Las variaciones en verde/rojo son {cmpTxt}. En tasas, la diferencia va en puntos.</div>}

@@ -51,8 +51,10 @@ function contraComparado(A: Bloque, C: Bloque, cmp: string): Senal[] {
         if (dSin != null && dSin >= 5) malas.push(`el asesor deja sin responder el ${f.pctSinResp}% (antes ${c.pctSinResp}%)`);
         if (f.respMed != null && c.respMed != null && f.respMed >= c.respMed * 1.5 && f.respMed - c.respMed >= 10)
             malas.push(`la 1ª respuesta pasó de ${Math.round(c.respMed)} a ${Math.round(f.respMed)} min`);
-        const dVis = pts(f.pctSinRespuesta, c.pctSinRespuesta);
-        if (dVis != null && dVis >= 8) malas.push(`no vemos respuesta del cliente en el ${f.pctSinRespuesta}% (antes ${c.pctSinRespuesta}%)`);
+        // sólo la tasa de WhatsApp/formulario: la de teléfono no es medible (la llamada al celular del
+        // asesor no se registra) y mezclarla hacía saltar alertas por cambio de mezcla de canal
+        const dVis = f.baseWa >= 50 && c.baseWa >= 50 ? pts(f.pctSinRespuestaWa, c.pctSinRespuestaWa) : null;
+        if (dVis != null && dVis >= 8) malas.push(`de los que escribieron por WhatsApp, en el ${f.pctSinRespuestaWa}% el cliente no volvió a escribir (antes ${c.pctSinRespuestaWa}%)`);
 
         if (subio || bajo) {
             const vol = subio

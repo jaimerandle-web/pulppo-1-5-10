@@ -77,6 +77,12 @@ export interface Fila {
     /** cada lead cae en UNA: con conversación · sin respuesta visible · fantasma (suman leads) */
     conConversacion: number; pctConConversacion: number | null;
     sinRespuesta: number; pctSinRespuesta: number | null;
+    /** «sin respuesta visible» partido por CANAL DE CONTACTO (ver canalContacto). WhatsApp/formulario es
+     *  confiable: si el cliente escribe, queda guardado. Teléfono NO: la llamada va al celular del asesor y
+     *  no se registra (sólo ~5% de los «ver teléfono» de i24 tienen llamada en `calls`), así que su %
+     *  es «sin contacto visible», no «no contestó». */
+    baseWa: number; sinRespuestaWa: number; pctSinRespuestaWa: number | null;
+    baseTel: number; sinRespuestaTel: number; pctSinRespuestaTel: number | null;
     /** teléfono inválido y sin conversación: no hay cómo contactarlo */
     fantasmas: number; pctFantasma: number | null;
     /** el portal mandó sólo el evento («Vio teléfono»…): dato del portal, no del lead */
@@ -168,6 +174,25 @@ export interface InmoView {
 // Fuente del CIERRE: toda la regla vive en fuenteCierre.ts (la comparten /portales y Desempeño de /mb).
 export { F_BROKER_EXT, F_RED, F_SIN, F_BUSQ, F_CARTERA, fuenteCapturada } from './fuenteCierre';
 
+/**
+ * Por qué canal intentó contactar el lead (oct-2026). Medido 1–13 oct en toda la red:
+ *   · i24: `medium` whatsapp («Contactó por WhatsApp», 2,186) · phone («Vio teléfono», 709) · form (410)
+ *   · MeLi: `medium` click_whatsapp aunque el mensaje diga «Vio teléfono» (1,757) → es WhatsApp
+ *   · pcom: el `medium` no sirve (form para los dos); manda el mensaje: «Es un lead de WhatsApp» (301)
+ *     vs «Es un lead de telefono» (259)
+ *   · call (conmutador, Google, sitio) → teléfono
+ * WhatsApp y formulario se pueden medir (el cliente escribe y queda guardado); teléfono no.
+ */
+export function canalContacto(l: { medium?: unknown; message?: unknown }): 'whatsapp' | 'telefono' | 'form' {
+    const msg = String(l.message ?? '').trim().toLowerCase();
+    if (msg.startsWith('es un lead de tel')) return 'telefono';
+    if (msg.startsWith('es un lead de whats')) return 'whatsapp';
+    const med = String(l.medium ?? '').toLowerCase();
+    if (med === 'phone' || med === 'call') return 'telefono';
+    if (med === 'whatsapp' || med === 'click_whatsapp') return 'whatsapp';
+    return 'form';
+}
+
 /** Teléfono que no sirve para contactar. Medido jul–ago 2026: 1.5% de los leads (casi todos traen correo). */
 function telInvalido(p: unknown): boolean {
     const d = String(p ?? '').replace(/\D/g, '');
@@ -250,11 +275,13 @@ interface Celda {
     brk: number; descFam: Map<string, number>;
     fuentes: Map<string, number>;
     sinCont: number; rafaga: number; madru: number; mailDig: number; nuevo: number;
+    baseWa: number; sinRespWa: number; baseTel: number; sinRespTel: number;
 }
 const nuevaCelda = (key: string, nombre: string, req: Set<string> | null): Celda => ({
     key, nombre, req, leads: 0, venta: 0, renta: 0, baseLab: 0, lt60: 0, sin: 0, resp: [],
     t0: new Map(), vis: new Set(), ofe: new Set(), clo: new Set(), soloClic: 0, conv: 0, sinResp: 0, fantTel: 0, desc: 0, descSinSeg: 0, telInv: 0, brk: 0, descFam: new Map(), fuentes: new Map(),
     sinCont: 0, rafaga: 0, madru: 0, mailDig: 0, nuevo: 0,
+    baseWa: 0, sinRespWa: 0, baseTel: 0, sinRespTel: 0,
 });
 
 async function bloque(
@@ -277,7 +304,8 @@ async function bloque(
 
     // leads → celdas; se guardan para los joins de después
     type LeadRef = { id: ObjectId; cells: Celda[]; t: Date; cid: string | null; inter: ObjectId | null; search: string | null; telMalo: boolean; pid: string | null; tel: string; mail: string;
-        canal: string; madru: boolean; mailDig: boolean; comp: string; compNombre: string; clic?: boolean; conv?: boolean; nuevo?: boolean };
+        canal: string; madru: boolean; mailDig: boolean; comp: string; compNombre: string; clic?: boolean; conv?: boolean; nuevo?: boolean;
+        contacto: 'whatsapp' | 'telefono' | 'form' };
     const refs: LeadRef[] = [];
     const nDias = Math.round((B.getTime() - A.getTime()) / DIA);
     const serie = new Map<string, { n: number[]; lab: number[]; sin: number[] }>();
@@ -290,7 +318,7 @@ async function bloque(
     const cur = db.collection('leads').find(filtro, {
         projection: { source: 1, createdAt: 1, answeredAt: 1, 'contact._id': 1, 'property.listing.operation': 1,
             'company._id': 1, 'company.name': 1, 'agent._id': 1, 'agent.firstName': 1, 'agent.lastName': 1, interaction: 1, search: 1,
-            phone: 1, 'contact.phone': 1, email: 1, 'contact.email': 1, 'property._id': 1 },
+            phone: 1, 'contact.phone': 1, email: 1, 'contact.email': 1, 'property._id': 1, medium: 1, message: 1 },
         batchSize: 10000,
     });
     for await (const l of cur) {
@@ -364,6 +392,7 @@ async function bloque(
             pid: dig(l, 'property', '_id') ? String(dig(l, 'property', '_id')) : null,
             tel: String(l.phone || dig(l, 'contact', 'phone') || '').replace(/\D/g, '').slice(-10), mail,
             canal, madru, mailDig, comp: String(dig(l, 'company', '_id') ?? ''), compNombre: String(dig(l, 'company', 'name') ?? '').trim(),
+            contacto: canalContacto({ medium: l.medium, message: l.message }),
         });
     }
 
@@ -498,10 +527,13 @@ async function bloque(
                 conv = !!ds?.some((d) => d.getTime() >= t - 30 * DIA && d.getTime() <= t + 14 * DIA);
             }
             r.conv = conv;
+            const tel = r.contacto === 'telefono';
             for (const c of r.cells) {
                 if (conv) c.conv += 1;
                 else if (r.telMalo) c.fantTel += 1;
                 else c.sinResp += 1;
+                if (tel) { c.baseTel += 1; if (!conv && !r.telMalo) c.sinRespTel += 1; }
+                else { c.baseWa += 1; if (!conv && !r.telMalo) c.sinRespWa += 1; }
             }
         }
     })();
@@ -609,6 +641,8 @@ async function bloque(
             pVisita: p1(c.vis.size, u), pOferta: p1(c.ofe.size, u), pCierre: p1(c.clo.size, u),
             conConversacion: c.conv, pctConConversacion: p1(c.conv, c.leads),
             sinRespuesta: c.sinResp, pctSinRespuesta: p1(c.sinResp, c.leads),
+            baseWa: c.baseWa, sinRespuestaWa: c.sinRespWa, pctSinRespuestaWa: p1(c.sinRespWa, c.baseWa),
+            baseTel: c.baseTel, sinRespuestaTel: c.sinRespTel, pctSinRespuestaTel: p1(c.sinRespTel, c.baseTel),
             fantasmas: c.fantTel, pctFantasma: p1(c.fantTel, c.leads),
             soloClic: c.soloClic, pctSoloClic: p1(c.soloClic, c.leads),
             descartados: c.desc, pctDescartado: p1(c.desc, c.leads),
@@ -677,7 +711,7 @@ async function bloque(
         for (const [k, g] of grupos) {
             const key = k === 'total' ? 'total' : `f:${k}`;
             detalle[key] = {
-                asesores: g.a.map(fila).sort((x, y) => y.sinRespuesta - x.sinRespuesta || y.leads - x.leads).slice(0, 15).map((x) => ({ ...x, whatsapp: null })),
+                asesores: g.a.map(fila).sort((x, y) => y.sinRespuestaWa - x.sinRespuestaWa || y.leads - x.leads).slice(0, 15).map((x) => ({ ...x, whatsapp: null })),
                 pubs: g.p.map(fila).sort((x, y) => y.leads - x.leads).slice(0, 10).map((x) => ({ ...x, pid: x.nombre, codigo: null, inmo: null })),
             };
         }
