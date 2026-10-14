@@ -8,7 +8,7 @@
 // el filtro se quede quieto (300 ms; 900 ms en fechas libres), cancela la consulta anterior y sólo
 // pinta la respuesta de la ÚLTIMA. Mientras carga se queda la vista anterior, atenuada.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import type { Bloque, Cierre, Comparar, Fila, InmoView } from '@/lib/portales/inmobiliaria';
+import type { Bloque, Cierre, Comparar, DetalleFuente, Fila, InmoView, SpamPub } from '@/lib/portales/inmobiliaria';
 import type { InversionRango } from '@/lib/portales/inversion';
 import type { DealMes } from '@/lib/portales/deal';
 import type { SeccionV2 } from './PortalesApp';
@@ -160,12 +160,100 @@ function Seccion({ titulo, sub, info, onCopiar, children }: { titulo: string; su
     );
 }
 
-function FilaFlag({ sev, titulo, items, spam }: { sev: 'alta' | 'media'; titulo: string; items: string[]; spam?: boolean }) {
+/** Fila de «Para atender». Con `detalle`, se abre al hacer clic y dice QUIÉN y QUÉ hacer (Ale, oct-2026). */
+function FilaFlag({ sev, titulo, items, spam, etiqueta, detalle, onAbrir }: {
+    sev: 'alta' | 'media'; titulo: string; items: string[]; spam?: boolean; etiqueta?: string;
+    detalle?: () => ReactNode; onAbrir?: () => void;
+}) {
+    const [abierta, setAbierta] = useState(false);
+    const abre = !!detalle;
     return (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '8px 0', borderBottom: `1px solid ${LGT}`, fontSize: 12.5, lineHeight: 1.5 }}>
-            <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.5px', color: sev === 'alta' ? RED : '#8A6D00', width: 44, flexShrink: 0 }}>{sev === 'alta' ? 'ALTA' : 'MEDIA'}</span>
-            <span style={{ width: 150, flexShrink: 0, fontWeight: 700 }}>{titulo}{spam && <span style={{ display: 'inline-block', marginLeft: 6, fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: R, background: '#F3D9D3', color: RED }}>Posible spam</span>}</span>
-            <span style={{ flex: 1 }}>{items.length === 1 ? items[0] : items.map((t, i) => <div key={i}>· {t}</div>)}</span>
+        <div style={{ borderBottom: `1px solid ${LGT}` }}>
+            <div onClick={abre ? () => { if (!abierta) onAbrir?.(); setAbierta(!abierta); } : undefined}
+                style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '8px 0', fontSize: 12.5, lineHeight: 1.5, cursor: abre ? 'pointer' : 'default' }}>
+                <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.5px', color: sev === 'alta' ? RED : '#8A6D00', width: 44, flexShrink: 0 }}>{sev === 'alta' ? 'ALTA' : 'MEDIA'}</span>
+                <span style={{ width: 150, flexShrink: 0, fontWeight: 700 }}>{titulo}{(spam || etiqueta) && <span style={{ display: 'inline-block', marginLeft: 6, fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: R, background: '#F3D9D3', color: RED }}>{etiqueta ?? 'Posible spam'}</span>}</span>
+                <span style={{ flex: 1 }}>{items.length === 1 ? items[0] : items.map((t, i) => <div key={i}>· {t}</div>)}</span>
+                {abre && <span style={{ fontSize: 11, color: '#777', flexShrink: 0, whiteSpace: 'nowrap' }}>{abierta ? '▾ cerrar' : '▸ ver detalle'}</span>}
+            </div>
+            {abre && abierta && <div style={{ margin: '0 0 12px 54px', padding: '12px 14px', background: '#FAFAFA', border: `1px solid ${LGT}`, borderRadius: R }}>{detalle!()}</div>}
+        </div>
+    );
+}
+
+/** Desplegable de una alerta por fuente: la acción sugerida, quién (asesores) y dónde (publicaciones). */
+function DetalleAlerta({ d, fuente, red }: { d: DetalleFuente | undefined; fuente: Fila | undefined; red?: boolean }) {
+    if (!d) return <div style={{ fontSize: 12, color: GRY }}>Calculando el detalle…</div>;
+    const totSin = fuente?.sinRespuesta || d.asesores.reduce((a, x) => a + x.sinRespuesta, 0) || 1;
+    const base = fuente?.pctSinRespuesta ?? null;
+    const acciones: string[] = [];
+    const top = d.asesores.filter((a) => a.sinRespuesta > 0).slice(0, 2);
+    const shareTop = top.reduce((a, x) => a + x.sinRespuesta, 0) / totSin;
+    if (top.length && shareTop > 0.5) acciones.push(`Habla con ${top.map((a) => a.nombre).join(' y ')}: ${top.length === 1 ? 'concentra' : 'concentran'} el ${Math.round(100 * shareTop)}% de los leads sin respuesta.`);
+    // si los asesores SÍ contestan, decirlo: el problema es el lead, no la atención (NURA, oct-2026)
+    if (!red && (fuente?.pctSinResp ?? 100) <= 5 && (fuente?.pctSinRespuesta ?? 0) >= 30)
+        acciones.push(`Los asesores sí contestan (${fuente?.pctSinResp}% sin responder en horario, 1ª respuesta ${mins(fuente?.respMed)}): el que no contesta es el cliente. Es un tema de calidad del lead, no de atención.`);
+    if ((fuente?.pctSoloClic ?? 0) >= 70) acciones.push(`El portal manda sólo el clic en el ${fuente?.pctSoloClic}% de los leads: que el asesor escriba primero por WhatsApp en los primeros minutos, y revisarlo con el portal.`);
+    const p0 = d.pubs[0];
+    if (p0 && fuente && fuente.leads && p0.leads / fuente.leads >= 0.2) acciones.push(`La publicación ${p0.codigo ?? '(sin código)'} concentra ${p0.leads} leads (${Math.round((100 * p0.leads) / fuente.leads)}%): revisar si es spam o un precio muy atractivo.`);
+    const lento = d.asesores.filter((a) => a.leads >= 5 && (a.pctSinResp ?? 0) >= 20).slice(0, 3);
+    if (lento.length) acciones.push(`Sin contestar en horario (8 am – 8 pm): ${lento.map((a) => `${a.nombre} (${a.pctSinResp}%)`).join(', ')}.`);
+    const sinWa = d.asesores.filter((a) => a.whatsapp === false && a.leads >= 5).slice(0, 4);
+    if (sinWa.length) acciones.push(`Sin WhatsApp vinculado (Pulppo no ve sus chats): ${sinWa.map((a) => a.nombre).join(', ')}.`);
+    const th: CSSProperties = { textAlign: 'right', fontSize: 10, color: '#777', fontWeight: 700, padding: '4px 6px', borderBottom: `1px solid ${BLK}`, whiteSpace: 'nowrap', textTransform: 'uppercase' };
+    const th0: CSSProperties = { ...th, textAlign: 'left' };
+    const c: CSSProperties = { ...td, padding: '4px 6px', fontSize: 11.5 };
+    const c0: CSSProperties = { ...td0, padding: '4px 6px', fontSize: 11.5 };
+    return (
+        <div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 4 }}>Qué hacer</div>
+            {acciones.length ? acciones.map((t, i) => <div key={i} style={{ fontSize: 12, margin: '2px 0' }}>→ {t}</div>) : <div style={{ fontSize: 12, color: '#666' }}>No hay un responsable claro: el cambio está repartido.</div>}
+            <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '12px 0 4px' }}>{red ? 'Por asesor (toda la red)' : 'Por asesor'}</div>
+            <div style={{ overflowX: 'auto' }}><table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 620 }}>
+                <thead><tr><th style={th0}>Asesor</th><th style={th}>Leads</th><th style={th}>Sin respuesta visible</th><th style={th}>Aporta</th><th style={th}>Asesor sin responder</th><th style={th}>1ª respuesta</th><th style={th}>WhatsApp</th></tr></thead>
+                <tbody>{d.asesores.map((a) => {
+                    const alto = base != null && a.pctSinRespuesta != null && a.leads >= 5 && a.pctSinRespuesta >= base + 15;
+                    return (
+                        <tr key={a.key}>
+                            <td style={{ ...c0, color: alto ? RED : BLK, fontWeight: alto ? 700 : 400 }}>{a.nombre}</td>
+                            <td style={c}>{f0(a.leads)}</td>
+                            <td style={{ ...c, color: alto ? RED : BLK }}>{pc(a.pctSinRespuesta)}</td>
+                            <td style={c}>{Math.round((100 * a.sinRespuesta) / totSin)}%</td>
+                            <td style={{ ...c, color: (a.pctSinResp ?? 0) >= 20 ? RED : BLK }}>{pc(a.pctSinResp)}</td>
+                            <td style={c}>{mins(a.respMed)}</td>
+                            <td style={{ ...c, color: a.whatsapp === false ? RED : '#777' }}>{a.whatsapp == null ? '—' : a.whatsapp ? 'vinculado' : 'sin vincular'}</td>
+                        </tr>
+                    );
+                })}</tbody>
+            </table></div>
+            {d.pubs.length > 0 && <>
+                <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', margin: '12px 0 4px' }}>Publicaciones con más leads</div>
+                <div style={{ overflowX: 'auto' }}><table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 560 }}>
+                    <thead><tr><th style={th0}>Propiedad</th><th style={th0}>Inmobiliaria</th><th style={th}>Leads</th><th style={th}>Sólo el clic</th><th style={th}>Sin respuesta visible</th></tr></thead>
+                    <tbody>{d.pubs.map((p) => (
+                        <tr key={p.pid}>
+                            <td style={c0}>{p.codigo ? <a href={`/ficha/${encodeURIComponent(p.codigo)}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>{p.codigo}</a> : '—'}</td>
+                            <td style={c0}>{p.inmo ?? '—'}</td>
+                            <td style={c}>{f0(p.leads)}</td>
+                            <td style={c}>{pc(p.pctSoloClic)}</td>
+                            <td style={c}>{pc(p.pctSinRespuesta)}</td>
+                        </tr>
+                    ))}</tbody>
+                </table></div>
+            </>}
+        </div>
+    );
+}
+
+/** Desplegable de «Posible spam en una publicación». */
+function DetalleSpam({ x }: { x: SpamPub }) {
+    return (
+        <div style={{ fontSize: 12, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 4 }}>Qué hacer</div>
+            <div>→ Revisar la publicación {x.codigo ? <a href={`/ficha/${encodeURIComponent(x.codigo)}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700 }}>{x.codigo}</a> : ''}: ¿el precio o la foto la hacen viral, o los leads son de cuentas en serie?</div>
+            <div>→ Pedirle al asesor que escriba a 5 de esos contactos: si casi nadie contesta, es tráfico de baja intención.</div>
+            <div>→ Si se confirma, mandar la lista al portal ({x.fuente}) con hora y teléfono para que lo revise, como se hizo con MercadoLibre.</div>
+            <div style={{ marginTop: 8, color: '#666' }}>Señales: {x.senales.join(' · ')}. {x.prev ? `Periodo anterior: ${x.prev} leads.` : ''}</div>
         </div>
     );
 }
@@ -239,6 +327,17 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
     const [ops, setOps] = useState<Opcion[]>([]);
     const [asesores, setAsesores] = useState<Asesor[]>([]);
     const [v, setV] = useState<InmoView | null>(null);
+    // detalle de los desplegables de «Para atender»: se pide UNA vez por periodo al abrir el primero
+    const [det, setDet] = useState<{ q: string; d: Record<string, DetalleFuente> | null } | null>(null);
+    const qDet = v ? new URLSearchParams({ view: 'detalle', desde: v.filtro.desde, hasta: v.filtro.hasta, operacion: v.filtro.operacion,
+        ...(v.filtro.inmobiliaria ? { inmo: v.filtro.inmobiliaria } : {}), ...(v.filtro.asesorId ? { asesor: v.filtro.asesorId } : {}) }).toString() : '';
+    const pedirDetalle = useCallback(() => {
+        if (!qDet || det?.q === qDet) return;
+        setDet({ q: qDet, d: null });
+        fetch(`/api/portales/inmobiliarias?${qDet}`).then((r) => r.json())
+            .then((j) => setDet({ q: qDet, d: j.detalle ?? {} })).catch(() => setDet({ q: qDet, d: {} }));
+    }, [qDet, det?.q]);
+    const detD = det?.q === qDet ? det.d : null;
     const [cargando, setCargando] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
@@ -562,6 +661,19 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                         .map((f) => ({ sev: 'media' as const, fuente: f.nombre, txt: `En el ${pc(f.pctSinRespuesta)} de sus leads no vemos respuesta del cliente.` })),
                 ], A.fuentes.map((f) => f.nombre));
                 const atender = [...generales.filter((x) => x.sev === 'alta'), ...generales.filter((x) => x.sev === 'media')];
+                // cada alerta por fuente abre su detalle: quién (asesores) y dónde (publicaciones)
+                const filaGrupo = (g: (typeof grupos)[number]) => {
+                    const fk = A.fuentes.find((x) => x.nombre === g.fuente);
+                    return <FilaFlag key={g.fuente + (g.spam ? '|s' : '')} sev={g.sev} titulo={g.fuente} items={g.items} spam={g.spam}
+                        onAbrir={fk ? pedirDetalle : undefined}
+                        detalle={fk ? () => <DetalleAlerta d={detD?.[fk.key] ?? (detD ? { asesores: [], pubs: [] } : undefined)} fuente={fk} /> : undefined} />;
+                };
+                const spamPub = A.spamPub ?? [];
+                const filaSpam = (x: SpamPub) => (
+                    <FilaFlag key={'sp' + x.pid} sev={x.sev} titulo={x.codigo ?? '(sin código)'} etiqueta="Posible spam"
+                        items={[`${x.fuente}${x.inmo ? ` · ${x.inmo}` : ''}: ${f0(x.n)} leads — ${x.senales.join(' · ')}`]}
+                        detalle={() => <DetalleSpam x={x} />} />
+                );
                 const top = A.fuentes.slice(0, 8);
                 return (<>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
@@ -584,14 +696,19 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                         info={<>
                             <b>Contra el periodo comparado</b> (fuentes con al menos 100 leads): volumen ×1.5 o −35%; asesor sin responder +5 pts; 1ª respuesta +50% (y +10 min); sin respuesta visible del cliente +8 pts; brokers +8 pts; fantasmas +5 pts; lead → visita −3 pts. Si el volumen se dispara <b>y</b> empeora la atención, sale como una sola alerta alta. <b>Calidad:</b> sin ningún dato de contacto +3 pts; llegan sólo con el clic +8 pts; descartados +8 pts (y qué motivo creció).
                             <p style={{ margin: '6px 0 0' }}><b>Posible spam</b> (va aparte, no es «no responde»): cuando coinciden 2 o más de — ráfagas (leads a ≤2 min de otro a la misma propiedad) ≥3% y el doble que antes; madrugada (0–5 am) ≥8% y 1.8× antes; correos con 4+ dígitos +15 pts; contactos nuevos +15 pts. Alta si coinciden 3 o más.</p>
+                            <p style={{ margin: '6px 0 0' }}><b>Posible spam en una publicación</b>: el spam se diluye a nivel portal, así que también se busca por publicación (≥20 leads) cuando coinciden 2 o más de — el triple de leads que el periodo anterior (o publicación nueva); madrugada ≥12%; correos con dígitos ≥40%; contactos nuevos ≥85%; conversa la mitad o menos que su fuente. Alta con 3 o más.</p>
+                            <p style={{ margin: '6px 0 0' }}>Haz clic en una alerta para ver <b>quién</b> (asesores) y <b>dónde</b> (publicaciones), con la acción sugerida.</p>
                             <p style={{ margin: '6px 0 0' }}><b>Día por día</b> (fuentes con mediana de 5+ leads diarios): pico = el doble de su mediana; caída = una cuarta parte o menos (suele ser una integración rota o un paquete apagado). El día en curso no cuenta.</p>
                             <p style={{ margin: '6px 0 0' }}>Las de la semana (respuesta, sin responder) salen sólo si el periodo incluye las últimas dos semanas.</p>
                         </>}>
-                        {!atender.length && !grupos.length ? <div style={{ fontSize: 12.5, color: GRY }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
+                        {!atender.length && !grupos.length && !(A.spamPub ?? []).length ? <div style={{ fontSize: 12.5, color: GRY }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
                             : <>
-                                {grupos.filter((g) => g.sev === 'alta').map((g) => <FilaFlag key={g.fuente + (g.spam ? '|s' : '')} sev="alta" titulo={g.fuente} items={g.items} spam={g.spam} />)}
-                                {atender.map((x, i) => <FilaFlag key={i} sev={x.sev} titulo="Toda la red" items={[x.txt]} />)}
-                                {grupos.filter((g) => g.sev === 'media').map((g) => <FilaFlag key={g.fuente + (g.spam ? '|s' : '')} sev="media" titulo={g.fuente} items={g.items} spam={g.spam} />)}
+                                {grupos.filter((g) => g.sev === 'alta').map((g) => filaGrupo(g))}
+                                {spamPub.filter((x) => x.sev === 'alta').map(filaSpam)}
+                                {atender.map((x, i) => <FilaFlag key={i} sev={x.sev} titulo="Toda la red" items={[x.txt]} onAbrir={pedirDetalle}
+                                    detalle={() => <DetalleAlerta d={detD?.total ?? (detD ? { asesores: [], pubs: [] } : undefined)} fuente={T} red />} />)}
+                                {grupos.filter((g) => g.sev === 'media').map((g) => filaGrupo(g))}
+                                {spamPub.filter((x) => x.sev === 'media').map(filaSpam)}
                             </>}
                     </Seccion>
                     {A.porDia && <Seccion titulo="Leads por fuente en el tiempo" sub="Cuántos leads entraron de cada fuente y qué parte del total fueron. En vista diaria, los puntos rojos son los días marcados en «Para atender».">

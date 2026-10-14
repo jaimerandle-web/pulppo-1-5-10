@@ -8,6 +8,8 @@ import type { Operacion } from '@/lib/portales/metrics';
 //   ?view=opciones                    → las 102 inmobiliarias en su orden + sus cuentas
 //   ?view=asesores&inmo=NOMBRE        → asesores de esa inmobiliaria
 //   ?view=datos&inmo=&asesor=&operacion=&desde=&hasta=&comparar=   → el análisis
+//   ?view=detalle&… (mismos filtros) → sólo el desglose por fuente × asesor y × publicación, para los
+//     desplegables de «Para atender». Se pide al abrir uno (no frena el Resumen) y se cachea 10 min.
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
@@ -37,11 +39,14 @@ export async function GET(req: Request) {
         const inmobiliaria = u.searchParams.get('inmo') || null;
         const asesorId = (inmobiliaria && u.searchParams.get('asesor')) || null;
 
-        const key = [inmobiliaria, asesorId, operacion, desde, hasta, comparar].join('|');
+        const detalle = view === 'detalle';
+        const key = [view, inmobiliaria, asesorId, operacion, desde, hasta, comparar].join('|');
         const hit = cache.get(key);
         if (hit && Date.now() - hit.at < TTL && u.searchParams.get('refresh') !== '1')
             return NextResponse.json({ ...(hit.data as object), cacheAt: hit.at });
-        const data = await inmobiliariaView({ inmobiliaria, asesorId, operacion, desde, hasta, comparar });
+        const v = await inmobiliariaView({ inmobiliaria, asesorId, operacion, desde, hasta, comparar: detalle ? 'ninguno' : comparar, detalle });
+        // el detalle sólo necesita el desglose y las tasas de cada fuente (para marcar a quien está muy arriba)
+        const data = detalle ? { detalle: v.actual.detalle ?? {}, fuentes: v.actual.fuentes, total: v.actual.total, inmobiliarias: v.actual.inmobiliarias } : v;
         const at = Date.now();
         if (cache.size >= MAX) cache.delete(cache.keys().next().value as string);
         cache.set(key, { at, data });

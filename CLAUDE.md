@@ -374,6 +374,13 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   en la misma propiedad: i24/MeLi entregan en lotes, base normal 12–20%), madrugada (0–5 am), correos con 4+
   dígitos y contactos nuevos (≤1 h antes del lead). Red flags en `senales.ts`; «Posible spam» = 2+ de las
   últimas cuatro disparadas a la vez, en fila propia (no se mezcla con «no responde»).
+- **Desplegables de «Para atender»**: cada alerta por fuente (y las de toda la red) se abre con la acción
+  sugerida, los asesores (sin respuesta visible, aporte, sin responder 8–8, 1ª respuesta, WhatsApp vinculado)
+  y las publicaciones con más leads. Sale de `/api/portales/inmobiliarias?view=detalle` (celdas `fa:`/`fp:`
+  sólo con `detalle`), pedido al abrir el primero y cacheado 10 min.
+- **Posible spam en una publicación** (`enriquecer` en inmobiliaria.ts): publicaciones con ≥20 leads y ≥2 de
+  ×3 vs periodo anterior (o nueva), madrugada ≥12%, correos con dígitos ≥40%, contactos nuevos ≥85%,
+  conversa ≤ la mitad que su fuente. Validado: 29-sep–5-oct saca DBS-369, DMB-352, DHY-045 (MeLi).
 - **Cierres sin registro** (Funnel y cierres): la lista completa de cierres sin ningún rastro de fuente,
   con inmobiliaria vendedora, asesor y quién trajo al comprador, para que el KAM corrija la fuente.
 - Las vistas viejas de la API (`costo`, `periodo`, `calidad`: view.ts, periodo.ts, calidad.ts) y

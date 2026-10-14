@@ -51,6 +51,18 @@ export interface FiltroInmo {
     /** YYYY-MM-DD, `hasta` inclusivo */
     desde: string; hasta: string;
     comparar: Comparar;
+    /** pedir además el detalle por fuente × asesor y fuente × publicación (desplegables de «Para atender») */
+    detalle?: boolean;
+}
+
+/** Publicación con ≥20 leads en el periodo: candidata a «posible spam en una publicación». */
+export interface PubAgg { pid: string; n: number; fuente: string; fuenteKey: string; inmo: string | null; madru: number; mailDig: number; clic: number; conv: number; nuevo: number }
+/** «Posible spam en una publicación»: el spam se diluye a nivel fuente (MeLi, oct-2026: 4 publicaciones con
+ *  15% de madrugada y 60% de correos con dígitos; todo MeLi 9.5% y 14.7%), así que se busca por publicación. */
+export interface SpamPub { pid: string; codigo: string | null; fuente: string; fuenteKey: string; inmo: string | null; n: number; prev: number; senales: string[]; sev: 'alta' | 'media' }
+export interface DetalleFuente {
+    asesores: Array<Fila & { whatsapp: boolean | null }>;
+    pubs: Array<Fila & { pid: string; codigo: string | null; inmo: string | null }>;
 }
 
 export interface Fila {
@@ -136,6 +148,14 @@ export interface Bloque {
         /** n = leads del día · lab = de ellos, los que entraron 8 am – 8 pm MX · sin = de esos, sin respuesta del asesor */
         series: Array<{ key: string; nombre: string; n: number[]; lab: number[]; sin: number[] }>;
     };
+    /** publicaciones con ≥20 leads, con sus señales de calidad (para la alerta de spam por publicación) */
+    pubs?: PubAgg[];
+    /** INTERNO: leads por publicación, para comparar contra el otro periodo; se borra antes de responder */
+    pubN?: Record<string, number>;
+    /** «Posible spam en una publicación» (sólo en el bloque actual) */
+    spamPub?: SpamPub[];
+    /** sólo con `detalle`: por clave de fuente (`f:meli`, … y `total`) los asesores y las publicaciones */
+    detalle?: Record<string, DetalleFuente>;
 }
 export interface InmoView {
     filtro: FiltroInmo;
@@ -256,7 +276,8 @@ async function bloque(
     cel('f:otros', 'Otras fuentes', reqInmo);
 
     // leads → celdas; se guardan para los joins de después
-    type LeadRef = { id: ObjectId; cells: Celda[]; t: Date; cid: string | null; inter: ObjectId | null; search: string | null; telMalo: boolean; pid: string | null; tel: string; mail: string };
+    type LeadRef = { id: ObjectId; cells: Celda[]; t: Date; cid: string | null; inter: ObjectId | null; search: string | null; telMalo: boolean; pid: string | null; tel: string; mail: string;
+        canal: string; madru: boolean; mailDig: boolean; comp: string; compNombre: string; clic?: boolean; conv?: boolean; nuevo?: boolean };
     const refs: LeadRef[] = [];
     const nDias = Math.round((B.getTime() - A.getTime()) / DIA);
     const serie = new Map<string, { n: number[]; lab: number[]; sin: number[] }>();
@@ -278,10 +299,19 @@ async function bloque(
         // i24 de NURA va aparte: tiene su propio paquete con i24 («I24 Mérida» en el Sheet).
         const canal = canalDeLead(l.source, dig(l, 'company', 'name'));
         const mis: Celda[] = [total, cells.get(`f:${canal}`)!];
+        const aid = dig(l, 'agent', '_id');
+        const an = [dig(l, 'agent', 'firstName'), dig(l, 'agent', 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+        const anom = aid ? an || '(sin nombre)' : 'Sin asesor asignado';
+        if (f.detalle) {
+            // desplegables de «Para atender»: quién (asesor) y dónde (publicación), por fuente y en total
+            const pidD = dig(l, 'property', '_id') ? String(dig(l, 'property', '_id')) : null;
+            for (const k of [canal, 'total']) {
+                mis.push(cel(`fa:${k}|${aid ?? 'sin'}`, anom, reqInmo));
+                if (pidD) mis.push(cel(`fp:${k}|${pidD}`, pidD, reqInmo));
+            }
+        }
         if (op) {
-            const aid = dig(l, 'agent', '_id');
-            const an = [dig(l, 'agent', 'firstName'), dig(l, 'agent', 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-            mis.push(cel(`a:${aid ?? 'sin'}`, aid ? an || '(sin nombre)' : 'Sin asesor asignado', reqInmo));
+            mis.push(cel(`a:${aid ?? 'sin'}`, anom, reqInmo));
         } else {
             const cid = String(dig(l, 'company', '_id') ?? '');
             const o = idANombre.get(cid);
@@ -333,6 +363,7 @@ async function bloque(
             search: l.search ? String(l.search) : null, telMalo,
             pid: dig(l, 'property', '_id') ? String(dig(l, 'property', '_id')) : null,
             tel: String(l.phone || dig(l, 'contact', 'phone') || '').replace(/\D/g, '').slice(-10), mail,
+            canal, madru, mailDig, comp: String(dig(l, 'company', '_id') ?? ''), compNombre: String(dig(l, 'company', 'name') ?? '').trim(),
         });
     }
 
@@ -431,7 +462,7 @@ async function bloque(
         //   · FANTASMA — teléfono inválido y sin conversación: no hay cómo contactarlo.
         // Aparte, «sólo el clic» = el portal mandó únicamente el evento (dato del portal, no del lead).
         const sinAqui = refs.filter((r) => !r.inter || !real.has(String(r.inter)));
-        for (const r of sinAqui) for (const c of r.cells) c.soloClic += 1;
+        for (const r of sinAqui) { r.clic = true; for (const c of r.cells) c.soloClic += 1; }
 
         // ¿ese contacto conversó de verdad en OTRA interacción?
         const vent = new Map<string, Date[]>();   // contacto → fechas de mensajes reales del cliente
@@ -466,6 +497,7 @@ async function bloque(
                 const t = r.t.getTime();
                 conv = !!ds?.some((d) => d.getTime() >= t - 30 * DIA && d.getTime() <= t + 14 * DIA);
             }
+            r.conv = conv;
             for (const c of r.cells) {
                 if (conv) c.conv += 1;
                 else if (r.telMalo) c.fantTel += 1;
@@ -559,7 +591,7 @@ async function bloque(
         }));
         for (const r of refs) {
             const t = r.cid ? creado.get(r.cid) : undefined;
-            if (t != null && t >= r.t.getTime() - 3600000) for (const c of r.cells) c.nuevo += 1;
+            if (t != null && t >= r.t.getTime() - 3600000) { r.nuevo = true; for (const c of r.cells) c.nuevo += 1; }
         }
     })();
 
@@ -616,8 +648,43 @@ async function bloque(
         r.n += 1; r.comision += x.comision; r.regalia += x.regalia; if (x.inferida) r.inferidas += 1;
         if (x.operacion === 'Venta') r.venta += 1; else if (x.operacion === 'Renta') r.renta += 1;
     }
+    // ── por publicación: candidatas a «posible spam» (≥20 leads) y conteo para comparar ──
+    const pubN: Record<string, number> = {};
+    const pubM = new Map<string, PubAgg & { _f: Map<string, number>; _i: Map<string, number> }>();
+    for (const r of refs) {
+        if (!r.pid) continue;
+        pubN[r.pid] = (pubN[r.pid] ?? 0) + 1;
+        const e = pubM.get(r.pid) ?? pubM.set(r.pid, { pid: r.pid, n: 0, fuente: '', fuenteKey: '', inmo: null, madru: 0, mailDig: 0, clic: 0, conv: 0, nuevo: 0, _f: new Map(), _i: new Map() }).get(r.pid)!;
+        e.n += 1; if (r.madru) e.madru += 1; if (r.mailDig) e.mailDig += 1; if (r.clic) e.clic += 1; if (r.conv) e.conv += 1; if (r.nuevo) e.nuevo += 1;
+        e._f.set(r.canal, (e._f.get(r.canal) ?? 0) + 1);
+        if (r.compNombre) e._i.set(r.compNombre, (e._i.get(r.compNombre) ?? 0) + 1);
+    }
+    const masDe = (m: Map<string, number>) => [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    const pubs: PubAgg[] = [...pubM.values()].filter((e) => e.n >= 20).map(({ _f, _i, ...e }) => {
+        const k = masDe(_f) ?? 'otros';
+        return { ...e, fuenteKey: `f:${k}`, fuente: cells.get(`f:${k}`)?.nombre ?? k, inmo: masDe(_i) };
+    });
+    let detalle: Record<string, DetalleFuente> | undefined;
+    if (f.detalle) {
+        detalle = {};
+        const grupos = new Map<string, { a: Celda[]; p: Celda[] }>();
+        for (const c of cells.values()) {
+            const m = /^f([ap]):([^|]+)\|(.+)$/.exec(c.key);
+            if (!m) continue;
+            const g = grupos.get(m[2]) ?? grupos.set(m[2], { a: [], p: [] }).get(m[2])!;
+            (m[1] === 'a' ? g.a : g.p).push(c);
+        }
+        for (const [k, g] of grupos) {
+            const key = k === 'total' ? 'total' : `f:${k}`;
+            detalle[key] = {
+                asesores: g.a.map(fila).sort((x, y) => y.sinRespuesta - x.sinRespuesta || y.leads - x.leads).slice(0, 15).map((x) => ({ ...x, whatsapp: null })),
+                pubs: g.p.map(fila).sort((x, y) => y.leads - x.leads).slice(0, 10).map((x) => ({ ...x, pid: x.nombre, codigo: null, inmo: null })),
+            };
+        }
+    }
     const bIncl = new Date(B.getTime() - DIA);
     return {
+        pubs, pubN, ...(detalle ? { detalle } : {}),
         desde: ymd(A), hasta: ymd(bIncl), etiqueta: etiquetaDe(A, bIncl), dias: Math.round((B.getTime() - A.getTime()) / DIA),
         total: fila(total), fuentes, asesores, inmobiliarias,
         descarte: {
@@ -757,6 +824,57 @@ export async function cierresEntre(
     return { out, sinFuenteOrig };
 }
 
+// ── posible spam por publicación + códigos/nombres para los desplegables ─────────────────────────
+// Una publicación con ≥20 leads es sospechosa si coinciden ≥2 señales (≥3 = alta). Umbrales calibrados
+// con las 4 publicaciones de MeLi del reporte de anomalías (29-sep a 5-oct-2026: DBS-369, DMB-352…).
+const SPAM = { x: 3, madru: 12, mailDig: 40, nuevo: 85 };
+async function enriquecer(A: Bloque, C: Bloque | null): Promise<void> {
+    const db = await getDb();
+    const convFuente = new Map(A.fuentes.map((x) => [x.key, x.pctConConversacion ?? null]));
+    const pct = (a: number, b: number) => (b ? (100 * a) / b : 0);
+    const spam: SpamPub[] = [];
+    for (const p of A.pubs ?? []) {
+        const sen: string[] = [];
+        const prev = C?.pubN?.[p.pid] ?? 0;
+        if (C) {
+            if (!prev) sen.push(`publicación nueva con ${p.n} leads`);
+            else if (p.n >= SPAM.x * prev) sen.push(`${p.n} leads vs ${prev} el periodo anterior`);
+        }
+        if (pct(p.madru, p.n) >= SPAM.madru) sen.push(`${Math.round(pct(p.madru, p.n))}% de madrugada`);
+        if (pct(p.mailDig, p.n) >= SPAM.mailDig) sen.push(`${Math.round(pct(p.mailDig, p.n))}% correos con dígitos`);
+        if (pct(p.nuevo, p.n) >= SPAM.nuevo) sen.push(`${Math.round(pct(p.nuevo, p.n))}% contactos nuevos`);
+        const cf = convFuente.get(p.fuenteKey);
+        if (cf != null && pct(p.conv, p.n) <= cf / 2) sen.push(`conversa el ${Math.round(pct(p.conv, p.n))}% (su fuente ${Math.round(cf)}%)`);
+        if (sen.length >= 2) spam.push({ pid: p.pid, codigo: null, fuente: p.fuente, fuenteKey: p.fuenteKey, inmo: p.inmo, n: p.n, prev, senales: sen, sev: sen.length >= 3 ? 'alta' : 'media' });
+    }
+    spam.sort((a, b) => (a.sev === b.sev ? b.n - a.n : a.sev === 'alta' ? -1 : 1));
+    // códigos de propiedad: spam + publicaciones del detalle
+    const pids = new Set<string>(spam.map((x) => x.pid));
+    for (const d of Object.values(A.detalle ?? {})) for (const x of d.pubs) pids.add(x.pid);
+    const props = new Map<string, Document>();
+    const ids = [...pids].map(oid).filter((x): x is ObjectId => !!x);
+    for (let i = 0; i < ids.length; i += 3000)
+        for await (const p of db.collection('properties').find({ _id: { $in: ids.slice(i, i + 3000) } }, { projection: { internalId: 1, 'company.name': 1 } }))
+            props.set(String(p._id), p);
+    for (const x of spam) x.codigo = (props.get(x.pid)?.internalId as string) ?? null;
+    // WhatsApp vinculado de los asesores del detalle (`agents.whatsapp`, booleano)
+    const aids = new Set<string>();
+    for (const d of Object.values(A.detalle ?? {})) for (const a of d.asesores) { const id = a.key.split('|')[1]; if (/^[a-f0-9]{24}$/i.test(id)) aids.add(id); }
+    const wa = new Map<string, boolean>();
+    const aoids = [...aids].map(oid).filter((x): x is ObjectId => !!x);
+    for (let i = 0; i < aoids.length; i += 3000)
+        for await (const a of db.collection('agents').find({ _id: { $in: aoids.slice(i, i + 3000) } }, { projection: { whatsapp: 1 } }))
+            wa.set(String(a._id), a.whatsapp === true);
+    for (const d of Object.values(A.detalle ?? {})) {
+        for (const a of d.asesores) a.whatsapp = wa.get(a.key.split('|')[1]) ?? null;
+        for (const x of d.pubs) { const p = props.get(x.pid); x.codigo = (p?.internalId as string) ?? null; x.inmo = String(dig(p, 'company', 'name') ?? '').trim() || null; }
+    }
+    A.spamPub = spam;
+    // internos: no viajan al navegador
+    delete A.pubN; delete A.pubs;
+    if (C) { delete C.pubN; delete C.pubs; }
+}
+
 /** Ventana [A, B) del periodo y, si se pide, la del periodo con que se compara. */
 export function ventanas(f: FiltroInmo): { A: Date; B: Date; cA: Date | null; cB: Date | null } {
     const A = parseYmd(f.desde), B = new Date(parseYmd(f.hasta).getTime() + DIA);
@@ -802,8 +920,9 @@ export async function inmobiliariaView(f: FiltroInmo, now = Date.now()): Promise
     const { A, B, cA, cB } = ventanas(f);
     const [actual, comparado] = await Promise.all([
         bloque(A, B, f, op, todas),
-        cA && cB ? bloque(cA, cB, f, op, todas) : Promise.resolve(null),
+        cA && cB ? bloque(cA, cB, { ...f, detalle: false }, op, todas) : Promise.resolve(null),
     ]);
+    await enriquecer(actual, comparado);
     return {
         filtro: f,
         inmobiliaria: op ? { nombre: op.nombre, kam: op.kam, tier: op.tier, cuentas: op.ids.length } : null,
