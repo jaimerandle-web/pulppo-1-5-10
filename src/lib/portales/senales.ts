@@ -8,9 +8,14 @@
 //     caída a casi cero suele ser una integración rota, no falta de demanda).
 // Los umbrales piden una base mínima: con 30 leads un +60% son 18 leads y no es una señal.
 import type { Bloque, Fila } from './inmobiliaria';
+import { FAM_LBL, type FamDesc } from './descarte';
 
 export type Sev = 'alta' | 'media';
-export interface Senal { sev: Sev; fuente: string; txt: string; /** días marcados en la gráfica */ dias?: string[] }
+export interface Senal {
+    sev: Sev; fuente: string; txt: string; /** días marcados en la gráfica */ dias?: string[];
+    /** «Posible spam»: va en su propia fila con su propia etiqueta, NO se mezcla con «no responde» */
+    spam?: boolean;
+}
 
 const MIN_VOL = 100;          // leads (el mayor de los dos periodos) para opinar de una fuente
 const SUBE = 1.5, BAJA = 0.65; // ×1.5 o −35%
@@ -65,6 +70,33 @@ function contraComparado(A: Bloque, C: Bloque, cmp: string): Senal[] {
         if (dFan != null && dFan >= 5) out.push({ sev: dFan >= 10 ? 'alta' : 'media', fuente: f.nombre, txt: `${f.nombre}: los fantasmas (teléfono inválido) subieron a ${f.pctFantasma}% (antes ${c.pctFantasma}%).` });
         const dVisita = pts(f.pVisita, c.pVisita);
         if (f.unicos >= 200 && dVisita != null && dVisita <= -3) out.push({ sev: 'media', fuente: f.nombre, txt: `${f.nombre}: lead → visita bajó a ${f.pVisita}% (antes ${c.pVisita}%).` });
+
+        // ── calidad del lead (sólo con 100+ leads en el periodo) ──
+        if (f.leads < MIN_VOL) continue;
+        const dSinC = pts(f.pctSinContacto ?? null, c.pctSinContacto ?? null);
+        if (dSinC != null && dSinC >= 3) out.push({ sev: 'media', fuente: f.nombre, txt: `${f.nombre}: los leads sin ningún dato de contacto subieron a ${f.pctSinContacto}% (antes ${c.pctSinContacto}%).` });
+        const dClic = pts(f.pctSoloClic, c.pctSoloClic);
+        if (dClic != null && dClic >= 8) out.push({ sev: 'media', fuente: f.nombre, txt: `${f.nombre}: llegan sólo con el clic el ${f.pctSoloClic}% (antes ${c.pctSoloClic}%), sin mensaje del cliente.` });
+        const dDesc = pts(f.pctDescartado, c.pctDescartado);
+        if (dDesc != null && dDesc >= 8) {
+            // la familia de motivo que más creció en participación
+            const share = (x: Fila, k: string) => (x.descartados ? (100 * (x.descFam[k] ?? 0)) / x.descartados : 0);
+            const fam = Object.keys(FAM_LBL).map((k) => [k, share(f, k) - share(c, k)] as const).sort((a, b) => b[1] - a[1])[0];
+            const motivo = fam && fam[1] > 0 ? `; lo que más creció: ${FAM_LBL[fam[0] as FamDesc].toLowerCase()}` : '';
+            out.push({ sev: 'media', fuente: f.nombre, txt: `${f.nombre}: se descartan el ${f.pctDescartado}% (antes ${c.pctDescartado}%)${motivo}.` });
+        }
+        // ── posible spam: coinciden 2+ señales de leads «fabricados» (el caso MeLi, oct-2026) ──
+        const v = (x: number | null | undefined) => x ?? 0;
+        const partes: string[] = [];
+        if (v(f.pctRafaga) >= 3 && v(f.pctRafaga) >= 2 * v(c.pctRafaga))
+            partes.push(`${(f.rafagas ?? 0).toLocaleString('es-MX')} leads en ráfaga (${v(f.pctRafaga)}%, antes ${v(c.pctRafaga)}%)`);
+        if (v(f.pctMadrugada) >= 8 && v(f.pctMadrugada) >= 1.8 * v(c.pctMadrugada))
+            partes.push(`${v(f.pctMadrugada)}% de madrugada (antes ${v(c.pctMadrugada)}%)`);
+        if (v(f.pctMailDigitos) - v(c.pctMailDigitos) >= 15)
+            partes.push(`${v(f.pctMailDigitos)}% correos con 4+ dígitos (antes ${v(c.pctMailDigitos)}%)`);
+        if (v(f.pctContactoNuevo) - v(c.pctContactoNuevo) >= 15)
+            partes.push(`${v(f.pctContactoNuevo)}% contactos nuevos (antes ${v(c.pctContactoNuevo)}%)`);
+        if (partes.length >= 2) out.push({ sev: partes.length >= 3 ? 'alta' : 'media', fuente: f.nombre, spam: true, txt: `${f.nombre}: ${partes.join(' · ')}.` });
     }
     return out;
 }
@@ -129,11 +161,13 @@ export function senales(A: Bloque, C: Bloque | null, cmp: string, hoy: string): 
 
 /** Una fila por fuente: sus hallazgos juntos, con la severidad más alta. Altas primero; dentro de
  *  cada severidad, la fuente con más leads arriba. */
-export interface SenalFuente { sev: Sev; fuente: string; items: string[] }
+export interface SenalFuente { sev: Sev; fuente: string; items: string[]; spam?: boolean }
 export function porFuente(xs: Senal[], orden: string[]): SenalFuente[] {
     const m = new Map<string, SenalFuente>();
     for (const x of xs) {
-        const e = m.get(x.fuente) ?? m.set(x.fuente, { sev: 'media', fuente: x.fuente, items: [] }).get(x.fuente)!;
+        // «Posible spam» va en su propia fila: es otra pregunta que «no responde» o «se descartan»
+        const k = x.spam ? `${x.fuente}|spam` : x.fuente;
+        const e = m.get(k) ?? m.set(k, { sev: 'media', fuente: x.fuente, items: [], ...(x.spam ? { spam: true } : {}) }).get(k)!;
         if (x.sev === 'alta') e.sev = 'alta';
         const t = x.txt.startsWith(`${x.fuente}: `) ? x.txt.slice(x.fuente.length + 2) : x.txt;
         e.items.push(t.charAt(0).toUpperCase() + t.slice(1));

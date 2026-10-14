@@ -160,11 +160,11 @@ function Seccion({ titulo, sub, info, onCopiar, children }: { titulo: string; su
     );
 }
 
-function FilaFlag({ sev, titulo, items }: { sev: 'alta' | 'media'; titulo: string; items: string[] }) {
+function FilaFlag({ sev, titulo, items, spam }: { sev: 'alta' | 'media'; titulo: string; items: string[]; spam?: boolean }) {
     return (
         <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '8px 0', borderBottom: `1px solid ${LGT}`, fontSize: 12.5, lineHeight: 1.5 }}>
             <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.5px', color: sev === 'alta' ? RED : '#8A6D00', width: 44, flexShrink: 0 }}>{sev === 'alta' ? 'ALTA' : 'MEDIA'}</span>
-            <span style={{ width: 150, flexShrink: 0, fontWeight: 700 }}>{titulo}</span>
+            <span style={{ width: 150, flexShrink: 0, fontWeight: 700 }}>{titulo}{spam && <span style={{ display: 'inline-block', marginLeft: 6, fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: R, background: '#F3D9D3', color: RED }}>Posible spam</span>}</span>
             <span style={{ flex: 1 }}>{items.length === 1 ? items[0] : items.map((t, i) => <div key={i}>· {t}</div>)}</span>
         </div>
     );
@@ -426,6 +426,33 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
         </tr>
     );
     const HEAD_CAL = ['', 'Leads', 'Con conversación', 'Sin respuesta visible', 'Fantasma', 'Llegó sólo el clic', 'Descartados', 'Asesor sin responder'];
+    // Calidad del lead por fuente: % y Δ en pts; la celda va en rojo cuando dispara la misma red flag de «Para atender».
+    const pv = (n: number | null | undefined) => n ?? 0;
+    const QCOLS: Array<{ h: string; v: (x: Fila) => number | null | undefined; flag: (x: Fila, c: Fila) => boolean; madura?: boolean }> = [
+        { h: 'Sin contacto', v: (x) => x.pctSinContacto, flag: (x, c) => pv(x.pctSinContacto) - pv(c.pctSinContacto) >= 3 },
+        { h: 'Fantasma', v: (x) => x.pctFantasma, flag: (x, c) => pv(x.pctFantasma) - pv(c.pctFantasma) >= 5 },
+        { h: 'Sólo el clic', v: (x) => x.pctSoloClic, flag: (x, c) => pv(x.pctSoloClic) - pv(c.pctSoloClic) >= 8 },
+        { h: 'Sin respuesta visible', v: (x) => x.pctSinRespuesta, flag: (x, c) => pv(x.pctSinRespuesta) - pv(c.pctSinRespuesta) >= 8 },
+        { h: 'Descartados', v: (x) => x.pctDescartado, flag: (x, c) => pv(x.pctDescartado) - pv(c.pctDescartado) >= 8, madura: true },
+        { h: 'Brokers', v: (x) => x.pctBroker, flag: (x, c) => pv(x.pctBroker) - pv(c.pctBroker) >= 8 },
+        { h: 'Ráfagas', v: (x) => x.pctRafaga, flag: (x, c) => pv(x.pctRafaga) >= 3 && pv(x.pctRafaga) >= 2 * pv(c.pctRafaga) },
+        { h: 'Madrugada', v: (x) => x.pctMadrugada, flag: (x, c) => pv(x.pctMadrugada) >= 8 && pv(x.pctMadrugada) >= 1.8 * pv(c.pctMadrugada) },
+        { h: 'Correos con dígitos', v: (x) => x.pctMailDigitos, flag: (x, c) => pv(x.pctMailDigitos) - pv(c.pctMailDigitos) >= 15 },
+        { h: 'Contactos nuevos', v: (x) => x.pctContactoNuevo, flag: (x, c) => pv(x.pctContactoNuevo) - pv(c.pctContactoNuevo) >= 15 },
+    ];
+    const filaQ = (x: Fila, c: Fila | null) => (
+        <tr key={'q' + x.key}>
+            <td style={td0}>{x.nombre}</td>
+            <td style={td}>{f0(x.leads)}</td>
+            {QCOLS.map((q) => {
+                const roja = !!c && x.leads >= 100 && (!q.madura || descMaduro) && q.flag(x, c);
+                return (
+                    <td key={q.h} style={{ ...td, color: roja ? RED : BLK, fontWeight: roja ? 700 : 400 }}>{pc(q.v(x) ?? null)}
+                        {c && (!q.madura || descMaduro) && <div style={{ fontSize: 10, fontWeight: 400 }}><Delta a={q.v(x) ?? null} b={q.v(c) ?? null} pts invertir /></div>}</td>
+                );
+            })}
+        </tr>
+    );
 
     const filaEquipo = (x: Fila, c: Fila | null) => (
         <tr key={x.key}>
@@ -555,15 +582,16 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                     </Seccion>
                     <Seccion titulo="Para atender" sub={`Lo que se movió raro por fuente${C ? `, ${cmp}` : ''}, y los días fuera de lo normal.`}
                         info={<>
-                            <b>Contra el periodo comparado</b> (fuentes con al menos 100 leads): volumen ×1.5 o −35%; asesor sin responder +5 pts; 1ª respuesta +50% (y +10 min); sin respuesta visible del cliente +8 pts; brokers +8 pts; fantasmas +5 pts; lead → visita −3 pts. Si el volumen se dispara <b>y</b> empeora la atención, sale como una sola alerta alta.
+                            <b>Contra el periodo comparado</b> (fuentes con al menos 100 leads): volumen ×1.5 o −35%; asesor sin responder +5 pts; 1ª respuesta +50% (y +10 min); sin respuesta visible del cliente +8 pts; brokers +8 pts; fantasmas +5 pts; lead → visita −3 pts. Si el volumen se dispara <b>y</b> empeora la atención, sale como una sola alerta alta. <b>Calidad:</b> sin ningún dato de contacto +3 pts; llegan sólo con el clic +8 pts; descartados +8 pts (y qué motivo creció).
+                            <p style={{ margin: '6px 0 0' }}><b>Posible spam</b> (va aparte, no es «no responde»): cuando coinciden 2 o más de — ráfagas (leads a ≤2 min de otro a la misma propiedad) ≥3% y el doble que antes; madrugada (0–5 am) ≥8% y 1.8× antes; correos con 4+ dígitos +15 pts; contactos nuevos +15 pts. Alta si coinciden 3 o más.</p>
                             <p style={{ margin: '6px 0 0' }}><b>Día por día</b> (fuentes con mediana de 5+ leads diarios): pico = el doble de su mediana; caída = una cuarta parte o menos (suele ser una integración rota o un paquete apagado). El día en curso no cuenta.</p>
                             <p style={{ margin: '6px 0 0' }}>Las de la semana (respuesta, sin responder) salen sólo si el periodo incluye las últimas dos semanas.</p>
                         </>}>
                         {!atender.length && !grupos.length ? <div style={{ fontSize: 12.5, color: GRY }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
                             : <>
-                                {grupos.filter((g) => g.sev === 'alta').map((g) => <FilaFlag key={g.fuente} sev="alta" titulo={g.fuente} items={g.items} />)}
+                                {grupos.filter((g) => g.sev === 'alta').map((g) => <FilaFlag key={g.fuente + (g.spam ? '|s' : '')} sev="alta" titulo={g.fuente} items={g.items} spam={g.spam} />)}
                                 {atender.map((x, i) => <FilaFlag key={i} sev={x.sev} titulo="Toda la red" items={[x.txt]} />)}
-                                {grupos.filter((g) => g.sev === 'media').map((g) => <FilaFlag key={g.fuente} sev="media" titulo={g.fuente} items={g.items} />)}
+                                {grupos.filter((g) => g.sev === 'media').map((g) => <FilaFlag key={g.fuente + (g.spam ? '|s' : '')} sev="media" titulo={g.fuente} items={g.items} spam={g.spam} />)}
                             </>}
                     </Seccion>
                     {A.porDia && <Seccion titulo="Leads por fuente en el tiempo" sub="Cuántos leads entraron de cada fuente y qué parte del total fueron. En vista diaria, los puntos rojos son los días marcados en «Para atender».">
@@ -740,6 +768,15 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 </Tabla>
             </Seccion>
 
+
+                <Seccion titulo="Calidad del lead por fuente" onCopiar={() => copiar([['Fuente', 'Leads', ...QCOLS.map((q) => q.h)], ...[...A.fuentes, T].map((x) => [x.nombre, x.leads, ...QCOLS.map((q) => q.v(x) ?? '')])])}
+                    sub="Qué tan contactables y qué tan reales son los leads de cada canal. En rojo, lo que dispara una red flag en «Para atender»."
+                    info={<><b>Sin contacto</b>: teléfono inválido y sin correo. <b>Fantasma</b>: teléfono inválido y nunca conversó. <b>Sólo el clic</b>: el portal mandó sólo el evento («Vio teléfono»), sin mensaje del cliente. <b>Sin respuesta visible</b>: tiene teléfono pero no vemos que haya contestado. <b>Descartados</b>: búsqueda cerrada como descartada. <b>Brokers</b>: el contacto está etiquetado como broker. <b>Ráfagas</b>: entró a ≤2 min del lead de OTRA persona (distinto contacto, teléfono y correo) a la misma propiedad. Inmuebles24 y MercadoLibre entregan leads en lotes, así que tienen una base normal de 12–20%: lo raro es que se duplique. <b>Madrugada</b>: entró de 0 a 5 am. <b>Correos con dígitos</b>: 4+ números antes de la @ (típico de cuentas hechas en serie). <b>Contactos nuevos</b>: el contacto se creó al mismo tiempo que el lead. Las últimas cuatro juntas son las señales de «Posible spam».</>}>
+                    <Tabla head={['Fuente', 'Leads', ...QCOLS.map((q) => q.h)]} min={1180}>
+                        {A.fuentes.map((x) => filaQ(x, buscar(C?.fuentes, x.key)))}
+                        {filaQ(T, CT)}
+                    </Tabla>
+                </Seccion>
 
                 <Seccion titulo="Por qué se descartan, por fuente" onCopiar={() => copiar([['Fuente', '% descartados', ...FAM.map(([, l]) => l)], ...A.fuentes.map((x) => [x.nombre, x.pctDescartado, ...FAM.map(([k]) => (x.descartados ? Math.round((100 * (x.descFam[k] ?? 0)) / x.descartados) : ''))])])}
                     sub="Si un portal manda más brokers, más datos falsos o más gente que no responde."

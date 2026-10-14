@@ -369,6 +369,11 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   clic» (el portal mandó sólo el evento «Vio teléfono»/«Contactó por WhatsApp»/«Es un lead de…»).
   La regla corre EN MONGO (`$regexMatch`). `interactions` NO tiene índice por `lead`: entrar por
   `lead.interaction` (= `_id`). `answeredAt` NO prueba que hubo mensaje.
+- **Calidad del lead** (Leads y calidad → «Calidad del lead por fuente»): sin contacto (tel inválido y sin
+  correo), fantasma, sólo el clic, sin respuesta visible, descartados, brokers, ráfagas (OTRA persona a ≤2 min
+  en la misma propiedad: i24/MeLi entregan en lotes, base normal 12–20%), madrugada (0–5 am), correos con 4+
+  dígitos y contactos nuevos (≤1 h antes del lead). Red flags en `senales.ts`; «Posible spam» = 2+ de las
+  últimas cuatro disparadas a la vez, en fila propia (no se mezcla con «no responde»).
 - **Cierres sin registro** (Funnel y cierres): la lista completa de cierres sin ningún rastro de fuente,
   con inmobiliaria vendedora, asesor y quién trajo al comprador, para que el KAM corrija la fuente.
 - Las vistas viejas de la API (`costo`, `periodo`, `calidad`: view.ts, periodo.ts, calidad.ts) y

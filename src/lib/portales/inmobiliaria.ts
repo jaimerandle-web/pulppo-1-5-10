@@ -78,6 +78,17 @@ export interface Fila {
     brokerLeads: number; pctBroker: number | null;
     /** descartados por familia (claves de FAM_ORDEN) */
     descFam: Record<string, number>;
+    // ── calidad del lead / posible spam (oct-2026, a raíz de los leads raros de MeLi) ──
+    /** teléfono inválido Y sin correo válido: no hay ningún dato para contactarlo */
+    sinContacto: number; pctSinContacto: number | null;
+    /** entró a ≤2 min de otro lead de la MISMA propiedad (cualquier fuente) */
+    rafagas: number; pctRafaga: number | null;
+    /** entró de 0:00 a 4:59 hora México */
+    madrugada: number; pctMadrugada: number | null;
+    /** el correo trae 4+ dígitos seguidos antes de la @ */
+    mailDigitos: number; pctMailDigitos: number | null;
+    /** el contacto se creó como mucho 1 h antes del lead (nadie lo conocía) */
+    contactoNuevo: number; pctContactoNuevo: number | null;
     /** fuente que más leads trae (sólo en filas de asesor / inmobiliaria) */
     topFuente?: string;
     nota?: string;
@@ -218,10 +229,12 @@ interface Celda {
     soloClic: number; conv: number; sinResp: number; fantTel: number; desc: number; descSinSeg: number; telInv: number;
     brk: number; descFam: Map<string, number>;
     fuentes: Map<string, number>;
+    sinCont: number; rafaga: number; madru: number; mailDig: number; nuevo: number;
 }
 const nuevaCelda = (key: string, nombre: string, req: Set<string> | null): Celda => ({
     key, nombre, req, leads: 0, venta: 0, renta: 0, baseLab: 0, lt60: 0, sin: 0, resp: [],
     t0: new Map(), vis: new Set(), ofe: new Set(), clo: new Set(), soloClic: 0, conv: 0, sinResp: 0, fantTel: 0, desc: 0, descSinSeg: 0, telInv: 0, brk: 0, descFam: new Map(), fuentes: new Map(),
+    sinCont: 0, rafaga: 0, madru: 0, mailDig: 0, nuevo: 0,
 });
 
 async function bloque(
@@ -243,7 +256,7 @@ async function bloque(
     cel('f:otros', 'Otras fuentes', reqInmo);
 
     // leads → celdas; se guardan para los joins de después
-    type LeadRef = { id: ObjectId; cells: Celda[]; t: Date; cid: string | null; inter: ObjectId | null; search: string | null; telMalo: boolean };
+    type LeadRef = { id: ObjectId; cells: Celda[]; t: Date; cid: string | null; inter: ObjectId | null; search: string | null; telMalo: boolean; pid: string | null; tel: string; mail: string };
     const refs: LeadRef[] = [];
     const nDias = Math.round((B.getTime() - A.getTime()) / DIA);
     const serie = new Map<string, { n: number[]; lab: number[]; sin: number[] }>();
@@ -256,7 +269,7 @@ async function bloque(
     const cur = db.collection('leads').find(filtro, {
         projection: { source: 1, createdAt: 1, answeredAt: 1, 'contact._id': 1, 'property.listing.operation': 1,
             'company._id': 1, 'company.name': 1, 'agent._id': 1, 'agent.firstName': 1, 'agent.lastName': 1, interaction: 1, search: 1,
-            phone: 1, 'contact.phone': 1 },
+            phone: 1, 'contact.phone': 1, email: 1, 'contact.email': 1, 'property._id': 1 },
         batchSize: 10000,
     });
     for await (const l of cur) {
@@ -287,6 +300,12 @@ async function bloque(
         const cid = cidRaw != null ? String(cidRaw) : null;
         // `||` y no `??`: hay leads con phone = '' y el teléfono bueno en el contacto.
         const telMalo = telInvalido(l.phone || dig(l, 'contact', 'phone'));
+        // calidad: sin ningún dato de contacto, madrugada y correos «fabricados» (4+ dígitos antes de la @)
+        const mail = String(l.email || dig(l, 'contact', 'email') || '').trim().toLowerCase();
+        const mailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail);
+        const sinCont = telMalo && !mailOk;
+        const madru = h < 5;
+        const mailDig = mailOk && /\d{4,}/.test(mail.split('@')[0]);
         const di = Math.floor((ca.getTime() - A.getTime()) / DIA);
         if (di >= 0 && di < nDias) {
             const sr = serie.get(canal) ?? serie.set(canal, { n: Array(nDias).fill(0), lab: Array(nDias).fill(0), sin: Array(nDias).fill(0) }).get(canal)!;
@@ -296,6 +315,9 @@ async function bloque(
         for (const c of mis) {
             c.leads += 1;
             if (telMalo) c.telInv += 1;
+            if (sinCont) c.sinCont += 1;
+            if (madru) c.madru += 1;
+            if (mailDig) c.mailDig += 1;
             if (oper === 'sale') c.venta += 1; else if (oper === 'rent') c.renta += 1;
             if (lab) {
                 c.baseLab += 1;
@@ -309,7 +331,31 @@ async function bloque(
             id: l._id as ObjectId, cells: mis, t: ca, cid,
             inter: l.interaction instanceof ObjectId ? l.interaction : null,
             search: l.search ? String(l.search) : null, telMalo,
+            pid: dig(l, 'property', '_id') ? String(dig(l, 'property', '_id')) : null,
+            tel: String(l.phone || dig(l, 'contact', 'phone') || '').replace(/\D/g, '').slice(-10), mail,
         });
+    }
+
+    // Ráfagas: PERSONAS DISTINTAS escribiendo a la misma propiedad a ≤2 min una de otra (MeLi oct-2026:
+    // 14 leads a menos de 30 s en DBS-369). La misma persona en segundos NO cuenta: el portal manda dos
+    // eventos por cada contacto («Vio teléfono» + «Contactó por WhatsApp»), y contarlos daba 15–20%
+    // de «ráfagas» en cualquier portal.
+    {
+        const porProp = new Map<string, LeadRef[]>();
+        for (const r of refs) if (r.pid) (porProp.get(r.pid) ?? porProp.set(r.pid, []).get(r.pid)!).push(r);
+        for (const xs of porProp.values()) {
+            if (xs.length < 2) continue;
+            xs.sort((a, b) => a.t.getTime() - b.t.getTime());
+            xs.forEach((r, i) => {
+                // otra persona = distinto contacto Y distinto teléfono Y distinto correo (la misma persona a
+                // veces queda con dos contactos: uno del portal y otro del WhatsApp)
+                const otra = (x: LeadRef) => x.cid !== r.cid && (!x.tel || x.tel !== r.tel) && (!x.mail || x.mail !== r.mail);
+                let hay = false;
+                for (let j = i - 1; j >= 0 && r.t.getTime() - xs[j].t.getTime() <= 120000 && !hay; j--) hay = otra(xs[j]);
+                for (let j = i + 1; j < xs.length && xs[j].t.getTime() - r.t.getTime() <= 120000 && !hay; j++) hay = otra(xs[j]);
+                if (hay) for (const c of r.cells) c.rafaga += 1;
+            });
+        }
     }
 
     // índice contacto → (celda, primer lead) para los joins
@@ -503,7 +549,21 @@ async function bloque(
         for (const r of refs) if (r.cid && bset.has(r.cid)) for (const c of r.cells) c.brk += 1;
     })();
 
-    const [, , , cierresRes] = await Promise.all([Promise.all(tareasJoin), tareaFantasma, tareaDescarte, tareaCierres, tareaBroker]);
+    // contacto NUEVO: creado como mucho 1 h antes del lead (nadie de la red lo conocía)
+    const tareaNuevo = (async () => {
+        const creado = new Map<string, number>();
+        const cids = [...new Set(refs.map((r) => r.cid).filter((x): x is string => !!x))].map(oid).filter((x): x is ObjectId => !!x);
+        await Promise.all(Array.from({ length: Math.ceil(cids.length / LOTE) }, async (_, j) => {
+            for await (const c of db.collection('contacts').find({ _id: { $in: cids.slice(j * LOTE, (j + 1) * LOTE) } }, { projection: { createdAt: 1 } }))
+                if (isDate(c.createdAt)) creado.set(String(c._id), c.createdAt.getTime());
+        }));
+        for (const r of refs) {
+            const t = r.cid ? creado.get(r.cid) : undefined;
+            if (t != null && t >= r.t.getTime() - 3600000) for (const c of r.cells) c.nuevo += 1;
+        }
+    })();
+
+    const [, , , cierresRes] = await Promise.all([Promise.all(tareasJoin), tareaFantasma, tareaDescarte, tareaCierres, tareaBroker, tareaNuevo]);
     const lista = cierresRes.out;
 
     const fila = (c: Celda): Fila => {
@@ -523,6 +583,11 @@ async function bloque(
             descSinSeg: c.descSinSeg, pctDescSinSeg: p1(c.descSinSeg, c.desc),
             brokerLeads: c.brk, pctBroker: p1(c.brk, c.leads), descFam: Object.fromEntries(c.descFam),
             telInvalido: c.telInv, pctTelInvalido: p1(c.telInv, c.leads),
+            sinContacto: c.sinCont, pctSinContacto: p1(c.sinCont, c.leads),
+            rafagas: c.rafaga, pctRafaga: p1(c.rafaga, c.leads),
+            madrugada: c.madru, pctMadrugada: p1(c.madru, c.leads),
+            mailDigitos: c.mailDig, pctMailDigitos: p1(c.mailDig, c.leads),
+            contactoNuevo: c.nuevo, pctContactoNuevo: p1(c.nuevo, c.leads),
             ...(top ? { topFuente: top[0] === 'i24nura' ? I24_NURA : KEY2NAME[top[0]] ?? 'Otras fuentes' } : {}),
         };
     };
