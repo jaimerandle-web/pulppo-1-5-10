@@ -355,12 +355,19 @@ el PDF imprime las dos con las listas abiertas.
 ## /mb → Marketing (Diamond House, SÓLO equipo interno)
 
 `src/lib/marketingDh.ts` + `/api/mb-marketing` + `MBMarketing.tsx`. Visibilidad en `src/lib/marketingAcceso.ts`
-(`MARKETING_VISIBLE_PARA = 'internos'`; la API responde 403 a masters y a masterExtra como Miriam). Secciones:
-asignación por nivel/cuenta i24/MeLi, cambios de la semana (desde `portals.inmuebles24.history`, ignorando
-OFFLINE = bug de i24), desempeño por nivel/aviso (leads únicos, visitas por startTime), estrellas,
-exposición vs calidad y rotación con el scoring de `portals/avisos.ts` (regla: 30–45 leads → Simple), y
-trabadas (60+ días sin oferta). SIN costos ni CPL (Ale). Ojo: en los datos `ANUNCIO_SIMPLE` trae los
-destacados y `ANUNCIOS_DEGOHOUSE` casi sólo simples (al revés de lo que se dijo; confirmar con portales).
+(`MARKETING_VISIBLE_PARA = 'internos'`; la API responde 403 a masters y a masterExtra como Miriam; el preview de
+`lib/preview.ts` sí entra). Secciones:
+- Asignación por nivel (i24 con zona demand sumado en su nivel, y el % zona demand sobre venta; MeLi). NO se
+  muestran las cuentas de i24 ni «zona forzada», que es la misma marca que zona demand. Ojo: en los datos,
+  `ANUNCIO_SIMPLE` trae los destacados y `ANUNCIOS_DEGOHOUSE` casi sólo simples; confirmarlo con portales.
+- Cambios de la semana, desde `portals.inmuebles24.history`, ignorando OFFLINE (bug de i24).
+- Desempeño por nivel en tarjetas vistas → leads → visitas. Las vistas son `metrics` type 'view', igual que /mb.
+- Estrellas y premium sin leads.
+- Trabadas (60+ días sin oferta), con el porqué: vistas, precio vs colonia, demanda y competencia.
+- Rotación con el scoring de `portals/avisos.ts` (regla: 30–45 leads → Simple). La explicación del scoring va
+  en una presentación aparte.
+- Top de anuncios venta/renta, al final.
+Todas las tablas usan `TablaFiltrable` (buscador, filtros, orden y copiar lo filtrado). SIN costos ni CPL (Ale).
 
 ## Portales → "Leads, funnel y cierres" por inmobiliaria
 
