@@ -8,6 +8,7 @@ import { masterExtra } from './masterExtra';
 import { getDb } from './data';
 import { isAllowed } from './access';
 import { userToken } from './token';
+import { tienePreview } from './preview';
 
 // company._id (como string) del master broker con ese email, o null si el email no es master de ninguna
 // inmobiliaria. Determinístico: en los datos ningún email cae en más de una company.
@@ -85,6 +86,7 @@ export async function canAccessCompany(companyId?: string | null): Promise<boole
     if (!u) return false;
     if (u.internal) return true;
     if (!companyId) return false;
+    if (tienePreview(u.email, companyId)) return true;
     const own = await masterCompanyForEmail(u.email);
     return !!own && own === companyId;
 }

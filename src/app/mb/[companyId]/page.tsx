@@ -20,6 +20,6 @@ export default async function MBPage({ params }: { params: Promise<{ companyId: 
     const d = await fetchInmobiliaria(companyId);
     if (!d) notFound();
     // Marketing: sólo equipo interno (ver lib/marketingAcceso.ts); la API vuelve a validarlo
-    const verMarketing = MARKETING_EMPRESAS.has(companyId) && puedeVerMarketing(await currentUser());
+    const verMarketing = MARKETING_EMPRESAS.has(companyId) && puedeVerMarketing(await currentUser(), companyId);
     return <MBApp d={d} verMarketing={verMarketing} />;
 }

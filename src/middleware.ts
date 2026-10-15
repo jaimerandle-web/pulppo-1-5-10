@@ -2,6 +2,7 @@ import { tieneStudio } from '@/lib/studioPiloto';
 import { NextRequest, NextResponse } from 'next/server';
 import { isAllowed } from '@/lib/access';
 import { fichaToken, userToken } from '@/lib/token';
+import { previewDe } from '@/lib/preview';
 
 // Enforcea el acceso en TODAS las rutas/API (no solo en el login). Dos tipos de usuario:
 //  - Interno (equipo Pulppo, allowlist) → acceso total.
@@ -30,7 +31,9 @@ export async function middleware(req: NextRequest) {
     const company = req.cookies.get('cm-company')?.value || '';
     if (validId && company) {
         const p = req.nextUrl.pathname;
-        const ownPanel = p === `/mb/${company}` || p.startsWith(`/mb/${company}/`);
+        const ownPanel = p === `/mb/${company}` || p.startsWith(`/mb/${company}/`)
+            // acceso de preview a otras inmobiliarias puntuales (lib/preview.ts)
+            || previewDe(email).some((c) => p === `/mb/${c}` || p.startsWith(`/mb/${c}/`));
         // `/api/avisos` es la pestaña Destacados de su propio panel: sin esto la inmobiliaria
         // veía "No se pudo calcular. No autorizado" justo en la herramienta hecha para ella.
         // La ruta ya no depende de este filtro para estar protegida: `lib/portales/acceso.ts`

@@ -322,6 +322,12 @@ guarde `demanda` y `competencia` con fecha (ver `PROPUESTA_MOTOR.md` en el repo 
 El doc canónico del criterio es `SPEC_SCORING.md` en
 `~/Documents/Pulppo/Análisis de Portales/analisis/optimizacion-avisos/`.
 
+## Acceso de preview (`src/lib/preview.ts`)
+
+Correo → inmobiliarias puntuales que puede ver aunque no sea interno ni su master (y su Marketing oculto).
+Lo revisan el middleware, `canAccessCompany` y `puedeVerMarketing`. Hoy: juan.pablo.velazquez@pulppo.com →
+Diamond House (es master de «Inmobiliaria Demo»). Sacarlo al terminar el preview.
+
 ## /mb → Desempeño (encendido para TODAS las inmobiliarias desde oct-2026; no en la demo)
 
 Port del reporte de Lau (KAM; app Flask «dashboard-inmobiliarias», nunca publicada). Motor

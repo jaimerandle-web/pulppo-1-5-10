@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     if (!/^[a-f0-9]{24}$/i.test(company) || !MARKETING_EMPRESAS.has(company))
         return NextResponse.json({ error: 'No disponible para esta inmobiliaria' }, { status: 404 });
     const user = await currentUser();
-    if (!puedeVerMarketing(user)) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+    if (!puedeVerMarketing(user, company)) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
     // cuando se abra a la inmobiliaria, un externo sólo puede pedir la suya
     if (!user!.internal && !(await canAccessCompany(company))) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
     const hit = cache.get(company);

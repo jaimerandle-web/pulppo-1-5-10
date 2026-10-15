@@ -9,7 +9,11 @@ export const MARKETING_VISIBLE_PARA: 'internos' | 'inmobiliaria' = 'internos';
 /** Inmobiliarias con la pestaña (hoy sólo Diamond House). */
 export const MARKETING_EMPRESAS = new Set(['62bf49012367c77fc24d9220']);
 
-export function puedeVerMarketing(user: { internal: boolean } | null): boolean {
+import { tienePreview } from './preview';
+
+export function puedeVerMarketing(user: { internal: boolean; email?: string } | null, companyId?: string): boolean {
     if (!user) return false;
-    return MARKETING_VISIBLE_PARA === 'inmobiliaria' ? true : user.internal;
+    if (MARKETING_VISIBLE_PARA === 'inmobiliaria' || user.internal) return true;
+    // acceso de preview (lib/preview.ts): ve el Marketing sólo de las inmobiliarias que tiene ahí
+    return !!companyId && tienePreview(user.email, companyId);
 }
