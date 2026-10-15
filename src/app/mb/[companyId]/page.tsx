@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import { fetchInmobiliaria } from '@/lib/mb';
 import { demoData } from '@/lib/mbDemo';
-import { canAccessCompany } from '@/lib/companyAccess';
+import { canAccessCompany, currentUser } from '@/lib/companyAccess';
+import { MARKETING_EMPRESAS, puedeVerMarketing } from '@/lib/marketingAcceso';
 import MBApp from './MBApp';
 
 // Herramienta Master Brokers — PRIMER BORRADOR. Fetch server-side; la UI (secciones + tabla
@@ -18,5 +19,7 @@ export default async function MBPage({ params }: { params: Promise<{ companyId: 
     if (companyId === 'demo') return <MBApp d={demoData()} />;
     const d = await fetchInmobiliaria(companyId);
     if (!d) notFound();
-    return <MBApp d={d} />;
+    // Marketing: sólo equipo interno (ver lib/marketingAcceso.ts); la API vuelve a validarlo
+    const verMarketing = MARKETING_EMPRESAS.has(companyId) && puedeVerMarketing(await currentUser());
+    return <MBApp d={d} verMarketing={verMarketing} />;
 }

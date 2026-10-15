@@ -346,6 +346,16 @@ el PDF imprime las dos con las listas abiertas.
 - Validado contra el Python de Lau (Andina, sep-2026 y ene–oct 2026): leads, visitas, funnel,
   cierres, comisión y días por etapa IGUALES; sólo cambian etiquetas de fuente («Contacto directo»).
 
+## /mb → Marketing (Diamond House, SÓLO equipo interno)
+
+`src/lib/marketingDh.ts` + `/api/mb-marketing` + `MBMarketing.tsx`. Visibilidad en `src/lib/marketingAcceso.ts`
+(`MARKETING_VISIBLE_PARA = 'internos'`; la API responde 403 a masters y a masterExtra como Miriam). Secciones:
+asignación por nivel/cuenta i24/MeLi, cambios de la semana (desde `portals.inmuebles24.history`, ignorando
+OFFLINE = bug de i24), desempeño por nivel/aviso (leads únicos, visitas por startTime), estrellas,
+exposición vs calidad y rotación con el scoring de `portals/avisos.ts` (regla: 30–45 leads → Simple), y
+trabadas (60+ días sin oferta). SIN costos ni CPL (Ale). Ojo: en los datos `ANUNCIO_SIMPLE` trae los
+destacados y `ANUNCIOS_DEGOHOUSE` casi sólo simples (al revés de lo que se dijo; confirmar con portales).
+
 ## Portales → "Leads, funnel y cierres" por inmobiliaria
 
 `/portales` → **Por inmobiliaria**. Filtros: inmobiliaria (o «Todas» = vista general con la tabla

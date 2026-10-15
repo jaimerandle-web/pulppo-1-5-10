@@ -7,6 +7,7 @@ import MBAnalisis from './MBAnalisis';
 import MBDestacados from './MBDestacados';
 import MBDesempeno from './MBDesempeno';
 import MBBusquedas from './MBBusquedas';
+import MBMarketing from './MBMarketing';
 import { NURA_ID } from '@/lib/nura';
 import MBMercado from './MBMercado';
 import { tieneMercado } from '@/lib/mercadoPiloto';
@@ -49,11 +50,11 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 // minutos → texto corto legible
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
-type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'busquedas' | 'mercado' | 'p1510' | 'analisis' | 'comoleer';
+type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'busquedas' | 'marketing' | 'mercado' | 'p1510' | 'analisis' | 'comoleer';
 // El botón de menú en celular muestra en qué sección estás; sin esto sólo dice "Menú" y te
 // pierdes al navegar.
 const SECTION_LABEL: Record<Section, string> = {
-    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño', busquedas: 'Búsquedas', mercado: 'Mercado',
+    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño', busquedas: 'Búsquedas', marketing: 'Marketing', mercado: 'Mercado',
     p1510: '1·5·10', analisis: 'Generador de análisis', comoleer: 'Cómo leer esto',
 };
 
@@ -497,7 +498,8 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     );
 }
 
-export default function MBApp({ d }: { d: MBData }) {
+// `verMarketing` lo decide el servidor (page.tsx): hoy sólo el equipo interno (lib/marketingAcceso.ts).
+export default function MBApp({ d, verMarketing = false }: { d: MBData; verMarketing?: boolean }) {
     const [orto, setOrto] = useState<Record<string, ErrorOrto[]>>({});
     useEffect(() => {
         if (d.companyId === 'demo') return;
@@ -588,7 +590,7 @@ export default function MBApp({ d }: { d: MBData }) {
                     <span style={{ fontSize: 13.5, fontWeight: 600 }}>{SECTION_LABEL[section]}</span>
                 </button>
                 <div className={`mb-nav${menuAbierto ? ' abierto' : ''}`}>
-                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{conDesempeno(d.companyId) && nav('desempeno', 'Desempeño')}{conBusquedas(d.companyId) && nav('busquedas', 'Búsquedas')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{conDesempeno(d.companyId) && nav('desempeno', 'Desempeño')}{conBusquedas(d.companyId) && nav('busquedas', 'Búsquedas')}{verMarketing && nav('marketing', 'Marketing · interno')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 </div>
                 <div className="mb-side-pie" style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
@@ -920,6 +922,20 @@ export default function MBApp({ d }: { d: MBData }) {
                             por periodo y asesor. Leído en vivo.
                         </div>
                         <MBDesempeno companyId={d.companyId} />
+                    </div>
+                )}
+
+                {section === 'marketing' && verMarketing && (
+                    <div>
+                        <div style={eyebrow}>Marketing · sólo equipo Pulppo</div><div style={accent} />
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
+                            ¿Cómo está asignada tu exposición y qué está rindiendo?
+                        </div>
+                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 700 }}>
+                            Niveles de anuncio en Inmuebles24 y MercadoLibre, qué cambió esta semana, qué propiedades
+                            están jalando y cuáles necesitan ayuda. En vivo, contra la semana anterior.
+                        </div>
+                        <MBMarketing companyId={d.companyId} />
                     </div>
                 )}
 
