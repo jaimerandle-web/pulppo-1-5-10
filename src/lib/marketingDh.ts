@@ -104,6 +104,9 @@ export interface MarketingMk {
         i24: Array<{ nivel: string; n: number }>;
         /** de los avisos EN VENTA: cuántos van en zona demand y cuántos normales */
         zonaDemandVenta: { zonaDemand: number; normal: number };
+        /** proporcionalidad zona demand: inventario de venta en las 4 alcaldías ZD vs avisos premium con tier ZD.
+         *  Criterio de la asignación (Ale, 31-ago-2026): la promesa ZD es proporcional a ese inventario. */
+        zdProporcion: { ventaInv: number; ventaEnZd: number; premium: number; premiumZd: number; zdFueraDeZona: number };
         meli: Array<{ tipo: string; n: number }>;
         fijados: Array<{ codigo: string; nivel: string; por: string | null; el: string | null }>;
         noPromovidos: Array<{ motivo: string; n: number }>;
@@ -141,7 +144,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const D30 = new Date(ahora.getTime() - 30 * DIA), D90 = new Date(ahora.getTime() - 90 * DIA);
 
     const props = await db.collection('properties').find({ 'company._id': cid, 'status.last': 'published' }, { projection: {
-        internalId: 1, type: 1, 'listing.operation': 1, 'listing.value': 1, 'address.neighborhood.name': 1, 'address.street': 1, publishedAt: 1,
+        internalId: 1, type: 1, 'listing.operation': 1, 'listing.value': 1, 'address.neighborhood.name': 1, 'address.street': 1, 'address.city.name': 1, publishedAt: 1,
         'agent.firstName': 1, 'agent.lastName': 1, 'portals.inmuebles24': 1, 'portals.mercadolibre.type': 1,
     } }).toArray();
     const ids = props.map((p) => p._id);
@@ -248,6 +251,19 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const porNivelMap = new Map<string, { n: number; venta: number; renta: number }>();
     const baseMap = new Map<string, number>();
     const meliMap = new Map<string, number>(), noProm = new Map<string, number>();
+    // Zona demand = las 4 alcaldías oficiales (mismo criterio que la asignación de avisos; Huixquilucan NO)
+    const sinAc = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const ALCALDIAS_ZD = new Set(['miguel hidalgo', 'alvaro obregon', 'cuajimalpa de morelos', 'cuajimalpa', 'la magdalena contreras', 'magdalena contreras']);
+    const zdp = { ventaInv: 0, ventaEnZd: 0, premium: 0, premiumZd: 0, zdFueraDeZona: 0 };
+    for (const p of props) {
+        if (dig(p, 'listing', 'operation') !== 'sale') continue;
+        const t = String(dig(p, 'portals', 'inmuebles24', 'type') ?? '');
+        const enZd = ALCALDIAS_ZD.has(sinAc(dig(p, 'address', 'city', 'name')));
+        const premium = /^(HOME|DESTACADO)/.test(t), tierZd = t.includes('ZONA_DEMAND');
+        zdp.ventaInv++; if (enZd) zdp.ventaEnZd++;
+        if (premium) { zdp.premium++; if (tierZd) zdp.premiumZd++; }
+        if (tierZd && !enZd) zdp.zdFueraDeZona++;
+    }
     let zdVenta = 0, venta = 0;
     for (const [k, p] of props.entries()) {
         const a = avisos[k];
@@ -277,6 +293,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
             porNivel: NIVELES.filter((n) => porNivelMap.has(n)).map((nivel) => ({ nivel, ...porNivelMap.get(nivel)! })),
             i24: NIVELES_BASE.filter((n) => baseMap.has(n)).map((nivel) => ({ nivel, n: baseMap.get(nivel)! })),
             zonaDemandVenta: { zonaDemand: zdVenta, normal: venta - zdVenta },
+            zdProporcion: zdp,
             meli: [...meliMap.entries()].sort((a, b) => b[1] - a[1]).map(([tipo, n]) => ({ tipo, n })),
             fijados: avisos.filter((a) => a.fijado).map((a) => ({ codigo: a.codigo, nivel: a.nivel, por: a.fijadoPor, el: a.fijadoEl })),
             noPromovidos: [...noProm.entries()].sort((a, b) => b[1] - a[1]).map(([motivo, n]) => ({ motivo: motivo.toLowerCase(), n })),

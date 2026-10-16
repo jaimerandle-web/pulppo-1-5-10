@@ -147,7 +147,8 @@ export default function MBMarketing({ companyId }: { companyId: string }) {
     return <Vista d={d} />;
 }
 
-const COLOR_I24: Record<string, string> = { 'Súper destacado': BLK, Destacado: YEL, Simple: SEA, Offline: GRY, Gratis: '#9FC7C7', 'Sin aviso': LGT };
+// Colores de siempre de los niveles (Ale): súper destacado amarillo, destacado azul (verde mar), simple negro
+const COLOR_I24: Record<string, string> = { 'Súper destacado': YEL, Destacado: SEA, Simple: BLK, Offline: GRY, Gratis: '#9FC7C7', 'Sin aviso': LGT };
 const COLOR_MELI: Record<string, string> = { gold_premium: YEL, gold: '#C79A00', silver: GRY, offline: '#D6D6D6', 'sin aviso': LGT };
 const MELI_LBL: Record<string, string> = { gold_premium: 'Gold premium', gold: 'Gold', silver: 'Silver', offline: 'Offline', 'sin aviso': 'Sin aviso' };
 
@@ -194,7 +195,7 @@ function NivelEmbudo({ x, max }: { x: PorNivelMk; max: { v: number; l: number; s
                 </div>
             ))}
             <div style={{ ...sub, marginTop: 4 }}>
-                Leads por cada 100 vistas: <b style={{ color: BLK }}>{x.vistas30 ? ((100 * x.leads30) / x.vistas30).toFixed(1) : '—'}</b> · lead → visita: <b style={{ color: BLK }}>{pc(x.visitas30, x.leads30)}</b> · leads por anuncio: <b style={{ color: BLK }}>{x.avisos ? (x.leads30 / x.avisos).toFixed(1) : '—'}</b>
+                Leads por cada 100 vistas: <b style={{ color: BLK }}>{x.vistas30 ? ((100 * x.leads30) / x.vistas30).toFixed(1) : '—'}</b> · lead → visita: <b style={{ color: BLK }}>{pc(x.visitas30, x.leads30)}</b> · L/A: <b style={{ color: BLK }} title="leads por anuncio (30 días)">{x.avisos ? (x.leads30 / x.avisos).toFixed(1) : '—'}</b>
             </div>
         </div>
     );
@@ -258,6 +259,20 @@ function Vista({ d }: { d: MarketingMk }) {
             <Distribucion partes={d.asignacion.i24.map((x) => ({ k: x.nivel, n: x.n, color: COLOR_I24[x.nivel] ?? LGT }))} />
             <div style={{ fontSize: 11.5, color: '#555', margin: '8px 0 10px' }}>
                 De los <b>{f0(zd.zonaDemand + zd.normal)}</b> anuncios en venta, <b>{pc(zd.zonaDemand, zd.zonaDemand + zd.normal)}</b> van en <b>zona demand</b> ({f0(zd.zonaDemand)}) y {pc(zd.normal, zd.zonaDemand + zd.normal)} en su nivel normal ({f0(zd.normal)}).
+                {d.asignacion.zdProporcion && (() => {
+                    const z = d.asignacion.zdProporcion;
+                    const inv = z.ventaInv ? (100 * z.ventaEnZd) / z.ventaInv : 0, av = z.premium ? (100 * z.premiumZd) / z.premium : 0;
+                    const dif = av - inv;
+                    return (
+                        <div style={{ marginTop: 6, padding: '8px 10px', background: LGT, borderRadius: R }}>
+                            <b>¿Le damos zona demand en proporción a su inventario?</b> El <b>{inv.toFixed(0)}%</b> de su inventario en venta está en alcaldías zona demand ({f0(z.ventaEnZd)} de {f0(z.ventaInv)}: Miguel Hidalgo, Cuajimalpa, Álvaro Obregón y Magdalena Contreras). De sus avisos premium, el <b>{av.toFixed(0)}%</b> son zona demand ({f0(z.premiumZd)} de {f0(z.premium)}).{' '}
+                            {Math.abs(dif) <= 10 ? <span style={{ color: SEA, fontWeight: 700 }}>Va proporcional.</span>
+                                : dif > 0 ? <span style={{ color: '#8A6D00', fontWeight: 700 }}>Le damos {dif.toFixed(0)} pts más zona demand de lo que pesa su inventario ahí.</span>
+                                : <span style={{ color: '#A52003', fontWeight: 700 }}>Le damos {Math.abs(dif).toFixed(0)} pts menos zona demand de lo que pesa su inventario ahí.</span>}
+                            {z.zdFueraDeZona > 0 && <> Ojo: {f0(z.zdFueraDeZona)} {z.zdFueraDeZona === 1 ? 'aviso tiene' : 'avisos tienen'} nivel zona demand pero la propiedad está fuera de esas alcaldías.</>}
+                        </div>
+                    );
+                })()}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
                 {d.asignacion.porNivel.map((x) => (
@@ -305,11 +320,12 @@ function Vista({ d }: { d: MarketingMk }) {
 
         <Seccion n={3} titulo="Desempeño por nivel" nota="Vistas → leads → visitas de cada nivel en los últimos 30 días (las barras se comparan entre niveles) y la semana en curso contra la anterior (▲▼).">
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {d.porNivel.map((x) => <NivelEmbudo key={x.nivel} x={x} max={maxN} />)}
+                {d.porNivel.filter((x) => x.nivel !== 'Offline' && x.nivel !== 'Sin aviso').map((x) => <NivelEmbudo key={x.nivel} x={x} max={maxN} />)}
             </div>
         </Seccion>
 
-        <Seccion n={4} titulo="Propiedades estrella" nota="Las que más leads reciben (30 días) y si los convierten en visitas. Estrella = 5+ leads y 15%+ visitan. Mucho ruido = 5+ leads y menos de 10% visitan. El top completo de venta y de renta está al final.">
+        <Seccion n={4} titulo="Propiedades estrella" nota="Las que más leads reciben (30 días) y si los convierten en visitas. Estrella = 5+ leads y 15%+ visitan. Mucho ruido = 5+ leads y menos de 10% visitan. ">
+            <div style={{ fontSize: 11.5, marginBottom: 8 }}><a href="#top-anuncios" onClick={(e) => { e.preventDefault(); document.getElementById('top-anuncios')?.scrollIntoView({ behavior: 'smooth' }); }} style={{ color: SEA, fontWeight: 700 }}>Ver el top completo de venta y renta ↓</a></div>
             <TablaFiltrable filas={d.estrellas} min={720} texto={(e) => buscar(e.codigo, e.etiqueta)}
                 selects={[{ label: 'Lectura', v: (e) => e.etiqueta }, op()]}
                 cols={[
@@ -400,6 +416,7 @@ function Vista({ d }: { d: MarketingMk }) {
                 ]} />
         </Seccion>
 
+        <div id="top-anuncios" />
         <Seccion n={8} titulo="Top de anuncios" nota="Todos los anuncios publicados, por operación. Ordena con clic en cualquier encabezado; filtra por nivel o busca por código, colonia, calle o asesor.">
             <div style={{ fontSize: 12, fontWeight: 700, margin: '4px 0 6px' }}>Venta · {f0(d.asignacion.venta)}</div>
             <TablaFiltrable filas={d.avisos.filter((a) => a.operacion === 'Venta')} cols={colsAviso} min={1100} orden={{ i: 5, dir: -1 }}
