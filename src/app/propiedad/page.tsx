@@ -28,7 +28,7 @@ export default async function BuscarPropiedadPage({ searchParams }: { searchPara
             {!r && (
                 <div style={{ marginTop: 18, fontSize: 12, color: '#666', lineHeight: 1.7 }}>
                     <b style={{ color: BLK }}>Acepta:</b> código de Pulppo (<code>DMA-014</code> o <code>dma014</code>) · ID largo de Pulppo · ID de Inmuebles24 (también avisos anteriores) ·
-                    Mercado Libre (<code>MLM…</code>) · Propiedades.com · EasyBroker (<code>EB-…</code>) · Casas y Terrenos · Ciencuadras · la liga de cualquiera de esos portales o de pulppo.com.
+                    Mercado Libre (<code>MLM…</code>) · Propiedades.com · EasyBroker (<code>EB-…</code>) · Casas y Terrenos · la liga de cualquiera de esos portales o de pulppo.com.
                 </div>
             )}
 

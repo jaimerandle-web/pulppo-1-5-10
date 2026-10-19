@@ -4,6 +4,7 @@ import type { Expediente as Exp, Evento } from '@/lib/propiedad';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
 const R = 2;
+const ESTATUS: Record<string, string> = { published: 'publicada', completed: 'vendida / rentada', cancelled: 'cancelada', edition: 'en edición', valuation: 'en valuación', documentation: 'en documentación' };
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 // fecha en hora de México (UTC−6, sin horario de verano)
 const fch = (x: string | null | undefined) => {
@@ -54,6 +55,19 @@ const tonoEstatus = (k: string): { fondo: string; color: string; borde?: string 
 const tonoOp = (k: string): { fondo: string; color: string; borde?: string } =>
     k === 'closed' || k === 'paying' ? { fondo: BLK, color: '#fff' } : k === 'cancelled' ? { fondo: '#fff', color: RED, borde: RED } : { fondo: YEL, color: BLK };
 
+// Contrato de una propiedad de Pulppo en la tabla de duplicados: comisión, exclusiva, documento y si el
+// propietario es el mismo — para ver de un vistazo quién la tiene y en qué condiciones.
+function ContratoCelda({ c, renta, mismo }: { c: { comision: number | null; exclusiva: string; documento: string }; renta: boolean; mismo?: boolean | null }) {
+    return (
+        <div style={{ fontSize: 11.5, lineHeight: 1.45 }}>
+            <b>{c.comision == null ? 'sin comisión' : renta ? `${c.comision} ${c.comision === 1 ? 'mes' : 'meses'}` : `${c.comision}%`}</b>
+            {' · '}<span style={{ color: c.exclusiva === 'Exclusiva vigente' ? SEA : BLK, fontWeight: c.exclusiva === 'Exclusiva vigente' ? 700 : 400 }}>{c.exclusiva.toLowerCase()}</span>
+            <div style={{ color: c.documento === 'firmado' ? '#666' : RED }}>contrato {c.documento}</div>
+            {mismo != null && <div style={{ color: mismo ? '#666' : RED }}>{mismo ? 'mismo propietario' : 'otro propietario'}</div>}
+        </div>
+    );
+}
+
 export default function Expediente({ e }: { e: Exp }) {
     const [tipos, setTipos] = useState<Set<Evento['tipo']>>(new Set());
     const tiposLinea = [...new Set(e.linea.map((x) => x.tipo))];
@@ -61,6 +75,7 @@ export default function Expediente({ e }: { e: Exp }) {
     const [verTodo, setVerTodo] = useState(false);
     const maxF = Math.max(1, ...e.funnel.porFuente.map((x) => x.n));
     const ex = e.contrato.exclusiva;
+    const hayPulppo = e.duplicados.some((d) => d.origen === 'pulppo');
     const kpis: Array<[string, string, string?]> = [
         [f0(e.funnel.vistas), 'vistas'],
         [f0(e.funnel.leads), 'leads', `${f0(e.funnel.leadsUnicos)} personas`],
@@ -230,15 +245,29 @@ export default function Expediente({ e }: { e: Exp }) {
                 {!e.duplicados.length ? <div style={{ fontSize: 12.5, color: '#777' }}>No encontramos otra publicación de este inmueble.</div> : (
                     <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
-                            <thead><tr><th style={th}>Coincidencia</th><th style={th}>Dónde</th><th style={th}>Quién la publica</th><th style={th}>Precio</th><th style={th}>Sup.</th><th style={th}>Calle · distancia</th><th style={th}></th></tr></thead>
-                            <tbody>{e.duplicados.map((d, i) => (
+                            <thead><tr><th style={th}>Coincidencia</th><th style={th}>Dónde</th><th style={th}>Quién la publica</th><th style={th}>Precio</th><th style={th}>Sup.</th><th style={th}>Calle · distancia</th>{hayPulppo && <th style={th}>Contrato</th>}<th style={th}></th></tr></thead>
+                            <tbody>
+                                {hayPulppo && (
+                                    <tr style={{ background: LGT }}>
+                                        <td style={{ ...td, fontWeight: 700 }}>Esta propiedad</td>
+                                        <td style={td}>Pulppo<div style={{ fontWeight: 700 }}>{e.internalId}</div></td>
+                                        <td style={td}>{e.inmobiliaria.nombre} · {e.asesor.nombre}</td>
+                                        <td style={{ ...td, whiteSpace: 'nowrap' }}>{money(e.precio)}</td>
+                                        <td style={td}>{e.m2 ?? '—'} m²</td>
+                                        <td style={td}>{e.direccion.calle || '—'}</td>
+                                        <td style={td}><ContratoCelda c={e.miContrato} renta={e.operacion === 'Renta'} /></td>
+                                        <td style={td}></td>
+                                    </tr>
+                                )}
+                                {e.duplicados.map((d, i) => (
                                 <tr key={i}>
                                     <td style={{ ...td, fontWeight: 700, color: d.nivel === 'Muy probable' ? RED : BLK }}>{d.nivel}</td>
-                                    <td style={td}>{d.portal}{d.origen === 'pulppo' && d.internalId && <div><a href={`/propiedad/${d.pulppoId}`} style={a}>{d.internalId}</a> <span style={{ fontSize: 11, color: '#777' }}>{d.estatus}</span></div>}</td>
+                                    <td style={td}>{d.portal}{d.origen === 'pulppo' && d.internalId && <div><a href={`/propiedad/${d.pulppoId}`} style={a}>{d.internalId}</a> <span style={{ fontSize: 11, color: '#777' }}>{ESTATUS[d.estatus ?? ''] ?? d.estatus}</span></div>}</td>
                                     <td style={td}>{d.quien}</td>
                                     <td style={{ ...td, whiteSpace: 'nowrap' }}>{money(d.precio)}{d.difPrecio != null && Math.abs(d.difPrecio) >= 0.5 && <div style={{ fontSize: 11, color: '#777' }}>{d.difPrecio > 0 ? '+' : ''}{d.difPrecio}%</div>}</td>
                                     <td style={td}>{d.m2 ?? '—'} m²{d.rec != null ? <div style={{ fontSize: 11, color: '#777' }}>{d.rec} rec</div> : null}</td>
                                     <td style={td}>{d.calle || '—'}{d.distancia != null && <div style={{ fontSize: 11, color: '#777' }}>a {f0(d.distancia)} m</div>}</td>
+                                    {hayPulppo && <td style={td}>{d.contrato ? <ContratoCelda c={d.contrato} renta={e.operacion === 'Renta'} mismo={d.contrato.mismoPropietario} /> : <span style={{ color: GRY }}>—</span>}</td>}
                                     <td style={td}>{d.url ? <a href={d.url} target="_blank" rel="noreferrer" style={a}>Ver aviso ↗</a> : ''}</td>
                                 </tr>
                             ))}</tbody>
@@ -257,7 +286,7 @@ export default function Expediente({ e }: { e: Exp }) {
             )}
 
             {/* ── línea de tiempo ── */}
-            <Seccion titulo="Línea de tiempo" nota="Lo más reciente arriba. Estatus de la propiedad y de cada operación, cambios de precio, de nivel en Inmuebles24 y del contrato.">
+            <Seccion titulo="Línea de tiempo" nota="Lo más reciente arriba. Cambios de precio y movimientos de cada operación: ofertas, ofertas aceptadas, contratos, cierres y las que se cayeron.">
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                     {tiposLinea.map((t) => {
                         const on = tipos.has(t);

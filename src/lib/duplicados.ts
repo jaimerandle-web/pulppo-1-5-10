@@ -38,6 +38,34 @@ export interface Duplicado {
     pulppoId?: string;
     internalId?: string | null;
     estatus?: string | null;
+    /** sólo origen 'pulppo' (y para la propia, en `contratoDe`): para comparar lado a lado */
+    contrato?: ContratoResumen;
+}
+export interface ContratoResumen {
+    /** % en venta (meses en renta), tal como está cargado */
+    comision: number | null;
+    exclusiva: 'Exclusiva vigente' | 'Exclusiva vencida' | 'En opción';
+    /** estado del documento: firmado, pendiente, enviado a firma… */
+    documento: string;
+    /** ¿mismo propietario que la propiedad que se está viendo? null = no se puede saber */
+    mismoPropietario: boolean | null;
+}
+const DOC: Record<string, string> = {
+    completed: 'firmado', pending: 'sin documento', revision: 'en revisión', approved: 'aprobado, sin enviar',
+    contract_sent: 'enviado a firma', rejected: 'rechazado',
+};
+/** Resumen del contrato de una propiedad de Pulppo (comisión, exclusiva y documento). */
+export function contratoDe(d: Document): Omit<ContratoResumen, 'mismoPropietario'> {
+    const c = (d.contract ?? {}) as Document;
+    const com = typeof c.comission === 'number' ? c.comission : Number(c.comission) || null;
+    const ini = c.exclusive?.start ? new Date(c.exclusive.start) : null;
+    const dur = typeof c.exclusive?.durationMonths === 'number' ? c.exclusive.durationMonths : null;
+    const fin = ini && dur ? new Date(Date.UTC(ini.getUTCFullYear(), ini.getUTCMonth() + dur, ini.getUTCDate())) : null;
+    return {
+        comision: com,
+        exclusiva: !ini || isNaN(ini.getTime()) ? 'En opción' : !fin || fin.getTime() >= Date.now() ? 'Exclusiva vigente' : 'Exclusiva vencida',
+        documento: DOC[s(c.status)] ?? (s(c.status) || 'sin documento'),
+    };
 }
 
 const PORTAL: Record<string, string> = {
@@ -83,6 +111,7 @@ const PROJ = {
     'import.source': 1, 'import.id': 1, 'import.url': 1, referenceCode: 1, portals: 1, 'company.name': 1, agent: 1,
     'listing.value': 1, 'attributes.totalSurface': 1, 'attributes.roofedSurface': 1, 'attributes.suites': 1,
     'address.street': 1, 'address.location': 1, 'status.last': 1, internalId: 1,
+    'contract.comission': 1, 'contract.status': 1, 'contract.exclusive': 1, 'contact._id': 1, 'contact.phone': 1,
 };
 
 export async function duplicadosDe(P: Document): Promise<Duplicado[]> {
@@ -104,6 +133,7 @@ export async function duplicadosDe(P: Document): Promise<Duplicado[]> {
     const calleP = dig(P, 'address', 'street');
     const vistos = new Set<string>();
     const out: Duplicado[] = [];
+    const docs = new Map<string, Document>();
     const evalua = (d: Document, origen: Duplicado['origen']) => {
         const k = `${origen}:${String(d._id)}`;
         if (vistos.has(k)) return;
@@ -143,11 +173,34 @@ export async function duplicadosDe(P: Document): Promise<Duplicado[]> {
                 precio, m2: supD[0], rec, calle, distancia: dist, difPrecio: Math.round(dif * 10) / 10,
                 url: i24 || ml || `https://pulppo.com/propiedades/${String(d._id)}`,
                 pulppoId: String(d._id), internalId: (d.internalId as string) ?? null, estatus: s(dig(d, 'status', 'last')) || null,
+                contrato: { ...contratoDe(d), mismoPropietario: null },
             });
+            docs.set(String(d._id), d);
         }
     };
     for (const d of [...pGeo, ...pNb]) evalua(d, 'pulppo');
     for (const d of [...mGeo, ...mNb]) evalua(d, 'mercado');
+
+    // ¿el mismo propietario? Por contacto, o por teléfono (el mismo dueño puede estar dado de alta dos veces)
+    const delPulppo = out.filter((d) => d.origen === 'pulppo');
+    if (delPulppo.length) {
+        const cid = (d: Document) => dig(d, 'contact', '_id');
+        const ids = [cid(P), ...delPulppo.map((d) => cid(docs.get(d.pulppoId!)!))].filter((x): x is ObjectId => x instanceof ObjectId);
+        const tels = new Map<string, Set<string>>();
+        const tel10 = (x: unknown) => s(x).replace(/\D/g, '').slice(-10);
+        for (const c of await db.collection('contacts').find({ _id: { $in: ids } }, { projection: { phones: 1, phone: 1 } }).toArray().catch(() => [] as Document[])) {
+            const xs = [tel10(c.phone), ...((c.phones as Document[]) ?? []).map((p) => tel10(p?.plain ?? p?.phone ?? p))].filter((x) => x.length === 10);
+            tels.set(String(c._id), new Set(xs));
+        }
+        const telsDe = (d: Document) => { const x = new Set(tels.get(s(cid(d))) ?? []); const t1 = tel10(dig(d, 'contact', 'phone')); if (t1.length === 10) x.add(t1); return x; };
+        const mios = telsDe(P);
+        for (const dup of delPulppo) {
+            const d = docs.get(dup.pulppoId!)!;
+            if (s(cid(d)) && s(cid(d)) === s(cid(P))) { dup.contrato!.mismoPropietario = true; continue; }
+            const suyos = telsDe(d);
+            dup.contrato!.mismoPropietario = mios.size && suyos.size ? [...suyos].some((x) => mios.has(x)) : null;
+        }
+    }
     // el mismo aviso puede venir dos veces en el MLS (mismo URL desde dos cargas)
     const urls = new Set<string>();
     return out.filter((d) => !d.url || (urls.has(d.url) ? false : (urls.add(d.url), true)))

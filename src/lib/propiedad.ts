@@ -1,8 +1,8 @@
 // Buscador de propiedades + expediente (/propiedad). SOLO interno.
 //
 // El buscador acepta lo que la gente tiene a la mano: el código de Pulppo (DMA-014, dma014), el _id
-// largo, el id de cualquier portal (i24, MeLi, propiedades.com, EasyBroker, Casas y Terrenos,
-// Ciencuadras) o directamente la LIGA del aviso. Si el código no es nuestro pero existe en el MLS,
+// largo, el id de cualquier portal (i24, MeLi, propiedades.com, EasyBroker, Casas y Terrenos)
+// o directamente la LIGA del aviso. Si el código no es nuestro pero existe en el MLS,
 // lo dice y enseña de quién es.
 //
 // El expediente junta en una pantalla lo operativo: códigos y estado de cada portal, estatus de la
@@ -13,7 +13,7 @@ import { getDb } from './data';
 import { classifySource, KEY2NAME, dig, isDate } from './portales/metrics';
 import { resolverFuentes, type FuenteCierre } from './portales/fuenteCierre';
 import { canalContacto } from './portales/inmobiliaria';
-import { duplicadosDe, esObjectId, portalDe, type Duplicado } from './duplicados';
+import { contratoDe, duplicadosDe, esObjectId, portalDe, type ContratoResumen, type Duplicado } from './duplicados';
 import { revisarAviso, type ErrorOrto } from './ortografia';
 
 // ── vocabulario ──────────────────────────────────────────────────────────
@@ -62,7 +62,6 @@ function interpretar(raw: string): { texto: string; intentos: Intento[]; mls: Fi
         intentos.push({ campo: 'ID Inmuebles24', filtro: { 'portals.inmuebles24.id': { $in: numInt(d) } } });
         intentos.push({ campo: 'ID Propiedades.com', filtro: { 'portals.propiedadesDotCom.id': { $in: numInt(d) } } });
         intentos.push({ campo: 'ID Casas y Terrenos', filtro: { 'portals.casas-y-terrenos.id': { $in: numInt(d) } } });
-        intentos.push({ campo: 'ID Ciencuadras', filtro: { 'portals.ciencuadras.id': { $in: numInt(d) } } });
         intentos.push({ campo: 'ID Mercado Libre', filtro: { 'portals.mercadolibre.id': `MLM${d}` } });
         // los avisos de i24 cambian de id al republicarse: el viejo queda en el historial
         intentos.push({ campo: 'ID Inmuebles24 (aviso anterior)', filtro: { 'portals.inmuebles24.history.idAvisoNavplat': { $in: numInt(d) } } });
@@ -150,7 +149,8 @@ export interface OperacionFila {
     lead: { fecha: string; fuente: string; asesor: string; mismaPropiedad: boolean } | null;
     historia: Array<{ estatus: string; t: string }>;
 }
-export interface Evento { t: string; tipo: 'Propiedad' | 'Operación' | 'Precio' | 'Inmuebles24' | 'Contrato' | 'Funnel'; texto: string; tono?: 'ok' | 'mal' | 'neutro' }
+/** Línea de tiempo: sólo PRECIO y OPERACIONES (ofertas, aceptadas, cierres, caídas) — Ale, oct-2026. */
+export interface Evento { t: string; tipo: 'Operación' | 'Precio'; texto: string; tono?: 'ok' | 'mal' | 'neutro' }
 export interface Expediente {
     id: string; internalId: string | null; titulo: string; tipo: string; operacion: 'Venta' | 'Renta';
     precio: number | null; moneda: string; m2: number | null; rec: number | null; banos: number | null; foto: string | null;
@@ -171,6 +171,8 @@ export interface Expediente {
     };
     operaciones: OperacionFila[];
     duplicados: Duplicado[];
+    /** el contrato de ESTA propiedad, para compararlo con los duplicados de Pulppo */
+    miContrato: Omit<ContratoResumen, 'mismoPropietario'>;
     ortografia: ErrorOrto[];
     linea: Evento[];
     links: { ficha: string; publica: string; mb: string | null };
@@ -227,18 +229,19 @@ export async function expediente(idRaw: string): Promise<Expediente | null> {
     if (eb && (eb.id || eb.status)) portales.push({ portal: 'EasyBroker', id: s(eb.id) || null, estatus: estatusPortal(eb.status), nivel: null, costoMes: null, url: s(eb.url) && s(eb.url) !== 'None' ? s(eb.url) : null, error: errorTxt(eb.lastError), nota: pt.companyEasybroker?.id ? `Cuenta de la inmobiliaria: ${s(pt.companyEasybroker.id)}` : null });
     const cyt = pt['casas-y-terrenos'];
     if (cyt && (cyt.id || cyt.status)) portales.push({ portal: 'Casas y Terrenos', id: s(cyt.id) || null, estatus: estatusPortal(cyt.status), nivel: null, costoMes: null, url: s(cyt.url) || null, error: errorTxt(cyt.lastError) ?? errorTxt(cyt.error), nota: null });
-    const cc = pt.ciencuadras;
-    if (cc && (cc.id || cc.status)) portales.push({ portal: 'Ciencuadras', id: s(cc.id) || null, estatus: estatusPortal(cc.status), nivel: null, costoMes: null, url: s(cc.url) || null, error: errorTxt(cc.error), nota: null });
-    const la = pt.lamudi;
-    if (la && la.url) portales.push({ portal: 'Lamudi', id: null, estatus: la.publish === false ? 'No publica' : 'Feed', nivel: s(la.status) ? s(la.status).charAt(0) + s(la.status).slice(1).toLowerCase() : null, costoMes: null, url: s(la.url), error: null, nota: null });
-    const feeds = ['trovit', 'icasas', 'mitula', 'nuroa', 'nestoria'].filter((k) => pt[k]?.url);
-    if (feeds.length) portales.push({ portal: 'Feeds', id: null, estatus: 'Feed', nivel: null, costoMes: null, url: null, error: null, nota: feeds.map((k) => k.charAt(0).toUpperCase() + k.slice(1)).join(', ') });
+    // Lamudi, Trovit y los feeds (iCasas, Mitula, Nuroa, Nestoria) NO se muestran: la presencia se canceló hace
+    // ~un año y la llave quedó colgada (las nuevas la traen vacía, las viejas con la URL de entonces; 0 leads
+    // en 90 días). Ciencuadras tampoco: es un portal de Colombia, una prueba de integración de sep-2026 que
+    // nunca publicó (100 avisos, todos «pending · dry-run: sin credenciales»).
 
     // ── leads ──
     const leads = (await db.collection('leads').find({ 'property._id': oid }, { projection: { source: 1, medium: 1, message: 1, createdAt: 1, 'contact._id': 1, phone: 1, 'contact.phone': 1, interaction: 1, 'agent.firstName': 1, 'agent.lastName': 1 } }).toArray())
         .filter((l) => s(l.source).toLowerCase() !== 'formulario de contacto' && isDate(l.createdAt));
     const porFuente = new Map<string, number>();
     for (const l of leads) { const k = classifySource(l.source as string); const f = KEY2NAME[k] ?? 'Otros'; porFuente.set(f, (porFuente.get(f) ?? 0) + 1); }
+    const door = leads.filter((l) => /doorvel/i.test(s(l.source))).sort((a, b) => (a.createdAt as Date).getTime() - (b.createdAt as Date).getTime());
+    if (door.length) portales.push({ portal: 'Doorvel', id: null, estatus: 'Recibe leads', nivel: null, costoMes: null, url: null, error: null,
+        nota: `${door.length} lead${door.length === 1 ? '' : 's'} · último ${(door[door.length - 1].createdAt as Date).toISOString().slice(0, 10)}. Doorvel no guarda el código del aviso en Pulppo.` });
     const unicos = new Set(leads.map((l) => s(dig(l, 'contact', '_id')) || String(l._id)));
     // «Sin respuesta · WhatsApp»: misma regla que /portales — lead por WhatsApp con teléfono válido y sin
     // conversación real en su interacción ni en otra del mismo contacto de −30 a +14 días.
@@ -344,38 +347,23 @@ export async function expediente(idRaw: string): Promise<Expediente | null> {
 
     // ── línea de tiempo ──
     const linea: Evento[] = [];
-    for (const h of hist) linea.push({ t: h.t.toISOString(), tipo: 'Propiedad', texto: ESTATUS_PROP[h.st] ?? h.st, tono: h.st === 'cancelled' ? 'mal' : h.st === 'completed' ? 'ok' : 'neutro' });
+    // `listing.priceHistory` guarda el precio ANTERIOR a cada cambio, con la fecha del cambio (DHA-014:
+    // 8.5M · 8.1M · 8.0M · 7.9M y hoy vale 7.7M). Así que cada entrada es «de ese precio al siguiente», y la
+    // última va al precio actual. Algunas entradas vienen en USD: el % sólo se calcula en la misma moneda.
+    const monedaHoy = s(dig(P, 'listing', 'price', 'currency')) || 'MXN';
     const precios = ((dig(P, 'listing', 'priceHistory') as Document[]) ?? []).map((p) => ({ v: n(p?.price), t: fecha(p?.timestamp), cur: s(p?.currency) || 'MXN' }))
         .filter((p): p is { v: number; t: Date; cur: string } => p.v != null && !!p.t).sort((a, b) => a.t.getTime() - b.t.getTime());
+    const fmtP = (v: number, cur: string) => `$${Math.round(v).toLocaleString('en-US')}${cur !== 'MXN' ? ` ${cur}` : ''}`;
     for (let i = 0; i < precios.length; i++) {
-        const prev = precios[i - 1];
-        if (prev && prev.v === precios[i].v) continue;
-        const fmt = (v: number) => `$${Math.round(v).toLocaleString('en-US')}`;
-        linea.push({ t: precios[i].t.toISOString(), tipo: 'Precio', texto: prev ? `${fmt(prev.v)} → ${fmt(precios[i].v)} (${precios[i].v < prev.v ? '' : '+'}${(((precios[i].v / prev.v) - 1) * 100).toFixed(1)}%)` : `Precio inicial ${fmt(precios[i].v)}`, tono: prev && precios[i].v < prev.v ? 'ok' : 'neutro' });
-    }
-    // Nivel en i24: OFFLINE se ignora (bug de la API key de i24: el aviso sigue publicado y se cobra como
-    // Simple) y cuenta sólo el ÚLTIMO estado de cada día — el reordenamiento lo mueve varias veces al día.
-    const porDia = new Map<string, { t: Date; lbl: string }>();
-    for (const h of ((i24?.history as Document[]) ?? []).map((x) => ({ t: fecha(x?.timestamp), type: s(x?.type).toUpperCase(), st: s(x?.status) })).filter((x) => x.t).sort((a, b) => a.t!.getTime() - b.t!.getTime())) {
-        if (h.type === 'OFFLINE' || (h.st && !/^online$/i.test(h.st))) continue;
-        const lbl = TIER_I24[h.type] ?? TIER_I24[`${h.type}_COMBO`] ?? h.type;
-        if (lbl) porDia.set(new Date(h.t!.getTime() - 6 * 3600 * 1000).toISOString().slice(0, 10), { t: h.t!, lbl });
-    }
-    let ultimoTier = '';
-    for (const { t: tt, lbl } of porDia.values()) {
-        if (lbl === ultimoTier) continue;
-        ultimoTier = lbl;
-        linea.push({ t: tt.toISOString(), tipo: 'Inmuebles24', texto: lbl, tono: 'neutro' });
+        const de = precios[i];
+        const a = i + 1 < precios.length ? precios[i + 1] : { v: n(dig(P, 'listing', 'value')), cur: monedaHoy };
+        if (a.v == null || (a.v === de.v && a.cur === de.cur)) continue;
+        const pct = a.cur === de.cur ? ((a.v / de.v) - 1) * 100 : null;
+        linea.push({ t: de.t.toISOString(), tipo: 'Precio', texto: `${fmtP(de.v, de.cur)} → ${fmtP(a.v, a.cur)}${pct != null ? ` (${pct > 0 ? '+' : ''}${pct.toFixed(1)}%)` : ''}`, tono: pct != null && pct < 0 ? 'ok' : 'neutro' });
     }
     for (const o of operaciones) for (const h of o.historia) linea.push({ t: h.t, tipo: 'Operación', texto: `${o.codigo} · ${h.estatus}`, tono: /cancel/i.test(h.estatus) ? 'mal' : /cerrada|cobrando|aceptada/i.test(h.estatus) ? 'ok' : 'neutro' });
-    if (exIni) linea.push({ t: exIni.toISOString(), tipo: 'Contrato', texto: `Inicia exclusiva${exDur ? ` · ${exDur} meses` : ''}`, tono: 'neutro' });
-    if (exFin && exFin.getTime() <= now) linea.push({ t: exFin.toISOString(), tipo: 'Contrato', texto: 'Vence la exclusiva', tono: 'mal' });
     const en1510 = fecha(dig(P, 'contract', 'exclusive', 'pulppo'));
-    if (en1510) linea.push({ t: en1510.toISOString(), tipo: 'Contrato', texto: 'Entra al programa 1·5·10', tono: 'ok' });
     const ordLeads = [...leads].sort((a, b) => (a.createdAt as Date).getTime() - (b.createdAt as Date).getTime());
-    if (ordLeads.length) linea.push({ t: (ordLeads[0].createdAt as Date).toISOString(), tipo: 'Funnel', texto: `Primer lead · ${fuenteLead(ordLeads[0].source)}`, tono: 'neutro' });
-    const visFechas = visAgg.map((v) => fecha(v.t)).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime());
-    if (visFechas.length) linea.push({ t: visFechas[0].toISOString(), tipo: 'Funnel', texto: 'Primera visita', tono: 'neutro' });
     linea.sort((a, b) => b.t.localeCompare(a.t));
 
     const fotos = ((P.pictures as Document[]) ?? []).filter((x) => x?.public !== false);
@@ -411,7 +399,7 @@ export async function expediente(idRaw: string): Promise<Expediente | null> {
             wa: { base: wa.length, sinRespuesta: sinResp },
             visitas: visAgg.filter((v) => v.conf === 1).length, visitasPendientes: visAgg.filter((v) => v.conf !== 1).length, ofertas,
         },
-        operaciones, duplicados, ortografia, linea,
+        operaciones, duplicados, miContrato: contratoDe(P), ortografia, linea,
         links: { ficha: `/ficha/${encodeURIComponent((P.internalId as string) || String(oid))}`, publica: `https://pulppo.com/propiedades/${String(oid)}`, mb: companyId ? `/mb/${companyId}` : null },
     };
 }

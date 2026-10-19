@@ -450,3 +450,10 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   o ≤150 m. Excluye el rebote de NUESTRO aviso en el MLS (mismo id de portal). También sale en la
   ficha (`/ficha/[id]`, completa y simple) con liga al aviso.
 - Comisión de venta tipo 4.64 / 5.80 se marca «parece 4% + IVA capturado».
+- Duplicados de Pulppo traen el contrato lado a lado (comisión, exclusiva/opción, documento, mismo
+  propietario por contacto o teléfono) — SÓLO en el expediente; la ficha es pública con token y no lo muestra.
+- Portales que NO se muestran: Lamudi, Trovit e iCasas/Mitula/Nuroa/Nestoria (presencia cancelada hace ~1 año;
+  la llave quedó colgada, 0 leads en 90 d) y Ciencuadras (portal colombiano, prueba de sep-2026 que nunca
+  publicó). Doorvel NO guarda código en la propiedad pero manda leads de formulario: sale si la propiedad tiene.
+- Línea de tiempo = SÓLO precio y operaciones (Ale). `listing.priceHistory` guarda el precio ANTERIOR a cada
+  cambio (con la fecha del cambio); la última entrada va al precio actual. Hay entradas en USD.
