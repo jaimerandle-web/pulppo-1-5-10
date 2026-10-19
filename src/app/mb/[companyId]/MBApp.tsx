@@ -1,5 +1,6 @@
 'use client';
 import type { ErrorOrto } from '@/lib/ortografia';
+import type { ExclusivaEnConflicto } from '@/lib/exclusivas';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import type { MBData, MBProp, MBFuera, MBCierreComprador, RespKey } from '@/lib/mb';
@@ -18,6 +19,8 @@ const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = 
 const R = 2; // design system Pulppo: esquinas cuadradas
 const money = (n?: number | null) => (n == null || isNaN(n) ? '—' : `$${Math.round(n).toLocaleString('en-US')}`);
 const f = (n: number) => n.toLocaleString('es-MX');
+const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const fechaCorta = (iso: string) => { const d = new Date(new Date(iso).getTime() - 6 * 3600 * 1000); return `${d.getUTCDate()} ${MESES_C[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 // Media / No competitivo van en negro de marca (el amarillo no se lee sobre blanco; se usa
 // como fondo del tag, no como color de texto).
 const calidadColor = (c: string) => (c === 'Alta' ? SEA : c === 'Baja' ? RED : BLK);
@@ -509,6 +512,15 @@ export default function MBApp({ d, verMarketing = false }: { d: MBData; verMarke
         return () => { vivo = false; };
     }, [d.companyId]);
     const nOrto = Object.keys(orto).length;
+    // Exclusivas que alguien más publica: también llegan después de pintar (son varias consultas por exclusiva)
+    const [exclusivas, setExclusivas] = useState<ExclusivaEnConflicto[]>([]);
+    useEffect(() => {
+        if (d.companyId === 'demo') return;
+        let vivo = true;
+        fetch(`/api/mb-exclusivas?company=${d.companyId}`).then((r) => (r.ok ? r.json() : null))
+            .then((j) => { if (vivo && Array.isArray(j?.exclusivas)) setExclusivas(j.exclusivas); }).catch(() => {});
+        return () => { vivo = false; };
+    }, [d.companyId]);
     // ejemplos más repetidos para la tarjeta de errores
     const ortoTop = useMemo(() => {
         const c = new Map<string, number>();
@@ -867,6 +879,42 @@ export default function MBApp({ d, verMarketing = false }: { d: MBData; verMarke
                             </>
                         )}
 
+                        {/* Exclusivas que alguien más publica: sólo si hay casos (lib/exclusivas.ts). */}
+                        {exclusivas.length > 0 && (
+                            <>
+                                <h2 style={{ ...h2, marginTop: 30 }}>Exclusivas que alguien más está publicando</h2>
+                                <div style={sub}>
+                                    <b>{f(exclusivas.length)}</b> {exclusivas.length === 1 ? 'propiedad está marcada' : 'propiedades están marcadas'} como exclusiva tuya, pero el mismo inmueble aparece publicado por otra inmobiliaria.
+                                    {' '}{exclusivas.filter((x) => !x.firmado).length > 0 && <><b>{f(exclusivas.filter((x) => !x.firmado).length)}</b> no {exclusivas.filter((x) => !x.firmado).length === 1 ? 'tiene' : 'tienen'} el contrato de exclusiva firmado en Pulppo: sin firma, la exclusiva no te protege.</>}
+                                </div>
+                                <div style={{ display: 'grid', gap: 10 }}>
+                                    {exclusivas.map((x) => (
+                                        <div key={x.id} style={{ border: `1px solid ${LGT}`, borderLeft: `3px solid ${x.firmado ? YEL : RED}`, borderRadius: R, padding: '12px 14px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                                                <div style={{ fontSize: 13 }}>
+                                                    <b>{x.code}</b> · {x.calle || x.colonia}{x.calle && x.colonia ? `, ${x.colonia}` : ''}
+                                                    <span style={{ color: '#666' }}> · {x.operacion} · {x.precio != null ? `$${Math.round(x.precio).toLocaleString('en-US')}` : '—'}</span>
+                                                </div>
+                                                <div style={{ fontSize: 11.5, color: x.firmado ? '#666' : RED, fontWeight: 700 }}>Contrato {x.contrato}</div>
+                                            </div>
+                                            <div style={{ fontSize: 11.5, color: '#666', marginTop: 2 }}>
+                                                {x.asesor || 'Sin asesor'} · exclusiva desde {fechaCorta(x.exclusivaDesde)}{x.exclusivaHasta ? ` hasta ${fechaCorta(x.exclusivaHasta)}` : ''}
+                                            </div>
+                                            <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                                {x.otros.map((o, i) => (
+                                                    <a key={i} href={o.url ?? undefined} target="_blank" rel="noreferrer"
+                                                        style={{ fontSize: 11.5, background: LGT, borderRadius: R, padding: '5px 9px', color: BLK, textDecoration: 'none', pointerEvents: o.url ? 'auto' : 'none' }}>
+                                                        <b>{o.quien}</b> · {o.deLaRed ? 'en Pulppo' : o.donde}{o.precio != null ? ` · $${Math.round(o.precio).toLocaleString('en-US')}` : ''}{o.url ? <span style={{ color: SEA, fontWeight: 700 }}> ↗</span> : null}
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={{ fontSize: 11, color: GRY, marginTop: 8 }}>Mismo tipo, superficie y precio (±3%), en la misma calle o a menos de 300 m. No cuenta tu propio aviso ni tus cuentas en otros portales, ni las unidades de un desarrollo. Del mercado, sólo avisos actualizados en los últimos 90 días.</div>
+                            </>
+                        )}
+
                         <div style={{ marginTop: 30, background: LGT, borderLeft: `2px solid ${YEL}`, padding: '13px 16px', fontSize: 12, color: '#555' }}>
                             Tienes <b>{f(nDest)}</b> propiedades en destacado o súper destacado en Inmuebles24. Estamos trabajando
                             en <b>inventario vs. últimos 6 meses</b> y en la comparativa ampliada contra la comunidad.
@@ -1010,6 +1058,7 @@ export default function MBApp({ d, verMarketing = false }: { d: MBData; verMarke
                             {dfn('Cómo va tu equipo', 'últimos 90 días, solo asesores de tu inmobiliaria y con al menos 10 leads. Son señales, no un ranking: el que más cierra puede a la vez estar quemando leads, y por eso aparece en "ojo con estos" en vez de en la columna verde.')}
                             {dfn('Empieza por aquí', 'ordenado por oportunidad (demanda ÷ (1+leads)). El diagnóstico dice el freno más probable: bajar precio o qué le falta a la ficha.')}
                             {dfn('¡Ojo con estas!', 'propiedades con errores de captura. Una propiedad puede tener más de un error, por eso la suma de los bloques puede pasar del total.')}
+                            {dfn('Exclusivas que alguien más está publicando', 'propiedades marcadas como exclusiva vigente que otra inmobiliaria también publica: el mismo tipo, superficie y precio (±3%), en la misma calle o a menos de 300 m. No cuentan tus propios avisos ni tus cuentas en otros portales, ni las unidades de un desarrollo; del mercado, sólo avisos actualizados en los últimos 90 días. Sólo aparece si hay casos.')}
                             {dfn('Tu inventario (listado)', 'por default muestra los ÚLTIMOS 30 DÍAS; cámbialo en el filtro de fechas si quieres otra ventana. La fila gris debajo de los encabezados filtra por columna: en las de texto escribe parte de la palabra, en las de número el mínimo (3 = 3 o más), salvo "1ª respuesta" donde es el máximo. Clic en un encabezado ordena.')}
                             {dfn('Acción', 'qué hacer con esa propiedad. De precio y ficha (bajar precio; lo puntual que le falta a la ficha: subir video, más fotos, agregar amenidades, alargar descripción, agregar tour; corregir ortografía; corregir datos) y de desempeño (contestar más rápido, convertir a visita, cerrar la visita, compartir con clientes).')}
                             {dfn('Generador de análisis', 'las fechas van en dos bloques. DESEMPEÑO = tu operación (funnel, asesores, leads, sin actividad): un período y contra qué compararlo. COMPARABLES = el mercado (cierres mín. 6 meses, demanda mín. 1 mes); la oferta es siempre foto de hoy porque no se guarda su historia.')}

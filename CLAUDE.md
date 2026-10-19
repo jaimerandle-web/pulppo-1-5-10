@@ -457,3 +457,15 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   publicó). Doorvel NO guarda código en la propiedad pero manda leads de formulario: sale si la propiedad tiene.
 - Línea de tiempo = SÓLO precio y operaciones (Ale). `listing.priceHistory` guarda el precio ANTERIOR a cada
   cambio (con la fecha del cambio); la última entrada va al precio actual. Hay entradas en USD.
+
+## /mb → Resumen: «Exclusivas que alguien más está publicando»
+
+`src/lib/exclusivas.ts` + `/api/mb-exclusivas?company=` (canAccessCompany, caché 1 h; llega después de pintar,
+como ortografía). Sale después de «¡Ojo con estas!» SÓLO si la inmobiliaria tiene casos, y la ven también los
+masters. Parte de cada exclusiva VIGENTE publicada y busca el mismo inmueble con `duplicadosDe`: sólo «Muy
+probable»; del MLS sólo avisos actualizados ≤90 d (40% del MLS de CDMX lleva más sin moverse); fuera la
+misma inmobiliaria (otra propiedad suya = cargada dos veces, o su cuenta en otro portal: `esPropia`, por
+nombre sin palabras genéricas o por asesor — «H&S Real Estate Polanco» = HS) y fuera desarrollos
+(`development.name` o 4+ copias). De la otra inmobiliaria de la red sólo se muestra el NOMBRE, nunca su
+contrato ni su comisión. Oct-2026: 70 exclusivas de 673 en la red; sólo 8 firmadas; HS 15 casos (marca el 41%
+de su inventario como exclusiva, 0 firmadas).

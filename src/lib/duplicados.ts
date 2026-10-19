@@ -15,7 +15,9 @@
 //                      cambia entre portales y agencias, pero entonces exigimos más cercanía).
 // Las recámaras, si las dos las traen y no coinciden, descartan.
 //
-// El rebote de NUESTRO MISMO aviso en el MLS (mismo id de portal) no es un duplicado y se omite.
+// El rebote de NUESTRO MISMO aviso en el MLS (mismo id de portal) no es un duplicado y se omite. Tampoco la
+// misma inmobiliaria o el mismo asesor publicando con SU cuenta en otro portal («H&S Real Estate Polanco» en
+// propiedades.com es HS): medido oct-2026, eso era 4 de cada 10 «copias» de las exclusivas.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 
@@ -34,6 +36,8 @@ export interface Duplicado {
     /** diferencia de precio contra la nuestra, en % */
     difPrecio: number | null;
     url: string | null;
+    /** última actualización del aviso en el MLS (los de >90 días pueden ya no existir) */
+    actualizado: string | null;
     /** sólo origen 'pulppo' */
     pulppoId?: string;
     internalId?: string | null;
@@ -93,6 +97,18 @@ const coords = (d: Document): number[] | null => {
     const c = dig(d, 'address', 'location', 'coordinates') as unknown[] | undefined;
     return Array.isArray(c) && typeof c[0] === 'number' && typeof c[1] === 'number' && (c[0] !== 0 || c[1] !== 0) ? [c[0], c[1]] : null;
 };
+// nombre de inmobiliaria sin palabras genéricas: «H&S Real Estate Polanco» → {hs}; «Q Inmobiliaria Querétaro» → {queretaro}
+const GENERICAS = /\b(bienes|raices|real|estate|inmobiliaria|inmobiliario|grupo|asesores|sa|de|cv|polanco|mexico|cdmx|propiedades|realty|the|y|del|la|el)\b/g;
+const tokensNombre = (x: unknown) => new Set((s(x).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/&/g, '').replace(GENERICAS, ' ').match(/[a-z0-9]+/g) ?? []).filter((w) => w.length >= 2));
+/** ¿el aviso del MLS es de la MISMA inmobiliaria (su cuenta en otro portal) o del mismo asesor? */
+export function esPropia(P: Document, d: Document): boolean {
+    const mia = s(dig(P, 'company', 'name')), suya = s(dig(d, 'company', 'name'));
+    const a = tokensNombre(mia), b = tokensNombre(suya);
+    if ([...a].some((w) => b.has(w))) return true;
+    if (mia.length > 3 && suya.toLowerCase().includes(mia.toLowerCase())) return true;
+    const miAsesor = nombre(P.agent).toLowerCase(), suAsesor = nombre(d.agent).toLowerCase();
+    return miAsesor.length > 5 && (miAsesor === suAsesor || suya.toLowerCase() === miAsesor);
+}
 const superficies = (d: Document) => [n(dig(d, 'attributes', 'totalSurface')), n(dig(d, 'attributes', 'roofedSurface'))].filter((x): x is number => x != null);
 
 /** Todos los ids de portal de una propiedad nuestra (incluye avisos viejos de i24 del historial): un registro
@@ -111,7 +127,7 @@ const PROJ = {
     'import.source': 1, 'import.id': 1, 'import.url': 1, referenceCode: 1, portals: 1, 'company.name': 1, agent: 1,
     'listing.value': 1, 'attributes.totalSurface': 1, 'attributes.roofedSurface': 1, 'attributes.suites': 1,
     'address.street': 1, 'address.location': 1, 'status.last': 1, internalId: 1,
-    'contract.comission': 1, 'contract.status': 1, 'contract.exclusive': 1, 'contact._id': 1, 'contact.phone': 1,
+    'import.updatedAt': 1, updatedAt: 1, 'contract.comission': 1, 'contract.status': 1, 'contract.exclusive': 1, 'contact._id': 1, 'contact.phone': 1,
 };
 
 export async function duplicadosDe(P: Document): Promise<Duplicado[]> {
@@ -160,18 +176,21 @@ export async function duplicadosDe(P: Document): Promise<Duplicado[]> {
             const url = s(dig(d, 'import', 'url')) || (Object.values((d.portals as Record<string, unknown>) ?? {}).map((v) => s(dig(v, 'url'))).find(Boolean) ?? '');
             // nuestro mismo aviso rebotado (por id, o por el MLM dentro de la URL)
             if (ids.some((x) => propios.has(x)) || [...propios].some((x) => x.length > 5 && url.toUpperCase().includes(x))) return;
+            if (esPropia(P, d)) return;
+            const act = dig(d, 'import', 'updatedAt') ?? d.updatedAt;
             const empresa = s(dig(d, 'company', 'name')), asesor = nombre(d.agent);
             out.push({
                 origen, nivel, portal: portalDe(dig(d, 'import', 'source')),
                 quien: [empresa, asesor && asesor.toLowerCase() !== empresa.toLowerCase() ? asesor : ''].filter(Boolean).join(' · ') || '—',
                 precio, m2: supD[0], rec, calle, distancia: dist, difPrecio: Math.round(dif * 10) / 10, url: url || null,
+                actualizado: act instanceof Date ? act.toISOString() : null,
             });
         } else {
             const i24 = s(dig(d, 'portals', 'inmuebles24', 'url')), ml = s(dig(d, 'portals', 'mercadolibre', 'url'));
             out.push({
                 origen, nivel, portal: 'Pulppo', quien: [s(dig(d, 'company', 'name')), nombre(d.agent)].filter(Boolean).join(' · ') || '—',
                 precio, m2: supD[0], rec, calle, distancia: dist, difPrecio: Math.round(dif * 10) / 10,
-                url: i24 || ml || `https://pulppo.com/propiedades/${String(d._id)}`,
+                url: i24 || ml || `https://pulppo.com/propiedades/${String(d._id)}`, actualizado: null,
                 pulppoId: String(d._id), internalId: (d.internalId as string) ?? null, estatus: s(dig(d, 'status', 'last')) || null,
                 contrato: { ...contratoDe(d), mismoPropietario: null },
             });
