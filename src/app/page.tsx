@@ -28,7 +28,8 @@ const PROYECTOS: { eyebrow: string; title: string; blurb: string; links: Link[] 
         blurb: 'La herramienta del dueño de la inmobiliaria: qué inventario necesita atención, cómo van sus leads, sus zonas y su equipo.',
         links: [
             { href: '/mb', label: 'Índice de inmobiliarias', hint: 'Filtra por KAM y abre la de cada una' },
-            { href: '/analisis', label: 'Análisis general', hint: 'El mismo motor, configurable para el reporte del KAM' }
+            { href: '/analisis', label: 'Análisis general', hint: 'El mismo motor, configurable para el reporte del KAM' },
+            { href: '/propiedad', label: 'Buscador de propiedades', hint: 'Código, ID de portal o liga → expediente completo' }
         ]
     },
     {

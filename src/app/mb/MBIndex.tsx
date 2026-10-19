@@ -68,6 +68,7 @@ export default function MBIndex({ rows }: { rows: MBIndexRow[] }) {
                     <a href="/" style={navLink}>← Herramientas</a>
                     {/* /analisis corre el mismo motor que esta herramienta, pero configurable para el KAM. */}
                     <a href="/analisis" style={navLink}>🧭 Análisis general</a>
+                    <a href="/propiedad" style={navLink}>🔎 Buscador de propiedades</a>
                 </div>
             </div>
 

@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
         '/api/mb-ortografia': ['./src/lib/ortografia/**'],
         '/ficha/[id]': ['./src/lib/ortografia/**'],
         '/ficha/[id]/comparables': ['./src/lib/ortografia/**'],
+        '/propiedad/[id]': ['./src/lib/ortografia/**'],
     },
     // /inventario sirve el reporte estático self-contained (public/inventario.html).
     // Queda detrás del login por el middleware (la ruta no está en la allowlist del matcher).

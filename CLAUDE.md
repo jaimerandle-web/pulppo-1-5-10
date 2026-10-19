@@ -27,6 +27,7 @@ App interna de Pulppo (México) que hospeda **dos proyectos** sobre la misma bas
 | `/1-5-10/evaluar`, `/1-5-10/campanas` | 1·5·10 | `/evaluar` y `/campanas` redirigen aquí (`next.config.ts`) |
 | `/mb`, `/mb/[companyId]` | Master Brokers | **No mover**: el PDF del Overview imprime estas URLs |
 | `/analisis` | Master Brokers | Entra desde el índice de `/mb`, no desde el menú |
+| `/propiedad`, `/propiedad/[id]` | Master Brokers | Buscador + expediente. SÓLO interno (regalía, comprador) |
 | `/ficha/[id]` | **compartida** | La abren 1·5·10 (Cartera) y MB. Tiene links públicos con token → **no mover** |
 | `/marketing` | Centro de Marketing | Calendario · Bases · Garantía de renta · Desempeño (`?tab=` entra directo) |
 | `/login` | — | Fuera del middleware |
@@ -426,3 +427,26 @@ comparación (periodo anterior o año pasado). Motor `src/lib/portales/inmobilia
   /portales (dejaba ~40% en «otros»). Brokers/descartes/ticket salieron de «La semana».
 - Tiempos: una inmobiliaria ~7 s; vista general de un mes ~7 s; general YTD vs año pasado ~2 min
   (cabe en `maxDuration` 300, y se cachea 10 min).
+
+## Buscador de propiedades (`/propiedad`, SÓLO interno)
+
+`src/lib/propiedad.ts` (búsqueda + expediente) · `src/lib/duplicados.ts` (compartido con la ficha) ·
+`src/app/propiedad/`. Acceso desde el menú (Master Brokers) y el índice de /mb.
+
+- **Qué acepta**: código Pulppo (`DMA-014`/`dma014`), `_id`, ID de i24 (también avisos ANTERIORES:
+  `portals.inmuebles24.history[].idAvisoNavplat`, sin índice → sólo si nada más pegó), MeLi `MLM…`,
+  propiedades.com (int), EasyBroker `EB-…`, Casas y Terrenos, Ciencuadras, o la LIGA de cualquiera.
+  Un número puede chocar entre portales: con 2+ coincidencias se lista; con una, redirect al expediente.
+  Si no es nuestra, se busca en `mls` (`import.id`, `import.url`, `referenceCode`) y dice de quién es.
+- **Expediente**: portales (estatus, nivel, costo i24 de lista, errores como la cuenta de EasyBroker
+  desactivada), estatus de la propiedad Y de cada operación (incluidas canceladas), funnel con
+  «Sin respuesta · WhatsApp» (misma regla que /portales), fuente del cierre con `resolverFuentes`
+  (vista de red), lead del comprador (primero sobre esa propiedad, si no con la inmobiliaria que lo
+  trajo), duplicados, ortografía y línea de tiempo. En i24 la línea ignora OFFLINE (bug) y deja un
+  estado por día (el reordenamiento lo mueve varias veces al día).
+- **Duplicados** (`duplicadosDe`): mismo tipo/operación, superficie ±3% (total o techada), recámaras
+  iguales si ambas las traen. «Muy probable» = precio ±3% Y misma calle o ≤300 m (la misma colonia
+  NO basta: en Polanco hay decenas de depas de 250 m² a $19M). «Posible» = precio ±15% y misma calle
+  o ≤150 m. Excluye el rebote de NUESTRO aviso en el MLS (mismo id de portal). También sale en la
+  ficha (`/ficha/[id]`, completa y simple) con liga al aviso.
+- Comisión de venta tipo 4.64 / 5.80 se marca «parece 4% + IVA capturado».

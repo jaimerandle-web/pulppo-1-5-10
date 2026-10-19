@@ -3,6 +3,7 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb, classifySource } from './data';
 import { revisarAviso } from './ortografia';
+import { duplicadosDe, type Duplicado } from './duplicados';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 
@@ -444,6 +445,8 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const words = desc.trim() ? desc.trim().split(/\s+/).length : 0;
     // faltas de ortografía del título y la descripción (mismo corrector que /mb → «¡Ojo con estas!»)
     const orto = await revisarAviso({ titulo: title, descripcion: desc, calle: dig(P, 'address', 'street') });
+    // ¿dónde más está publicada? (MLS + otras propiedades de Pulppo) — misma lógica que el expediente
+    const dups = await duplicadosDe(P).catch(() => [] as Duplicado[]);
     const ortoTxt = (n: number) => orto.slice(0, n).map((e) => `${e.palabra} → ${e.bien}${e.tipo === 'dedo' ? ' (posible)' : ''}`).join(' · ') + (orto.length > n ? ` · y ${orto.length - n} más` : '');
     // Ale, 17-sep: el mínimo va en CARACTERES y son 400. Medido sobre 6,000 publicadas, la
     // descripción mediana tiene 833 caracteres (131 palabras) y sólo el 1% queda por debajo
@@ -942,6 +945,12 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const refPpm = simple ? '' : `<div style="margin-top:20px;opacity:.7"><div class="eyebrow" style="color:${GRY};margin-bottom:4px">Referencia · qué te alcanza por $/m² similar</div>
       <div style="font-size:10px;color:${GRY};margin-bottom:4px">Menos relevante: mismo $/m² (±15%), como referencia de mercado.</div>
       <table><tr><th>Zona</th><th>Precio</th><th>Sup.</th><th>$/m²</th><th>Rec/Baños</th></tr>${compTbl(alcPpm2)}</table></div>`;
+    // Duplicados: la misma propiedad publicada por otra agencia, por el propietario o cargada dos veces en Pulppo.
+    const dupsHtml = `<div class="sec"><div class="eyebrow">¿Dónde más está publicada?</div><div class="accent"></div>
+    ${dups.length ? `<div style="font-size:10px;color:${GRY};margin-bottom:4px">El mismo inmueble en otros avisos del mercado: misma superficie y precio cercano. «Muy probable» = precio ±3% en la misma calle o a menos de 300 m; «posible» = precio ±15% en la misma calle o a menos de 150 m.</div>
+    <table><tr><th>Coincidencia</th><th>Dónde</th><th>Quién la publica</th><th>Precio</th><th>Sup.</th><th></th></tr>${dups.slice(0, 12).map((d) => `<tr><td class="nw" style="font-weight:700;color:${d.nivel === 'Muy probable' ? RED : BLK}">${d.nivel}</td><td>${esc(d.portal)}${d.internalId ? ` · ${esc(d.internalId)}` : ''}</td><td>${esc(d.quien)}</td><td class="nw">${money(d.precio)}${d.difPrecio != null && Math.abs(d.difPrecio) >= 0.5 ? ` <span style="color:${GRY}">(${d.difPrecio > 0 ? '+' : ''}${d.difPrecio}%)</span>` : ''}</td><td class="nw">${d.m2 ?? '—'} m²</td><td class="nw">${d.url ? `<a href="${esc(d.url)}" target="_blank" rel="noreferrer" style="color:${SEA};font-weight:700">Ver aviso ↗</a>` : ''}</td></tr>`).join('')}</table>
+    ${dups.length > 12 ? `<div style="font-size:10px;color:${GRY};margin-top:4px">Y ${dups.length - 12} más.</div>` : ''}` : `<div style="font-size:11px;color:${GRY}">No encontramos otra publicación de este inmueble en el mercado.</div>`}
+  </div>`;
     const secSalud = `<div class="sec"><div class="eyebrow">Salud del anuncio</div><div class="accent"></div>${health}</div>`;
     const secFunnel = `<div class="sec"><div class="eyebrow">Demanda y funnel</div><div class="accent"></div>
     <div class="grid2">
@@ -975,6 +984,7 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
 ${promoHtml}
 ${comportHtml}
 ${secFunnel}
+${dupsHtml}
   ${zonaLbl ? `<div class="sec"><div class="eyebrow">Insights de la zona · ${esc(zonaLbl)}</div><div class="accent"></div>${zonaInner}</div>` : ''}
   <div class="sec"><div class="eyebrow">Mercado y competencia</div><div class="accent"></div>
     ${cierresVisual}
@@ -985,6 +995,7 @@ ${secFunnel}
   ${secAnalisis}`;
     const bodySimple = `${secSalud}
 ${secFunnel}
+${dupsHtml}
   <div class="sec"><div class="eyebrow">Mercado de la zona</div><div class="accent"></div>
     ${zonaInner}
     ${cierresVisual}
