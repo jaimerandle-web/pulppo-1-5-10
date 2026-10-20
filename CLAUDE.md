@@ -369,6 +369,14 @@ el PDF imprime las dos con las listas abiertas.
   en una presentación aparte.
 - Top de anuncios venta/renta, al final.
 Todas las tablas usan `TablaFiltrable` (buscador, filtros, orden y copiar lo filtrado). SIN costos ni CPL (Ale).
+Cambios oct-2026 (Ale): «semana» = ÚLTIMOS 7 DÍAS contra los 7 anteriores (antes lunes–hoy contra semana completa:
+un martes todo salía ▼80%). Arriba «La semana en corto» (leads/visitas 7 d, cambios, cierres 90 d y qué hacer). En
+«Desempeño por nivel» los niveles de i24 cuentan SÓLO leads de i24 (y visitas de esos compradores) y los de MeLi
+sólo de MeLi — antes sumaba todas las fuentes contra vistas de i24 y salían 16–32 leads/100 vistas —, con filtro
+Venta / Renta (78 de 89 simples de DH son rentas). «Cierres por fuente» (90 d / año) con `cierresEntre` sobre todas
+las compañías con el mismo nombre. Premium se juzga con 2+ semanas en su nivel. Rotación: renta / terreno / comercial
+/ sin datos del mercado = «Decisión manual» (el scoring no los evalúa). Trabadas = 90+ días. «Casi nadie la ve» =
+vistas i24 < 50% de las del mercado (`performance`), no un umbral fijo. Caché de la API `:v4`.
 
 ## Portales → "Leads, funnel y cierres" por inmobiliaria
 

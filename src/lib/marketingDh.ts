@@ -1,8 +1,9 @@
 // Marketing de una inmobiliaria en /mb → Marketing (oct-2026). Hoy SÓLO Diamond House y SÓLO para el
 // equipo interno de Pulppo (ver MARKETING_VISIBLE_PARA en marketingAcceso.ts y la barrera de /api/mb-marketing).
 //
-// Responde «¿cómo está asignada la exposición en portales y qué está rindiendo?», en vivo y contra la
-// semana anterior (lunes a domingo, hora México):
+// Responde «¿cómo está asignada la exposición en portales y qué está rindiendo?», en vivo: los ÚLTIMOS 7 DÍAS
+// contra los 7 anteriores (Ale, oct-2026). Antes era lunes–hoy contra la semana completa anterior, y un martes
+// todo salía ▼80%: comparaba 2 días contra 7.
 //   1. Asignación de hoy: nivel del aviso en Inmuebles24 (`portals.inmuebles24.type`) y MeLi, venta/renta,
 //      fijados a mano. 🔴 NO se muestran las cuentas de i24 (ANUNCIO_SIMPLE / ANUNCIOS_DEGOHOUSE): Ale no
 //      quiere que la inmobiliaria vea en qué cuenta está cada aviso. Tampoco «zona forzada»: es la misma
@@ -10,7 +11,10 @@
 //   2. Cambios de la semana: el tipo vigente al inicio y al final de cada semana, desde el historial
 //      casi diario del aviso (`history[]`, con `trigger`: daily / reorder / manual / force…).
 //   3. Desempeño por nivel y por aviso: VISTAS → leads ÚNICOS (contacto + propiedad) → visitas por fecha
-//      de la visita (confirmadas + pendientes; reglas de mbComun.ts).
+//      de la visita (confirmadas + pendientes; reglas de mbComun.ts). 🔴 En cada nivel de i24 cuentan SÓLO
+//      los leads de i24 (y las visitas de esos compradores); en cada nivel de MeLi, sólo los de MeLi. Antes
+//      un nivel de i24 sumaba leads de todas las fuentes contra vistas de i24 y salían «16–32 leads por cada
+//      100 vistas». Separado por venta / renta: 78 de los 89 simples de Diamond House son rentas.
 //      Vistas = colección `metrics` con type 'view' (fechadas: ~80% vienen de Inmuebles24 y el resto del
 //      portal de brokers), que sí se pueden cortar por semana. `portals.inmuebles24.performance` (vistas
 //      del aviso contra el promedio del mercado, ventana del portal) se usa sólo como contexto en el «por qué».
@@ -22,6 +26,8 @@ import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { claveLead, VISITA_OK } from './mbComun';
 import { datosDe, type Aviso } from './portales/avisos';
+import { classifySource } from './portales/metrics';
+import { cierresEntre } from './portales/inmobiliaria';
 
 const MX = 6 * 3600 * 1000;
 const DIA = 86400000;
@@ -62,12 +68,6 @@ const fechaHist = (e: Document): Date | null => {
     return d && !isNaN(d.getTime()) ? d : null;
 };
 const ymd = (d: Date) => new Date(d.getTime() - MX).toISOString().slice(0, 10);
-/** lunes 00:00 hora México de la semana de `d`, como instante UTC */
-function lunesMx(d: Date): Date {
-    const m = new Date(d.getTime() - MX);
-    const dow = (m.getUTCDay() + 6) % 7;
-    return new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), m.getUTCDate() - dow) + MX);
-}
 const pct = (a: number, b: number) => (b ? Math.round((1000 * a) / b) / 10 : null);
 
 export interface AvisoMk {
@@ -79,6 +79,8 @@ export interface AvisoMk {
     vistasSem: number; vistasSemAnt: number; vistas30: number;
     leadsSem: number; leadsSemAnt: number; leads30: number; leads90: number;
     visitasSem: number; visitasSemAnt: number; visitas30: number; visitas90: number;
+    /** el mismo embudo pero sólo con los leads de ese portal (y las visitas de esos compradores) */
+    i24: Embudo; meliE: Embudo;
     ofertas: number;
     /** vistas del aviso en i24 contra el promedio del mercado (portals.inmuebles24.performance, ventana del portal) */
     vistasI24: number | null; vistasMercadoI24: number | null;
@@ -86,11 +88,16 @@ export interface AvisoMk {
     puntos: number | null; compite: boolean; tags: string[]; falta: string; precioVsZona: number | null;
     demanda: number | null; competencia: number | null;
 }
+export interface Embudo { leadsSem: number; leadsSemAnt: number; leads30: number; visitasSem: number; visitasSemAnt: number; visitas30: number }
+export type Op = 'Todas' | 'Venta' | 'Renta';
+export interface FuenteCierres { fuente: string; n: number; comision: number }
+export interface CierresMk { n: number; comision: number; porFuente: FuenteCierres[]; desde: string; hasta: string }
 export interface CambioMk { codigo: string; antes: string; despues: string; sube: boolean; motivo: string | null; fecha: string }
 export interface Semana { desde: string; hasta: string; enCurso: boolean }
 export interface PorNivelMk {
     nivel: string; avisos: number;
-    vistasSem: number; vistasSemAnt: number; vistas30: number;
+    /** null en MeLi: no reporta vistas */
+    vistasSem: number | null; vistasSemAnt: number | null; vistas30: number | null;
     leadsSem: number; leadsSemAnt: number; leads30: number;
     visitasSem: number; visitasSemAnt: number; visitas30: number;
 }
@@ -106,21 +113,26 @@ export interface MarketingMk {
         zonaDemandVenta: { zonaDemand: number; normal: number };
         /** proporcionalidad zona demand: inventario de venta en las 4 alcaldías ZD vs avisos premium con tier ZD.
          *  Criterio de la asignación (Ale, 31-ago-2026): la promesa ZD es proporcional a ese inventario. */
-        zdProporcion: { ventaInv: number; ventaEnZd: number; premium: number; premiumZd: number; zdFueraDeZona: number };
+        zdProporcion: { ventaInv: number; ventaEnZd: number; premium: number; premiumZd: number; zdFueraDeZona: number; zdFueraCodigos: string[] };
         meli: Array<{ tipo: string; n: number }>;
         fijados: Array<{ codigo: string; nivel: string; por: string | null; el: string | null }>;
         noPromovidos: Array<{ motivo: string; n: number }>;
     };
     cambios: { semana: CambioMk[]; semanaAnt: CambioMk[] };
-    porNivel: PorNivelMk[];
+    /** niveles de i24 (leads de i24) y de MeLi (leads de MeLi), por operación */
+    porNivel: Record<Op, PorNivelMk[]>;
+    porNivelMeli: Record<Op, PorNivelMk[]>;
+    /** cierres de la inmobiliaria (cualquier lado) por fuente, con la regla de /portales */
+    cierres: { d90: CierresMk; anio: CierresMk };
     avisos: AvisoMk[];
     reglas: { leadsRotar: number };
     estrellas: Array<{ codigo: string; nivel: string; operacion: string; vistas30: number; leads30: number; visitas30: number; conv: number | null; etiqueta: 'Estrella' | 'Mucho ruido, poca visita' | 'En camino' }>;
     desperdicio: Array<{ codigo: string; nivel: string; operacion: string; vistas30: number; leads30: number; motivo: string }>;
     premiumSinLeads: Array<{ codigo: string; nivel: string; operacion: string; diasEnNivel: number; desde: string | null; vistas30: number; porque: string }>;
     subir: Array<{ codigo: string; operacion: string; puntos: number; leads30: number; demanda: number | null; competencia: number | null }>;
-    rotar: Array<{ codigo: string; nivel: string; operacion: string; leadsEnNivel: number; desde: string | null; motivo: string }>;
-    trabadas: Array<{ codigo: string; nivel: string; operacion: string; dias: number; vistas30: number; leads90: number; visitas90: number; freno: string; porque: string; accion: string }>;
+    /** `manual`: el scoring no evalúa ese caso (renta, terreno, comercial, sin datos del mercado) → decide la persona */
+    rotar: Array<{ codigo: string; nivel: string; operacion: string; leadsEnNivel: number; desde: string | null; motivo: string; manual: boolean }>;
+    trabadas: Array<{ codigo: string; nivel: string; operacion: string; dias: number; vistas30: number; vistasI24: number | null; vistasMercadoI24: number | null; leads90: number; visitas90: number; freno: string; porque: string; accion: string }>;
 }
 const FICHA = new Set(['faltan fotos', 'falta video o tour', 'calidad i24 baja']);
 const PRECIO = new Set(['precio caro', 'precio fuera de su zona']);
@@ -140,7 +152,8 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const company = await db.collection('companies').findOne({ _id: cid }, { projection: { name: 1 } });
     const nombre = String(company?.name ?? '').trim();
     const ahora = new Date();
-    const L0 = lunesMx(ahora), Lm1 = new Date(L0.getTime() - 7 * DIA);
+    // «semana» = últimos 7 días; «semana anterior» = los 7 días previos (Ale: mismo periodo, no lunes–hoy)
+    const L0 = new Date(ahora.getTime() - 7 * DIA), Lm1 = new Date(ahora.getTime() - 14 * DIA);
     const D30 = new Date(ahora.getTime() - 30 * DIA), D90 = new Date(ahora.getTime() - 90 * DIA);
 
     const props = await db.collection('properties').find({ 'company._id': cid, 'status.last': 'published' }, { projection: {
@@ -152,23 +165,33 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
 
     // leads únicos (contacto + propiedad) por ventana; se guarda la fecha para contar «leads en su nivel»
     const leadsP = new Map<string, Date[]>();
+    const leadsSrc = new Map<string, Array<{ t: Date; k: string }>>();
+    // propiedad|comprador → canal de su primer lead: para saber de qué portal vino cada visita
+    const canalComprador = new Map<string, string>();
     const vistos = new Set<string>();
     for await (const l of db.collection('leads').find({ 'property._id': { $in: ids }, createdAt: { $gte: new Date(ahora.getTime() - 400 * DIA) } },
-        { projection: { 'contact._id': 1, 'property._id': 1, createdAt: 1 } }).sort({ createdAt: 1 })) {
+        { projection: { 'contact._id': 1, 'property._id': 1, createdAt: 1, source: 1 } }).sort({ createdAt: 1 })) {
         if (!isDate(l.createdAt)) continue;
         const k = claveLead(l);
         if (vistos.has(k)) continue;
         vistos.add(k);
         const pid = String(dig(l, 'property', '_id'));
+        const canal = classifySource(String(l.source ?? ''));
         (leadsP.get(pid) ?? leadsP.set(pid, []).get(pid)!).push(l.createdAt);
+        (leadsSrc.get(pid) ?? leadsSrc.set(pid, []).get(pid)!).push({ t: l.createdAt, k: canal });
+        const cc = `${pid}|${String(dig(l, 'contact', '_id') ?? '')}`;
+        if (!canalComprador.has(cc)) canalComprador.set(cc, canal);
     }
     const visP = new Map<string, Date[]>();
+    const visSrc = new Map<string, Array<{ t: Date; k: string }>>();
     for await (const v of db.collection('visits').find({ 'steps.property._id': { $in: ids }, 'status.last': { $in: VISITA_OK }, startTime: { $gte: D90 } },
-        { projection: { 'steps.property._id': 1, startTime: 1 } })) {
+        { projection: { 'steps.property._id': 1, startTime: 1, 'contact._id': 1 } })) {
         if (!isDate(v.startTime)) continue;
         for (const pid of new Set(((v.steps as Document[]) ?? []).map((s) => String(dig(s, 'property', '_id'))))) {
             if (!idSet.has(pid)) continue;
             (visP.get(pid) ?? visP.set(pid, []).get(pid)!).push(v.startTime);
+            const k = canalComprador.get(`${pid}|${String(dig(v, 'contact', '_id') ?? '')}`) ?? 'otros';
+            (visSrc.get(pid) ?? visSrc.set(pid, []).get(pid)!).push({ t: v.startTime, k });
         }
     }
     // vistas fechadas (metrics type 'view'): las mismas que usa la tabla de propiedades de /mb
@@ -221,6 +244,12 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         }
         const pid = String(p._id);
         const L = leadsP.get(pid), V = visP.get(pid), W = vistP.get(pid);
+        const embudo = (canal: string): Embudo => {
+            const l = (leadsSrc.get(pid) ?? []).filter((x) => x.k === canal).map((x) => x.t);
+            const v = (visSrc.get(pid) ?? []).filter((x) => x.k === canal).map((x) => x.t);
+            return { leadsSem: cuenta(l, L0, fin), leadsSemAnt: cuenta(l, Lm1, L0), leads30: cuenta(l, D30, fin),
+                visitasSem: cuenta(v, L0, fin), visitasSemAnt: cuenta(v, Lm1, L0), visitas30: cuenta(v, D30, fin) };
+        };
         const sc = score.get(codigo);
         const perf = (i24.performance as Document) ?? {};
         const pinBy = [i24.pinnedBy].flat().filter(Boolean).map(String)[0];
@@ -241,6 +270,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
             vistasSem: cuenta(W, L0, fin), vistasSemAnt: cuenta(W, Lm1, L0), vistas30: cuenta(W, D30, fin),
             leadsSem: cuenta(L, L0, fin), leadsSemAnt: cuenta(L, Lm1, L0), leads30: cuenta(L, D30, fin), leads90: cuenta(L, D90, fin),
             visitasSem: cuenta(V, L0, fin), visitasSemAnt: cuenta(V, Lm1, L0), visitas30: cuenta(V, D30, fin), visitas90: cuenta(V, D90, fin),
+            i24: embudo('i24'), meliE: embudo('meli'),
             ofertas: ofertas.get(pid) ?? 0,
             vistasI24: num(dig(perf, 'views', 'listing')), vistasMercadoI24: num(dig(perf, 'views', 'market')) != null ? Math.round(num(dig(perf, 'views', 'market'))!) : null,
             puntos: sc?.puntos ?? null, compite: !!sc?.compite, tags: sc?.tags ?? [], falta: sc?.falta ?? '',
@@ -254,7 +284,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     // Zona demand = las 4 alcaldías oficiales (mismo criterio que la asignación de avisos; Huixquilucan NO)
     const sinAc = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
     const ALCALDIAS_ZD = new Set(['miguel hidalgo', 'alvaro obregon', 'cuajimalpa de morelos', 'cuajimalpa', 'la magdalena contreras', 'magdalena contreras']);
-    const zdp = { ventaInv: 0, ventaEnZd: 0, premium: 0, premiumZd: 0, zdFueraDeZona: 0 };
+    const zdp = { ventaInv: 0, ventaEnZd: 0, premium: 0, premiumZd: 0, zdFueraDeZona: 0, zdFueraCodigos: [] as string[] };
     for (const p of props) {
         if (dig(p, 'listing', 'operation') !== 'sale') continue;
         const t = String(dig(p, 'portals', 'inmuebles24', 'type') ?? '');
@@ -262,7 +292,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         const premium = /^(HOME|DESTACADO)/.test(t), tierZd = t.includes('ZONA_DEMAND');
         zdp.ventaInv++; if (enZd) zdp.ventaEnZd++;
         if (premium) { zdp.premium++; if (tierZd) zdp.premiumZd++; }
-        if (tierZd && !enZd) zdp.zdFueraDeZona++;
+        if (tierZd && !enZd) { zdp.zdFueraDeZona++; zdp.zdFueraCodigos.push(`${String(p.internalId ?? p._id)} (${String(dig(p, 'address', 'city', 'name') ?? 'sin alcaldía')})`); }
     }
     let zdVenta = 0, venta = 0;
     for (const [k, p] of props.entries()) {
@@ -275,19 +305,51 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         const motivos = (dig(p, 'portals', 'inmuebles24', 'noPromotedReason') as string[] | undefined) ?? [];
         for (const m of motivos) noProm.set(m, (noProm.get(m) ?? 0) + 1);
     }
-    const porNivel: PorNivelMk[] = NIVELES.filter((n) => porNivelMap.has(n)).map((nivel) => {
-        const xs = avisos.filter((a) => a.nivel === nivel);
-        const s = (k: keyof AvisoMk) => xs.reduce((t, a) => t + (a[k] as number), 0);
+    const OPS: Op[] = ['Todas', 'Venta', 'Renta'];
+    const deOp = (op: Op) => avisos.filter((a) => op === 'Todas' || a.operacion === op);
+    const sumE = (xs: AvisoMk[], e: 'i24' | 'meliE', k: keyof Embudo) => xs.reduce((t, a) => t + a[e][k], 0);
+    const sumA = (xs: AvisoMk[], k: 'vistasSem' | 'vistasSemAnt' | 'vistas30') => xs.reduce((t, a) => t + a[k], 0);
+    const nivelI24 = (op: Op): PorNivelMk[] => NIVELES.filter((n) => porNivelMap.has(n)).map((nivel) => {
+        const xs = deOp(op).filter((a) => a.nivel === nivel);
         return { nivel, avisos: xs.length,
-            vistasSem: s('vistasSem'), vistasSemAnt: s('vistasSemAnt'), vistas30: s('vistas30'),
-            leadsSem: s('leadsSem'), leadsSemAnt: s('leadsSemAnt'), leads30: s('leads30'),
-            visitasSem: s('visitasSem'), visitasSemAnt: s('visitasSemAnt'), visitas30: s('visitas30') };
+            vistasSem: sumA(xs, 'vistasSem'), vistasSemAnt: sumA(xs, 'vistasSemAnt'), vistas30: sumA(xs, 'vistas30'),
+            leadsSem: sumE(xs, 'i24', 'leadsSem'), leadsSemAnt: sumE(xs, 'i24', 'leadsSemAnt'), leads30: sumE(xs, 'i24', 'leads30'),
+            visitasSem: sumE(xs, 'i24', 'visitasSem'), visitasSemAnt: sumE(xs, 'i24', 'visitasSemAnt'), visitas30: sumE(xs, 'i24', 'visitas30') };
+    }).filter((x) => x.avisos);
+    const MELI_ORDEN = ['gold_premium', 'gold_pro', 'gold', 'silver', 'bronze', 'free', 'offline', 'sin aviso'];
+    const nivelMeli = (op: Op): PorNivelMk[] => [...new Set(avisos.map((a) => a.meli))]
+        .sort((a, b) => (MELI_ORDEN.indexOf(a) + 99 * +(MELI_ORDEN.indexOf(a) < 0)) - (MELI_ORDEN.indexOf(b) + 99 * +(MELI_ORDEN.indexOf(b) < 0)))
+        .map((nivel) => {
+            const xs = deOp(op).filter((a) => a.meli === nivel);
+            return { nivel, avisos: xs.length, vistasSem: null, vistasSemAnt: null, vistas30: null,
+                leadsSem: sumE(xs, 'meliE', 'leadsSem'), leadsSemAnt: sumE(xs, 'meliE', 'leadsSemAnt'), leads30: sumE(xs, 'meliE', 'leads30'),
+                visitasSem: sumE(xs, 'meliE', 'visitasSem'), visitasSemAnt: sumE(xs, 'meliE', 'visitasSemAnt'), visitas30: sumE(xs, 'meliE', 'visitas30') };
+        }).filter((x) => x.avisos);
+    const porNivel = Object.fromEntries(OPS.map((o) => [o, nivelI24(o)])) as Record<Op, PorNivelMk[]>;
+    const porNivelMeli = Object.fromEntries(OPS.map((o) => [o, nivelMeli(o)])) as Record<Op, PorNivelMk[]>;
+
+    // cierres por fuente — la MISMA regla que /portales y Desempeño (cierresEntre → resolverFuentes). La
+    // inmobiliaria puede estar partida en varias compañías con el mismo nombre (Diamond House son 2).
+    const hermanas = (await db.collection('companies').find({ name: { $regex: `^\\s*${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, $options: 'i' } },
+        { projection: { email: 1 } }).toArray()).filter((c) => !/tuhabi/i.test(String(c.email ?? ''))).map((c) => String(c._id));
+    const idsInmo = [...new Set([companyId, ...hermanas])];
+    const resumenCierres = async (A: Date): Promise<CierresMk> => {
+        const { out } = await cierresEntre(A, fin, { ids: idsInmo, operacion: 'todas' });
+        const m = new Map<string, FuenteCierres>();
+        for (const c of out) { const e = m.get(c.fuente) ?? m.set(c.fuente, { fuente: c.fuente, n: 0, comision: 0 }).get(c.fuente)!; e.n++; e.comision += c.comision || 0; }
+        return { n: out.length, comision: out.reduce((s, c) => s + (c.comision || 0), 0), porFuente: [...m.values()].sort((a, b) => b.n - a.n || b.comision - a.comision), desde: ymd(A), hasta: ymd(ahora) };
+    };
+    const inicioAnio = new Date(Date.UTC(new Date(ahora.getTime() - MX).getUTCFullYear(), 0, 1) + MX);
+    const [c90, cAnio] = await Promise.all([resumenCierres(D90), resumenCierres(inicioAnio)]).catch((e) => {
+        console.error('[marketing] cierres', e);
+        const vacio = { n: 0, comision: 0, porFuente: [], desde: '', hasta: '' };
+        return [vacio, vacio];
     });
 
     return {
         inmobiliaria: nombre, generado: ahora.toISOString(),
-        semana: { desde: ymd(L0), hasta: ymd(ahora), enCurso: true },
-        semanaAnt: { desde: ymd(Lm1), hasta: ymd(new Date(L0.getTime() - DIA)), enCurso: false },
+        semana: { desde: ymd(new Date(L0.getTime() + DIA)), hasta: ymd(ahora), enCurso: false },
+        semanaAnt: { desde: ymd(new Date(Lm1.getTime() + DIA)), hasta: ymd(L0), enCurso: false },
         asignacion: {
             venta, renta: avisos.length - venta,
             porNivel: NIVELES.filter((n) => porNivelMap.has(n)).map((nivel) => ({ nivel, ...porNivelMap.get(nivel)! })),
@@ -299,7 +361,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
             noPromovidos: [...noProm.entries()].sort((a, b) => b[1] - a[1]).map(([motivo, n]) => ({ motivo: motivo.toLowerCase(), n })),
         },
         cambios: { semana: cambiosSem.sort((a, b) => b.fecha.localeCompare(a.fecha)), semanaAnt: cambiosAnt.sort((a, b) => b.fecha.localeCompare(a.fecha)) },
-        porNivel, avisos, reglas: { leadsRotar: LEADS_ROTAR },
+        porNivel, porNivelMeli, cierres: { d90: c90, anio: cAnio }, avisos, reglas: { leadsRotar: LEADS_ROTAR },
         ...derivar(avisos),
     };
 }
@@ -322,11 +384,15 @@ function porqueDe(a: AvisoMk): string {
     const precio = vsZona(a.precioVsZona);
     const caro = a.tags.some((t) => PRECIO.has(t));
     const ficha = a.tags.filter((t) => FICHA.has(t));
+    // ¿la ve poca gente? Mejor contra avisos parecidos en i24 (performance: vistas del aviso vs mercado) que
+    // contra un umbral fijo de vistas.
+    const pocoVista = a.vistasI24 != null && a.vistasMercadoI24 ? a.vistasI24 < 0.5 * a.vistasMercadoI24 : a.vistas30 < 15;
     if (a.vistas30 >= 30 && a.leads30 === 0) {
         const revisar = ficha.length ? `${caro && precio ? `precio (${precio})` : 'precio'}, fotos y video` : `${caro && precio ? `precio (${precio})` : 'precio'} y fotos`;
         partes.push(`${nivel}${pl(a.vistas30, 'vista', 'vistas')} y 0 leads en 30 días: la ven pero no escriben → revisar ${revisar}`);
-    } else if (a.vistas30 < 15) {
-        partes.push(`${nivel}${pl(a.vistas30, 'vista', 'vistas')} en 30 días: casi nadie la ve → ${premium ? 'el lugar destacado no le está dando exposición: revisar zona y título' : 'falta exposición o zona'}`);
+    } else if (pocoVista) {
+        const vsMercado = a.vistasI24 != null && a.vistasMercadoI24 ? `en i24 la ven ${f0(a.vistasI24)} veces contra ${f0(a.vistasMercadoI24)} de avisos parecidos` : `${pl(a.vistas30, 'vista', 'vistas')} en 30 días`;
+        partes.push(`${nivel}${vsMercado}: casi nadie la ve → ${premium ? 'el lugar destacado no le está dando exposición: revisar zona y título' : 'falta exposición o zona'}`);
     } else {
         partes.push(`${nivel}${pl(a.vistas30, 'vista', 'vistas')}, ${pl(a.leads30, 'lead', 'leads')} y ${pl(a.visitas30, 'visita', 'visitas')} en 30 días`);
         if (caro && precio) partes.push(`precio ${precio}`);
@@ -346,23 +412,31 @@ function derivar(avisos: AvisoMk[]): Pick<MarketingMk, 'estrellas' | 'desperdici
             a.leads30 >= 5 && c != null && c >= 0.15 ? 'Estrella' : a.leads30 >= 5 && (c ?? 0) < 0.10 ? 'Mucho ruido, poca visita' : 'En camino';
         return { codigo: a.codigo, nivel: a.nivel, operacion: a.operacion, vistas30: a.vistas30, leads30: a.leads30, visitas30: a.visitas30, conv: c, etiqueta };
     });
-    const desperdicio = avisos.filter((a) => PREMIUM.has(a.nivel)).map((a) => {
+    // Mínimo 2 semanas en su nivel antes de decir que no rinde (Ale): un súper destacado de 3 días todavía no juega.
+    const MIN_DIAS = 14;
+    const desperdicio = avisos.filter((a) => PREMIUM.has(a.nivel) && (a.diasEnNivel ?? MIN_DIAS) >= MIN_DIAS).map((a) => {
         const malo = a.leads30 === 0 || a.tags.some((t) => PRECIO.has(t)) || a.tags.some((t) => FICHA.has(t));
         return { codigo: a.codigo, nivel: a.nivel, operacion: a.operacion, vistas30: a.vistas30, leads30: a.leads30, motivo: malo ? porqueDe(a) : '' };
     }).filter((x) => x.motivo).sort((a, b) => a.leads30 - b.leads30);
     // premium sin un solo lead desde que entró a su nivel (sobre todo súper destacados), por días en el nivel
-    const premiumSinLeads = avisos.filter((a) => PREMIUM.has(a.nivel) && a.leadsEnNivel === 0 && (a.diasEnNivel ?? 0) >= 7)
+    const premiumSinLeads = avisos.filter((a) => PREMIUM.has(a.nivel) && a.leadsEnNivel === 0 && (a.diasEnNivel ?? 0) >= MIN_DIAS)
         .sort((a, b) => (rango(b.nivel) - rango(a.nivel)) || ((b.diasEnNivel ?? 0) - (a.diasEnNivel ?? 0)))
         .map((a) => ({ codigo: a.codigo, nivel: a.nivel, operacion: a.operacion, diasEnNivel: a.diasEnNivel ?? 0, desde: a.enNivelDesde, vistas30: a.vistas30, porque: porqueDe(a) }));
     const subir = avisos.filter((a) => a.nivel === 'Simple' && a.compite && (a.puntos ?? 0) >= 60)
         .sort((a, b) => (b.puntos ?? 0) - (a.puntos ?? 0)).slice(0, 15)
         .map((a) => ({ codigo: a.codigo, operacion: a.operacion, puntos: a.puntos ?? 0, leads30: a.leads30, demanda: a.demanda, competencia: a.competencia }));
+    // Rentas, terrenos, comerciales y zonas que el MLS no cubre: el scoring NO los evalúa, así que no puede
+    // decir «rotar». Van como decisión manual (Ale), con los leads que lleva en su lugar como referencia.
+    const NO_EVALUA = ['renta', 'terreno', 'comercial', 'sin datos del mercado'];
     const rotar = avisos.filter((a) => PREMIUM.has(a.nivel)).map((a) => {
+        const noEvalua = a.tags.find((t) => NO_EVALUA.includes(t));
+        const manual = !!noEvalua && a.leadsEnNivel < LEADS_ROTAR;
         const motivo = a.leadsEnNivel >= LEADS_ROTAR ? `ya juntó ${a.leadsEnNivel} leads en su lugar: libera el lugar para otra`
+            : noEvalua ? `decisión manual: el scoring no evalúa ${noEvalua === 'sin datos del mercado' ? 'zonas sin datos del mercado' : noEvalua === 'renta' ? 'rentas' : `${noEvalua}s`}`
             : !a.compite && a.tags.length ? `el scoring no lo recomienda (${a.tags[0]})` : '';
-        return { codigo: a.codigo, nivel: a.nivel, operacion: a.operacion, leadsEnNivel: a.leadsEnNivel, desde: a.enNivelDesde, motivo };
-    }).filter((x) => x.motivo).sort((a, b) => b.leadsEnNivel - a.leadsEnNivel);
-    const trabadas = avisos.filter((a) => (a.diasPublicada ?? 0) >= 60 && a.ofertas === 0 && (a.leads90 <= 2 || (a.leads90 >= 5 && a.visitas90 === 0)))
+        return { codigo: a.codigo, nivel: a.nivel, operacion: a.operacion, leadsEnNivel: a.leadsEnNivel, desde: a.enNivelDesde, motivo, manual };
+    }).filter((x) => x.motivo).sort((a, b) => Number(a.manual) - Number(b.manual) || b.leadsEnNivel - a.leadsEnNivel);
+    const trabadas = avisos.filter((a) => (a.diasPublicada ?? 0) >= 90 && a.ofertas === 0 && (a.leads90 <= 2 || (a.leads90 >= 5 && a.visitas90 === 0)))
         .map((a) => {
             let freno = 'Revisar', accion = 'Revisar con el asesor qué está frenando la propiedad.';
             if (a.tags.some((t) => PRECIO.has(t))) { freno = 'Precio'; accion = `Llevar el ACM y los cierres de la zona al propietario${a.falta && a.falta !== 'nada' ? ` (${a.falta})` : ''}.`; }
@@ -371,7 +445,7 @@ function derivar(avisos: AvisoMk[]): Pick<MarketingMk, 'estrellas' | 'desperdici
             else if (a.vistas30 >= 30 && a.leads90 <= 2) { freno = 'Precio o fotos'; accion = 'La ven pero no escriben: revisar precio contra la colonia y la primera foto.'; }
             else if (a.leads90 <= 2 && !PREMIUM.has(a.nivel)) { freno = 'Exposición'; accion = a.compite ? 'Promoverla: el scoring dice que puede competir por un lugar destacado.' : `Casi nadie la ve y no compite por un destacado (${a.tags[0] ?? 'sin datos'}): revisar zona, título y precio.`; }
             else if (a.leads90 <= 2) { freno = 'Demanda'; accion = 'Está destacada y aun así no genera leads: bajarla a Simple y revisar precio y zona.'; }
-            return { codigo: a.codigo, nivel: a.nivel, operacion: a.operacion, dias: a.diasPublicada ?? 0, vistas30: a.vistas30, leads90: a.leads90, visitas90: a.visitas90, freno, porque: porqueDe(a), accion };
+            return { codigo: a.codigo, nivel: a.nivel, operacion: a.operacion, dias: a.diasPublicada ?? 0, vistas30: a.vistas30, vistasI24: a.vistasI24, vistasMercadoI24: a.vistasMercadoI24, leads90: a.leads90, visitas90: a.visitas90, freno, porque: porqueDe(a), accion };
         }).sort((a, b) => b.dias - a.dias);
     return { estrellas, desperdicio, premiumSinLeads, subir, rotar, trabadas };
 }

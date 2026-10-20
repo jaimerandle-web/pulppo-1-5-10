@@ -26,12 +26,12 @@ export async function GET(req: NextRequest) {
     if (!puedeVerMarketing(user, company)) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
     // cuando se abra a la inmobiliaria, un externo sólo puede pedir la suya
     if (!user!.internal && !(await canAccessCompany(company))) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-    const hit = cache.get(company + ':v3');
+    const hit = cache.get(company + ':v4');
     if (hit && req.nextUrl.searchParams.get('refresh') !== '1' && Date.now() - hit.t < CACHE_MS)
         return NextResponse.json(hit.d, { headers: { 'Cache-Control': 'private, no-store' } });
     try {
         const d = await marketingDe(company);
-        cache.set(company + ':v3', { t: Date.now(), d });
+        cache.set(company + ':v4', { t: Date.now(), d });
         return NextResponse.json(d, { headers: { 'Cache-Control': 'private, no-store' } });
     } catch (e) {
         console.error('[mb-marketing]', e);
