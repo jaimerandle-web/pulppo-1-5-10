@@ -376,7 +376,14 @@ sólo de MeLi — antes sumaba todas las fuentes contra vistas de i24 y salían 
 Venta / Renta (78 de 89 simples de DH son rentas). «Cierres por fuente» (90 d / año) con `cierresEntre` sobre todas
 las compañías con el mismo nombre. Premium se juzga con 2+ semanas en su nivel. Rotación: renta / terreno / comercial
 / sin datos del mercado = «Decisión manual» (el scoring no los evalúa). Trabadas = 90+ días. «Casi nadie la ve» =
-vistas i24 < 50% de las del mercado (`performance`), no un umbral fijo. Caché de la API `:v4`.
+vistas i24 < 50% de las del mercado (`performance`), no un umbral fijo. Caché de la API `:v6`.
+**L/L (leads sobre listing, así se llama — Ale)** por nivel de i24, `serieLL` en marketingDh.ts: por día (182 d),
+avisos PUBLICADOS ese día en el nivel (status.history + portals.inmuebles24.history a mediodía MX, OFFLINE fuera,
+incluye vendidas/bajadas) y leads únicos de i24 en el nivel que traía el aviso (`leads.campaign`; vacío → historial).
+UI: filtro 7/30/60/90 días/6 meses + gráfica semanal (semanas con <3 avisos promedio no se grafican: 1–2 leads la
+disparaban). Cierres: además de closed/paying trae lo EN CURSO del año (oferta, oferta aceptada, contrato) con
+`resolverFuentes` (closedAt = hoy) para el filtro de estatus; «revenue esperado» = comission.value. Listas de leads:
+`/api/mb-marketing/leads?company&codigo&dias` (misma barrera; lead único = primera vez en 400 d, igual que el conteo).
 
 ## Portales → "Leads, funnel y cierres" por inmobiliaria
 

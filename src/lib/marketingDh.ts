@@ -28,6 +28,7 @@ import { claveLead, VISITA_OK } from './mbComun';
 import { datosDe, type Aviso } from './portales/avisos';
 import { classifySource } from './portales/metrics';
 import { cierresEntre } from './portales/inmobiliaria';
+import { resolverFuentes } from './portales/fuenteCierre';
 
 const MX = 6 * 3600 * 1000;
 const DIA = 86400000;
@@ -93,10 +94,16 @@ export type Op = 'Todas' | 'Venta' | 'Renta';
 /** un cierre de la inmobiliaria (cualquier lado), con su fuente según la regla de /portales */
 export interface CierreMk {
     fecha: string; codigo: string | null; operacion: string; tipo: string | null; colonia: string | null;
-    fuente: string; comision: number; estatus: 'Cerrada' | 'Cobrando'; lado: string; asesor: string;
+    /** Cerrada (cobrada) · Cobrando · y en curso: Contrato · Oferta aceptada · Oferta. En las de curso, `fecha` es
+     *  cuándo se creó la oferta y `comision` es la esperada. */
+    fuente: string; comision: number; estatus: 'Cerrada' | 'Cobrando' | 'Contrato' | 'Oferta aceptada' | 'Oferta'; lado: string; asesor: string;
 }
 /** por qué un aviso está Offline en i24 (Joshua: «¿Offline qué es?») */
 export interface OfflineMk { codigo: string; motivo: string; desde: string | null; nivelAntes: string | null }
+/** L/L (leads sobre listing) por nivel de i24 y por día: avisos vivos en ese nivel ese día y leads de i24 que
+ *  llegaron con el aviso en ese nivel. La UI suma la ventana que elija: L/L = leads ÷ (aviso-días ÷ días). */
+export interface SerieLL { nivel: string; op: 'Venta' | 'Renta'; avisoDias: number[]; leads: number[] }
+export interface LLMk { desde: string; dias: number; series: SerieLL[] }
 export interface CambioMk { codigo: string; antes: string; despues: string; sube: boolean; motivo: string | null; fecha: string }
 export interface Semana { desde: string; hasta: string; enCurso: boolean }
 export interface PorNivelMk {
@@ -131,6 +138,7 @@ export interface MarketingMk {
      *  estatus y operación. Revenue = comisión sin IVA que recibe la inmobiliaria. */
     cierres: { lista: CierreMk[]; desde90: string; desdeAnio: string; hasta: string };
     offline: OfflineMk[];
+    ll: LLMk;
     avisos: AvisoMk[];
     reglas: { leadsRotar: number };
     estrellas: Array<{ codigo: string; nivel: string; operacion: string; vistas30: number; leads30: number; visitas30: number; conv: number | null; etiqueta: 'Estrella' | 'Mucho ruido, poca visita' | 'En camino' }>;
@@ -345,6 +353,8 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         .then(({ out }) => out.map((c) => ({ fecha: c.fecha, codigo: c.codigo, operacion: c.operacion, tipo: c.tipo, colonia: c.colonia,
             fuente: c.fuente, comision: c.comision || 0, estatus: c.estatus ?? 'Cerrada', lado: c.lado, asesor: c.asesor })))
         .catch((e) => { console.error('[marketing] cierres', e); return []; });
+    // en curso (para el filtro de estatus): ofertas, aceptadas y contratos creados en el año
+    lista.push(...await enCursoDe(db, idsInmo, inicioAnio).catch((e) => { console.error('[marketing] en curso', e); return [] as CierreMk[]; }));
 
     // Offline: por qué. Sin código de aviso = nunca llegó a i24; EXCLUDED_BY_RULE = i24 lo sacó (p. ej. duplicado);
     // si no, desde cuándo y en qué nivel estaba antes.
@@ -378,6 +388,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
             noPromovidos: [...noProm.entries()].sort((a, b) => b[1] - a[1]).map(([motivo, n]) => ({ motivo: motivo.toLowerCase(), n })),
         },
         cambios: { semana: cambiosSem.sort((a, b) => b.fecha.localeCompare(a.fecha)), semanaAnt: cambiosAnt.sort((a, b) => b.fecha.localeCompare(a.fecha)) },
+        ll: await serieLL(db, idsInmo, ahora).catch((e) => { console.error('[marketing] L/L', e); return { desde: '', dias: 0, series: [] }; }),
         porNivel, porNivelMeli, cierres: { lista, desde90: ymd(D90), desdeAnio: ymd(inicioAnio), hasta: ymd(ahora) }, offline, avisos, reglas: { leadsRotar: LEADS_ROTAR },
         ...derivar(avisos),
     };
@@ -465,4 +476,111 @@ function derivar(avisos: AvisoMk[]): Pick<MarketingMk, 'estrellas' | 'desperdici
             return { codigo: a.codigo, nivel: a.nivel, operacion: a.operacion, dias: a.diasPublicada ?? 0, vistas30: a.vistas30, vistasI24: a.vistasI24, vistasMercadoI24: a.vistasMercadoI24, leads90: a.leads90, visitas90: a.visitas90, freno, porque: porqueDe(a), accion };
         }).sort((a, b) => b.dias - a.dias);
     return { estrellas, desperdicio, premiumSinLeads, subir, rotar, trabadas };
+}
+
+// ── L/L en el tiempo (Joshua, oct-2026) ───────────────────────────────────────────────────────────────
+// «L/L tiene que ser del total de avisos que hubo en el periodo, incluyendo los que estuvieron vivos durante
+// ese periodo, no la foto de hoy». Por eso, para cada día de los últimos 182:
+//   · avisos del nivel = propiedades PUBLICADAS ese día (status.history) cuyo nivel en i24 a mediodía (hora
+//     México) era ése, según `portals.inmuebles24.history`. Incluye las que ya se vendieron o se bajaron.
+//     OFFLINE no cuenta en ningún nivel (bug de i24) y antes del primer registro del historial no se sabe.
+//   · leads del nivel = leads ÚNICOS de Inmuebles24 cuyo `campaign` es el nivel en el que estaba el aviso
+//     cuando llegó el lead (i24 lo manda así); si viene vacío (~26%), el nivel del historial en ese momento.
+const DIAS_LL = 182;
+async function serieLL(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[], ahora: Date): Promise<LLMk> {
+    const hoyMx = new Date(ahora.getTime() - MX);
+    const D0 = new Date(Date.UTC(hoyMx.getUTCFullYear(), hoyMx.getUTCMonth(), hoyMx.getUTCDate() - (DIAS_LL - 1)) + MX);   // 00:00 MX
+    const props = await db.collection('properties').find(
+        { 'company._id': { $in: idsInmo.map((x) => new ObjectId(x)) }, 'portals.inmuebles24.history.0': { $exists: true } },
+        { projection: { 'listing.operation': 1, 'status.history': 1, 'portals.inmuebles24.history': 1 } }).toArray();
+    const series = new Map<string, SerieLL>();
+    const serie = (nivel: string, op: 'Venta' | 'Renta') => {
+        const k = `${nivel}|${op}`;
+        return series.get(k) ?? series.set(k, { nivel, op, avisoDias: new Array(DIAS_LL).fill(0), leads: new Array(DIAS_LL).fill(0) }).get(k)!;
+    };
+    const nivelHist = new Map<string, Array<{ t: number; nivel: string | null }>>();
+    const opDe = new Map<string, 'Venta' | 'Renta'>();
+    for (const p of props) {
+        const pid = String(p._id);
+        const op: 'Venta' | 'Renta' = dig(p, 'listing', 'operation') === 'rent' ? 'Renta' : 'Venta';
+        opDe.set(pid, op);
+        const h = (((dig(p, 'portals', 'inmuebles24', 'history') as Document[]) ?? []).map((e) => {
+            const tt = fechaHist(e);
+            const tipo = String(e.type ?? '').toUpperCase();
+            return tt ? { t: tt.getTime(), nivel: !tipo || tipo === 'OFFLINE' ? null : nivelDe(tipo) } : null;
+        }).filter(Boolean) as Array<{ t: number; nivel: string | null }>).sort((a, b) => a.t - b.t);
+        nivelHist.set(pid, h);
+        const st = (((dig(p, 'status', 'history') as Document[]) ?? []).map((e) => ({ t: isDate(e.timestamp) ? e.timestamp.getTime() : Date.parse(String(e.timestamp)), s: String(e.status ?? '') }))
+            .filter((e) => !isNaN(e.t))).sort((a, b) => a.t - b.t);
+        let iH = -1, iS = -1;
+        for (let k = 0; k < DIAS_LL; k++) {
+            const tk = D0.getTime() + k * DIA + 12 * 3600 * 1000;
+            if (tk > ahora.getTime()) break;
+            while (iS + 1 < st.length && st[iS + 1].t <= tk) iS++;
+            while (iH + 1 < h.length && h[iH + 1].t <= tk) iH++;
+            if (iS < 0 || st[iS].s !== 'published' || iH < 0) continue;
+            const niv = h[iH].nivel;
+            if (niv) serie(niv, op).avisoDias[k]++;
+        }
+    }
+    const nivelEnT = (pid: string, tt: number) => { let r: string | null = null; for (const e of nivelHist.get(pid) ?? []) { if (e.t > tt) break; r = e.nivel; } return r; };
+    const ids = props.map((p) => p._id);
+    const vistos = new Set<string>();
+    for (let i = 0; i < ids.length; i += 500) {
+        for (const l of await db.collection('leads').find({ 'property._id': { $in: ids.slice(i, i + 500) }, createdAt: { $gte: new Date(D0.getTime() - 400 * DIA) } },
+            { projection: { 'contact._id': 1, 'property._id': 1, createdAt: 1, source: 1, campaign: 1 } }).sort({ createdAt: 1 }).toArray()) {
+            if (!isDate(l.createdAt)) continue;
+            const k = claveLead(l);
+            if (vistos.has(k)) continue;
+            vistos.add(k);
+            if (l.createdAt < D0 || classifySource(String(l.source ?? '')) !== 'i24') continue;
+            const pid = String(dig(l, 'property', '_id'));
+            const camp = String(l.campaign ?? '').toUpperCase();
+            const niv = /^(HOME|DESTACADO|SIMPLE)/.test(camp) ? nivelDe(camp) : nivelEnT(pid, l.createdAt.getTime());
+            if (!niv) continue;
+            const d = Math.floor((l.createdAt.getTime() - D0.getTime()) / DIA);
+            if (d >= 0 && d < DIAS_LL) serie(niv, opDe.get(pid) ?? 'Venta').leads[d]++;
+        }
+    }
+    return { desde: ymd(D0), dias: DIAS_LL, series: [...series.values()] };
+}
+
+// Operaciones EN CURSO de la inmobiliaria (cualquier lado), con la misma regla de fuente que los cierres.
+// resolverFuentes compara contra la fecha de cierre; como aún no la tienen, se usa «hoy».
+const EN_CURSO: Record<string, CierreMk['estatus']> = { offer: 'Oferta', offer_blocked: 'Oferta aceptada', contract: 'Contrato' };
+async function enCursoDe(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[], desde: Date): Promise<CierreMk[]> {
+    const oids = idsInmo.map((x) => new ObjectId(x));
+    const idSet = new Set(idsInmo);
+    const ops = await db.collection('operations').find({
+        'status.last': { $in: Object.keys(EN_CURSO) }, createdAt: { $gte: desde },
+        $or: [{ 'seller.company._id': { $in: oids } }, { 'buyer.company._id': { $in: oids } }],
+    }, { projection: {
+        id: 1, createdAt: 1, 'status.last': 1, 'property._id': 1, 'property.internalId': 1, 'property.listing.operation': 1, 'property.type': 1,
+        'property.address.neighborhood.name': 1, 'comission.value': 1, 'buyer.source': 1, 'buyer.search': 1, 'buyer.contact._id': 1,
+        'buyer.broker._id': 1, 'buyer.broker.phone': 1, 'buyer.broker.firstName': 1, 'buyer.broker.lastName': 1, 'buyer.company._id': 1, 'buyer.company.external': 1,
+        'seller.company._id': 1, 'seller.broker.firstName': 1, 'seller.broker.lastName': 1,
+    } }).toArray();
+    const ahora = new Date();
+    const conFecha: Document[] = ops.map((o) => ({ ...o, closedAt: ahora }));
+    const comp = (o: Document, k: 'buyer' | 'seller') => String(dig(o, k, 'company', '_id') ?? '');
+    const fuentes = await resolverFuentes(conFecha, {
+        esNuestra: (o) => idSet.has(comp(o, 'buyer')),
+        compsComprador: (o) => (idSet.has(comp(o, 'buyer')) ? idSet : new Set([comp(o, 'buyer')])),
+        compsVendedora: (o) => (idSet.has(comp(o, 'seller')) ? idSet : new Set([comp(o, 'seller')])),
+    });
+    const nom = (o: Document, k: 'buyer' | 'seller') => `${dig(o, k, 'broker', 'firstName') ?? ''} ${dig(o, k, 'broker', 'lastName') ?? ''}`.replace(/\s+/g, ' ').trim();
+    return conFecha.map((o) => {
+        const vende = idSet.has(comp(o, 'seller')), compra = idSet.has(comp(o, 'buyer'));
+        const opx = dig(o, 'property', 'listing', 'operation');
+        return {
+            fecha: ymd(isDate(o.createdAt) ? o.createdAt : ahora), codigo: (dig(o, 'property', 'internalId') as string) ?? null,
+            operacion: opx === 'rent' ? 'Renta' : 'Venta', tipo: (dig(o, 'property', 'type') as string) ?? null,
+            colonia: (dig(o, 'property', 'address', 'neighborhood', 'name') as string) ?? null,
+            fuente: fuentes.get(String(o._id))?.fuente ?? 'Sin registro',
+            comision: typeof dig(o, 'comission', 'value') === 'number' ? dig(o, 'comission', 'value') as number : 0,
+            estatus: EN_CURSO[String(dig(o, 'status', 'last'))],
+            lado: vende && compra ? 'ambos' : vende ? 'vendedor' : 'comprador',
+            asesor: [vende ? nom(o, 'seller') : '', compra ? nom(o, 'buyer') : ''].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' / ') || '—',
+        };
+    });
 }

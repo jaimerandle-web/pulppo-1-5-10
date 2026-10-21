@@ -12,7 +12,8 @@
  * «Copiar tabla» con sólo lo filtrado.
  */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import type { AvisoMk, CierreMk, MarketingMk, Op, PorNivelMk } from '@/lib/marketingDh';
+import type { AvisoMk, CierreMk, LLMk, MarketingMk, Op, PorNivelMk } from '@/lib/marketingDh';
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
 const R = 2;
@@ -198,7 +199,7 @@ function NivelEmbudo({ x, max, color }: { x: PorNivelMk; max: { v: number; l: nu
                 </div>
             ))}
             <div style={{ ...sub, marginTop: 4 }}>
-                {x.vistas30 != null && <>Leads por cada 100 vistas: <b style={{ color: BLK }}>{x.vistas30 ? ((100 * x.leads30) / x.vistas30).toFixed(1) : '—'}</b> · </>}lead → visita: <b style={{ color: BLK }}>{pc(x.visitas30, x.leads30)}</b> · L/A: <b style={{ color: BLK }} title="leads por anuncio (30 días)">{x.avisos ? (x.leads30 / x.avisos).toFixed(1) : '—'}</b>
+                {x.vistas30 != null && <>Leads por cada 100 vistas: <b style={{ color: BLK }}>{x.vistas30 ? ((100 * x.leads30) / x.vistas30).toFixed(1) : '—'}</b> · </>}lead → visita: <b style={{ color: BLK }}>{pc(x.visitas30, x.leads30)}</b>
             </div>
         </div>
     );
@@ -359,7 +360,8 @@ function Vista({ d }: { d: MarketingMk }) {
                     </button>
                 ))}
             </div>
-            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Inmuebles24 <span style={{ ...sub, fontWeight: 400 }}>· leads de Inmuebles24</span></div>
+            <LLPanel ll={d.ll} op={opNivel} />
+            <div style={{ fontSize: 12, fontWeight: 700, margin: '18px 0 6px' }}>Inmuebles24 · embudo de 30 días <span style={{ ...sub, fontWeight: 400 }}>· leads de Inmuebles24 de los anuncios que hoy están en cada nivel</span></div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {nivelesI24.map((x) => <NivelEmbudo key={x.nivel} x={x} max={maxDe(nivelesI24)} color={COLOR_I24[x.nivel.replace(/ zona demand$/, '')]} />)}
                 {!nivelesI24.length && <span style={sub}>Sin anuncios en este filtro.</span>}
@@ -497,9 +499,14 @@ function Vista({ d }: { d: MarketingMk }) {
  *  recibe la inmobiliaria; los % van contra el revenue, no contra el número de operaciones. */
 function CierresPanel({ d }: { d: MarketingMk }) {
     const [periodo, setPeriodo] = useState<'d90' | 'anio'>('d90');
-    const [estatus, setEstatus] = useState<'Todas' | 'Cerrada' | 'Cobrando'>('Todas');
+    // estatus: cierres (cerradas / cobrando) o lo que está en curso (contrato, oferta aceptada, oferta)
+    const ESTATUS_OPC = ['Cerradas y cobrando', 'Cerrada', 'Cobrando', 'En curso', 'Contrato', 'Oferta aceptada', 'Oferta'] as const;
+    const [estatus, setEstatus] = useState<(typeof ESTATUS_OPC)[number]>('Cerradas y cobrando');
+    const CIERRE_OK = (e: string) => e === 'Cerrada' || e === 'Cobrando';
+    const pasa = (e: string) => estatus === 'Cerradas y cobrando' ? CIERRE_OK(e) : estatus === 'En curso' ? !CIERRE_OK(e) : e === estatus;
+    const esperado = estatus === 'En curso' || estatus === 'Contrato' || estatus === 'Oferta aceptada' || estatus === 'Oferta';
     const [oper, setOper] = useState<'Total' | 'Venta' | 'Renta'>('Total');
-    const base = d.cierres.lista.filter((c) => (periodo === 'anio' || c.fecha >= d.cierres.desde90) && (estatus === 'Todas' || c.estatus === estatus));
+    const base = d.cierres.lista.filter((c) => (periodo === 'anio' || c.fecha >= d.cierres.desde90) && pasa(c.estatus));
     const xs = base.filter((c) => oper === 'Total' || c.operacion === oper);
     const rev = xs.reduce((s, c) => s + c.comision, 0);
     const revBase = base.reduce((s, c) => s + c.comision, 0);
@@ -514,17 +521,19 @@ function CierresPanel({ d }: { d: MarketingMk }) {
         <div>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
                 <span style={{ display: 'flex', gap: 6 }}><Boton v="d90" act={periodo} set={setPeriodo}>Últimos 90 días</Boton><Boton v="anio" act={periodo} set={setPeriodo}>En el año</Boton></span>
-                <span style={{ display: 'flex', gap: 6 }}>{(['Todas', 'Cerrada', 'Cobrando'] as const).map((k) => <Boton key={k} v={k} act={estatus} set={setEstatus}>{k === 'Todas' ? 'Cerradas y cobrando' : k === 'Cerrada' ? 'Cerradas (cobradas)' : 'Cobrando'}</Boton>)}</span>
+                <select value={estatus} onChange={(e) => setEstatus(e.target.value as (typeof ESTATUS_OPC)[number])} style={{ ...inp, fontSize: 12.5, padding: '6px 9px' }}>
+                    {ESTATUS_OPC.map((k) => <option key={k} value={k}>{k === 'Cerrada' ? 'Cerradas (cobradas)' : k === 'En curso' ? 'En curso (contrato, aceptada, oferta)' : k}</option>)}
+                </select>
                 <span style={{ display: 'flex', gap: 6 }}>{(['Total', 'Venta', 'Renta'] as const).map((k) => <Boton key={k} v={k} act={oper} set={setOper}>{k}</Boton>)}</span>
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-                <Kpi label="Revenue" value={money(rev)} nota={`${f0(xs.length)} cierres · comisión sin IVA`} />
-                {porOp.map((x) => <Kpi key={x.o} label={`${x.o} · % del revenue`} value={pc(x.rev, revBase)} nota={`${money(x.rev)} · ${f0(x.n)} cierres`} />)}
+                <Kpi label={esperado ? 'Revenue esperado' : 'Revenue'} value={money(rev)} nota={`${f0(xs.length)} ${esperado ? 'operaciones en curso' : 'cierres'} · comisión sin IVA`} />
+                {porOp.map((x) => <Kpi key={x.o} label={`${x.o} · % del revenue`} value={pc(x.rev, revBase)} nota={`${money(x.rev)} · ${f0(x.n)} ${esperado ? 'operaciones' : 'cierres'}`} />)}
             </div>
             {!xs.length ? <div style={sub}>Sin cierres con estos filtros.</div> : (
                 <div style={{ maxWidth: 820 }}>
                     <div style={{ display: 'flex', gap: 10, fontSize: 10, fontWeight: 700, color: '#777', textTransform: 'uppercase', letterSpacing: '.4px', borderBottom: `1px solid ${BLK}`, padding: '0 0 4px' }}>
-                        <span style={{ width: 190 }}>Fuente</span><span style={{ flex: 1 }}>Revenue</span><span style={{ width: 120, textAlign: 'right' }}>Revenue</span><span style={{ width: 70, textAlign: 'right' }}>% revenue</span><span style={{ width: 60, textAlign: 'right' }}>Cierres</span>
+                        <span style={{ width: 190 }}>Fuente</span><span style={{ flex: 1 }}>Revenue</span><span style={{ width: 120, textAlign: 'right' }}>Revenue</span><span style={{ width: 70, textAlign: 'right' }}>% revenue</span><span style={{ width: 60, textAlign: 'right' }}>{esperado ? 'Operac.' : 'Cierres'}</span>
                     </div>
                     {fuentes.map((x) => (
                         <div key={x.fuente} style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0', fontSize: 12 }}>
@@ -539,7 +548,7 @@ function CierresPanel({ d }: { d: MarketingMk }) {
             )}
             {xs.length > 0 && (
                 <details style={{ marginTop: 12, fontSize: 12 }}>
-                    <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Ver los {f0(xs.length)} cierres</summary>
+                    <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Ver {esperado ? 'las' : 'los'} {f0(xs.length)} {esperado ? 'operaciones' : 'cierres'}</summary>
                     <div style={{ marginTop: 8 }}>
                         <TablaFiltrable filas={xs} min={980} limite={25} orden={{ i: 0, dir: -1 }} texto={(c) => [c.codigo, c.tipo, c.colonia, c.fuente, c.asesor].filter(Boolean).join(' ')}
                             selects={[{ label: 'Fuente', v: (c: CierreMk) => c.fuente }, { label: 'Lado', v: (c: CierreMk) => c.lado }]}
@@ -614,7 +623,7 @@ function Resumen({ d, rotarAuto, rotarAutoCod, manual }: { d: MarketingMk; rotar
     const meli = s((a) => a.meliE.leadsSem), meliAnt = s((a) => a.meliE.leadsSemAnt);
     const vis = s((a) => a.visitasSem), visAnt = s((a) => a.visitasSemAnt);
     const sube = d.cambios.semana.filter((c) => c.sube).length, baja = d.cambios.semana.length - sube;
-    const l90 = d.cierres.lista.filter((c) => c.fecha >= d.cierres.desde90);
+    const l90 = d.cierres.lista.filter((c) => c.fecha >= d.cierres.desde90 && (c.estatus === 'Cerrada' || c.estatus === 'Cobrando'));
     const f90 = Object.entries(l90.reduce<Record<string, number>>((m, c) => ({ ...m, [c.fuente]: (m[c.fuente] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
     const frenos = Object.entries(d.trabadas.reduce<Record<string, number>>((m, x) => ({ ...m, [x.freno]: (m[x.freno] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
     const Linea = ({ children }: { children: ReactNode }) => <div style={{ padding: '6px 0', borderBottom: `1px solid ${LGT}`, fontSize: 12.5 }}>{children}</div>;
@@ -641,5 +650,75 @@ function Resumen({ d, rotarAuto, rotarAutoCod, manual }: { d: MarketingMk; rotar
                 </div>
             </div>
         </section>
+    );
+}
+
+/** L/L (leads sobre listing) por nivel de i24: leads de i24 que llegaron con el aviso en ese nivel ÷ avisos
+ *  que de verdad estuvieron vivos en ese nivel durante el periodo (aviso-días ÷ días). No es la foto de hoy. */
+const COLOR_LL: Record<string, { c: string; dash?: string }> = {
+    'Súper destacado': { c: YEL }, 'Súper destacado zona demand': { c: '#C79A00', dash: '5 3' },
+    Destacado: { c: SEA }, 'Destacado zona demand': { c: SEA, dash: '5 3' }, Simple: { c: BLK },
+};
+function LLPanel({ ll, op }: { ll: LLMk; op: Op }) {
+    const [dias, setDias] = useState(30);
+    const niveles = Object.keys(COLOR_LL).filter((n) => ll.series.some((s) => s.nivel === n));
+    const suma = (n: string, k: 'avisoDias' | 'leads', a: number, b: number) =>
+        ll.series.filter((s) => s.nivel === n && (op === 'Todas' || s.op === op)).reduce((t, s) => t + s[k].slice(a, b).reduce((x, y) => x + y, 0), 0);
+    const fin = ll.dias, ini = Math.max(0, fin - dias);
+    const filas = niveles.map((n) => {
+        const ad = suma(n, 'avisoDias', ini, fin), le = suma(n, 'leads', ini, fin);
+        const avisos = ad / (fin - ini);
+        return { n, avisos, leads: le, ll: avisos >= 1 ? le / avisos : null };
+    }).filter((x) => x.avisos > 0 || x.leads > 0);
+    // serie semanal (7 días que terminan hoy, hacia atrás) para seguirlo en el tiempo
+    const semanas = Math.floor(ll.dias / 7);
+    const serie = Array.from({ length: semanas }, (_, w) => {
+        const b = fin - (semanas - 1 - w) * 7, a = b - 7;
+        const d0 = new Date(Date.parse(`${ll.desde}T12:00:00Z`) + a * 86400000);
+        const row: Record<string, number | string | null> = { semana: `${d0.getUTCDate()} ${MES[d0.getUTCMonth()]}` };
+        // con menos de 3 avisos vivos en promedio, 1–2 leads disparan el L/L (Destacado zona demand llegaba a 17): no se grafica
+        for (const n of niveles) { const av = suma(n, 'avisoDias', a, b) / 7, le = suma(n, 'leads', a, b); row[n] = av >= 3 ? Math.round((le / av) * 100) / 100 : null; }
+        return row;
+    });
+    if (!ll.dias) return <div style={sub}>No se pudo calcular el L/L.</div>;
+    return (
+        <div style={{ border: `1px solid ${LGT}`, borderRadius: R, padding: '12px 14px', marginBottom: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>L/L por nivel en Inmuebles24 <span style={{ ...sub, fontWeight: 400 }}>· leads sobre listing{op !== 'Todas' ? ` · ${op.toLowerCase()}` : ''}</span></div>
+                <span style={{ display: 'flex', gap: 6 }}>
+                    {[7, 30, 60, 90, 182].map((x) => (
+                        <button key={x} type="button" onClick={() => setDias(x)} style={{ padding: '4px 10px', fontSize: 11.5, border: `1px solid ${dias === x ? BLK : LGT}`, borderRadius: R, cursor: 'pointer', fontFamily: 'inherit', background: dias === x ? BLK : '#fff', color: dias === x ? '#fff' : '#555' }}>
+                            {x === 182 ? '6 meses' : `${x} días`}
+                        </button>
+                    ))}
+                </span>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '10px 0 12px' }}>
+                {filas.map((x) => (
+                    <div key={x.n} style={{ flex: '1 1 170px', border: `1px solid ${LGT}`, borderLeft: `3px solid ${COLOR_LL[x.n].c}`, borderRadius: R, padding: '8px 10px' }}>
+                        <div style={{ fontSize: 10.5, color: '#777', fontWeight: 700 }}>{x.n}</div>
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 24 }}>{x.ll == null ? '—' : x.ll.toFixed(2)} <span style={{ ...sub, fontFamily: 'Nunito Sans, sans-serif' }}>L/L</span></div>
+                        <div style={sub}>{f0(x.leads)} leads ÷ {x.avisos.toFixed(1)} avisos vivos en promedio{x.avisos < 3 ? ' · pocos avisos: tómalo con cuidado' : ''}</div>
+                    </div>
+                ))}
+                {!filas.length && <span style={sub}>Sin avisos en este filtro.</span>}
+            </div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 2 }}>Semana a semana <span style={{ ...sub, fontWeight: 400 }}>· L/L de cada semana (últimos 6 meses)</span></div>
+            <div style={{ width: '100%', height: 220 }}>
+                <ResponsiveContainer>
+                    <LineChart data={serie} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
+                        <CartesianGrid stroke={LGT} vertical={false} />
+                        <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#777' }} interval={2} />
+                        <YAxis tick={{ fontSize: 10, fill: '#777' }} />
+                        <Tooltip contentStyle={{ fontSize: 11, borderRadius: R }} formatter={(v) => (v == null ? '—' : Number(v).toFixed(2))} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        {niveles.map((n) => <Line key={n} type="monotone" dataKey={n} stroke={COLOR_LL[n].c} strokeDasharray={COLOR_LL[n].dash} strokeWidth={2} dot={false} connectNulls={false} />)}
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+            <div style={{ ...sub, marginTop: 4, lineHeight: 1.5 }}>
+                Semanas con menos de 3 avisos vivos en el nivel no se grafican. Leads = leads únicos de Inmuebles24, contados en el nivel que tenía el aviso cuando llegó el lead. Avisos = los que estuvieron publicados en ese nivel durante el periodo, en promedio por día (incluye los que ya se vendieron o se bajaron). Offline no cuenta.
+            </div>
+        </div>
     );
 }

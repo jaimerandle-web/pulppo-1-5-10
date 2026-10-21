@@ -788,7 +788,8 @@ export async function renderFicha(id: string, opts?: { token?: string; simple?: 
     const tcheck = `tipo ${tipoOk ? '✓' : '✗'} · operación ${opOk ? '✓' : '✗'} · zona ${zonaOk ? '✓' : '✗'}`;
     const health = [
         rowH('Calidad del anuncio', q != null ? `${q.toFixed(0)}/100` : '—', q != null && q >= 85 ? 'ok' : 'warn'),
-        rowH('Título', esc(title.slice(0, 60)) || '—', tipoOk && opOk && zonaOk ? 'ok' : 'warn', tcheck),
+        // completo: antes se cortaba a 60 caracteres y se leía «incompleto» (Joshua, oct-2026)
+        rowH('Título', esc(title) || '—', tipoOk && opOk && zonaOk ? 'ok' : 'warn', tcheck),
         rowH('Ortografía', orto.length ? `${orto.length} ${orto.length === 1 ? 'falta' : 'faltas'}` : 'sin faltas', orto.length ? 'warn' : 'ok', esc(ortoTxt(4))),
         rowH('Descripción', `${chars} caracteres · ${words} palabras`,
             chars >= MIN_CHARS && words <= 200 ? 'ok' : 'warn',
