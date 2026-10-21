@@ -12,7 +12,7 @@
  * «Copiar tabla» con sólo lo filtrado.
  */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import type { AvisoMk, CierresMk, MarketingMk, Op, PorNivelMk } from '@/lib/marketingDh';
+import type { AvisoMk, CierreMk, MarketingMk, Op, PorNivelMk } from '@/lib/marketingDh';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
 const R = 2;
@@ -65,15 +65,17 @@ interface Col<T> {
     num?: boolean;
     render?: (r: T) => ReactNode;
 }
-function TablaFiltrable<T>({ filas, cols, texto, selects = [], min = 600, limite = 25, orden: ordenIni, vacio = 'Nada que mostrar.' }: {
+function TablaFiltrable<T>({ filas, cols, texto, selects = [], min = 600, limite = 25, orden: ordenIni, vacio = 'Nada que mostrar.', inicial }: {
     filas: T[]; cols: Col<T>[];
     /** texto donde busca el buscador (código, colonia, calle, asesor, nivel…) */
     texto: (r: T) => string;
     selects?: Array<{ label: string; v: (r: T) => string }>;
     min?: number; limite?: number; orden?: { i: number; dir: 1 | -1 }; vacio?: string;
+    /** filtros ya puestos al abrir (p. ej. el nivel al que se le dio clic arriba) */
+    inicial?: Record<string, string>;
 }) {
     const [q, setQ] = useState('');
-    const [sel, setSel] = useState<Record<string, string>>({});
+    const [sel, setSel] = useState<Record<string, string>>(inicial ?? {});
     const [ord, setOrd] = useState<{ i: number; dir: 1 | -1 } | null>(ordenIni ?? null);
     const [ver, setVer] = useState(limite);
     const opciones = useMemo(() => selects.map((s) => [...new Set(filas.map(s.v).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'))), [filas, selects]);
@@ -205,22 +207,31 @@ function NivelEmbudo({ x, max, color }: { x: PorNivelMk; max: { v: number; l: nu
 function Vista({ d }: { d: MarketingMk }) {
     const [verCambios, setVerCambios] = useState<'semana' | 'semanaAnt'>('semana');
     const [opNivel, setOpNivel] = useState<Op>('Todas');
-    const [verCierres, setVerCierres] = useState<'d90' | 'anio'>('d90');
+    const [filtroTop, setFiltroTop] = useState<string>('');
+    const [leadsDe, setLeadsDe] = useState<{ codigo: string; dias: number; portal?: string } | null>(null);
+    const verNivel = (nivel: string) => { setFiltroTop(nivel); setTimeout(() => document.getElementById('top-anuncios')?.scrollIntoView({ behavior: 'smooth' }), 50); };
     const porCodigo = useMemo(() => new Map(d.avisos.map((a) => [a.codigo, a])), [d.avisos]);
     const total = d.avisos.length;
     const premium = d.asignacion.porNivel.filter((x) => /Súper|Destacado/.test(x.nivel)).reduce((s, x) => s + x.n, 0);
     const zd = d.asignacion.zonaDemandVenta;
 
-    // identificación: código con liga + colonia · calle (nada sólo con el ID)
+    // identificación (Joshua): tipo, operación, calle y número, colonia y asesor — nunca sólo el código
     const Prop = ({ codigo }: { codigo: string }) => {
         const a = porCodigo.get(codigo);
         return (
-            <div style={{ minWidth: 150 }}>
+            <div style={{ minWidth: 170 }}>
                 <a href={`/ficha/${encodeURIComponent(a?.id ?? codigo)}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700, textDecoration: 'none' }}>{codigo}</a>
-                <div style={{ ...sub, whiteSpace: 'normal' }}>{[a?.colonia, a?.calle].filter(Boolean).join(' · ') || 'sin dirección'}</div>
+                {a && <span style={{ ...sub, marginLeft: 6 }}>{[a.tipo, a.operacion].filter(Boolean).join(' · ')}</span>}
+                <div style={{ fontSize: 11.5, whiteSpace: 'normal' }}>{[a?.calle, a?.colonia].filter(Boolean).join(', ') || 'sin dirección'}</div>
+                {a?.asesor && a.asesor !== '—' && <div style={{ ...sub, whiteSpace: 'normal' }}>{a.asesor}</div>}
             </div>
         );
     };
+    // liga a la lista de leads (nombre, fuente, medio, teléfono, correo)
+    const VerLeads = ({ codigo, n, dias = 30, portal, negritas }: { codigo: string; n: number; dias?: number; portal?: string; negritas?: boolean }) => (n
+        ? <button type="button" onClick={() => setLeadsDe({ codigo, dias, portal })} title="Ver la lista de leads"
+            style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: SEA, fontWeight: negritas ? 700 : 600, fontFamily: 'inherit', fontSize: 'inherit', textDecoration: 'underline dotted' }}>{f0(n)}</button>
+        : <>{f0(n)}</>);
     const buscar = (codigo: string, extra = '') => {
         const a = porCodigo.get(codigo);
         return [codigo, a?.colonia, a?.calle, a?.asesor, a?.nivel, a?.tipo, extra].filter(Boolean).join(' ');
@@ -242,11 +253,10 @@ function Vista({ d }: { d: MarketingMk }) {
         { h: 'Vistas 7 d', num: true, v: (a) => a.vistasSem, render: (a) => <>{f0(a.vistasSem)}<Delta a={a.vistasSem} b={a.vistasSemAnt} /></> },
         { h: 'Vistas 30 d', num: true, v: (a) => a.vistas30 },
         { h: 'Leads 7 d', num: true, v: (a) => a.leadsSem, render: (a) => <>{f0(a.leadsSem)}<Delta a={a.leadsSem} b={a.leadsSemAnt} /></> },
-        { h: 'Leads 30 d', num: true, v: (a) => a.leads30, render: (a) => <b>{f0(a.leads30)}</b> },
+        { h: 'Leads 30 d', num: true, v: (a) => a.leads30, render: (a) => <VerLeads codigo={a.codigo} n={a.leads30} negritas /> },
         { h: 'Visitas 30 d', num: true, v: (a) => a.visitas30 },
         { h: 'Lead → visita', num: true, v: (a) => conv(a), render: (a) => (conv(a) == null ? '—' : `${conv(a)}%`) },
         { h: 'Vistas i24 / mercado', num: true, v: (a) => a.vistasI24, render: (a) => <span style={{ color: '#666' }}>{a.vistasI24 ?? '—'} / {a.vistasMercadoI24 ?? '—'}</span> },
-        { h: 'Asesor', v: (a) => a.asesor, render: (a) => <span style={{ fontSize: 11 }}>{a.asesor}</span> },
     ];
 
     return (<div>
@@ -284,13 +294,28 @@ function Vista({ d }: { d: MarketingMk }) {
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
                 {d.asignacion.porNivel.map((x) => (
-                    <div key={x.nivel} style={{ flex: '1 1 150px', border: `1px solid ${LGT}`, borderLeft: `3px solid ${COLOR_I24[x.nivel.replace(/ zona demand$/, '')] ?? LGT}`, borderRadius: R, padding: '8px 10px', background: '#fff' }}>
-                        <div style={{ fontSize: 10.5, color: '#777', fontWeight: 700 }}>{x.nivel}</div>
+                    <div key={x.nivel} onClick={() => verNivel(x.nivel)} title="Ver qué propiedades están en este nivel" style={{ flex: '1 1 150px', border: `1px solid ${LGT}`, borderLeft: `3px solid ${COLOR_I24[x.nivel.replace(/ zona demand$/, '')] ?? LGT}`, borderRadius: R, padding: '8px 10px', background: '#fff', cursor: 'pointer' }}>
+                        <div style={{ fontSize: 10.5, color: '#777', fontWeight: 700 }}>{x.nivel} <span style={{ color: SEA }}>↓ ver</span></div>
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22 }}>{f0(x.n)}</div>
                         <div style={sub}>{f0(x.venta)} venta · {f0(x.renta)} renta</div>
                     </div>
                 ))}
             </div>
+            {d.offline.length > 0 && (
+                <details style={{ margin: '-6px 0 16px', fontSize: 12 }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 700 }}>¿Qué son los {f0(d.offline.length)} Offline? <span style={{ ...sub, fontWeight: 400 }}>· avisos que hoy no se muestran en Inmuebles24, y por qué</span></summary>
+                    <div style={{ marginTop: 8 }}>
+                        <TablaFiltrable filas={d.offline} min={760} limite={20} texto={(x) => buscar(x.codigo, x.motivo)}
+                            selects={[{ label: 'Motivo', v: (x) => (x.motivo.startsWith('Nunca') ? 'Nunca se publicó' : /DUPLICADO/i.test(x.motivo) ? 'Duplicado' : x.motivo.startsWith('Inmuebles24 respondió') ? 'Error de i24' : 'Sin error registrado') }]}
+                            cols={[
+                                colProp<(typeof d.offline)[number]>(),
+                                { h: 'Offline desde', v: (x) => x.desde, render: (x) => (x.desde ? fecha(x.desde) + ' ' + x.desde.slice(0, 4) : '—') },
+                                { h: 'Antes estaba en', v: (x) => x.nivelAntes },
+                                { h: 'Por qué', v: (x) => x.motivo, render: (x) => <span style={{ fontSize: 11.5 }}>{x.motivo}</span> },
+                            ]} />
+                    </div>
+                </details>
+            )}
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>MercadoLibre</div>
             <Distribucion partes={d.asignacion.meli.map((m) => ({ k: MELI_LBL[m.tipo] ?? m.tipo, n: m.n, color: COLOR_MELI[m.tipo] ?? SEA }))} />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
@@ -346,15 +371,8 @@ function Vista({ d }: { d: MarketingMk }) {
             </div>
         </Seccion>
 
-        <Seccion n={4} titulo="Cierres por fuente" nota="Cierres de la inmobiliaria (como vendedora o compradora) por el canal por el que llegó el comprador. Misma regla que Desempeño y /portales: si la operación no trae la fuente, se busca en el lead del comprador y del broker.">
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                {(['d90', 'anio'] as const).map((k) => (
-                    <button key={k} type="button" onClick={() => setVerCierres(k)} style={{ padding: '5px 11px', fontSize: 12, border: `1px solid ${LGT}`, borderRadius: R, cursor: 'pointer', fontFamily: 'inherit', background: verCierres === k ? BLK : '#fff', color: verCierres === k ? '#fff' : '#555' }}>
-                        {k === 'd90' ? `Últimos 90 días · ${d.cierres.d90.n}` : `En el año · ${d.cierres.anio.n}`}
-                    </button>
-                ))}
-            </div>
-            <CierresTabla c={d.cierres[verCierres]} />
+        <Seccion n={4} titulo="Cierres por fuente" nota="Cierres de la inmobiliaria (como vendedora o compradora) por el canal por el que llegó el comprador. Revenue = comisión que recibe la inmobiliaria, sin IVA; los % son sobre el revenue. Misma regla de fuente que Desempeño y /portales.">
+            <CierresPanel d={d} />
         </Seccion>
 
         <Seccion n={5} titulo="Propiedades estrella" nota="Las que más leads reciben (30 días) y si los convierten en visitas. Estrella = 5+ leads y 15%+ visitan. Mucho ruido = 5+ leads y menos de 10% visitan. ">
@@ -366,7 +384,7 @@ function Vista({ d }: { d: MarketingMk }) {
                     { h: 'Operación', v: (e) => e.operacion },
                     { h: 'Nivel', v: (e) => e.nivel },
                     { h: 'Vistas 30 d', num: true, v: (e) => e.vistas30 },
-                    { h: 'Leads 30 d', num: true, v: (e) => e.leads30, render: (e) => <b>{f0(e.leads30)}</b> },
+                    { h: 'Leads 30 d', num: true, v: (e) => e.leads30, render: (e) => <VerLeads codigo={e.codigo} n={e.leads30} negritas /> },
                     { h: 'Visitas 30 d', num: true, v: (e) => e.visitas30 },
                     { h: 'Lead → visita', num: true, v: (e) => (e.conv == null ? null : Math.round(e.conv * 100)), render: (e) => (e.conv == null ? '—' : `${Math.round(e.conv * 100)}%`) },
                     { h: 'Lectura', v: (e) => e.etiqueta, render: (e) => (e.etiqueta === 'Estrella' ? <Pill t="★ Estrella" bg={SEA} fg="#fff" /> : e.etiqueta === 'Mucho ruido, poca visita' ? <Pill t="Mucho ruido, poca visita" bg="#F3D9D3" fg={RED} /> : <Pill t="En camino" bg={LGT} fg={BLK} />) },
@@ -431,7 +449,7 @@ function Vista({ d }: { d: MarketingMk }) {
                     colProp(),
                     { h: 'Nivel', v: (x) => x.nivel, render: (x) => <>{x.nivel}<div style={sub}>desde {fecha(x.desde)}</div></> },
                     { h: 'Leads en su lugar', num: true, v: (x) => x.leadsEnNivel, render: (x) => <b>{f0(x.leadsEnNivel)}</b> },
-                    { h: 'Leads 30 d', num: true, v: (x) => porCodigo.get(x.codigo)?.leads30 ?? null },
+                    { h: 'Leads 30 d', num: true, v: (x) => porCodigo.get(x.codigo)?.leads30 ?? null, render: (x) => <VerLeads codigo={x.codigo} n={porCodigo.get(x.codigo)?.leads30 ?? 0} /> },
                     { h: 'Por qué', v: (x) => x.motivo, render: (x) => <span style={{ fontSize: 11.5, color: '#666' }}>{x.motivo}</span> },
                 ]} />
             <div style={{ marginTop: 14, fontSize: 12, lineHeight: 1.6, maxWidth: 880 }}>
@@ -463,32 +481,127 @@ function Vista({ d }: { d: MarketingMk }) {
         <div id="top-anuncios" />
         <Seccion n={9} titulo="Top de anuncios" nota="Todos los anuncios publicados, por operación. Ordena con clic en cualquier encabezado; filtra por nivel o busca por código, colonia, calle o asesor.">
             <div style={{ fontSize: 12, fontWeight: 700, margin: '4px 0 6px' }}>Venta · {f0(d.asignacion.venta)}</div>
-            <TablaFiltrable filas={d.avisos.filter((a) => a.operacion === 'Venta')} cols={colsAviso} min={1100} orden={{ i: 5, dir: -1 }}
-                texto={(a) => buscar(a.codigo)} selects={[{ label: 'Nivel', v: (a) => a.nivel }]} />
+            <TablaFiltrable key={`v-${filtroTop}`} inicial={filtroTop ? { Nivel: filtroTop } : undefined} filas={d.avisos.filter((a) => a.operacion === 'Venta')} cols={colsAviso} min={1100} orden={{ i: 5, dir: -1 }}
+                texto={(a) => buscar(a.codigo)} selects={[{ label: 'Nivel', v: (a) => a.nivel }, { label: 'Tipo', v: (a) => a.tipo ?? '' }, { label: 'Asesor', v: (a) => a.asesor }]} />
             <div style={{ fontSize: 12, fontWeight: 700, margin: '20px 0 6px' }}>Renta · {f0(d.asignacion.renta)}</div>
-            <TablaFiltrable filas={d.avisos.filter((a) => a.operacion === 'Renta')} cols={colsAviso} min={1100} orden={{ i: 5, dir: -1 }}
-                texto={(a) => buscar(a.codigo)} selects={[{ label: 'Nivel', v: (a) => a.nivel }]} />
+            <TablaFiltrable key={`r-${filtroTop}`} inicial={filtroTop ? { Nivel: filtroTop } : undefined} filas={d.avisos.filter((a) => a.operacion === 'Renta')} cols={colsAviso} min={1100} orden={{ i: 5, dir: -1 }}
+                texto={(a) => buscar(a.codigo)} selects={[{ label: 'Nivel', v: (a) => a.nivel }, { label: 'Tipo', v: (a) => a.tipo ?? '' }, { label: 'Asesor', v: (a) => a.asesor }]} />
             <div style={{ ...sub, marginTop: 6 }}>«Vistas i24 / mercado»: vistas del anuncio que reporta Inmuebles24 contra el promedio de anuncios comparables (ventana del portal).</div>
         </Seccion>
         <p style={{ fontSize: 10, color: GRY, marginTop: 16 }}>En vivo desde Mongo · {new Date(d.generado).toLocaleString('es-MX')}</p>
+        {leadsDe && <LeadsModal companyId={d.companyId} pedido={leadsDe} onClose={() => setLeadsDe(null)} etiqueta={porCodigo.get(leadsDe.codigo)} />}
     </div>);
 }
 
-/** Cierres por fuente de un periodo */
-function CierresTabla({ c }: { c: CierresMk }) {
-    if (!c.n) return <div style={sub}>Sin cierres en este periodo.</div>;
-    const max = Math.max(1, ...c.porFuente.map((x) => x.n));
+/** Cierres por fuente con filtros de periodo, estatus y operación (Joshua). Revenue = comisión sin IVA que
+ *  recibe la inmobiliaria; los % van contra el revenue, no contra el número de operaciones. */
+function CierresPanel({ d }: { d: MarketingMk }) {
+    const [periodo, setPeriodo] = useState<'d90' | 'anio'>('d90');
+    const [estatus, setEstatus] = useState<'Todas' | 'Cerrada' | 'Cobrando'>('Todas');
+    const [oper, setOper] = useState<'Total' | 'Venta' | 'Renta'>('Total');
+    const base = d.cierres.lista.filter((c) => (periodo === 'anio' || c.fecha >= d.cierres.desde90) && (estatus === 'Todas' || c.estatus === estatus));
+    const xs = base.filter((c) => oper === 'Total' || c.operacion === oper);
+    const rev = xs.reduce((s, c) => s + c.comision, 0);
+    const revBase = base.reduce((s, c) => s + c.comision, 0);
+    const porOp = (['Venta', 'Renta'] as const).map((o) => ({ o, n: base.filter((c) => c.operacion === o).length, rev: base.filter((c) => c.operacion === o).reduce((s, c) => s + c.comision, 0) }));
+    const fuentes = [...xs.reduce((m, c) => { const e = m.get(c.fuente) ?? { n: 0, rev: 0 }; e.n++; e.rev += c.comision; return m.set(c.fuente, e); }, new Map<string, { n: number; rev: number }>())]
+        .map(([fuente, v]) => ({ fuente, ...v })).sort((a, b) => b.rev - a.rev);
+    const max = Math.max(1, ...fuentes.map((x) => x.rev));
+    const money = (v: number) => `$${f0(Math.round(v))}`;
+    const Boton = <K extends string>({ v, act, set, children }: { v: K; act: K; set: (k: K) => void; children: ReactNode }) => (
+        <button type="button" onClick={() => set(v)} style={{ padding: '5px 11px', fontSize: 12, border: `1px solid ${act === v ? BLK : LGT}`, borderRadius: R, cursor: 'pointer', fontFamily: 'inherit', background: act === v ? BLK : '#fff', color: act === v ? '#fff' : '#555' }}>{children}</button>);
     return (
-        <div style={{ maxWidth: 720 }}>
-            {c.porFuente.map((x) => (
-                <div key={x.fuente} style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '5px 0', fontSize: 12 }}>
-                    <span style={{ width: 190, flexShrink: 0 }}>{x.fuente}</span>
-                    <span style={{ flex: 1, background: LGT, height: 14 }}><span style={{ display: 'block', height: 14, width: `${(100 * x.n) / max}%`, background: BLK }} /></span>
-                    <span style={{ width: 70, textAlign: 'right' }}><b>{f0(x.n)}</b> <span style={sub}>{pc(x.n, c.n)}</span></span>
-                    <span style={{ width: 120, textAlign: 'right', color: '#666' }}>${f0(Math.round(x.comision))}</span>
+        <div>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+                <span style={{ display: 'flex', gap: 6 }}><Boton v="d90" act={periodo} set={setPeriodo}>Últimos 90 días</Boton><Boton v="anio" act={periodo} set={setPeriodo}>En el año</Boton></span>
+                <span style={{ display: 'flex', gap: 6 }}>{(['Todas', 'Cerrada', 'Cobrando'] as const).map((k) => <Boton key={k} v={k} act={estatus} set={setEstatus}>{k === 'Todas' ? 'Cerradas y cobrando' : k === 'Cerrada' ? 'Cerradas (cobradas)' : 'Cobrando'}</Boton>)}</span>
+                <span style={{ display: 'flex', gap: 6 }}>{(['Total', 'Venta', 'Renta'] as const).map((k) => <Boton key={k} v={k} act={oper} set={setOper}>{k}</Boton>)}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+                <Kpi label="Revenue" value={money(rev)} nota={`${f0(xs.length)} cierres · comisión sin IVA`} />
+                {porOp.map((x) => <Kpi key={x.o} label={`${x.o} · % del revenue`} value={pc(x.rev, revBase)} nota={`${money(x.rev)} · ${f0(x.n)} cierres`} />)}
+            </div>
+            {!xs.length ? <div style={sub}>Sin cierres con estos filtros.</div> : (
+                <div style={{ maxWidth: 820 }}>
+                    <div style={{ display: 'flex', gap: 10, fontSize: 10, fontWeight: 700, color: '#777', textTransform: 'uppercase', letterSpacing: '.4px', borderBottom: `1px solid ${BLK}`, padding: '0 0 4px' }}>
+                        <span style={{ width: 190 }}>Fuente</span><span style={{ flex: 1 }}>Revenue</span><span style={{ width: 120, textAlign: 'right' }}>Revenue</span><span style={{ width: 70, textAlign: 'right' }}>% revenue</span><span style={{ width: 60, textAlign: 'right' }}>Cierres</span>
+                    </div>
+                    {fuentes.map((x) => (
+                        <div key={x.fuente} style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0', fontSize: 12 }}>
+                            <span style={{ width: 190, flexShrink: 0 }}>{x.fuente}</span>
+                            <span style={{ flex: 1, background: LGT, height: 14 }}><span style={{ display: 'block', height: 14, width: `${(100 * x.rev) / max}%`, background: BLK }} /></span>
+                            <span style={{ width: 120, textAlign: 'right' }}>{money(x.rev)}</span>
+                            <span style={{ width: 70, textAlign: 'right' }}><b>{pc(x.rev, rev)}</b></span>
+                            <span style={{ width: 60, textAlign: 'right', color: '#666' }}>{f0(x.n)}</span>
+                        </div>
+                    ))}
                 </div>
-            ))}
-            <div style={{ ...sub, marginTop: 6 }}>{f0(c.n)} cierres · ${f0(Math.round(c.comision))} de comisión (sin IVA) · del {fecha(c.desde)} al {fecha(c.hasta)}</div>
+            )}
+            {xs.length > 0 && (
+                <details style={{ marginTop: 12, fontSize: 12 }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Ver los {f0(xs.length)} cierres</summary>
+                    <div style={{ marginTop: 8 }}>
+                        <TablaFiltrable filas={xs} min={980} limite={25} orden={{ i: 0, dir: -1 }} texto={(c) => [c.codigo, c.tipo, c.colonia, c.fuente, c.asesor].filter(Boolean).join(' ')}
+                            selects={[{ label: 'Fuente', v: (c: CierreMk) => c.fuente }, { label: 'Lado', v: (c: CierreMk) => c.lado }]}
+                            cols={[
+                                { h: 'Fecha', v: (c) => c.fecha, render: (c) => `${fecha(c.fecha)} ${c.fecha.slice(0, 4)}` },
+                                { h: 'Propiedad', v: (c) => c.codigo, render: (c) => <div><b>{c.codigo ?? '—'}</b> <span style={sub}>{[c.tipo, c.operacion].filter(Boolean).join(' · ')}</span><div style={{ fontSize: 11.5 }}>{c.colonia ?? ''}</div></div> },
+                                { h: 'Asesor', v: (c) => c.asesor, render: (c) => <span style={{ fontSize: 11.5 }}>{c.asesor}</span> },
+                                { h: 'Lado', v: (c) => c.lado },
+                                { h: 'Fuente', v: (c) => c.fuente },
+                                { h: 'Estatus', v: (c) => c.estatus },
+                                { h: 'Revenue', num: true, v: (c) => c.comision, render: (c) => money(c.comision) },
+                            ]} />
+                    </div>
+                </details>
+            )}
+        </div>
+    );
+}
+
+/** Lista de leads de una propiedad: nombre, fuente, medio, teléfono y correo (Joshua). Datos personales: se
+ *  piden al abrir y no se guardan. */
+function LeadsModal({ companyId, pedido, onClose, etiqueta }: { companyId: string; pedido: { codigo: string; dias: number; portal?: string }; onClose: () => void; etiqueta?: AvisoMk }) {
+    const [filas, setFilas] = useState<Array<Record<string, string | null>> | null>(null);
+    const [err, setErr] = useState('');
+    useEffect(() => {
+        let vivo = true;
+        const qs = new URLSearchParams({ company: companyId, codigo: pedido.codigo, dias: String(pedido.dias), ...(pedido.portal ? { portal: pedido.portal } : {}) });
+        fetch(`/api/mb-marketing/leads?${qs}`).then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+            .then(({ ok, j }) => { if (!vivo) return; if (ok) setFilas(j.leads); else setErr(j.error || 'No se pudo cargar'); })
+            .catch(() => vivo && setErr('No se pudo cargar'));
+        return () => { vivo = false; };
+    }, [companyId, pedido]);
+    type L = Record<string, string | null>;
+    return (
+        <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(33,35,34,.45)', zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px' }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: R, width: 'min(1100px, 100%)', maxHeight: '86vh', overflow: 'auto', padding: '18px 20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                    <div>
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 21 }}>Leads de {pedido.codigo} · últimos {pedido.dias} días</div>
+                        {etiqueta && <div style={sub}>{[etiqueta.tipo, etiqueta.operacion, [etiqueta.calle, etiqueta.colonia].filter(Boolean).join(', '), etiqueta.asesor].filter(Boolean).join(' · ')}</div>}
+                    </div>
+                    <button type="button" onClick={onClose} style={{ border: `1px solid ${LGT}`, background: '#fff', borderRadius: R, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>Cerrar ✕</button>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                    {err ? <p style={{ color: RED, fontSize: 13 }}>{err}</p> : !filas ? <p style={{ ...sub, fontSize: 12 }}>Cargando…</p> : (
+                        <TablaFiltrable<L> filas={filas} min={900} limite={50} orden={{ i: 0, dir: -1 }}
+                            texto={(l) => [l.nombre, l.fuente, l.medio, l.telefono, l.correo, l.asesor].filter(Boolean).join(' ')}
+                            selects={[{ label: 'Fuente', v: (l) => l.fuente ?? '' }, { label: 'Medio', v: (l) => l.medio ?? '' }]}
+                            vacio="Sin leads en este periodo."
+                            cols={[
+                                { h: 'Fecha', v: (l) => l.fecha, render: (l) => (l.fecha ? new Date(l.fecha).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—') },
+                                { h: 'Nombre', v: (l) => l.nombre },
+                                { h: 'Fuente', v: (l) => l.fuente },
+                                { h: 'Medio', v: (l) => l.medio },
+                                { h: 'Teléfono', v: (l) => l.telefono },
+                                { h: 'Correo', v: (l) => l.correo },
+                                { h: 'Asesor', v: (l) => l.asesor, render: (l) => <span style={{ fontSize: 11.5 }}>{l.asesor ?? '—'}</span> },
+                                { h: 'Mensaje', v: (l) => l.mensaje, render: (l) => <span style={{ fontSize: 11, color: '#666' }}>{l.mensaje ?? '—'}</span> },
+                            ]} />
+                    )}
+                </div>
+            </div>
         </div>
     );
 }
@@ -501,7 +614,8 @@ function Resumen({ d, rotarAuto, rotarAutoCod, manual }: { d: MarketingMk; rotar
     const meli = s((a) => a.meliE.leadsSem), meliAnt = s((a) => a.meliE.leadsSemAnt);
     const vis = s((a) => a.visitasSem), visAnt = s((a) => a.visitasSemAnt);
     const sube = d.cambios.semana.filter((c) => c.sube).length, baja = d.cambios.semana.length - sube;
-    const c90 = d.cierres.d90;
+    const l90 = d.cierres.lista.filter((c) => c.fecha >= d.cierres.desde90);
+    const f90 = Object.entries(l90.reduce<Record<string, number>>((m, c) => ({ ...m, [c.fuente]: (m[c.fuente] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
     const frenos = Object.entries(d.trabadas.reduce<Record<string, number>>((m, x) => ({ ...m, [x.freno]: (m[x.freno] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
     const Linea = ({ children }: { children: ReactNode }) => <div style={{ padding: '6px 0', borderBottom: `1px solid ${LGT}`, fontSize: 12.5 }}>{children}</div>;
     const acciones: ReactNode[] = [];
@@ -519,7 +633,7 @@ function Resumen({ d, rotarAuto, rotarAutoCod, manual }: { d: MarketingMk; rotar
                     <Linea><b>{f0(leads)}</b> leads en 7 días<Delta a={leads} b={leadsAnt} /> <span style={sub}>· Inmuebles24 {f0(i24)}</span><Delta a={i24} b={i24Ant} /> <span style={sub}>· MercadoLibre {f0(meli)}</span><Delta a={meli} b={meliAnt} /></Linea>
                     <Linea><b>{f0(vis)}</b> visitas en 7 días<Delta a={vis} b={visAnt} /></Linea>
                     <Linea><b>{f0(sube)}</b> {sube === 1 ? 'anuncio subió' : 'anuncios subieron'} y <b>{f0(baja)}</b> {baja === 1 ? 'bajó' : 'bajaron'} de nivel en Inmuebles24</Linea>
-                    <Linea><b>{f0(c90.n)}</b> cierres en 90 días{c90.porFuente.length ? <> · {c90.porFuente.slice(0, 3).map((x) => `${x.fuente} ${x.n}`).join(' · ')}</> : ''}</Linea>
+                    <Linea><b>{f0(l90.length)}</b> cierres en 90 días{f90.length ? <> · {f90.slice(0, 3).map(([k, n]) => `${k} ${n}`).join(' · ')}</> : ''}</Linea>
                 </div>
                 <div>
                     <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: .8, color: GRY, fontWeight: 700, padding: '6px 0 2px' }}>Qué hacer esta semana</div>

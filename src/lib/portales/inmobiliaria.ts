@@ -123,6 +123,8 @@ export interface Cierre {
     evidencia?: string | null;
     /** quién trajo al comprador si no fue la inmobiliaria: «Broker externo» / «Red Pulppo» (no es fuente) */
     comprador?: string | null;
+    /** closed = «Cerrada» (cobrada) · paying = «Cobrando» */
+    estatus?: 'Cerrada' | 'Cobrando';
 }
 export interface Bloque {
     desde: string; hasta: string; etiqueta: string; dias: number;
@@ -789,7 +791,7 @@ export async function cierresEntre(
         'seller.company.name': 1, 'buyer.company.name': 1,
         'seller.broker._id': 1, 'seller.broker.firstName': 1, 'seller.broker.lastName': 1,
         'buyer.broker._id': 1, 'buyer.broker.phone': 1, 'buyer.broker.firstName': 1, 'buyer.broker.lastName': 1,
-        'seller.company.external': 1, 'buyer.search': 1,
+        'seller.company.external': 1, 'buyer.search': 1, 'status.last': 1,
     } }).sort({ closedAt: -1 }).toArray();
     // Una misma venta a veces tiene DOS operaciones (paying + closed): 8 de 1,364 en 2026. Se queda
     // la más reciente por propiedad + comprador.
@@ -852,6 +854,7 @@ export async function cierresEntre(
             })(),
             lado: ladoX, asesor: nombres.join(' / ') || '—',
             vende: String(dig(o, 'seller', 'company', 'name') ?? '').trim() || null,
+            estatus: dig(o, 'status', 'last') === 'paying' ? 'Cobrando' : 'Cerrada',
         });
         if (!fuenteCapturada(dig(o, 'buyer', 'source'))) sinFuenteOrig += 1;
     }

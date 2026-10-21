@@ -90,8 +90,13 @@ export interface AvisoMk {
 }
 export interface Embudo { leadsSem: number; leadsSemAnt: number; leads30: number; visitasSem: number; visitasSemAnt: number; visitas30: number }
 export type Op = 'Todas' | 'Venta' | 'Renta';
-export interface FuenteCierres { fuente: string; n: number; comision: number }
-export interface CierresMk { n: number; comision: number; porFuente: FuenteCierres[]; desde: string; hasta: string }
+/** un cierre de la inmobiliaria (cualquier lado), con su fuente según la regla de /portales */
+export interface CierreMk {
+    fecha: string; codigo: string | null; operacion: string; tipo: string | null; colonia: string | null;
+    fuente: string; comision: number; estatus: 'Cerrada' | 'Cobrando'; lado: string; asesor: string;
+}
+/** por qué un aviso está Offline en i24 (Joshua: «¿Offline qué es?») */
+export interface OfflineMk { codigo: string; motivo: string; desde: string | null; nivelAntes: string | null }
 export interface CambioMk { codigo: string; antes: string; despues: string; sube: boolean; motivo: string | null; fecha: string }
 export interface Semana { desde: string; hasta: string; enCurso: boolean }
 export interface PorNivelMk {
@@ -102,7 +107,7 @@ export interface PorNivelMk {
     visitasSem: number; visitasSemAnt: number; visitas30: number;
 }
 export interface MarketingMk {
-    inmobiliaria: string; generado: string;
+    inmobiliaria: string; companyId: string; generado: string;
     semana: Semana; semanaAnt: Semana;
     asignacion: {
         venta: number; renta: number;
@@ -122,8 +127,10 @@ export interface MarketingMk {
     /** niveles de i24 (leads de i24) y de MeLi (leads de MeLi), por operación */
     porNivel: Record<Op, PorNivelMk[]>;
     porNivelMeli: Record<Op, PorNivelMk[]>;
-    /** cierres de la inmobiliaria (cualquier lado) por fuente, con la regla de /portales */
-    cierres: { d90: CierresMk; anio: CierresMk };
+    /** cierres del año de la inmobiliaria (cualquier lado), con la regla de /portales; la UI filtra periodo,
+     *  estatus y operación. Revenue = comisión sin IVA que recibe la inmobiliaria. */
+    cierres: { lista: CierreMk[]; desde90: string; desdeAnio: string; hasta: string };
+    offline: OfflineMk[];
     avisos: AvisoMk[];
     reglas: { leadsRotar: number };
     estrellas: Array<{ codigo: string; nivel: string; operacion: string; vistas30: number; leads30: number; visitas30: number; conv: number | null; etiqueta: 'Estrella' | 'Mucho ruido, poca visita' | 'En camino' }>;
@@ -333,21 +340,31 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const hermanas = (await db.collection('companies').find({ name: { $regex: `^\\s*${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, $options: 'i' } },
         { projection: { email: 1 } }).toArray()).filter((c) => !/tuhabi/i.test(String(c.email ?? ''))).map((c) => String(c._id));
     const idsInmo = [...new Set([companyId, ...hermanas])];
-    const resumenCierres = async (A: Date): Promise<CierresMk> => {
-        const { out } = await cierresEntre(A, fin, { ids: idsInmo, operacion: 'todas' });
-        const m = new Map<string, FuenteCierres>();
-        for (const c of out) { const e = m.get(c.fuente) ?? m.set(c.fuente, { fuente: c.fuente, n: 0, comision: 0 }).get(c.fuente)!; e.n++; e.comision += c.comision || 0; }
-        return { n: out.length, comision: out.reduce((s, c) => s + (c.comision || 0), 0), porFuente: [...m.values()].sort((a, b) => b.n - a.n || b.comision - a.comision), desde: ymd(A), hasta: ymd(ahora) };
-    };
     const inicioAnio = new Date(Date.UTC(new Date(ahora.getTime() - MX).getUTCFullYear(), 0, 1) + MX);
-    const [c90, cAnio] = await Promise.all([resumenCierres(D90), resumenCierres(inicioAnio)]).catch((e) => {
-        console.error('[marketing] cierres', e);
-        const vacio = { n: 0, comision: 0, porFuente: [], desde: '', hasta: '' };
-        return [vacio, vacio];
-    });
+    const lista: CierreMk[] = await cierresEntre(inicioAnio, fin, { ids: idsInmo, operacion: 'todas' })
+        .then(({ out }) => out.map((c) => ({ fecha: c.fecha, codigo: c.codigo, operacion: c.operacion, tipo: c.tipo, colonia: c.colonia,
+            fuente: c.fuente, comision: c.comision || 0, estatus: c.estatus ?? 'Cerrada', lado: c.lado, asesor: c.asesor })))
+        .catch((e) => { console.error('[marketing] cierres', e); return []; });
+
+    // Offline: por qué. Sin código de aviso = nunca llegó a i24; EXCLUDED_BY_RULE = i24 lo sacó (p. ej. duplicado);
+    // si no, desde cuándo y en qué nivel estaba antes.
+    const offline: OfflineMk[] = props.filter((p) => nivelDe(dig(p, 'portals', 'inmuebles24', 'type')) === 'Offline').map((p) => {
+        const i24 = (dig(p, 'portals', 'inmuebles24') as Document) ?? {};
+        const hist = ((i24.history as Document[]) ?? []).map((e) => ({ t: fechaHist(e), tipo: String(e.type ?? '').toUpperCase() }))
+            .filter((h): h is { t: Date; tipo: string } => !!h.t).sort((a, b) => a.t.getTime() - b.t.getTime());
+        let desde: Date | null = null;
+        for (let k = hist.length - 1; k >= 0 && hist[k].tipo === 'OFFLINE'; k--) desde = hist[k].t;
+        const antes = [...hist].reverse().find((h) => h.tipo && h.tipo !== 'OFFLINE');
+        const err = (i24.lastError as Document) ?? null;
+        const motivo = !i24.id ? 'Nunca se publicó en Inmuebles24: no tiene código de aviso.'
+            : err?.code === 'EXCLUDED_BY_RULE' ? String(err.message ?? 'Inmuebles24 lo excluyó por una regla.')
+            : err?.message ? `Inmuebles24 respondió con error: ${String(err.message)}`
+            : 'Inmuebles24 lo tiene fuera de línea sin un error registrado: revisar con portales.';
+        return { codigo: String(p.internalId ?? p._id), motivo, desde: desde ? ymd(desde) : null, nivelAntes: antes ? nivelDe(antes.tipo) : null };
+    }).sort((a, b) => (a.desde ?? '9').localeCompare(b.desde ?? '9'));
 
     return {
-        inmobiliaria: nombre, generado: ahora.toISOString(),
+        inmobiliaria: nombre, companyId, generado: ahora.toISOString(),
         semana: { desde: ymd(new Date(L0.getTime() + DIA)), hasta: ymd(ahora), enCurso: false },
         semanaAnt: { desde: ymd(new Date(Lm1.getTime() + DIA)), hasta: ymd(L0), enCurso: false },
         asignacion: {
@@ -361,7 +378,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
             noPromovidos: [...noProm.entries()].sort((a, b) => b[1] - a[1]).map(([motivo, n]) => ({ motivo: motivo.toLowerCase(), n })),
         },
         cambios: { semana: cambiosSem.sort((a, b) => b.fecha.localeCompare(a.fecha)), semanaAnt: cambiosAnt.sort((a, b) => b.fecha.localeCompare(a.fecha)) },
-        porNivel, porNivelMeli, cierres: { d90: c90, anio: cAnio }, avisos, reglas: { leadsRotar: LEADS_ROTAR },
+        porNivel, porNivelMeli, cierres: { lista, desde90: ymd(D90), desdeAnio: ymd(inicioAnio), hasta: ymd(ahora) }, offline, avisos, reglas: { leadsRotar: LEADS_ROTAR },
         ...derivar(avisos),
     };
 }
