@@ -47,6 +47,19 @@ function Kpi({ label, value, nota }: { label: string; value: string; nota?: stri
         </div>
     );
 }
+/** Venta / Renta con color (Ale): venta verde mar, renta amarillo */
+export const OpTag = ({ op }: { op: string | null | undefined }) => (op === 'Venta' || op === 'Renta'
+    ? <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: R, background: op === 'Venta' ? SEA : YEL, color: op === 'Venta' ? '#fff' : BLK, marginLeft: 6, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '.03em', verticalAlign: 'middle' }}>{op}</span>
+    : null);
+/** botón «Actualizar» + hora del último cálculo */
+export function Actualizar({ generado, cargando, onClick }: { generado: string; cargando: boolean; onClick: () => void }) {
+    return (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, margin: '-6px 0 6px' }}>
+            <span style={{ fontSize: 10.5, color: '#777' }}>{cargando ? 'Actualizando…' : `Datos de las ${new Date(generado).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`}</span>
+            <button type="button" onClick={onClick} disabled={cargando} style={{ fontSize: 11.5, padding: '4px 11px', border: `1px solid ${BLK}`, borderRadius: R, background: '#fff', cursor: cargando ? 'wait' : 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>↻ Actualizar</button>
+        </div>
+    );
+}
 const Pill = ({ t, bg, fg }: { t: string; bg: string; fg: string }) => <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: R, background: bg, color: fg, whiteSpace: 'nowrap' }}>{t}</span>;
 /** ▲▼ contra la semana anterior */
 const Delta = ({ a, b }: { a: number; b: number }) => {
@@ -60,16 +73,23 @@ const Delta = ({ a, b }: { a: number; b: number }) => {
 export default function MBMarketing({ companyId, interno = false }: { companyId: string; interno?: boolean }) {
     const [d, setD] = useState<MarketingMk | null>(null);
     const [err, setErr] = useState('');
+    const [vuelta, setVuelta] = useState(0);   // «Actualizar» fuerza recalcular (salta el caché del servidor)
+    const [cargando, setCargando] = useState(false);
     useEffect(() => {
         let vivo = true;
-        fetch(`/api/mb-marketing?company=${companyId}`).then((r) => r.json().then((j) => ({ ok: r.ok, j })))
-            .then(({ ok, j }) => { if (!vivo) return; if (ok) setD(j); else setErr(j.error || 'No se pudo calcular'); })
-            .catch(() => vivo && setErr('No se pudo calcular'));
+        setCargando(true);
+        fetch(`/api/mb-marketing?company=${companyId}${vuelta ? '&refresh=1' : ''}`).then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+            .then(({ ok, j }) => { if (!vivo) return; if (ok) { setD(j); setErr(''); } else setErr(j.error || 'No se pudo calcular'); })
+            .catch(() => vivo && setErr('No se pudo calcular'))
+            .finally(() => vivo && setCargando(false));
         return () => { vivo = false; };
-    }, [companyId]);
+    }, [companyId, vuelta]);
     if (err) return <p style={{ fontSize: 13, color: RED }}>{err}</p>;
     if (!d) return <p style={{ fontSize: 13, color: GRY }}>Calculando en vivo… (la primera vez del día tarda ~30 s: corre el scoring de avisos)</p>;
-    return <Vista d={d} interno={interno} />;
+    return (<>
+        <Actualizar generado={d.generado} cargando={cargando} onClick={() => setVuelta((x) => x + 1)} />
+        <Vista d={d} interno={interno} />
+    </>);
 }
 
 // Colores de siempre de los niveles (Ale): súper destacado amarillo, destacado azul (verde mar), simple negro
@@ -143,7 +163,7 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
         return (
             <div style={{ minWidth: 170 }}>
                 <a href={`/ficha/${encodeURIComponent(a?.id ?? codigo)}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700, textDecoration: 'none' }}>{codigo}</a>
-                {a && <span style={{ ...sub, marginLeft: 6 }}>{[a.tipo, a.operacion].filter(Boolean).join(' · ')}</span>}
+                {a && <><OpTag op={a.operacion} /><span style={{ ...sub, marginLeft: 6 }}>{a.tipo}</span></>}
                 <div style={{ fontSize: 11.5, whiteSpace: 'normal' }}>{[a?.calle, a?.colonia].filter(Boolean).join(', ') || 'sin dirección'}</div>
                 {a?.asesor && a.asesor !== '—' && <div style={{ ...sub, whiteSpace: 'normal' }}>{a.asesor}</div>}
             </div>
@@ -285,28 +305,8 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
             <div style={{ ...sub, marginTop: 6 }}>«Vistas i24 / mercado»: vistas del anuncio que reporta Inmuebles24 contra el promedio de anuncios comparables.</div>
         </Seccion>
 
-        <Seccion n={4} titulo="Cambios de nivel" nota="Qué subió o bajó de nivel en Inmuebles24: el nivel de hace 7 días contra el de hoy (o, en los 7 días anteriores, el de hace 14 contra el de hace 7). El motivo sale del historial del anuncio.">
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                {(['semana', 'semanaAnt'] as const).map((k) => (
-                    <button key={k} type="button" onClick={() => setVerCambios(k)} style={{ padding: '5px 11px', fontSize: 12, border: `1px solid ${LGT}`, borderRadius: R, cursor: 'pointer', fontFamily: 'inherit', background: verCambios === k ? BLK : '#fff', color: verCambios === k ? '#fff' : '#555' }}>
-                        {k === 'semana' ? `Últimos 7 días · ${d.cambios.semana.length}` : `7 días anteriores · ${d.cambios.semanaAnt.length}`}
-                    </button>
-                ))}
-            </div>
-            <div style={{ fontSize: 12, marginBottom: 6 }}><b>{f0(cambios.filter((c) => c.sube).length)}</b> subieron · <b>{f0(cambios.filter((c) => !c.sube).length)}</b> bajaron o rotaron.</div>
-            <TablaFiltrable key={verCambios} filas={cambios} min={660} texto={(c) => buscar(c.codigo, `${c.antes} ${c.despues} ${c.motivo ?? ''}`)}
-                selects={[{ label: 'Movimiento', v: (c) => (c.sube ? 'Subió' : 'Bajó') }, op()]}
-                vacio="Sin cambios de nivel en estos 7 días."
-                cols={[
-                    { h: 'Fecha', v: (c) => c.fecha, render: (c) => fecha(c.fecha) },
-                    colProp(),
-                    { h: 'Antes', v: (c) => c.antes },
-                    { h: 'Ahora', v: (c) => c.despues, render: (c) => <><span style={{ color: c.sube ? SEA : RED, fontWeight: 700 }}>{c.sube ? '↑' : '↓'}</span> {c.despues}</> },
-                    { h: 'Motivo', v: (c) => c.motivo, render: (c) => <span style={{ color: '#666' }}>{c.motivo ?? '—'}</span> },
-                ]} />
-        </Seccion>
 
-        <Seccion n={5} titulo="Desempeño por nivel" nota="Vistas → leads → visitas de cada nivel en los últimos 30 días (las barras se comparan entre niveles) y los últimos 7 días contra los 7 anteriores (▲▼). En los niveles de Inmuebles24 cuentan sólo los leads que llegaron por Inmuebles24 (y las visitas de esos compradores); en los de MercadoLibre, sólo los de MercadoLibre. MercadoLibre no reporta vistas.">
+        <Seccion n={4} titulo="Desempeño por nivel" nota="Vistas → leads → visitas de cada nivel en los últimos 30 días (las barras se comparan entre niveles) y los últimos 7 días contra los 7 anteriores (▲▼). En los niveles de Inmuebles24 cuentan sólo los leads que llegaron por Inmuebles24 (y las visitas de esos compradores); en los de MercadoLibre, sólo los de MercadoLibre. MercadoLibre no reporta vistas.">
             <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                 {(['Todas', 'Venta', 'Renta'] as Op[]).map((o) => (
                     <button key={o} type="button" onClick={() => setOpNivel(o)} style={{ padding: '5px 13px', fontSize: 12, fontWeight: 600, border: `1px solid ${opNivel === o ? BLK : LGT}`, borderRadius: R, cursor: 'pointer', fontFamily: 'inherit', background: opNivel === o ? BLK : '#fff', color: opNivel === o ? '#fff' : '#555' }}>
@@ -325,6 +325,27 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
                 {nivelesMeli.map((x) => <NivelEmbudo key={x.nivel} x={{ ...x, nivel: MELI_LBL[x.nivel] ?? x.nivel }} max={maxDe(nivelesMeli)} color={COLOR_MELI[x.nivel]} />)}
                 {!nivelesMeli.length && <span style={sub}>Sin anuncios en este filtro.</span>}
             </div>
+        </Seccion>
+
+        <Seccion n={5} titulo="Cambios de nivel" nota="Qué subió o bajó de nivel en Inmuebles24: el nivel de hace 7 días contra el de hoy (o, en los 7 días anteriores, el de hace 14 contra el de hace 7). El motivo sale del historial del anuncio.">
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                {(['semana', 'semanaAnt'] as const).map((k) => (
+                    <button key={k} type="button" onClick={() => setVerCambios(k)} style={{ padding: '5px 11px', fontSize: 12, border: `1px solid ${LGT}`, borderRadius: R, cursor: 'pointer', fontFamily: 'inherit', background: verCambios === k ? BLK : '#fff', color: verCambios === k ? '#fff' : '#555' }}>
+                        {k === 'semana' ? `Últimos 7 días · ${d.cambios.semana.length}` : `7 días anteriores · ${d.cambios.semanaAnt.length}`}
+                    </button>
+                ))}
+            </div>
+            <div style={{ fontSize: 12, marginBottom: 6 }}><b>{f0(cambios.filter((c) => c.sube).length)}</b> subieron · <b>{f0(cambios.filter((c) => !c.sube).length)}</b> bajaron o rotaron.</div>
+            <TablaFiltrable key={verCambios} filas={cambios} min={660} texto={(c) => buscar(c.codigo, `${c.antes} ${c.despues} ${c.motivo ?? ''}`)}
+                selects={[{ label: 'Movimiento', v: (c) => (c.sube ? 'Subió' : 'Bajó') }, op()]}
+                vacio="Sin cambios de nivel en estos 7 días."
+                cols={[
+                    { h: 'Fecha', v: (c) => c.fecha, render: (c) => fecha(c.fecha) },
+                    colProp(),
+                    { h: 'Antes', v: (c) => c.antes },
+                    { h: 'Ahora', v: (c) => c.despues, render: (c) => <><span style={{ color: c.sube ? SEA : RED, fontWeight: 700 }}>{c.sube ? '↑' : '↓'}</span> {c.despues}</> },
+                    { h: 'Motivo', v: (c) => c.motivo, render: (c) => <span style={{ color: '#666' }}>{c.motivo ?? '—'}</span> },
+                ]} />
         </Seccion>
 
         <Seccion n={6} titulo="Cierres por fuente" nota="Cierres de la inmobiliaria (como vendedora o compradora) por el canal por el que llegó el comprador. Revenue = comisión que recibe la inmobiliaria, sin IVA; los % son sobre el revenue. Misma regla de fuente que Desempeño y /portales.">
@@ -448,19 +469,18 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
  *  recibe la inmobiliaria; los % van contra el revenue, no contra el número de operaciones. */
 function CierresPanel({ d }: { d: MarketingMk }) {
     const [periodo, setPeriodo] = useState<'d90' | 'anio'>('d90');
-    // estatus: cierres (cerradas / cobrando) o lo que está en curso (contrato, oferta aceptada, oferta)
-    const ESTATUS_OPC = ['Cerradas y cobrando', 'Cerrada', 'Cobrando', 'En curso', 'Contrato', 'Oferta aceptada', 'Oferta'] as const;
-    const [estatus, setEstatus] = useState<(typeof ESTATUS_OPC)[number]>('Cerradas y cobrando');
-    const CIERRE_OK = (e: string) => e === 'Cerrada' || e === 'Cobrando';
-    const pasa = (e: string) => estatus === 'Cerradas y cobrando' ? CIERRE_OK(e) : estatus === 'En curso' ? !CIERRE_OK(e) : e === estatus;
-    const esperado = estatus === 'En curso' || estatus === 'Contrato' || estatus === 'Oferta aceptada' || estatus === 'Oferta';
+    // estatus con casillas (Ale): se suman los que marques. Cerradas y cobrando = cierres; el resto, en curso.
+    const ESTATUS_OPC = ['Cerrada', 'Cobrando', 'Contrato', 'Oferta aceptada', 'Oferta'] as const;
+    const [estatus, setEstatus] = useState<Set<string>>(new Set(['Cerrada', 'Cobrando']));
+    const pasa = (e: string) => estatus.has(e);
+    const esperado = [...estatus].some((e) => e !== 'Cerrada' && e !== 'Cobrando');
     const [oper, setOper] = useState<'Total' | 'Venta' | 'Renta'>('Total');
     const base = d.cierres.lista.filter((c) => (periodo === 'anio' || c.fecha >= d.cierres.desde90) && pasa(c.estatus));
     const xs = base.filter((c) => oper === 'Total' || c.operacion === oper);
     const rev = xs.reduce((s, c) => s + c.comision, 0);
     const revBase = base.reduce((s, c) => s + c.comision, 0);
     const porOp = (['Venta', 'Renta'] as const).map((o) => ({ o, n: base.filter((c) => c.operacion === o).length, rev: base.filter((c) => c.operacion === o).reduce((s, c) => s + c.comision, 0) }));
-    const fuentes = [...xs.reduce((m, c) => { const e = m.get(c.fuente) ?? { n: 0, rev: 0 }; e.n++; e.rev += c.comision; return m.set(c.fuente, e); }, new Map<string, { n: number; rev: number }>())]
+    const fuentes = [...xs.reduce((m, c) => { const e = m.get(c.fuente) ?? { n: 0, rev: 0, venta: 0, renta: 0 }; e.n++; e.rev += c.comision; if (c.operacion === 'Renta') e.renta += c.comision; else e.venta += c.comision; return m.set(c.fuente, e); }, new Map<string, { n: number; rev: number; venta: number; renta: number }>())]
         .map(([fuente, v]) => ({ fuente, ...v })).sort((a, b) => b.rev - a.rev);
     const max = Math.max(1, ...fuentes.map((x) => x.rev));
     const money = (v: number) => `$${f0(Math.round(v))}`;
@@ -470,9 +490,14 @@ function CierresPanel({ d }: { d: MarketingMk }) {
         <div>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
                 <span style={{ display: 'flex', gap: 6 }}><Boton v="d90" act={periodo} set={setPeriodo}>Últimos 90 días</Boton><Boton v="anio" act={periodo} set={setPeriodo}>En el año</Boton></span>
-                <select value={estatus} onChange={(e) => setEstatus(e.target.value as (typeof ESTATUS_OPC)[number])} style={{ ...inp, fontSize: 12.5, padding: '6px 9px' }}>
-                    {ESTATUS_OPC.map((k) => <option key={k} value={k}>{k === 'Cerrada' ? 'Cerradas (cobradas)' : k === 'En curso' ? 'En curso (contrato, aceptada, oferta)' : k}</option>)}
-                </select>
+                <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 12, border: `1px solid ${LGT}`, borderRadius: R, padding: '5px 10px' }}>
+                    {ESTATUS_OPC.map((k) => (
+                        <label key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            <input type="checkbox" checked={estatus.has(k)} onChange={() => setEstatus((p) => { const x = new Set(p); if (x.has(k)) x.delete(k); else x.add(k); return x; })} />
+                            {k === 'Cerrada' ? 'Cerrada (cobrada)' : k}
+                        </label>
+                    ))}
+                </span>
                 <span style={{ display: 'flex', gap: 6 }}>{(['Total', 'Venta', 'Renta'] as const).map((k) => <Boton key={k} v={k} act={oper} set={setOper}>{k}</Boton>)}</span>
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -481,13 +506,20 @@ function CierresPanel({ d }: { d: MarketingMk }) {
             </div>
             {!xs.length ? <div style={sub}>Sin cierres con estos filtros.</div> : (
                 <div style={{ maxWidth: 820 }}>
+                    <div style={{ display: 'flex', gap: 14, fontSize: 11, marginBottom: 6 }}>
+                        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: SEA, marginRight: 5, verticalAlign: 'middle' }} />Venta</span>
+                        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: YEL, marginRight: 5, verticalAlign: 'middle' }} />Renta</span>
+                    </div>
                     <div style={{ display: 'flex', gap: 10, fontSize: 10, fontWeight: 700, color: '#777', textTransform: 'uppercase', letterSpacing: '.4px', borderBottom: `1px solid ${BLK}`, padding: '0 0 4px' }}>
                         <span style={{ width: 190 }}>Fuente</span><span style={{ flex: 1 }}>Revenue</span><span style={{ width: 120, textAlign: 'right' }}>Revenue</span><span style={{ width: 70, textAlign: 'right' }}>% revenue</span><span style={{ width: 60, textAlign: 'right' }}>{esperado ? 'Operac.' : 'Cierres'}</span>
                     </div>
                     {fuentes.map((x) => (
                         <div key={x.fuente} style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0', fontSize: 12 }}>
                             <span style={{ width: 190, flexShrink: 0 }}>{x.fuente}</span>
-                            <span style={{ flex: 1, background: LGT, height: 14 }}><span style={{ display: 'block', height: 14, width: `${(100 * x.rev) / max}%`, background: BLK }} /></span>
+                            <span style={{ flex: 1, background: LGT, height: 14, display: 'flex' }} title={`Venta $${f0(Math.round(x.venta))} · Renta $${f0(Math.round(x.renta))}`}>
+                                <span style={{ display: 'block', height: 14, width: `${(100 * x.venta) / max}%`, background: SEA }} />
+                                <span style={{ display: 'block', height: 14, width: `${(100 * x.renta) / max}%`, background: YEL }} />
+                            </span>
                             <span style={{ width: 120, textAlign: 'right' }}>{money(x.rev)}</span>
                             <span style={{ width: 70, textAlign: 'right' }}><b>{pc(x.rev, rev)}</b></span>
                             <span style={{ width: 60, textAlign: 'right', color: '#666' }}>{f0(x.n)}</span>
@@ -503,7 +535,7 @@ function CierresPanel({ d }: { d: MarketingMk }) {
                             selects={[{ label: 'Fuente', v: (c: CierreMk) => c.fuente }, { label: 'Lado', v: (c: CierreMk) => c.lado }]}
                             cols={[
                                 { h: 'Fecha', v: (c) => c.fecha, render: (c) => `${fecha(c.fecha)} ${c.fecha.slice(0, 4)}` },
-                                { h: 'Propiedad', v: (c) => c.codigo, render: (c) => <div><b>{c.codigo ?? '—'}</b> <span style={sub}>{[c.tipo, c.operacion].filter(Boolean).join(' · ')}</span><div style={{ fontSize: 11.5 }}>{c.colonia ?? ''}</div></div> },
+                                { h: 'Propiedad', v: (c) => c.codigo, render: (c) => <div><b>{c.codigo ?? '—'}</b><OpTag op={c.operacion} /> <span style={sub}>{c.tipo}</span><div style={{ fontSize: 11.5 }}>{c.colonia ?? ''}</div></div> },
                                 { h: 'Asesor', v: (c) => c.asesor, render: (c) => <span style={{ fontSize: 11.5 }}>{c.asesor}</span> },
                                 { h: 'Lado', v: (c) => c.lado },
                                 { h: 'Fuente', v: (c) => c.fuente },

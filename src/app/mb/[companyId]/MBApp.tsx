@@ -535,6 +535,12 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
         return [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k]) => k);
     }, [orto]);
     const [section, setSection] = useState<Section>('overview');
+    // Cada pestaña se queda MONTADA después de abrirla: al ir y volver conserva filtros, scroll y datos sin
+    // recalcular (Ale, oct-2026). Para datos nuevos, el botón «Actualizar» de cada pestaña.
+    const [vistas, setVistas] = useState<Set<Section>>(() => new Set<Section>(['overview']));
+    useEffect(() => { setVistas((p) => (p.has(section) ? p : new Set(p).add(section))); }, [section]);
+    const montada = (k: Section) => k === section || vistas.has(k);
+    const oculta = (k: Section) => (k === section ? undefined : ({ display: 'none' } as const));
     // sólo se ve en celular (el CSS esconde el botón arriba de 860px)
     const [menuAbierto, setMenuAbierto] = useState(false);
     const [seg, setSeg] = useState<Seg>('');
@@ -615,8 +621,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
             </aside>
 
             <main className="mb-main" style={{ flex: 1, minWidth: 0, padding: '30px 34px 60px', maxWidth: 1260 }}>
-                {section === 'overview' && (
-                    <div>
+                {montada('overview') && (
+                    <div style={oculta('overview')}>
                         <div style={eyebrow}>Overview</div><div style={accent} />
                         <div style={{ background: BLK, color: '#fff', borderRadius: R, padding: '26px 28px' }}>
                             <div style={{ width: 44, height: 2, background: YEL, marginBottom: 14 }} />
@@ -929,8 +935,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                     </div>
                 )}
 
-                {section === 'props' && (
-                    <div>
+                {montada('props') && (
+                    <div style={oculta('props')}>
                         <div style={eyebrow}>Propiedades</div><div style={accent} />
                         <h1 style={{ fontFamily: 'EB Garamond, serif', fontWeight: 400, fontSize: 30, margin: '0 0 3px' }}>Tu inventario</h1>
                         <div style={sub}>El funnel se recalcula con tus filtros. Haz clic en un encabezado para <b>ordenar</b> y usa la fila gris para <b>filtrar por columna</b>; abre el reporte de cada propiedad desde su código. <b>vs. oferta</b> y <b>vs. cierres</b> comparan tu $/m² contra la <b>mediana</b> de tus comparables (no el promedio). Vistas = sitios de Pulppo + Inmuebles24.</div>
@@ -938,8 +944,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                     </div>
                 )}
 
-                {section === 'destacados' && CON_DESTACADOS.has(d.companyId) && (
-                    <div>
+                {montada('destacados') && CON_DESTACADOS.has(d.companyId) && (
+                    <div style={oculta('destacados')}>
                         <div style={eyebrow}>Destacados</div><div style={accent} />
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
                             ¿Cuáles quieres destacar en inmuebles24?
@@ -952,8 +958,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                     </div>
                 )}
 
-                {section === 'busquedas' && conBusquedas(d.companyId) && (
-                    <div>
+                {montada('busquedas') && conBusquedas(d.companyId) && (
+                    <div style={oculta('busquedas')}>
                         <div style={eyebrow}>Búsquedas</div><div style={accent} />
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
                             ¿Qué pasa con tus búsquedas?
@@ -966,8 +972,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                     </div>
                 )}
 
-                {section === 'desempeno' && conDesempeno(d.companyId) && (
-                    <div>
+                {montada('desempeno') && conDesempeno(d.companyId) && (
+                    <div style={oculta('desempeno')}>
                         <div style={eyebrow}>Desempeño</div><div style={accent} />
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
                             ¿Qué está pasando con tus leads?
@@ -980,8 +986,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                     </div>
                 )}
 
-                {section === 'marketing' && verMarketing && (
-                    <div>
+                {montada('marketing') && verMarketing && (
+                    <div style={oculta('marketing')}>
                         <div style={eyebrow}>Marketing</div><div style={accent} />
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
                             ¿Qué tienes publicado, dónde y qué está rindiendo?
@@ -994,22 +1000,22 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                     </div>
                 )}
 
-                {section === 'consultas' && verMarketing && (
-                    <div>
+                {montada('consultas') && verMarketing && (
+                    <div style={oculta('consultas')}>
                         <div style={eyebrow}>Consultas</div><div style={accent} />
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
                             ¿Quién te está escribiendo y cómo se le está atendiendo?
                         </div>
                         <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 6, maxWidth: 720 }}>
-                            Cada lead con su canal, su asesor, si se abrió, si hubo conversación y en qué va. Los filtros de
+                            Cada lead con su canal, su asesor, si se respondió, si hubo conversación y en qué va. Los filtros de
                             arriba filtran todo: indicadores, gráficas, tablas y la lista.
                         </div>
                         <MBConsultas companyId={d.companyId} />
                     </div>
                 )}
 
-                {section === 'mercado' && tieneMercado(d.companyId) && (
-                    <div>
+                {montada('mercado') && tieneMercado(d.companyId) && (
+                    <div style={oculta('mercado')}>
                         <div style={eyebrow}>Mercado</div><div style={accent} />
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
                             ¿A cuánto se está cerrando en tu zona?
@@ -1022,8 +1028,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                     </div>
                 )}
 
-                {section === 'p1510' && (
-                    <div>
+                {montada('p1510') && (
+                    <div style={oculta('p1510')}>
                         <div style={eyebrow}>Exclusivas 1·5·10</div><div style={accent} />
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 28, lineHeight: 1.15, marginBottom: 4, maxWidth: 700 }}>
                             Una exclusiva 1·5·10 cierra 3 veces más seguido que un aviso normal.

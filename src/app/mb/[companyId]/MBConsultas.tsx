@@ -4,13 +4,14 @@
  * Consultas a detalle (/mb → Consultas) — el seguimiento que Diamond House hacía en el Retool «Reporte de
  * consultas y propiedades», con un solo cálculo y filtros que filtran TODO: si eliges Inmuebles24, los
  * indicadores, la gráfica, las tablas por asesor y por propiedad y la lista de leads son sólo de Inmuebles24.
- * Dos medidas de respuesta, con su nombre (Ale): «abierto por el asesor» (lo que el Retool llama
- * «respondido») y «con conversación visible». Motor: lib/consultas.ts.
+ * Dos medidas, con su nombre (Ale): «respondidos» (`answeredAt`, igual que el Retool y la pestaña Propiedades)
+ * y «con conversación visible» (el cliente escribió o hubo llamada). Motor: lib/consultas.ts.
  */
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { ConsultasData, LeadConsulta } from '@/lib/consultas';
 import TablaFiltrable, { inp } from './TablaFiltrable';
+import { Actualizar, OpTag } from './MBMarketing';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
 const R = 2;
@@ -75,15 +76,16 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
     const [data, setData] = useState<ConsultasData | null>(null);
     const [err, setErr] = useState('');
     const [cargando, setCargando] = useState(false);
+    const [vuelta, setVuelta] = useState(0);   // «Actualizar» salta el caché del servidor
     useEffect(() => {
         let vivo = true;
         setCargando(true); setErr('');
-        fetch(`/api/mb-consultas?company=${companyId}&desde=${desde}&hasta=${hasta}`).then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+        fetch(`/api/mb-consultas?company=${companyId}&desde=${desde}&hasta=${hasta}${vuelta ? '&refresh=1' : ''}`).then((r) => r.json().then((j) => ({ ok: r.ok, j })))
             .then(({ ok, j }) => { if (!vivo) return; if (ok) setData(j); else setErr(j.error || 'No se pudo calcular'); })
             .catch(() => vivo && setErr('No se pudo calcular'))
             .finally(() => vivo && setCargando(false));
         return () => { vivo = false; };
-    }, [companyId, desde, hasta]);
+    }, [companyId, desde, hasta, vuelta]);
 
     // filtros que filtran TODO
     const [canales, setCanales] = useState<Set<string>>(new Set());
@@ -124,7 +126,7 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
         const xs = cur.filter((l) => diaMx(l.fecha) === dd);
         const row: Record<string, number | string> = { dia: fCorta(dd) };
         if (verDia === 'canal') for (const c of canalesCur) row[c] = xs.filter((l) => l.canal === c).length;
-        else { row['Abierto por el asesor'] = xs.filter((l) => l.abierto).length; row['Sin abrir'] = xs.filter((l) => !l.abierto).length; }
+        else { row['Respondidos'] = xs.filter((l) => l.abierto).length; row['Sin responder'] = xs.filter((l) => !l.abierto).length; }
         return row;
     }), [dias, cur, canalesCur, verDia]);
 
@@ -139,8 +141,8 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
         { h, v: (r: Fila) => r.k, render },
         { h: 'Leads', num: true, v: (r: Fila) => r.n, render: (r: Fila) => <b>{f0(r.n)}</b> },
         { h: '% del total', num: true, v: (r: Fila) => pct(r.n, a.n), render: (r: Fila) => pc(r.n, a.n) },
-        { h: 'Abiertos por el asesor', num: true, v: (r: Fila) => pct(r.abiertos, r.n), render: (r: Fila) => <>{pc(r.abiertos, r.n)} <span style={sub}>({f0(r.n - r.abiertos)} sin abrir)</span></> },
-        { h: '1ª apertura (mediana)', num: true, v: (r: Fila) => r.med, render: (r: Fila) => tiempo(r.med) },
+        { h: 'Respondidos', num: true, v: (r: Fila) => pct(r.abiertos, r.n), render: (r: Fila) => <>{pc(r.abiertos, r.n)} <span style={sub}>({f0(r.n - r.abiertos)} sin responder)</span></> },
+        { h: '1ª respuesta (mediana)', num: true, v: (r: Fila) => r.med, render: (r: Fila) => tiempo(r.med) },
         { h: 'Con conversación', num: true, v: (r: Fila) => pct(r.conv, r.n), render: (r: Fila) => pc(r.conv, r.n) },
         { h: 'Visitaron', num: true, v: (r: Fila) => r.visito, render: (r: Fila) => <>{f0(r.visito)} <span style={sub}>{pc(r.visito, r.n)}</span></> },
         { h: 'Ofertaron', num: true, v: (r: Fila) => r.oferto, render: (r: Fila) => <>{f0(r.oferto)} <span style={sub}>{pc(r.oferto, r.n)}</span></> },
@@ -149,6 +151,7 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
 
     return (
         <div>
+            {data && <Actualizar generado={data.generado} cargando={cargando} onClick={() => setVuelta((x) => x + 1)} />}
             {/* ── filtros ── */}
             <div style={{ position: 'sticky', top: 0, zIndex: 5, background: '#fff', borderBottom: `1px solid ${LGT}`, padding: '10px 0', display: 'grid', gap: 8 }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -156,14 +159,22 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                     {periodo === 'fechas' && <><input type="date" value={d1} onChange={(e) => setD1(e.target.value)} style={inp} /><input type="date" value={d2} onChange={(e) => setD2(e.target.value)} style={inp} /></>}
                     <span style={sub}>{fCorta(desde)} {desde.slice(0, 4)} – {fCorta(hasta)} {hasta.slice(0, 4)}{cargando ? ' · cargando…' : ''}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ ...sub, fontWeight: 700 }}>Canal:</span>
-                    <button type="button" onClick={() => setCanales(new Set())} style={chip(!canales.size)}>Todos</button>
-                    {listaCanales.map(([c, n]) => (
-                        <button key={c} type="button" onClick={() => setCanales((p) => { const x = new Set(p); if (x.has(c)) x.delete(c); else x.add(c); return x; })} style={chip(canales.has(c))}>{c} <span style={{ opacity: .7 }}>{f0(n)}</span></button>
-                    ))}
-                </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <details style={{ position: 'relative' }}>
+                        <summary style={{ ...inp, listStyle: 'none', cursor: 'pointer', display: 'inline-block', minWidth: 170 }}>
+                            Canal: {canales.size ? [...canales].join(', ') : 'todos'} ▾
+                        </summary>
+                        <div style={{ position: 'absolute', zIndex: 10, top: '110%', left: 0, background: '#fff', border: `1px solid ${LGT}`, borderRadius: R, padding: '8px 10px', minWidth: 210, boxShadow: 'none' }}>
+                            <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, padding: '3px 0', cursor: 'pointer', fontWeight: 700 }}>
+                                <input type="checkbox" checked={!canales.size} onChange={() => setCanales(new Set())} /> Todos
+                            </label>
+                            {listaCanales.map(([c]) => (
+                                <label key={c} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, padding: '3px 0', cursor: 'pointer' }}>
+                                    <input type="checkbox" checked={canales.has(c)} onChange={() => setCanales((p) => { const x = new Set(p); if (x.has(c)) x.delete(c); else x.add(c); return x; })} /> {c}
+                                </label>
+                            ))}
+                        </div>
+                    </details>
                     {(['Todas', 'Venta', 'Renta'] as const).map((o) => <button key={o} type="button" onClick={() => setOper(o)} style={chip(oper === o)}>{o === 'Todas' ? 'Venta y renta' : o}</button>)}
                     <select value={asesor} onChange={(e) => setAsesor(e.target.value)} style={inp}><option value="">Asesor: todos</option>{asesores.map((x) => <option key={x} value={x}>{x}</option>)}</select>
                     <select value={medio} onChange={(e) => setMedio(e.target.value)} style={inp}><option value="">Medio: todos</option>{['WhatsApp', 'Teléfono', 'Formulario'].map((x) => <option key={x} value={x}>{x}</option>)}</select>
@@ -177,19 +188,19 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
             {data && (<>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
                     <Kpi label="Leads" value={f0(a.n)} delta={<Delta a={a.n} b={b.n} />} nota={<>{f0(a.venta)} venta · {f0(a.renta)} renta · vs {f0(b.n)} el periodo anterior</>} />
-                    <Kpi label="Abiertos por el asesor" value={a.n ? pc(a.abiertos, a.n) : '—'} delta={<Delta a={pct(a.abiertos, a.n)} b={pct(b.abiertos, b.n)} pts />} nota={<>{f0(a.n - a.abiertos)} sin abrir · 1ª apertura {tiempo(a.med)} (mediana)</>} />
+                    <Kpi label="Respondidos" value={a.n ? pc(a.abiertos, a.n) : '—'} delta={<Delta a={pct(a.abiertos, a.n)} b={pct(b.abiertos, b.n)} pts />} nota={<>{f0(a.n - a.abiertos)} sin responder · 1ª respuesta {tiempo(a.med)} (mediana)</>} />
                     <Kpi label="Con conversación visible" value={a.n ? pc(a.conv, a.n) : '—'} delta={<Delta a={pct(a.conv, a.n)} b={pct(b.conv, b.n)} pts />} nota="el cliente escribió o hubo llamada" />
                     <Kpi label="Visitaron" value={f0(a.visito)} delta={<Delta a={a.visito} b={b.visito} />} nota={`${pc(a.visito, a.n)} de los leads`} />
                     <Kpi label="Ofertaron" value={f0(a.oferto)} delta={<Delta a={a.oferto} b={b.oferto} />} nota={`${pc(a.oferto, a.n)} de los leads`} />
                 </div>
                 <div style={{ ...sub, marginTop: 6, lineHeight: 1.5, maxWidth: 900 }}>
-                    <b>Abierto por el asesor</b>: el asesor abrió la conversación desde Pulppo (es lo que el Retool llamaba «respondido»; no prueba que haya contestado, porque su WhatsApp no se guarda). <b>Con conversación visible</b>: el cliente escribió algo real o hubo llamada. Leads únicos: misma persona + misma propiedad = 1.
+                    <b>Respondidos</b>: el asesor respondió el lead desde Pulppo (igual que en el Retool y en Propiedades). <b>Con conversación visible</b>: además, el cliente escribió algo real o hubo llamada — la señal de que sí hubo plática, porque el WhatsApp del asesor no se guarda. Leads únicos: misma persona + misma propiedad = 1.
                 </div>
 
                 <Seccion titulo="Leads por día">
                     <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                         <button type="button" onClick={() => setVerDia('canal')} style={chip(verDia === 'canal')}>Por canal</button>
-                        <button type="button" onClick={() => setVerDia('abierto')} style={chip(verDia === 'abierto')}>Abiertos vs sin abrir</button>
+                        <button type="button" onClick={() => setVerDia('abierto')} style={chip(verDia === 'abierto')}>Respondidos vs sin responder</button>
                     </div>
                     <div style={{ width: '100%', height: 240 }}>
                         <ResponsiveContainer>
@@ -201,7 +212,7 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                                 <Legend wrapperStyle={{ fontSize: 11 }} />
                                 {verDia === 'canal'
                                     ? canalesCur.map((c, i) => <Bar key={c} dataKey={c} stackId="a" fill={COLORES_CANAL[i % COLORES_CANAL.length]} />)
-                                    : [<Bar key="ab" dataKey="Abierto por el asesor" stackId="a" fill={SEA} />, <Bar key="sa" dataKey="Sin abrir" stackId="a" fill={RED} />]}
+                                    : [<Bar key="ab" dataKey="Respondidos" stackId="a" fill={SEA} />, <Bar key="sa" dataKey="Sin responder" stackId="a" fill={RED} />]}
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -253,7 +264,7 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                         cols={[
                             { h: 'Propiedad', v: (r) => r.k, render: (r) => { const l = r.xs[0]; return (
                                 <div style={{ minWidth: 170 }}>
-                                    {link(r.k, () => { setQ(r.k); verLista(); })} <span style={sub}>{[l?.tipo, l?.operacion].filter(Boolean).join(' · ')}</span>
+                                    {link(r.k, () => { setQ(r.k); verLista(); })}<OpTag op={l?.operacion} /> <span style={sub}>{l?.tipo}</span>
                                     <div style={{ fontSize: 11.5 }}>{[l?.calle, l?.colonia].filter(Boolean).join(', ')}</div>
                                     <div style={sub}>{[...new Set(r.xs.map((x) => x.asesor))].join(' / ')}</div>
                                 </div>); } },
@@ -267,7 +278,7 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                 <Seccion id="lista-leads" titulo={`Leads · ${f0(cur.length)}`} nota="Todos los leads con los filtros de arriba. «Copiar tabla» copia sólo lo filtrado.">
                     <TablaFiltrable<LeadConsulta> filas={cur} min={1500} limite={50} orden={{ i: 0, dir: -1 }}
                         texto={(l) => [l.nombre, l.telefono, l.correo, l.codigo, l.calle, l.colonia, l.asesor, l.canal].filter(Boolean).join(' ')}
-                        selects={[{ label: 'Etapa', v: (l) => l.etapa }, { label: 'Abierto', v: (l) => (l.abierto ? 'Abierto' : 'Sin abrir') }, { label: 'Conversación', v: (l) => (l.conversacion ? 'Con conversación' : 'Sin conversación visible') }]}
+                        selects={[{ label: 'Etapa', v: (l) => l.etapa }, { label: 'Respuesta', v: (l) => (l.abierto ? 'Respondido' : 'Sin responder') }, { label: 'Conversación', v: (l) => (l.conversacion ? 'Con conversación' : 'Sin conversación visible') }]}
                         cols={[
                             { h: 'Fecha', v: (l) => l.fecha, render: (l) => new Date(l.fecha).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' }) },
                             { h: 'Nombre', v: (l) => l.nombre },
@@ -275,9 +286,9 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                             { h: 'Correo', v: (l) => l.correo, render: (l) => <span style={{ fontSize: 11.5 }}>{l.correo ?? '—'}</span> },
                             { h: 'Canal', v: (l) => l.canal },
                             { h: 'Medio', v: (l) => l.medio },
-                            { h: 'Propiedad', v: (l) => l.codigo, render: (l) => <div><b>{l.codigo ?? '—'}</b> <span style={sub}>{[l.tipo, l.operacion].filter(Boolean).join(' · ')}</span><div style={{ fontSize: 11 }}>{[l.calle, l.colonia].filter(Boolean).join(', ')}</div></div> },
+                            { h: 'Propiedad', v: (l) => l.codigo, render: (l) => <div><b>{l.codigo ?? '—'}</b><OpTag op={l.operacion} /> <span style={sub}>{l.tipo}</span><div style={{ fontSize: 11 }}>{[l.calle, l.colonia].filter(Boolean).join(', ')}</div></div> },
                             { h: 'Asesor', v: (l) => l.asesor, render: (l) => <span style={{ fontSize: 11.5 }}>{l.asesor}</span> },
-                            { h: 'Abierto', v: (l) => l.minutosRespuesta, render: (l) => (l.abierto ? <span>✓ <span style={sub}>{tiempo(l.minutosRespuesta)}</span></span> : <span style={{ color: RED }}>Sin abrir</span>) },
+                            { h: 'Respuesta', v: (l) => l.minutosRespuesta, render: (l) => (l.abierto ? <span>✓ <span style={sub}>{tiempo(l.minutosRespuesta)}</span></span> : <span style={{ color: RED }}>Sin responder</span>) },
                             { h: 'Conversación', v: (l) => (l.conversacion ? 1 : 0), render: (l) => (l.conversacion ? '✓' : <span style={sub}>—</span>) },
                             { h: 'Etapa', v: (l) => l.etapa, render: (l) => <span>{l.etapa}{l.motivo ? <div style={sub}>{l.motivo}</div> : null}</span> },
                             { h: 'Visitó / ofertó', v: (l) => (l.oferto ? 2 : l.visito ? 1 : 0), render: (l) => (l.oferto ? 'Ofertó' : l.visito ? 'Visitó' : '—') },

@@ -366,7 +366,7 @@ de la inmobiliaria; el expediente muestra las dos.
 Retool «Reporte de consultas y propiedades». Trae leads del periodo + periodo anterior (mismos filtros) y TODO se
 filtra en el cliente (canal, venta/renta, asesor, medio, búsqueda): indicadores, leads por día, por canal, embudo
 (etapa de la búsqueda + motivo de descarte, visitó/ofertó), por asesor, por propiedad y la lista con nombre,
-teléfono y correo. Dos medidas de respuesta: «abierto por el asesor» (answeredAt = lo que el Retool llama
+teléfono y correo. Dos medidas: «respondidos» (answeredAt, como el Retool y Propiedades; antes se llamó «abierto por el asesor» y a Ale no le convenció —
 respondido) y «con conversación visible». Propiedades (sólo DH) suma la columna «Aviso i24» (`MBProp.avisoI24`).
 
 ### (historia) /mb → Marketing (Diamond House, antes SÓLO equipo interno)

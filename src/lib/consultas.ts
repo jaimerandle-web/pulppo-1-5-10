@@ -8,7 +8,7 @@
 //     igual que Marketing y Desempeño.
 //   · canal: el de /portales (classifySource); medio: WhatsApp / teléfono / formulario (canalContacto).
 //   · DOS medidas de respuesta (Ale: «mostremos las dos»):
-//       «abierto por el asesor» = `answeredAt` (lo que el Retool llama «respondido»; sólo dice que el asesor
+//       «respondidos» = `answeredAt` (igual que el Retool y la pestaña Propiedades; sólo dice que el asesor
 //       abrió el chat desde la app, no que contestó) y
 //       «con conversación visible» = hubo plática real del cliente en su interacción o en otra del mismo
 //       contacto de −30 a +14 días (regla de /portales; en WhatsApp el chat del asesor no se guarda).
