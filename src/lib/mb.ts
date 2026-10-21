@@ -30,6 +30,10 @@ const estadoPrecio = (sp: number | null): string => (sp == null ? 'Haz ACM' : sp
 const CAL: Record<number, string> = { 3: 'Alta', 2: 'Media', 1: 'Baja' };
 // Tier de destacado en Inmuebles24 (portals.inmuebles24.type).
 const TIER: Record<string, string> = { HOME_COMBO: 'Super', HOME_COMBO_ZONA_DEMAND: 'Super', DESTACADO_COMBO: 'Destacado', DESTACADO_COMBO_ZONA_DEMAND: 'Destacado', SIMPLE_COMBO: 'Simple', OFFLINE: 'Offline' };
+const AVISO_I24: Record<string, string> = {
+    HOME_COMBO: 'Súper destacado', HOME_COMBO_ZONA_DEMAND: 'Súper destacado zona demand', DESTACADO_COMBO: 'Destacado',
+    DESTACADO_COMBO_ZONA_DEMAND: 'Destacado zona demand', SIMPLE_COMBO: 'Simple', OFFLINE: 'Offline', GRATIS: 'Gratis', GRATIS_COMBO: 'Gratis',
+};
 const D24 = new Date(Date.now() - 730 * 864e5);
 const D30 = new Date(Date.now() - 30 * 864e5);
 const D60 = new Date(Date.now() - 60 * 864e5);
@@ -57,6 +61,8 @@ export interface MBProp {
     lab: number; labSin: number;
     /** mediana de 1ª respuesta en minutos, sólo leads en horario */
     respMedMin: number | null; oppScore: number; diag: string[]; tier: string;
+    /** nivel del aviso en Inmuebles24 con zona demand (columna «Aviso i24» de Propiedades, sólo Diamond House) */
+    avisoI24?: string;
     // Token de la ficha: los master brokers (externos) no pasan el middleware con la URL pelada
     // —los rebota a su overview—, así que la liga tiene que ir firmada. Ver src/lib/token.ts.
     /** exclusiva del programa 1·5·10 (`contract.exclusive.pulppo`). Abre el reporte LARGO. */
@@ -661,6 +667,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             respMedMin: median(respByProp.get(hex) ?? []),
             oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag,
             tier: TIER[dig(p, 'portals', 'inmuebles24', 'type') as string] ?? 'Simple',
+            avisoI24: AVISO_I24[String(dig(p, 'portals', 'inmuebles24', 'type') ?? '')] ?? (dig(p, 'portals', 'inmuebles24', 'type') ? 'Simple' : 'Sin aviso'),
             fotos, video, tour, amenidades, errores, sugerencia,
             p1510: dig(p, 'contract', 'exclusive', 'pulppo') != null,
             comision: num(dig(p, 'contract', 'comission')),

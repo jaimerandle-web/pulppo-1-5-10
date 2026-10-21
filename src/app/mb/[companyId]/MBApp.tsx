@@ -9,6 +9,8 @@ import MBDestacados from './MBDestacados';
 import MBDesempeno from './MBDesempeno';
 import MBBusquedas from './MBBusquedas';
 import MBMarketing from './MBMarketing';
+import MBConsultas from './MBConsultas';
+import { MARKETING_EMPRESAS } from '@/lib/marketingAcceso';
 import { NURA_ID } from '@/lib/nura';
 import MBMercado from './MBMercado';
 import { tieneMercado } from '@/lib/mercadoPiloto';
@@ -53,11 +55,11 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 // minutos → texto corto legible
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
-type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'busquedas' | 'marketing' | 'mercado' | 'p1510' | 'analisis' | 'comoleer';
+type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'busquedas' | 'marketing' | 'consultas' | 'mercado' | 'p1510' | 'analisis' | 'comoleer';
 // El botón de menú en celular muestra en qué sección estás; sin esto sólo dice "Menú" y te
 // pierdes al navegar.
 const SECTION_LABEL: Record<Section, string> = {
-    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño', busquedas: 'Búsquedas', marketing: 'Marketing', mercado: 'Mercado',
+    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño', busquedas: 'Búsquedas', marketing: 'Marketing', consultas: 'Consultas', mercado: 'Mercado',
     p1510: '1·5·10', analisis: 'Generador de análisis', comoleer: 'Cómo leer esto',
 };
 
@@ -204,7 +206,7 @@ function Funnel({ vistas, leads, respondidos, visitas, ofertas, cierres, respMed
 }
 
 type Col = { key: keyof MBProp; label: string; num?: boolean };
-const COLS: Col[] = [
+const COLS_BASE: Col[] = [
     { key: 'code', label: 'Código' }, { key: 'type', label: 'Tipo' }, { key: 'asesor', label: 'Asesor' },
     { key: 'op', label: 'Operación' },
     { key: 'colonia', label: 'Colonia' }, { key: 'precio', label: 'Precio', num: true },
@@ -217,9 +219,12 @@ const COLS: Col[] = [
     { key: 'visitas', label: 'Visitas', num: true }, { key: 'ofertas', label: 'Ofertas', num: true }
 ];
 // Columnas que se ordenan alfabéticamente (el resto, de mayor a menor).
-const TEXT_COLS: (keyof MBProp)[] = ['code', 'type', 'asesor', 'colonia', 'op', 'calidad'];
+const TEXT_COLS: (keyof MBProp)[] = ['code', 'type', 'asesor', 'colonia', 'op', 'calidad', 'avisoI24'];
 
 function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) => void }) {
+    // «Aviso i24»: en qué nivel está publicado cada aviso (Ale, oct-2026: sólo Diamond House por ahora)
+    const conAviso = MARKETING_EMPRESAS.has(d.companyId);
+    const COLS: Col[] = conAviso ? [...COLS_BASE.slice(0, 4), { key: 'avisoI24', label: 'Aviso i24' }, ...COLS_BASE.slice(4)] : COLS_BASE;
     const [sortKey, setSortKey] = useState<keyof MBProp>('leads');
     const [dir, setDir] = useState<1 | -1>(-1);
     const [q, setQ] = useState('');
@@ -474,7 +479,9 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                                 <tr key={p.id}>
                                     <td style={td}><Link href={urlFicha(p)} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
                                     <td style={td}>{p.type}</td>
-                                    <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td><td style={{ ...td, color: GRY }}>{p.colonia}</td>
+                                    <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td>
+                                    {conAviso && <td style={{ ...td, whiteSpace: 'nowrap', fontWeight: 600, color: p.avisoI24 === 'Offline' || p.avisoI24 === 'Sin aviso' ? RED : p.avisoI24?.startsWith('Súper') ? '#8A6D00' : p.avisoI24?.startsWith('Destacado') ? SEA : BLK }}>{p.avisoI24 ?? '—'}</td>}
+                                    <td style={{ ...td, color: GRY }}>{p.colonia}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{money(p.precio)}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
                                     <td style={{ ...td, textAlign: 'right' }}>{vsCell(p.vsCierres)}</td>
@@ -502,7 +509,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
 }
 
 // `verMarketing` lo decide el servidor (page.tsx): hoy sólo el equipo interno (lib/marketingAcceso.ts).
-export default function MBApp({ d, verMarketing = false }: { d: MBData; verMarketing?: boolean }) {
+export default function MBApp({ d, verMarketing = false, interno = false }: { d: MBData; verMarketing?: boolean; interno?: boolean }) {
     const [orto, setOrto] = useState<Record<string, ErrorOrto[]>>({});
     useEffect(() => {
         if (d.companyId === 'demo') return;
@@ -602,7 +609,7 @@ export default function MBApp({ d, verMarketing = false }: { d: MBData; verMarke
                     <span style={{ fontSize: 13.5, fontWeight: 600 }}>{SECTION_LABEL[section]}</span>
                 </button>
                 <div className={`mb-nav${menuAbierto ? ' abierto' : ''}`}>
-                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{conDesempeno(d.companyId) && nav('desempeno', 'Desempeño')}{conBusquedas(d.companyId) && nav('busquedas', 'Búsquedas')}{verMarketing && nav('marketing', 'Marketing · interno')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{conDesempeno(d.companyId) && nav('desempeno', 'Desempeño')}{conBusquedas(d.companyId) && nav('busquedas', 'Búsquedas')}{verMarketing && nav('marketing', 'Marketing')}{verMarketing && nav('consultas', 'Consultas')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 </div>
                 <div className="mb-side-pie" style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
@@ -975,15 +982,29 @@ export default function MBApp({ d, verMarketing = false }: { d: MBData; verMarke
 
                 {section === 'marketing' && verMarketing && (
                     <div>
-                        <div style={eyebrow}>Marketing · sólo equipo Pulppo</div><div style={accent} />
+                        <div style={eyebrow}>Marketing</div><div style={accent} />
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
-                            ¿Cómo está asignada tu exposición y qué está rindiendo?
+                            ¿Qué tienes publicado, dónde y qué está rindiendo?
                         </div>
                         <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 700 }}>
-                            Niveles de anuncio en Inmuebles24 y MercadoLibre, qué cambió esta semana, qué propiedades
-                            están jalando y cuáles necesitan ayuda. En vivo, contra la semana anterior.
+                            Qué se muestra en cada portal y en qué nivel, lo que no se está mostrando y qué hacer, y cómo
+                            rinde cada nivel. En vivo.
                         </div>
-                        <MBMarketing companyId={d.companyId} />
+                        <MBMarketing companyId={d.companyId} interno={interno} />
+                    </div>
+                )}
+
+                {section === 'consultas' && verMarketing && (
+                    <div>
+                        <div style={eyebrow}>Consultas</div><div style={accent} />
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
+                            ¿Quién te está escribiendo y cómo se le está atendiendo?
+                        </div>
+                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 6, maxWidth: 720 }}>
+                            Cada lead con su canal, su asesor, si se abrió, si hubo conversación y en qué va. Los filtros de
+                            arriba filtran todo: indicadores, gráficas, tablas y la lista.
+                        </div>
+                        <MBConsultas companyId={d.companyId} />
                     </div>
                 )}
 

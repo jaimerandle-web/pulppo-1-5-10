@@ -192,7 +192,7 @@ const errorTxt = (e: unknown): string | null => {
     try { const j = JSON.parse(t); t = s(dig(j, 'error')) || s(dig(j, 'message')) || t; } catch { /* no es JSON */ }
     return t.length > 180 ? `${t.slice(0, 180)}…` : t;
 };
-const ESTATUS_PORTAL: Record<string, string> = { online: 'En línea', offline: 'Fuera de línea', pending: 'Pendiente', error: 'Con error', paused: 'Pausado', closed: 'Cerrado', active: 'En línea', inactive: 'Fuera de línea' };
+const ESTATUS_PORTAL: Record<string, string> = { published: 'En línea', online: 'En línea', offline: 'Fuera de línea', pending: 'Pendiente', error: 'Con error', paused: 'Pausado', closed: 'Cerrado', active: 'En línea', inactive: 'Fuera de línea' };
 const estatusPortal = (x: unknown) => { const v = s(x); return v ? ESTATUS_PORTAL[v.toLowerCase()] ?? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : null; };
 
 export async function expediente(idRaw: string): Promise<Expediente | null> {
@@ -226,7 +226,11 @@ export async function expediente(idRaw: string): Promise<Expediente | null> {
     const pc = pt.propiedadesDotCom;
     if (pc && (pc.id || pc.status)) portales.push({ portal: 'Propiedades.com', id: s(pc.id) || null, estatus: estatusPortal(pc.status), nivel: null, costoMes: null, url: s(pc.url) || null, error: errorTxt(pc.lastError) ?? errorTxt(pc.error), nota: null });
     const eb = pt.easybroker;
-    if (eb && (eb.id || eb.status)) portales.push({ portal: 'EasyBroker', id: s(eb.id) || null, estatus: estatusPortal(eb.status), nivel: null, costoMes: null, url: s(eb.url) && s(eb.url) !== 'None' ? s(eb.url) : null, error: errorTxt(eb.lastError), nota: pt.companyEasybroker?.id ? `Cuenta de la inmobiliaria: ${s(pt.companyEasybroker.id)}` : null });
+    // Dos EasyBroker: la cuenta PROPIA de la inmobiliaria (`companyEasybroker`, la que ellos ven) y el envío de
+    // Pulppo (`easybroker`, hoy desactivado: «Make a payment»).
+    const ceb = pt.companyEasybroker;
+    if (ceb && (ceb.id || ceb.status)) portales.push({ portal: 'EasyBroker · cuenta de la inmobiliaria', id: s(ceb.id) || null, estatus: estatusPortal(ceb.status), nivel: null, costoMes: null, url: s(ceb.url) && s(ceb.url) !== 'None' ? s(ceb.url) : null, error: errorTxt(ceb.lastError), nota: null });
+    if (eb && (eb.id || eb.status)) portales.push({ portal: 'EasyBroker · envío de Pulppo', id: s(eb.id) || null, estatus: estatusPortal(eb.status), nivel: null, costoMes: null, url: s(eb.url) && s(eb.url) !== 'None' ? s(eb.url) : null, error: errorTxt(eb.lastError), nota: null });
     const cyt = pt['casas-y-terrenos'];
     if (cyt && (cyt.id || cyt.status)) portales.push({ portal: 'Casas y Terrenos', id: s(cyt.id) || null, estatus: estatusPortal(cyt.status), nivel: null, costoMes: null, url: s(cyt.url) || null, error: errorTxt(cyt.lastError) ?? errorTxt(cyt.error), nota: null });
     // Lamudi, Trovit y los feeds (iCasas, Mitula, Nuroa, Nestoria) NO se muestran: la presencia se canceló hace

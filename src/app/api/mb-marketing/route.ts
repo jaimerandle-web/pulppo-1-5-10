@@ -2,7 +2,7 @@
 //
 //   GET /api/mb-marketing?company=<id>
 //
-// 🔴 SÓLO equipo interno de Pulppo. El middleware deja pasar /api/mb-* a los master brokers (cada
+// Visible para la inmobiliaria desde el 20-oct-2026 (marketingAcceso.ts). El middleware deja pasar /api/mb-* a los master brokers (cada
 // ruta valida su inmobiliaria), así que AQUÍ se exige `internal`: un master de la cuenta —o alguien con
 // acceso concedido en masterExtra.ts, como Miriam Cojab o informacion.dh de Diamond House— recibe 403
 // aunque pida su propia inmobiliaria. Se abrirá a la inmobiliaria cuando Ale lo decida
@@ -26,12 +26,12 @@ export async function GET(req: NextRequest) {
     if (!puedeVerMarketing(user, company)) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
     // cuando se abra a la inmobiliaria, un externo sólo puede pedir la suya
     if (!user!.internal && !(await canAccessCompany(company))) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
-    const hit = cache.get(company + ':v6');
+    const hit = cache.get(company + ':v8');
     if (hit && req.nextUrl.searchParams.get('refresh') !== '1' && Date.now() - hit.t < CACHE_MS)
         return NextResponse.json(hit.d, { headers: { 'Cache-Control': 'private, no-store' } });
     try {
         const d = await marketingDe(company);
-        cache.set(company + ':v6', { t: Date.now(), d });
+        cache.set(company + ':v8', { t: Date.now(), d });
         return NextResponse.json(d, { headers: { 'Cache-Control': 'private, no-store' } });
     } catch (e) {
         console.error('[mb-marketing]', e);

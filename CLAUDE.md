@@ -353,7 +353,23 @@ el PDF imprime las dos con las listas abiertas.
 - Validado contra el Python de Lau (Andina, sep-2026 y ene–oct 2026): leads, visitas, funnel,
   cierres, comisión y días por etapa IGUALES; sólo cambian etiquetas de fuente («Contacto directo»).
 
-## /mb → Marketing (Diamond House, SÓLO equipo interno)
+## /mb → Marketing y Consultas (Diamond House; ABIERTAS a la inmobiliaria el 20-oct-2026)
+
+**Marketing** = transparencia: qué está publicado en cada portal y en qué nivel (i24, MeLi, propiedades.com, Casas y
+Terrenos y EasyBroker), «Lo que no se está mostrando y qué hacer» (motivo del portal + quién lo corrige), «Tus
+anuncios» (una fila por propiedad con su estado en cada portal), cambios de nivel, L/L y cierres. Lo de Pulppo
+(estrellas, exposición vs calidad, rotación, trabadas, proporción ZD, fijados) sólo con `interno` (prop desde page.tsx).
+🔴 EasyBroker: hay DOS. `portals.companyEasybroker` = la cuenta PROPIA de la inmobiliaria (DH 290 publicadas, es lo que
+ellos ven); `portals.easybroker` = el envío de Pulppo a EasyBroker, hoy desactivado («Make a payment»). En la UI va la
+de la inmobiliaria; el expediente muestra las dos.
+**Consultas** (`src/lib/consultas.ts` + `/api/mb-consultas?company&desde&hasta` + `MBConsultas.tsx`): reemplaza el
+Retool «Reporte de consultas y propiedades». Trae leads del periodo + periodo anterior (mismos filtros) y TODO se
+filtra en el cliente (canal, venta/renta, asesor, medio, búsqueda): indicadores, leads por día, por canal, embudo
+(etapa de la búsqueda + motivo de descarte, visitó/ofertó), por asesor, por propiedad y la lista con nombre,
+teléfono y correo. Dos medidas de respuesta: «abierto por el asesor» (answeredAt = lo que el Retool llama
+respondido) y «con conversación visible». Propiedades (sólo DH) suma la columna «Aviso i24» (`MBProp.avisoI24`).
+
+### (historia) /mb → Marketing (Diamond House, antes SÓLO equipo interno)
 
 `src/lib/marketingDh.ts` + `/api/mb-marketing` + `MBMarketing.tsx`. Visibilidad en `src/lib/marketingAcceso.ts`
 (`MARKETING_VISIBLE_PARA = 'internos'`; la API responde 403 a masters y a masterExtra como Miriam; el preview de

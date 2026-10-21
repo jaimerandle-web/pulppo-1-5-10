@@ -74,6 +74,9 @@ const pct = (a: number, b: number) => (b ? Math.round((1000 * a) / b) / 10 : nul
 export interface AvisoMk {
     id: string; codigo: string; tipo: string | null; operacion: string; colonia: string | null; calle: string | null; asesor: string;
     precio: number | null; nivel: string; meli: string; diasPublicada: number | null;
+    /** estado del aviso en cada portal: «En línea» · «Fuera de línea» · «Sin aviso» */
+    /** eb = la cuenta de EasyBroker DE LA INMOBILIARIA (`portals.companyEasybroker`), no el envío de Pulppo */
+    estado: { i24: string; meli: string; pcom: string; cyt: string; eb: string };
     fijado: boolean; fijadoPor: string | null; fijadoEl: string | null;
     /** desde cuándo está en su nivel actual (inicio de la racha en el historial), días y leads únicos desde entonces */
     enNivelDesde: string | null; diasEnNivel: number | null; leadsEnNivel: number;
@@ -98,8 +101,13 @@ export interface CierreMk {
      *  cuándo se creó la oferta y `comision` es la esperada. */
     fuente: string; comision: number; estatus: 'Cerrada' | 'Cobrando' | 'Contrato' | 'Oferta aceptada' | 'Oferta'; lado: string; asesor: string;
 }
-/** por qué un aviso está Offline en i24 (Joshua: «¿Offline qué es?») */
-export interface OfflineMk { codigo: string; motivo: string; desde: string | null; nivelAntes: string | null }
+/** un aviso que hoy NO se muestra en un portal, por qué y qué hacer (Joshua: «¿Offline qué es?») */
+export interface OfflineMk {
+    codigo: string; portal: string; motivo: string; accion: string;
+    /** quién lo corrige: la inmobiliaria (precio, colonia, fotos) o Pulppo (cupo, integración) */
+    quien: 'Inmobiliaria' | 'Pulppo';
+    desde: string | null; nivelAntes: string | null;
+}
 /** L/L (leads sobre listing) por nivel de i24 y por día: avisos vivos en ese nivel ese día y leads de i24 que
  *  llegaron con el aviso en ese nivel. La UI suma la ventana que elija: L/L = leads ÷ (aviso-días ÷ días). */
 export interface SerieLL { nivel: string; op: 'Venta' | 'Renta'; avisoDias: number[]; leads: number[] }
@@ -173,7 +181,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
 
     const props = await db.collection('properties').find({ 'company._id': cid, 'status.last': 'published' }, { projection: {
         internalId: 1, type: 1, 'listing.operation': 1, 'listing.value': 1, 'address.neighborhood.name': 1, 'address.street': 1, 'address.city.name': 1, publishedAt: 1,
-        'agent.firstName': 1, 'agent.lastName': 1, 'portals.inmuebles24': 1, 'portals.mercadolibre.type': 1,
+        'agent.firstName': 1, 'agent.lastName': 1, 'portals.inmuebles24': 1, 'portals.mercadolibre': 1, 'portals.propiedadesDotCom': 1, 'portals.casas-y-terrenos': 1, 'portals.companyEasybroker': 1,
     } }).toArray();
     const ids = props.map((p) => p._id);
     const idSet = new Set(ids.map(String));
@@ -286,6 +294,11 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
             leadsSem: cuenta(L, L0, fin), leadsSemAnt: cuenta(L, Lm1, L0), leads30: cuenta(L, D30, fin), leads90: cuenta(L, D90, fin),
             visitasSem: cuenta(V, L0, fin), visitasSemAnt: cuenta(V, Lm1, L0), visitas30: cuenta(V, D30, fin), visitas90: cuenta(V, D90, fin),
             i24: embudo('i24'), meliE: embudo('meli'),
+            estado: {
+                i24: estadoPortal(dig(p, 'portals', 'inmuebles24')), meli: estadoPortal(dig(p, 'portals', 'mercadolibre')),
+                pcom: estadoPortal(dig(p, 'portals', 'propiedadesDotCom')), cyt: estadoPortal(dig(p, 'portals', 'casas-y-terrenos')),
+                eb: estadoPortal(dig(p, 'portals', 'companyEasybroker')),
+            },
             ofertas: ofertas.get(pid) ?? 0,
             vistasI24: num(dig(perf, 'views', 'listing')), vistasMercadoI24: num(dig(perf, 'views', 'market')) != null ? Math.round(num(dig(perf, 'views', 'market'))!) : null,
             puntos: sc?.puntos ?? null, compite: !!sc?.compite, tags: sc?.tags ?? [], falta: sc?.falta ?? '',
@@ -356,22 +369,44 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     // en curso (para el filtro de estatus): ofertas, aceptadas y contratos creados en el año
     lista.push(...await enCursoDe(db, idsInmo, inicioAnio).catch((e) => { console.error('[marketing] en curso', e); return [] as CierreMk[]; }));
 
-    // Offline: por qué. Sin código de aviso = nunca llegó a i24; EXCLUDED_BY_RULE = i24 lo sacó (p. ej. duplicado);
-    // si no, desde cuándo y en qué nivel estaba antes.
-    const offline: OfflineMk[] = props.filter((p) => nivelDe(dig(p, 'portals', 'inmuebles24', 'type')) === 'Offline').map((p) => {
+    // Lo que no se muestra en cada portal, por qué y qué hacer. i24: sin código de aviso = nunca llegó;
+    // EXCLUDED_BY_RULE = i24 lo sacó (p. ej. duplicado); si no, desde cuándo y en qué nivel estaba. MeLi,
+    // propiedades.com, Casas y Terrenos y EasyBroker: el error que devolvió el portal. 🔴 EasyBroker = la cuenta
+    // PROPIA de la inmobiliaria (`portals.companyEasybroker`: DH 290 publicadas). `portals.easybroker` es el
+    // envío de Pulppo a EasyBroker, que hoy está desactivado («Make a payment») — no es lo que la inmobiliaria ve.
+    const offline: OfflineMk[] = [];
+    for (const p of props) {
+        const codigo = String(p.internalId ?? p._id);
         const i24 = (dig(p, 'portals', 'inmuebles24') as Document) ?? {};
-        const hist = ((i24.history as Document[]) ?? []).map((e) => ({ t: fechaHist(e), tipo: String(e.type ?? '').toUpperCase() }))
-            .filter((h): h is { t: Date; tipo: string } => !!h.t).sort((a, b) => a.t.getTime() - b.t.getTime());
-        let desde: Date | null = null;
-        for (let k = hist.length - 1; k >= 0 && hist[k].tipo === 'OFFLINE'; k--) desde = hist[k].t;
-        const antes = [...hist].reverse().find((h) => h.tipo && h.tipo !== 'OFFLINE');
-        const err = (i24.lastError as Document) ?? null;
-        const motivo = !i24.id ? 'Nunca se publicó en Inmuebles24: no tiene código de aviso.'
-            : err?.code === 'EXCLUDED_BY_RULE' ? String(err.message ?? 'Inmuebles24 lo excluyó por una regla.')
-            : err?.message ? `Inmuebles24 respondió con error: ${String(err.message)}`
-            : 'Inmuebles24 lo tiene fuera de línea sin un error registrado: revisar con portales.';
-        return { codigo: String(p.internalId ?? p._id), motivo, desde: desde ? ymd(desde) : null, nivelAntes: antes ? nivelDe(antes.tipo) : null };
-    }).sort((a, b) => (a.desde ?? '9').localeCompare(b.desde ?? '9'));
+        if (nivelDe(i24.type) === 'Offline') {
+            const hist = ((i24.history as Document[]) ?? []).map((e) => ({ t: fechaHist(e), tipo: String(e.type ?? '').toUpperCase() }))
+                .filter((h): h is { t: Date; tipo: string } => !!h.t).sort((a, b) => a.t.getTime() - b.t.getTime());
+            let desde: Date | null = null;
+            for (let k = hist.length - 1; k >= 0 && hist[k].tipo === 'OFFLINE'; k--) desde = hist[k].t;
+            const antes = [...hist].reverse().find((h) => h.tipo && h.tipo !== 'OFFLINE');
+            const err = (i24.lastError as Document) ?? null;
+            const dup = err?.code === 'EXCLUDED_BY_RULE' && /duplicad/i.test(String(err.message ?? ''));
+            offline.push({ codigo, portal: 'Inmuebles24', desde: desde ? ymd(desde) : null, nivelAntes: antes ? nivelDe(antes.tipo) : null,
+                ...(!i24.id ? { motivo: 'Nunca se publicó: no tiene código de aviso en Inmuebles24.', accion: 'Pulppo revisa por qué no se envió.', quien: 'Pulppo' as const }
+                    : dup ? { motivo: String(err!.message), accion: 'Dar de baja el aviso duplicado de la misma propiedad; al quedar uno solo se vuelve a publicar.', quien: 'Inmobiliaria' as const }
+                    : err?.message ? { motivo: `Inmuebles24: ${String(err.message)}`, accion: 'Pulppo lo revisa con Inmuebles24.', quien: 'Pulppo' as const }
+                    : { motivo: 'Fuera de línea sin un error registrado.', accion: 'Pulppo lo revisa con Inmuebles24.', quien: 'Pulppo' as const }) });
+        }
+        for (const [portal, k] of [['MercadoLibre', 'mercadolibre'], ['Propiedades.com', 'propiedadesDotCom'], ['Casas y Terrenos', 'casas-y-terrenos'], ['EasyBroker', 'companyEasybroker']] as const) {
+            const x = (dig(p, 'portals', k) as Document) ?? null;
+            if (estadoPortal(x) === 'En línea') continue;
+            const err = (x?.lastError ?? x?.error) as Document | string | null | undefined;
+            const code = typeof err === 'object' && err ? String(err.code ?? '') : '';
+            const msg = typeof err === 'object' && err ? String(err.message ?? '') : typeof err === 'string' ? err : '';
+            const fx = (motivo: string, accion: string, quien: 'Inmobiliaria' | 'Pulppo') => offline.push({ codigo, portal, motivo, accion, quien, desde: null, nivelAntes: null });
+            if (!x || estadoPortal(x) === 'Sin aviso') fx(`No se ha enviado a ${portal}.`, 'Pulppo revisa por qué no se envió.', 'Pulppo');
+            else if (code === 'PRICE_BELOW_CATEGORY_MINIMUM') fx(msg, 'Revisar el precio y la operación (venta / renta) capturados en Pulppo.', 'Inmobiliaria');
+            else if (code === 'NO_LOCATION_MAPPING') fx(msg, 'Corregir la colonia de la propiedad en Pulppo.', 'Inmobiliaria');
+            else if (/quota/i.test(msg)) fx('Sin cupo disponible en el portal.', 'Pulppo decide qué avisos usan el cupo.', 'Pulppo');
+            else fx(msg ? `${portal}: ${msg}` : 'Fuera de línea sin un error registrado.', 'Pulppo lo revisa con el portal.', 'Pulppo');
+        }
+    }
+    offline.sort((a, b) => a.portal.localeCompare(b.portal) || a.quien.localeCompare(b.quien) || (a.desde ?? '9').localeCompare(b.desde ?? '9'));
 
     return {
         inmobiliaria: nombre, companyId, generado: ahora.toISOString(),
@@ -583,4 +618,14 @@ async function enCursoDe(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[
             asesor: [vende ? nom(o, 'seller') : '', compra ? nom(o, 'buyer') : ''].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' / ') || '—',
         };
     });
+}
+
+/** «En línea» · «Fuera de línea» · «Sin aviso» del bloque de un portal en `properties.portals` */
+function estadoPortal(x: unknown): string {
+    if (!x || typeof x !== 'object') return 'Sin aviso';
+    const d = x as Document;
+    const st = String(d.status ?? '').toUpperCase(), tipo = String(d.type ?? '').toUpperCase();
+    if (!d.id && !d.code && !st) return 'Sin aviso';
+    if ((st === 'ONLINE' || st === 'PUBLISHED') && tipo !== 'OFFLINE') return 'En línea';
+    return 'Fuera de línea';
 }

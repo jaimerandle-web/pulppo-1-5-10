@@ -19,7 +19,8 @@ export default async function MBPage({ params }: { params: Promise<{ companyId: 
     if (companyId === 'demo') return <MBApp d={demoData()} />;
     const d = await fetchInmobiliaria(companyId);
     if (!d) notFound();
-    // Marketing: sólo equipo interno (ver lib/marketingAcceso.ts); la API vuelve a validarlo
-    const verMarketing = MARKETING_EMPRESAS.has(companyId) && puedeVerMarketing(await currentUser(), companyId);
-    return <MBApp d={d} verMarketing={verMarketing} />;
+    // Marketing y Consultas (ver lib/marketingAcceso.ts); la API vuelve a validarlo. `interno` muestra lo de Pulppo.
+    const user = await currentUser();
+    const verMarketing = MARKETING_EMPRESAS.has(companyId) && puedeVerMarketing(user, companyId);
+    return <MBApp d={d} verMarketing={verMarketing} interno={!!user?.internal} />;
 }
