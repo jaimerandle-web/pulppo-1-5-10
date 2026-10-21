@@ -256,10 +256,20 @@ function Comercial({ d, op, conAsesor }: { d: DesempenoMb; op: OpF; conAsesor: b
     const ofertas = ops.reduce((s, o) => s + d.ofertasActivas[o], 0);
 
     // mapa de calor: leads únicos por asesor y mes
-    const filasAsesor = d.porAsesor.map((a) => ({
-        nombre: a.nombre, activo: a.activo,
+    // Los asesores ACTIVOS salen aunque tengan 0 leads (Ale, oct-2026: «hay que darnos cuenta si alguien tiene 0
+    // leads» — Blanca Luna, de Degohouse, desaparecía de la tabla porque los leads de sus propiedades se los
+    // asignaban a otros). Los inactivos sólo si tienen leads en el periodo.
+    const conLeads = d.porAsesor.map((a) => ({
+        id: a.id, nombre: a.nombre, activo: a.activo,
         meses: d.meses.map((m) => ops.reduce((s, o) => s + (a.meses[m.mes]?.[o] ?? 0), 0)),
-    })).map((a) => ({ ...a, total: a.meses.reduce((s, x) => s + x, 0) })).filter((a) => a.total > 0).sort((x, y) => y.total - x.total);
+    })).map((a) => ({ ...a, total: a.meses.reduce((s, x) => s + x, 0) }));
+    const yaEstan = new Set(conLeads.filter((a) => a.total > 0).map((a) => a.id));
+    const filasAsesor = [
+        ...conLeads.filter((a) => a.total > 0).sort((x, y) => y.total - x.total),
+        ...d.asesores.filter((a) => a.activo && !yaEstan.has(a.id))
+            .map((a) => ({ id: a.id, nombre: a.nombre, activo: true, meses: d.meses.map(() => 0), total: 0 }))
+            .sort((x, y) => x.nombre.localeCompare(y.nombre, 'es')),
+    ];
     const maxCelda = Math.max(1, ...filasAsesor.flatMap((a) => a.meses));
     const [abiertas, setAbiertas] = useState<Record<string, boolean>>({});
 
@@ -289,15 +299,15 @@ function Comercial({ d, op, conAsesor }: { d: DesempenoMb; op: OpF; conAsesor: b
             {d.sinOperacion.leads > 0 && <div style={sub}>Además hay {f0(d.sinOperacion.leads)} leads de propiedades sin operación definida; no se incluyen arriba.</div>}
         </Seccion>
 
-        {conAsesor && <Seccion titulo="Leads únicos por asesor y mes" nota="Dónde está el volumen. El color más intenso es el mes con más leads de toda la tabla.">
+        {conAsesor && <Seccion titulo="Leads únicos por asesor y mes" nota="Dónde está el volumen. El color más intenso es el mes con más leads de toda la tabla. Los asesores activos sin ningún lead asignado en el periodo salen al final, en rojo.">
             <Tabla min={520}>
                 <thead><tr><th style={th}>Asesor</th>{d.meses.map((m) => <th key={m.mes} style={thN}>{MESL[Number(m.mes.slice(5, 7)) - 1].slice(0, 3)}</th>)}<th style={thN}>Total</th></tr></thead>
                 <tbody>
                     {filasAsesor.map((a) => (
-                        <tr key={a.nombre}>
-                            <td style={{ ...td, whiteSpace: 'nowrap', color: a.activo ? BLK : '#777' }}>{a.nombre}{!a.activo && <span style={{ marginLeft: 6 }}><Tag t="inactivo" /></span>}</td>
+                        <tr key={a.id}>
+                            <td style={{ ...td, whiteSpace: 'nowrap', color: a.activo ? BLK : '#777' }}>{a.nombre}{!a.activo && <span style={{ marginLeft: 6 }}><Tag t="inactivo" /></span>}{!a.total && <span style={{ marginLeft: 6, fontSize: 10.5, color: RED, fontWeight: 700 }}>sin leads asignados</span>}</td>
                             {a.meses.map((v, i) => <td key={i} style={{ ...tdN, background: v ? `rgba(246,190,0,${(v / maxCelda) * .55})` : undefined }}>{v || ''}</td>)}
-                            <td style={{ ...tdN, fontWeight: 700 }}>{f0(a.total)}</td>
+                            <td style={{ ...tdN, fontWeight: 700, color: a.total ? BLK : RED }}>{f0(a.total)}</td>
                         </tr>
                     ))}
                 </tbody>
