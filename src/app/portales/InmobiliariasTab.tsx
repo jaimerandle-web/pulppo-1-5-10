@@ -679,7 +679,8 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                         items={[`${x.fuente}${x.inmo ? ` · ${x.inmo}` : ''}: ${f0(x.n)} leads — ${x.senales.join(' · ')}`]}
                         detalle={() => <DetalleSpam x={x} />} />
                 );
-                const top = A.fuentes.slice(0, 8);
+                // los 8 canales con más leads, y siempre las cuentas propias de i24 (NURA, Premier de Diamond House)
+                const top = [...A.fuentes.slice(0, 8), ...A.fuentes.slice(8).filter((x) => x.key === 'f:i24nura' || x.key === 'f:i24premier')];
                 return (<>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
                         <Kpi label="Leads" info={DEF.leads} value={f0(T.leads)} sub={`${f0(T.unicos)} personas`} delta={<Delta a={T.leads} b={CT?.leads} />} />
@@ -719,17 +720,26 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                     {A.porDia && <Seccion titulo="Leads por fuente en el tiempo" sub="Cuántos leads entraron de cada fuente y qué parte del total fueron. En vista diaria, los puntos rojos son los días marcados en «Para atender».">
                         <LeadsPorDia A={A} senales={flags} hoy={iso(hoy)} />
                     </Seccion>}
-                    <Seccion titulo="Por canal" sub={<>Lo esencial de cada canal. El detalle está en las otras secciones del menú.</>}>
-                        <Tabla head={['Canal', 'Leads', '% visita', 'Cierres', 'Regalía', 'ROI']} min={600}>
+                    <Seccion titulo="Por canal" sub={<>Lo esencial de cada canal. El detalle está en las otras secciones del menú.</>}
+                        info={<><b>L/L</b> (leads sobre listing) = leads del periodo ÷ avisos vivos en promedio, llevado a 30 días para comparar periodos de distinto largo. En Inmuebles24 los avisos salen del historial día por día; en MercadoLibre, propiedades.com y Casas y Terrenos no hay historial y se usa la foto de hoy (marcado con *). <b>CPL</b> = inversión ÷ leads. <b>CPV</b> = inversión ÷ visitas de esos leads.</>}>
+                        <Tabla head={['Canal', 'Leads', 'L/L', '% visita', 'CPL', 'CPV', 'Cierres', 'Regalía', 'ROI']} min={820}>
                             {top.map((f) => {
                                 const fi = filasInv.find((x) => x.k === f.key.slice(2));
                                 const c = buscar(C?.fuentes, f.key);
                                 const ok = !sinCostoReal && !periodoParcial && !faltaInv;
+                                const avC = A.avisos?.canal[f.key.slice(2)];
+                                const ll = avC && avC.avisos >= 1 && A.avisos ? (f.leads / avC.avisos) * (30 / A.avisos.dias) : null;
+                                const avP = C?.avisos?.canal[f.key.slice(2)];
+                                const llC = c && avP && avP.avisos >= 1 && C?.avisos ? (c.leads / avP.avisos) * (30 / C.avisos.dias) : null;
+                                const inv = typeof fi?.inv === 'number' && fi.inv > 0 ? fi.inv : null;
                                 return (
                                     <tr key={f.key}>
                                         <td style={td0}>{f.nombre}</td>
                                         <td style={td}>{f0(f.leads)}{c && <div style={{ fontSize: 10 }}><Delta a={f.leads} b={c.leads} /></div>}</td>
+                                        <td style={td} title={avC ? `${f0(Math.round(avC.avisos))} avisos ${avC.hoy ? 'hoy' : 'vivos en promedio'}` : undefined}>{ll != null ? <>{ll.toFixed(2)}{avC?.hoy ? '*' : ''}</> : '—'}{ll != null && llC != null && <div style={{ fontSize: 10 }}><Delta a={Math.round(ll * 100)} b={Math.round(llC * 100)} /></div>}</td>
                                         <td style={td}>{pc(f.pVisita)}{c && <div style={{ fontSize: 10 }}><Delta a={f.pVisita} b={c.pVisita} pts /></div>}</td>
+                                        <td style={td}>{ok && inv && f.leads ? money(inv / f.leads) : '—'}</td>
+                                        <td style={td}>{ok && inv && f.visitas ? money(inv / f.visitas) : '—'}</td>
                                         <td style={td}>{f0(fi?.cierres ?? 0)}</td>
                                         <td style={td}>{money(fi?.regalia ?? 0)}</td>
                                         <td style={{ ...td, fontWeight: 700, color: ok && fi?.roi != null ? (fi.roi >= 1 ? SEA : RED) : GRY }}>{ok && fi?.roi != null ? `${fi.roi.toFixed(2)}×` : '—'}</td>
@@ -738,6 +748,30 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                             })}
                         </Tabla>
                     </Seccion>
+                    {A.avisos && A.avisos.tipos.length > 0 && <Seccion titulo="L/L por tipo de aviso" sub="Leads sobre listing de cada tipo de aviso, para seguir qué nivel rinde."
+                        info={<>Cada lead cuenta en el tipo que tenía su aviso <b>cuando llegó</b> (Inmuebles24 lo manda en el lead). Avisos = los que estuvieron vivos en ese tipo durante el periodo, en promedio por día (Inmuebles24, desde el historial); MercadoLibre no guarda historial y va con la foto de hoy (*). L/L llevado a 30 días. <b>Costo</b> = precio de lista por aviso al mes × avisos; la cuenta Premier todavía no tiene precio cargado. <b>CPL</b> = ese costo ÷ leads.</>}>
+                        <Tabla head={['Portal', 'Tipo de aviso', 'Avisos', 'Leads', 'L/L', 'Costo del periodo', 'CPL']} min={720}>
+                            {A.avisos.tipos.map((x) => {
+                                const d = A.avisos!.dias;
+                                const ll = x.avisos >= 1 ? (x.leads / x.avisos) * (30 / d) : null;
+                                const cx = C?.avisos?.tipos.find((y) => y.portal === x.portal && y.tipo === x.tipo);
+                                const llC = cx && cx.avisos >= 1 && C?.avisos ? (cx.leads / cx.avisos) * (30 / C.avisos.dias) : null;
+                                const costo = x.costoMes != null ? x.costoMes * x.avisos * (d / 30) : null;
+                                return (
+                                    <tr key={`${x.portal}|${x.tipo}`}>
+                                        <td style={td0}>{x.portal}</td>
+                                        <td style={{ ...td0, fontWeight: 700 }}>{x.tipo}</td>
+                                        <td style={td}>{f0(Math.round(x.avisos))}{x.hoy ? '*' : ''}</td>
+                                        <td style={td}>{f0(x.leads)}</td>
+                                        <td style={{ ...td, fontWeight: 700 }}>{ll != null ? ll.toFixed(2) : '—'}{ll != null && llC != null && <div style={{ fontSize: 10, fontWeight: 400 }}><Delta a={Math.round(ll * 100)} b={Math.round(llC * 100)} /></div>}</td>
+                                        <td style={td}>{costo != null ? money(costo) : '—'}</td>
+                                        <td style={td}>{costo != null && x.leads ? money(costo / x.leads) : '—'}</td>
+                                    </tr>
+                                );
+                            })}
+                        </Tabla>
+                        <div style={{ fontSize: 11, color: GRY, marginTop: 6 }}>* MercadoLibre: avisos en línea hoy (no guarda historial). Con una inmobiliaria elegida o venta/renta, todo se filtra igual.</div>
+                    </Seccion>}
                 </>);
             })()}
 

@@ -500,3 +500,17 @@ nombre sin palabras genéricas o por asesor — «H&S Real Estate Polanco» = HS
 (`development.name` o 4+ copias). De la otra inmobiliaria de la red sólo se muestra el NOMBRE, nunca su
 contrato ni su comisión. Oct-2026: 70 exclusivas de 673 en la red; sólo 8 firmadas; HS 15 casos (marca el 41%
 de su inventario como exclusiva, 0 firmadas).
+
+## /portales → fuente «Inmuebles24 · Premier» y L/L (oct-2026)
+
+- **Premier**: cuenta de i24 `ANUNCIO_PREMIERE` (Diamond House, 130 súper destacados desde el 22-oct-2026). Cada lead
+  trae la cuenta del aviso EN EL MOMENTO del lead en `propertyPublishPortals.portals.inmuebles24.company`; `canalDeLead`
+  recibe esa cuenta (3er argumento, `cuentaI24DeLead`) y devuelve `i24premier`. Igual que NURA (`i24nura`), sale
+  siempre en «Por canal». Su inversión se lee del Sheet si hay una línea «I24 Premier» (alias en inversion.ts).
+  Los CIERRES de Premier todavía cuentan como Inmuebles24 (la fuente del cierre no trae la cuenta).
+- **L/L** (`src/lib/portales/avisosVivos.ts`, en `Bloque.avisos`): avisos vivos por día a mediodía MX desde
+  `portals.inmuebles24.history` + `status.history`, recortado EN MONGO ($convert/$filter/$reduce; leer el historial
+  completo de la red tarda ~70 s, así ~10 s). MeLi, propiedades.com y Casas y Terrenos no tienen historial: foto de
+  hoy (marcada *). Leads por tipo = `leads.campaign` (i24 manda su tipo; MeLi gold/gold_premium/silver). L/L se
+  lleva a 30 días. Resumen → «Por canal» suma L/L, CPL (inversión ÷ leads) y CPV (inversión ÷ visitas), y la
+  sección «L/L por tipo de aviso» con costo de lista (avisos × precio i24 al mes) y CPL por tipo.

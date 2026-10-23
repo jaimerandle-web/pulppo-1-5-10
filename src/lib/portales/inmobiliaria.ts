@@ -32,6 +32,7 @@ import { CANALES, KEY2NAME, NOT, NOTP, brokerContacts, classifySource, dig, isDa
 import { FAM_LBL, FAM_ORDEN, NO_ES_DESCARTE, etiquetaMotivo, familiaDe, motivoDe } from './descarte';
 import { ALIAS_IDS, ALIAS_INMO, ORDEN_INMOBILIARIAS, SIN_CUENTA, normInmo } from './ordenInmobiliarias';
 import type { Operacion } from './metrics';
+import { avisosDelPeriodo, tipoI24, TIPO_MELI, COSTO_TIPO, ORDEN_TIPOS, CUENTA_PREMIER } from './avisosVivos';
 
 const DIA = 86400000;
 const MX_MS = 6 * 3600 * 1000;
@@ -164,6 +165,12 @@ export interface Bloque {
     spamPub?: SpamPub[];
     /** sólo con `detalle`: por clave de fuente (`f:meli`, … y `total`) los asesores y las publicaciones */
     detalle?: Record<string, DetalleFuente>;
+    /** L/L: avisos vivos promedio en el periodo por canal (i24 con historial; MeLi, pcom, CyT foto de hoy) y por tipo */
+    avisos?: {
+        dias: number;
+        canal: Record<string, { avisos: number; hoy: boolean }>;
+        tipos: Array<{ portal: 'Inmuebles24' | 'MercadoLibre'; tipo: string; avisos: number; hoy: boolean; leads: number; costoMes: number | null }>;
+    };
 }
 export interface InmoView {
     filtro: FiltroInmo;
@@ -206,6 +213,8 @@ function telInvalido(p: unknown): boolean {
 
 /** NURA tiene contrato propio con i24 (la línea «I24 Mérida» del Sheet): se reporta aparte. */
 export const I24_NURA = 'Inmuebles24 · NURA';
+/** cuenta premier de i24 (ANUNCIO_PREMIERE): Diamond House, 130 súper destacados desde el 22-oct-2026 */
+export const I24_PREMIER = 'Inmuebles24 · Premier';
 const esNura = (name: unknown) => /\bnura\b/i.test(String(name ?? ''));
 
 const r1 = (x: number) => Math.round(x * 10) / 10;
@@ -302,6 +311,7 @@ async function bloque(
     const total = cel('total', 'Total', reqInmo);
     for (const [n, k] of CANALES) cel(`f:${k}`, n, reqInmo);
     cel('f:i24nura', I24_NURA, reqInmo);
+    cel('f:i24premier', I24_PREMIER, reqInmo);
     cel('f:otros', 'Otras fuentes', reqInmo);
 
     // leads → celdas; se guardan para los joins de después
@@ -309,6 +319,9 @@ async function bloque(
         canal: string; madru: boolean; mailDig: boolean; comp: string; compNombre: string; clic?: boolean; conv?: boolean; nuevo?: boolean;
         contacto: 'whatsapp' | 'telefono' | 'form' };
     const refs: LeadRef[] = [];
+    const leadsTipo = new Map<string, number>();
+    // avisos vivos del periodo (en paralelo con los leads)
+    const tareaAvisos = avisosDelPeriodo(A, B, { ids: idsInmo, operacion: f.operacion, esNura }).catch((e) => { console.error('[portales] avisos vivos', e); return null; });
     const nDias = Math.round((B.getTime() - A.getTime()) / DIA);
     const serie = new Map<string, { n: number[]; lab: number[]; sin: number[] }>();
     const filtro: Document = {
@@ -320,15 +333,24 @@ async function bloque(
     const cur = db.collection('leads').find(filtro, {
         projection: { source: 1, createdAt: 1, answeredAt: 1, 'contact._id': 1, 'property.listing.operation': 1,
             'company._id': 1, 'company.name': 1, 'agent._id': 1, 'agent.firstName': 1, 'agent.lastName': 1, interaction: 1, search: 1,
-            phone: 1, 'contact.phone': 1, email: 1, 'contact.email': 1, 'property._id': 1, medium: 1, message: 1 },
+            phone: 1, 'contact.phone': 1, email: 1, 'contact.email': 1, 'property._id': 1, medium: 1, message: 1,
+            campaign: 1, 'propertyPublishPortals.portals.inmuebles24.company': 1 },
         batchSize: 10000,
     });
     for await (const l of cur) {
         const ca = l.createdAt;
         if (!isDate(ca)) continue;
         // i24 de NURA va aparte: tiene su propio paquete con i24 («I24 Mérida» en el Sheet).
-        const canal = canalDeLead(l.source, dig(l, 'company', 'name'));
+        const canal = canalDeLead(l.source, dig(l, 'company', 'name'), cuentaI24DeLead(l));
         const mis: Celda[] = [total, cells.get(`f:${canal}`)!];
+        // L/L por tipo: el nivel del aviso cuando entró el lead (`campaign`: i24 manda su tipo, MeLi su nivel)
+        if (canal === 'i24' || canal === 'i24nura' || canal === 'i24premier') {
+            const tp = tipoI24(l.campaign, cuentaI24DeLead(l));
+            if (tp) leadsTipo.set(`Inmuebles24|${tp}`, (leadsTipo.get(`Inmuebles24|${tp}`) ?? 0) + 1);
+        } else if (canal === 'meli') {
+            const tp = TIPO_MELI[String(l.campaign ?? '').toLowerCase()];
+            if (tp) leadsTipo.set(`MercadoLibre|${tp}`, (leadsTipo.get(`MercadoLibre|${tp}`) ?? 0) + 1);
+        }
         const aid = dig(l, 'agent', '_id');
         const an = [dig(l, 'agent', 'firstName'), dig(l, 'agent', 'lastName')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
         const anom = aid ? an || '(sin nombre)' : 'Sin asesor asignado';
@@ -656,7 +678,7 @@ async function bloque(
             madrugada: c.madru, pctMadrugada: p1(c.madru, c.leads),
             mailDigitos: c.mailDig, pctMailDigitos: p1(c.mailDig, c.leads),
             contactoNuevo: c.nuevo, pctContactoNuevo: p1(c.nuevo, c.leads),
-            ...(top ? { topFuente: top[0] === 'i24nura' ? I24_NURA : KEY2NAME[top[0]] ?? 'Otras fuentes' } : {}),
+            ...(top ? { topFuente: nombreCanal(top[0]) } : {}),
         };
     };
     const celdas = [...cells.values()];
@@ -718,9 +740,27 @@ async function bloque(
             };
         }
     }
+    // L/L: avisos vivos promedio por canal y por tipo, con los leads de cada tipo
+    const av = await tareaAvisos;
+    const avisos: Bloque['avisos'] = av ? (() => {
+        const prom = (x: number) => Math.round((10 * x) / av.dias) / 10;
+        const canal: Record<string, { avisos: number; hoy: boolean }> = {};
+        for (const [k, n] of Object.entries(av.canalesI24)) canal[k] = { avisos: prom(n), hoy: false };
+        for (const [k, n] of Object.entries(av.hoy)) canal[k] = { avisos: n, hoy: true };
+        const tipos: NonNullable<Bloque['avisos']>['tipos'] = [];
+        for (const tp of ORDEN_TIPOS) {
+            const ad = av.tiposI24[tp] ?? 0, le = leadsTipo.get(`Inmuebles24|${tp}`) ?? 0;
+            if (ad || le) tipos.push({ portal: 'Inmuebles24', tipo: tp, avisos: prom(ad), hoy: false, leads: le, costoMes: COSTO_TIPO[tp] ?? null });
+        }
+        for (const tp of Object.values(TIPO_MELI)) {
+            const n = av.meliHoy[tp] ?? 0, le = leadsTipo.get(`MercadoLibre|${tp}`) ?? 0;
+            if (n || le) tipos.push({ portal: 'MercadoLibre', tipo: tp, avisos: n, hoy: true, leads: le, costoMes: null });
+        }
+        return { dias: av.dias, canal, tipos };
+    })() : undefined;
     const bIncl = new Date(B.getTime() - DIA);
     return {
-        pubs, pubN, ...(detalle ? { detalle } : {}),
+        pubs, pubN, ...(detalle ? { detalle } : {}), ...(avisos ? { avisos } : {}),
         desde: ymd(A), hasta: ymd(bIncl), etiqueta: etiquetaDe(A, bIncl), dias: Math.round((B.getTime() - A.getTime()) / DIA),
         total: fila(total), fuentes, asesores, inmobiliarias,
         descarte: {
@@ -761,12 +801,19 @@ async function bloque(
 
 /** Canal de un lead: el de su `source`, salvo el i24 de NURA, que va aparte (su propio paquete,
  *  «I24 Mérida» en el Sheet). Lo usan todas las pestañas de /portales. */
-export const canalDeLead = (source: unknown, companyName: unknown): string => {
+export const canalDeLead = (source: unknown, companyName: unknown, cuentaI24?: unknown): string => {
     const k = classifySource(source as string);
-    return k === 'i24' && esNura(companyName) ? 'i24nura' : k;
+    if (k !== 'i24') return k;
+    if (esNura(companyName)) return 'i24nura';
+    // cuenta premier de Diamond House: el lead trae la cuenta del aviso EN EL MOMENTO del lead
+    return String(cuentaI24 ?? '').toUpperCase() === CUENTA_PREMIER ? 'i24premier' : k;
 };
+/** cuenta de i24 del aviso cuando entró el lead (`propertyPublishPortals.portals.inmuebles24.company`) */
+export const cuentaI24DeLead = (l: Document) => dig(l, 'propertyPublishPortals', 'portals', 'inmuebles24', 'company');
+/** nombre visible de una clave de canal (con las de i24 aparte) */
+export const nombreCanal = (k: string) => (k === 'i24nura' ? I24_NURA : k === 'i24premier' ? I24_PREMIER : KEY2NAME[k] ?? 'Otras fuentes');
 /** Canales en el orden de las tablas, con NURA justo después de Inmuebles24. */
-export const CANALES_TODOS: Array<[string, string]> = CANALES.flatMap((c) => (c[1] === 'i24' ? [c, [I24_NURA, 'i24nura'] as [string, string]] : [c]));
+export const CANALES_TODOS: Array<[string, string]> = CANALES.flatMap((c) => (c[1] === 'i24' ? [c, [I24_NURA, 'i24nura'] as [string, string], [I24_PREMIER, 'i24premier'] as [string, string]] : [c]));
 
 /** Cierres de [A, B) con su fuente atribuida — el MISMO cálculo en «Inmobiliarias», el Resumen y el
  *  Histórico. `ids` = compañías de una inmobiliaria (ambos lados); null = toda la red. */

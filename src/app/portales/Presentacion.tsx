@@ -37,7 +37,7 @@ export const SECCIONES: Array<[SeccionP, string]> = [
 ];
 /** Canales con factura: los únicos que tiene sentido presentar (mismo criterio que SIN_COSTO). */
 export const PORTALES_PAGADOS: Array<[string, string]> = [
-    ['i24', 'Inmuebles24'], ['i24nura', 'Inmuebles24 · NURA'], ['meli', 'MercadoLibre'], ['easybroker', 'EasyBroker'],
+    ['i24', 'Inmuebles24'], ['i24nura', 'Inmuebles24 · NURA'], ['i24premier', 'Inmuebles24 · Premier'], ['meli', 'MercadoLibre'], ['easybroker', 'EasyBroker'],
     ['propiedades', 'Propiedades.com'], ['cyt', 'Casas y Terrenos'], ['facebook', 'Meta (FB/IG)'], ['doorvel', 'Doorvel'],
 ];
 

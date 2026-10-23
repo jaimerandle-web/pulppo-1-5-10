@@ -10,7 +10,7 @@
 // de cierres que dejaba ~40% en «otros» y no cuadraba con «Funnel y cierres».
 import { getDb } from '../data';
 import { MESES, NOT, hoyMx, isDate, mesKey, monthWindow, pct, utc } from './metrics';
-import { CANALES_TODOS, canalDeLead, cierresEntre, type Cierre } from './inmobiliaria';
+import { CANALES_TODOS, canalDeLead, cierresEntre, cuentaI24DeLead, type Cierre } from './inmobiliaria';
 
 export interface FilaYtd {
     canal: string;
@@ -59,14 +59,14 @@ export async function historicoView(opts: { months?: number; operacion?: 'todas'
     const hasta = new Date(utc(h.y, h.m, h.d).getTime() + 86400000);
     const cur = db.collection('leads').find(
         { createdAt: { $gte: desde, $lt: hasta }, ...NOT, ...(oper === 'todas' ? {} : { 'property.listing.operation': oper }) },
-        { projection: { source: 1, createdAt: 1, 'company.name': 1 } });
+        { projection: { source: 1, createdAt: 1, 'company.name': 1, 'propertyPublishPortals.portals.inmuebles24.company': 1 } });
     const tareaLeads = (async () => {
         for await (const l of cur) {
             const ca = l.createdAt;
             if (!isDate(ca)) continue;
             const i = idx.get(mesKey(ca));
             if (i === undefined) continue;
-            const k = canalDeLead(l.source, (l.company as { name?: unknown } | undefined)?.name);
+            const k = canalDeLead(l.source, (l.company as { name?: unknown } | undefined)?.name, cuentaI24DeLead(l));
             const arr = trend.get(k) ?? trend.set(k, Array(months).fill(0)).get(k)!;
             arr[i] += 1;
         }

@@ -95,7 +95,7 @@ export interface AnalisisConfig {
 // Pulppo, Doorvel, Sitio propio con su nombre). Lo que no cae en ningún canal sale como «Otros», que es
 // el nombre del chip del formulario de /analisis.
 const NOMBRE_CANAL = new Map(CANALES_TODOS.map(([n, k]) => [k, n]));
-const srcLabel = (s: unknown, empresa?: unknown): string => NOMBRE_CANAL.get(canalDeLead(s, empresa)) ?? 'Otros';
+const srcLabel = (s: unknown, empresa?: unknown, cuentaI24?: unknown): string => NOMBRE_CANAL.get(canalDeLead(s, empresa, cuentaI24)) ?? 'Otros';
 
 // ---------- ventana de DESEMPEÑO + su base de comparación ----------
 const MES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -736,7 +736,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const seenA = new Set<string>(), seenB = new Set<string>();   // dedup por período de comparación
     const srcCount: Record<string, number> = {};   // leads únicos por fuente (ventana de desempeño)
     const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: leadScanStart, $lt: PERF.end } },
-        { projection: { 'property._id': 1, 'property.agent': 1, agent: 1, answeredAt: 1, createdAt: 1, source: 1, 'company.name': 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1 } });
+        { projection: { 'property._id': 1, 'property.agent': 1, agent: 1, answeredAt: 1, createdAt: 1, source: 1, 'company.name': 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1, 'propertyPublishPortals.portals.inmuebles24.company': 1 } });
     for await (const l of lc) {
         const d = asDt(l.createdAt); if (!d) continue;
         const pid = String(gv(l, 'property', '_id'));
@@ -757,7 +757,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
                 if (broker) compBroker++; else compCliente++;
                 const ans = asDt(l.answeredAt);
                 if (l.answeredAt) contByOp[op]++;
-                const sl = srcLabel(l.source, gv(l, 'company', 'name')); srcCount[sl] = (srcCount[sl] || 0) + 1;
+                const sl = srcLabel(l.source, gv(l, 'company', 'name'), gv(l, 'propertyPublishPortals', 'portals', 'inmuebles24', 'company')); srcCount[sl] = (srcCount[sl] || 0) + 1;
                 // asesor RESPONSABLE del lead (agent asignado); si no hay, el de la propiedad
                 const la = pickAgent(gv(l, 'agent'), gv(l, 'property', 'agent'), pid2agent.get(pid));
                 const e = accInterno(la);

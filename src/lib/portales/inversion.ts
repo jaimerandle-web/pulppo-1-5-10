@@ -27,6 +27,8 @@ const CANAL_KEY: Record<string, string> = {
     // «I24 Mérida» es el paquete de NURA (contrato propio con i24): va en su propia clave para
     // poder separarlo (Ale, 5-oct-2026). Donde se necesita el i24 completo se suman las dos.
     'i24': 'i24', 'i24 merida': 'i24nura', 'inmuebles24': 'i24',
+    // cuenta premier de Diamond House (ANUNCIO_PREMIERE, oct-2026): su propia línea en el Sheet
+    'i24 premier': 'i24premier', 'i24 premiere': 'i24premier', 'inmuebles24 premier': 'i24premier', 'premier': 'i24premier',
     'meli': 'meli', 'mercadolibre': 'meli',
     'meta': 'facebook', 'fb': 'facebook', 'facebook': 'facebook',
     'easybroker': 'easybroker',

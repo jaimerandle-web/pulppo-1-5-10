@@ -10,7 +10,7 @@
 // dice nada de un cierre. Eso vive en «Costo y retorno» y en el histórico.
 import { getDb } from '../data';
 import { KEY2NAME, NOT, dig, hoyMx, isDate, lunesDe, oid, utc } from './metrics';
-import { CANALES_TODOS, I24_NURA, canalDeLead } from './inmobiliaria';
+import { CANALES_TODOS, I24_NURA, canalDeLead, cuentaI24DeLead, nombreCanal } from './inmobiliaria';
 
 const DIA = 86400000;
 /** Portales que se apilan en la gráfica de visitas; el resto cae en «otros». */
@@ -78,11 +78,11 @@ export async function pulseView(opts: { operacion?: 'todas' | 'sale' | 'rent'; n
     const cur = db.collection('leads').find(
         { createdAt: { $gte: inicio, $lt: wtdB }, ...NOT,
           ...(oper === 'todas' ? {} : { 'property.listing.operation': oper }) },
-        { projection: { source: 1, createdAt: 1, answeredAt: 1, 'contact._id': 1, 'agent._id': 1, 'company.name': 1 } });
+        { projection: { source: 1, createdAt: 1, answeredAt: 1, 'contact._id': 1, 'agent._id': 1, 'company.name': 1, 'propertyPublishPortals.portals.inmuebles24.company': 1 } });
     for await (const l of cur) {
         const ca = l.createdAt;
         if (!isDate(ca)) continue;
-        const canal = canalDeLead(l.source, dig(l, 'company', 'name'));
+        const canal = canalDeLead(l.source, dig(l, 'company', 'name'), cuentaI24DeLead(l));
         const cid = dig(l, 'contact', '_id');
         const cs = cid == null ? null : String(cid);
         if (cs) {
@@ -135,7 +135,7 @@ export async function pulseView(opts: { operacion?: 'todas' | 'sale' | 'rent'; n
     }
     const segs = [...STACK, 'otros', 's/d'];
     const visitas = {
-        segs: segs.map((k) => ({ key: k, name: k === 'i24nura' ? I24_NURA : KEY2NAME[k] ?? (k === 'otros' ? 'Resto de fuentes' : 'Sin dato') })),
+        segs: segs.map((k) => ({ key: k, name: k === 'otros' ? 'Resto de fuentes' : k === 'i24nura' || k === 'i24premier' || KEY2NAME[k] ? nombreCanal(k) : 'Sin dato' })),
         weeks: visStack.map((m) => Object.fromEntries(segs.map((k) => [k, m.get(k) ?? 0]))),
         total: visStack.map((m) => [...m.values()].reduce((a, b) => a + b, 0)),
     };
