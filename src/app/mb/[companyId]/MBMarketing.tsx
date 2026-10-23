@@ -93,7 +93,9 @@ export default function MBMarketing({ companyId, interno = false }: { companyId:
 }
 
 // Colores de siempre de los niveles (Ale): súper destacado amarillo, destacado azul (verde mar), simple negro
-const COLOR_I24: Record<string, string> = { 'Súper destacado': YEL, Destacado: SEA, Simple: BLK, Offline: GRY, Gratis: '#9FC7C7', 'Sin aviso': LGT };
+// Premier (cuenta ANUNCIO_PREMIERE de DH): dorado, para distinguirlo del súper destacado normal
+const DORADO = '#B8860B', NIVEL_PREMIER = 'Súper destacado · Premier';   // = NIVEL_PREMIER de marketingDh (no se importa: trae mongodb)
+const COLOR_I24: Record<string, string> = { 'Súper destacado · Premier': DORADO, 'Súper destacado': YEL, Destacado: SEA, Simple: BLK, Offline: GRY, Gratis: '#9FC7C7', 'Sin aviso': LGT };
 const COLOR_MELI: Record<string, string> = { gold_premium: YEL, gold: '#C79A00', silver: GRY, offline: '#D6D6D6', 'sin aviso': LGT };
 const MELI_LBL: Record<string, string> = { gold_premium: 'Gold premium', gold: 'Gold', silver: 'Silver', offline: 'Offline', 'sin aviso': 'Sin aviso' };
 
@@ -146,10 +148,15 @@ function NivelEmbudo({ x, max, color }: { x: PorNivelMk; max: { v: number; l: nu
     );
 }
 
+const btnLiga: CSSProperties = { background: 'none', border: 0, padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 700, textDecoration: 'underline dotted' };
+
 function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
-    const [verCambios, setVerCambios] = useState<'semana' | 'semanaAnt'>('semana');
     const [opNivel, setOpNivel] = useState<Op>('Todas');
     const [filtroTop, setFiltroTop] = useState<string>('');
+    const [filtroOff, setFiltroOff] = useState<string>('');
+    const verFuera = (portal: string) => { setFiltroOff(portal); setTimeout(() => document.getElementById('no-se-muestra')?.scrollIntoView({ behavior: 'smooth' }), 50); };
+    // motivo de cada anuncio que no se muestra, para decirlo en la misma celda de «Tus anuncios»
+    const motivoDe = useMemo(() => new Map(d.offline.map((x) => [`${x.codigo}|${x.portal}`, x])), [d.offline]);
     const [leadsDe, setLeadsDe] = useState<{ codigo: string; dias: number; portal?: string } | null>(null);
     const verNivel = (nivel: string) => { setFiltroTop(nivel); setTimeout(() => document.getElementById('top-anuncios')?.scrollIntoView({ behavior: 'smooth' }), 50); };
     const porCodigo = useMemo(() => new Map(d.avisos.map((a) => [a.codigo, a])), [d.avisos]);
@@ -186,21 +193,27 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
     const nivelesMeli = d.porNivelMeli[opNivel].filter((x) => x.nivel !== 'offline' && x.nivel !== 'sin aviso');
     const maxDe = (xs: PorNivelMk[]) => ({ v: Math.max(1, ...xs.map((x) => x.vistas30 ?? 0)), l: Math.max(1, ...xs.map((x) => x.leads30)), s: Math.max(1, ...xs.map((x) => x.visitas30)) });
     const rotarAuto = d.rotar.filter((x) => !x.manual), rotarManual = d.rotar.filter((x) => x.manual);
-    const cambios = d.cambios[verCambios];
     const conv = (a: { leads30: number; visitas30: number }) => (a.leads30 ? Math.round((100 * a.visitas30) / a.leads30) : null);
 
-    const Estado = ({ e, nivel }: { e: string; nivel?: string }) => (
-        <span style={{ fontSize: 11.5, color: e === 'En línea' ? BLK : e === 'Fuera de línea' ? RED : GRY, fontWeight: e === 'En línea' ? 600 : 400, whiteSpace: 'nowrap' }}>
-            {e === 'En línea' ? (nivel ?? '✓ En línea') : e === 'Fuera de línea' ? '✗ Fuera de línea' : '— Sin aviso'}
-        </span>);
+    const Estado = ({ e, nivel, codigo, portal }: { e: string; nivel?: string; codigo?: string; portal?: string }) => {
+        const m = e !== 'En línea' && codigo && portal ? motivoDe.get(`${codigo}|${portal}`) : undefined;
+        return (<>
+            <span style={{ fontSize: 11.5, color: e === 'En línea' ? (nivel === NIVEL_PREMIER ? DORADO : BLK) : e === 'Fuera de línea' ? RED : GRY, fontWeight: e === 'En línea' ? 600 : 400, whiteSpace: 'nowrap' }}>
+                {e === 'En línea' ? (nivel ?? '✓ En línea') : e === 'Fuera de línea' ? '✗ Fuera de línea' : '— Sin aviso'}
+            </span>
+            {m && <div title={`${m.motivo} · ${m.accion}`} style={{ fontSize: 10.5, color: '#777', whiteSpace: 'normal', maxWidth: 190, lineHeight: 1.35, marginTop: 2 }}>
+                {m.motivo.length > 70 ? m.motivo.slice(0, 68) + '…' : m.motivo} <span style={{ fontWeight: 700, color: m.quien === 'Inmobiliaria' ? BLK : '#999' }}>· {m.quien === 'Inmobiliaria' ? 'lo corriges tú' : 'lo revisa Pulppo'}</span>
+            </div>}
+        </>);
+    };
     const colsAviso: Col<AvisoMk>[] = [
         colProp<AvisoMk>(),
         { h: 'Precio', num: true, v: (a) => a.precio, render: (a) => (a.precio != null ? `$${f0(Math.round(a.precio))}` : '—') },
-        { h: 'Inmuebles24', v: (a) => a.nivel, render: (a) => <><Estado e={a.estado.i24} nivel={a.nivel} />{a.estado.i24 === 'En línea' && a.enNivelDesde && <div style={sub}>desde {fecha(a.enNivelDesde)}</div>}</> },
-        { h: 'MercadoLibre', v: (a) => a.meli, render: (a) => <Estado e={a.estado.meli} nivel={MELI_LBL[a.meli] ?? a.meli} /> },
-        { h: 'Propiedades.com', v: (a) => a.estado.pcom, render: (a) => <Estado e={a.estado.pcom} /> },
-        { h: 'Casas y Terrenos', v: (a) => a.estado.cyt, render: (a) => <Estado e={a.estado.cyt} /> },
-        { h: 'EasyBroker', v: (a) => a.estado.eb, render: (a) => <Estado e={a.estado.eb} /> },
+        { h: 'Inmuebles24', v: (a) => a.nivel, render: (a) => <><Estado e={a.estado.i24} nivel={a.nivel} codigo={a.codigo} portal="Inmuebles24" />{a.estado.i24 === 'En línea' && a.enNivelDesde && <div style={sub}>desde {fecha(a.enNivelDesde)}</div>}</> },
+        { h: 'MercadoLibre', v: (a) => a.meli, render: (a) => <Estado e={a.estado.meli} nivel={MELI_LBL[a.meli] ?? a.meli} codigo={a.codigo} portal="MercadoLibre" /> },
+        { h: 'Propiedades.com', v: (a) => a.estado.pcom, render: (a) => <Estado e={a.estado.pcom} codigo={a.codigo} portal="Propiedades.com" /> },
+        { h: 'Casas y Terrenos', v: (a) => a.estado.cyt, render: (a) => <Estado e={a.estado.cyt} codigo={a.codigo} portal="Casas y Terrenos" /> },
+        { h: 'EasyBroker', v: (a) => a.estado.eb, render: (a) => <Estado e={a.estado.eb} codigo={a.codigo} portal="EasyBroker" /> },
         { h: 'Vistas 7 d', num: true, v: (a) => a.vistasSem, render: (a) => <>{f0(a.vistasSem)}<Delta a={a.vistasSem} b={a.vistasSemAnt} /></> },
         { h: 'Vistas 30 d', num: true, v: (a) => a.vistas30 },
         { h: 'Leads 7 d', num: true, v: (a) => a.leadsSem, render: (a) => <>{f0(a.leadsSem)}<Delta a={a.leadsSem} b={a.leadsSemAnt} /></> },
@@ -213,12 +226,12 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
     const enLinea = (k: keyof AvisoMk['estado']) => d.avisos.filter((a) => a.estado[k] === 'En línea').length;
     const fuera = (k: keyof AvisoMk['estado']) => d.avisos.filter((a) => a.estado[k] === 'Fuera de línea').length;
     const sinAviso = (k: keyof AvisoMk['estado']) => d.avisos.filter((a) => a.estado[k] === 'Sin aviso').length;
-    const PORTALES: Array<{ k: keyof AvisoMk['estado']; nombre: string; detalle?: ReactNode }> = [
-        { k: 'i24', nombre: 'Inmuebles24', detalle: <>{d.asignacion.porNivel.filter((x) => x.nivel !== 'Offline' && x.nivel !== 'Sin aviso').map((x) => <div key={x.nivel}>{x.nivel}: <b>{f0(x.n)}</b></div>)}</> },
-        { k: 'meli', nombre: 'MercadoLibre', detalle: <>{d.asignacion.meli.filter((m) => !['offline', 'sin aviso'].includes(m.tipo)).map((m) => <div key={m.tipo}>{MELI_LBL[m.tipo] ?? m.tipo}: <b>{f0(m.n)}</b></div>)}</> },
-        { k: 'pcom', nombre: 'Propiedades.com' },
-        { k: 'cyt', nombre: 'Casas y Terrenos' },
-        { k: 'eb', nombre: 'EasyBroker (tu cuenta)' },
+    const PORTALES: Array<{ k: keyof AvisoMk['estado']; nombre: string; off: string; detalle?: ReactNode }> = [
+        { k: 'i24', nombre: 'Inmuebles24', off: 'Inmuebles24', detalle: <>{d.asignacion.porNivel.filter((x) => x.nivel !== 'Offline' && x.nivel !== 'Sin aviso').map((x) => <div key={x.nivel}>{x.nivel}: <b>{f0(x.n)}</b></div>)}</> },
+        { k: 'meli', nombre: 'MercadoLibre', off: 'MercadoLibre', detalle: <>{d.asignacion.meli.filter((m) => !['offline', 'sin aviso'].includes(m.tipo)).map((m) => <div key={m.tipo}>{MELI_LBL[m.tipo] ?? m.tipo}: <b>{f0(m.n)}</b></div>)}</> },
+        { k: 'pcom', nombre: 'Propiedades.com', off: 'Propiedades.com' },
+        { k: 'cyt', nombre: 'Casas y Terrenos', off: 'Casas y Terrenos' },
+        { k: 'eb', nombre: 'EasyBroker (tu cuenta)', off: 'EasyBroker' },
     ];
 
     return (<div>
@@ -237,7 +250,7 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.1, margin: '4px 0 2px' }}>{f0(enLinea(x.k))} <span style={{ ...sub, fontFamily: 'Nunito Sans, sans-serif' }}>en línea · {pc(enLinea(x.k), total)}</span></div>
                         {x.detalle && <div style={{ fontSize: 11.5, color: '#555', lineHeight: 1.6 }}>{x.detalle}</div>}
                         {(fuera(x.k) > 0 || sinAviso(x.k) > 0) && <div style={{ fontSize: 11.5, marginTop: 4 }}>
-                            {fuera(x.k) > 0 && <span style={{ color: RED, fontWeight: 700 }}>{f0(fuera(x.k))} fuera de línea</span>}{fuera(x.k) > 0 && sinAviso(x.k) > 0 && ' · '}{sinAviso(x.k) > 0 && <span style={{ color: '#777' }}>{f0(sinAviso(x.k))} sin aviso</span>}
+                            {fuera(x.k) > 0 && <button type="button" onClick={() => verFuera(x.off)} title="Ver cuáles son y por qué" style={{ ...btnLiga, color: RED }}>{f0(fuera(x.k))} fuera de línea ↓</button>}{fuera(x.k) > 0 && sinAviso(x.k) > 0 && ' · '}{sinAviso(x.k) > 0 && <button type="button" onClick={() => verFuera(x.off)} title="Ver cuáles son" style={{ ...btnLiga, color: '#777', fontWeight: 600 }}>{f0(sinAviso(x.k))} sin aviso ↓</button>}
                         </div>}
                     </div>
                 ))}
@@ -281,7 +294,8 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
                     <Kpi label="Los corrige la inmobiliaria" value={f0(d.offline.filter((x) => x.quien === 'Inmobiliaria').length)} nota="precio, colonia, duplicados" />
                     <Kpi label="Los revisa Pulppo" value={f0(d.offline.filter((x) => x.quien === 'Pulppo').length)} nota="cupo, envío al portal, errores del portal" />
                 </div>
-                <TablaFiltrable filas={d.offline} min={980} limite={20} texto={(x) => buscar(x.codigo, `${x.portal} ${x.motivo} ${x.accion}`)}
+                {filtroOff && <div style={{ fontSize: 12, marginBottom: 6 }}>Mostrando <b>{filtroOff}</b> · <button type="button" onClick={() => setFiltroOff('')} style={{ ...btnLiga, color: SEA }}>ver todos los portales</button></div>}
+                <TablaFiltrable key={`off-${filtroOff}`} inicial={filtroOff ? { Portal: filtroOff } : undefined} filas={d.offline} min={980} limite={20} texto={(x) => buscar(x.codigo, `${x.portal} ${x.motivo} ${x.accion}`)}
                     selects={[{ label: 'Portal', v: (x) => x.portal }, { label: 'Quién', v: (x) => x.quien }, op()]}
                     cols={[
                         colProp<(typeof d.offline)[number]>(),
@@ -327,36 +341,17 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
             </div>
         </Seccion>
 
-        <Seccion n={5} titulo="Cambios de nivel" nota="Qué subió o bajó de nivel en Inmuebles24: el nivel de hace 7 días contra el de hoy (o, en los 7 días anteriores, el de hace 14 contra el de hace 7). El motivo sale del historial del anuncio.">
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                {(['semana', 'semanaAnt'] as const).map((k) => (
-                    <button key={k} type="button" onClick={() => setVerCambios(k)} style={{ padding: '5px 11px', fontSize: 12, border: `1px solid ${LGT}`, borderRadius: R, cursor: 'pointer', fontFamily: 'inherit', background: verCambios === k ? BLK : '#fff', color: verCambios === k ? '#fff' : '#555' }}>
-                        {k === 'semana' ? `Últimos 7 días · ${d.cambios.semana.length}` : `7 días anteriores · ${d.cambios.semanaAnt.length}`}
-                    </button>
-                ))}
-            </div>
-            <div style={{ fontSize: 12, marginBottom: 6 }}><b>{f0(cambios.filter((c) => c.sube).length)}</b> subieron · <b>{f0(cambios.filter((c) => !c.sube).length)}</b> bajaron o rotaron.</div>
-            <TablaFiltrable key={verCambios} filas={cambios} min={660} texto={(c) => buscar(c.codigo, `${c.antes} ${c.despues} ${c.motivo ?? ''}`)}
-                selects={[{ label: 'Movimiento', v: (c) => (c.sube ? 'Subió' : 'Bajó') }, op()]}
-                vacio="Sin cambios de nivel en estos 7 días."
-                cols={[
-                    { h: 'Fecha', v: (c) => c.fecha, render: (c) => fecha(c.fecha) },
-                    colProp(),
-                    { h: 'Antes', v: (c) => c.antes },
-                    { h: 'Ahora', v: (c) => c.despues, render: (c) => <><span style={{ color: c.sube ? SEA : RED, fontWeight: 700 }}>{c.sube ? '↑' : '↓'}</span> {c.despues}</> },
-                    { h: 'Motivo', v: (c) => c.motivo, render: (c) => <span style={{ color: '#666' }}>{c.motivo ?? '—'}</span> },
-                ]} />
-        </Seccion>
 
-        <Seccion n={6} titulo="Cierres por fuente" nota="Cierres de la inmobiliaria (como vendedora o compradora) por el canal por el que llegó el comprador. Revenue = comisión que recibe la inmobiliaria, sin IVA; los % son sobre el revenue. Misma regla de fuente que Desempeño y /portales.">
+        <Seccion n={5} titulo="Cierres por fuente" nota="Cierres de la inmobiliaria (como vendedora o compradora) por el canal por el que llegó el comprador. Revenue = comisión que recibe la inmobiliaria, sin IVA; los % son sobre el revenue. Misma regla de fuente que Desempeño y /portales.">
             <CierresPanel d={d} />
         </Seccion>
 
         {interno && (<>
         <div style={{ marginTop: 40, padding: '10px 14px', background: BLK, color: '#fff', borderRadius: R, fontSize: 12 }}>
             <b>Sólo equipo Pulppo</b> · lo que la inmobiliaria no ve: lecturas para entender qué funciona y qué rotar.
+            {d.scoringPendiente && <div style={{ marginTop: 4, color: YEL }}>El puntaje de anuncios todavía se está calculando (la primera vez del día tarda ~2 min): rotación, exposición y trabadas salen incompletas. Dale «Actualizar» en un par de minutos.</div>}
         </div>
-        <Seccion n={7} titulo="Propiedades estrella" nota="Las que más leads reciben (30 días) y si los convierten en visitas. Estrella = 5+ leads y 15%+ visitan. Mucho ruido = 5+ leads y menos de 10% visitan. ">
+        <Seccion n={6} titulo="Propiedades estrella" nota="Las que más leads reciben (30 días) y si los convierten en visitas. Estrella = 5+ leads y 15%+ visitan. Mucho ruido = 5+ leads y menos de 10% visitan. ">
             <div style={{ fontSize: 11.5, marginBottom: 8 }}><a href="#top-anuncios" onClick={(e) => { e.preventDefault(); document.getElementById('top-anuncios')?.scrollIntoView({ behavior: 'smooth' }); }} style={{ color: SEA, fontWeight: 700 }}>Ver todos tus anuncios ↓</a></div>
             <TablaFiltrable filas={d.estrellas} min={720} texto={(e) => buscar(e.codigo, e.etiqueta)}
                 selects={[{ label: 'Lectura', v: (e) => e.etiqueta }, op()]}
@@ -372,7 +367,7 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
                 ]} />
         </Seccion>
 
-        <Seccion n={8} titulo="Exposición vs. calidad del inventario" nota="Dónde se está usando un lugar premium sin que rinda, y qué simples merecen subir según el scoring de anuncios. El «por qué» junta vistas, leads, precio contra la colonia, demanda (búsquedas en la zona) y competencia (comparables).">
+        <Seccion n={7} titulo="Exposición vs. calidad del inventario" nota="Dónde se está usando un lugar premium sin que rinda, y qué simples merecen subir según el scoring de anuncios. El «por qué» junta vistas, leads, precio contra la colonia, demanda (búsquedas en la zona) y competencia (comparables).">
             <div style={{ fontSize: 12, fontWeight: 700, margin: '4px 0 6px', color: RED }}>Premium sin leads · {f0(d.premiumSinLeads.length)} <span style={{ ...sub, fontWeight: 400 }}>· 2+ semanas en su nivel actual sin un solo lead desde que entró (súper destacados primero)</span></div>
             <TablaFiltrable filas={d.premiumSinLeads} min={860} limite={15} texto={(x) => buscar(x.codigo, x.porque)}
                 selects={[niv(), op()]}
@@ -405,7 +400,7 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
                 ]} />
         </Seccion>
 
-        <Seccion n={9} titulo="Rotación: qué promover y qué rotar">
+        <Seccion n={8} titulo="Rotación: qué promover y qué rotar">
             <div style={{ background: LGT, borderLeft: `2px solid ${YEL}`, padding: '8px 12px', fontSize: 12, color: '#555', marginBottom: 12 }}>
                 Cómo funciona el scoring: ver presentación (próximamente).
             </div>
@@ -442,7 +437,7 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
             </div>
         </Seccion>
 
-        <Seccion n={10} titulo="Propiedades trabadas que necesitan auxilio" nota="Publicadas hace 90+ días, sin ninguna oferta, y con 2 o menos leads en 90 días, o con 5+ leads pero ninguna visita. El freno probable, por qué y una acción concreta.">
+        <Seccion n={9} titulo="Propiedades trabadas que necesitan auxilio" nota="Publicadas hace 90+ días, sin ninguna oferta, y con 2 o menos leads en 90 días, o con 5+ leads pero ninguna visita. El freno probable, por qué y una acción concreta.">
             <div style={{ fontSize: 12, marginBottom: 6 }}><b>{f0(d.trabadas.length)}</b> propiedades · {Object.entries(d.trabadas.reduce<Record<string, number>>((m, x) => ({ ...m, [x.freno]: (m[x.freno] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(' · ')}</div>
             <TablaFiltrable filas={d.trabadas} min={1100} texto={(x) => buscar(x.codigo, `${x.freno} ${x.porque}`)}
                 selects={[{ label: 'Freno', v: (x) => x.freno }, niv(), op()]}
@@ -603,7 +598,6 @@ function Resumen({ d, interno, rotarAuto, rotarAutoCod, manual }: { d: Marketing
     const i24 = s((a) => a.i24.leadsSem), i24Ant = s((a) => a.i24.leadsSemAnt);
     const meli = s((a) => a.meliE.leadsSem), meliAnt = s((a) => a.meliE.leadsSemAnt);
     const vis = s((a) => a.visitasSem), visAnt = s((a) => a.visitasSemAnt);
-    const sube = d.cambios.semana.filter((c) => c.sube).length, baja = d.cambios.semana.length - sube;
     const l90 = d.cierres.lista.filter((c) => c.fecha >= d.cierres.desde90 && (c.estatus === 'Cerrada' || c.estatus === 'Cobrando'));
     const f90 = Object.entries(l90.reduce<Record<string, number>>((m, c) => ({ ...m, [c.fuente]: (m[c.fuente] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
     const frenos = Object.entries(d.trabadas.reduce<Record<string, number>>((m, x) => ({ ...m, [x.freno]: (m[x.freno] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
@@ -628,7 +622,6 @@ function Resumen({ d, interno, rotarAuto, rotarAutoCod, manual }: { d: Marketing
                 <div>
                     <Linea><b>{f0(leads)}</b> leads en 7 días<Delta a={leads} b={leadsAnt} /> <span style={sub}>· Inmuebles24 {f0(i24)}</span><Delta a={i24} b={i24Ant} /> <span style={sub}>· MercadoLibre {f0(meli)}</span><Delta a={meli} b={meliAnt} /></Linea>
                     <Linea><b>{f0(vis)}</b> visitas en 7 días<Delta a={vis} b={visAnt} /></Linea>
-                    <Linea><b>{f0(sube)}</b> {sube === 1 ? 'anuncio subió' : 'anuncios subieron'} y <b>{f0(baja)}</b> {baja === 1 ? 'bajó' : 'bajaron'} de nivel en Inmuebles24</Linea>
                     <Linea><b>{f0(l90.length)}</b> cierres en 90 días{f90.length ? <> · {f90.slice(0, 3).map(([k, n]) => `${k} ${n}`).join(' · ')}</> : ''}</Linea>
                 </div>
                 <div>
@@ -643,6 +636,7 @@ function Resumen({ d, interno, rotarAuto, rotarAutoCod, manual }: { d: Marketing
 /** L/L (leads sobre listing) por nivel de i24: leads de i24 que llegaron con el aviso en ese nivel ÷ avisos
  *  que de verdad estuvieron vivos en ese nivel durante el periodo (aviso-días ÷ días). No es la foto de hoy. */
 const COLOR_LL: Record<string, { c: string; dash?: string }> = {
+    'Súper destacado · Premier': { c: DORADO },
     'Súper destacado': { c: YEL }, 'Súper destacado zona demand': { c: '#C79A00', dash: '5 3' },
     Destacado: { c: SEA }, 'Destacado zona demand': { c: SEA, dash: '5 3' }, Simple: { c: BLK },
 };

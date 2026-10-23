@@ -16,6 +16,7 @@ import MBMercado from './MBMercado';
 import { tieneMercado } from '@/lib/mercadoPiloto';
 import MB1510 from './MB1510';
 import PrintRoot from './PrintRoot';
+import SinResponderModal from './SinResponderModal';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2; // design system Pulppo: esquinas cuadradas
@@ -134,12 +135,13 @@ const accionesDe = (p: MBProp): string[] => {
     return a;
 };
 
-function Kpi({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+function Kpi({ label, value, sub, color, onClick, accion }: { label: string; value: string; sub?: string; color?: string; onClick?: () => void; accion?: string }) {
     return (
-        <div style={{ flex: 1, background: '#fff', border: `1px solid ${LGT}`, padding: '13px 15px', borderRadius: R, minWidth: 0 }}>
+        <div onClick={onClick} title={accion} style={{ flex: 1, background: '#fff', border: `1px solid ${LGT}`, padding: '13px 15px', borderRadius: R, minWidth: 0, cursor: onClick ? 'pointer' : 'default' }}>
             <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>{label}</div>
             <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 27, lineHeight: 1.05, margin: '8px 0 3px', color: color || BLK }}>{value}</div>
             {sub && <div style={{ fontSize: 10.5, color: '#777', lineHeight: 1.3 }}>{sub}</div>}
+            {onClick && accion && <div style={{ fontSize: 11, color: SEA, fontWeight: 700, marginTop: 6 }}>{accion} →</div>}
         </div>
     );
 }
@@ -510,6 +512,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
 
 // `verMarketing` lo decide el servidor (page.tsx): hoy sólo el equipo interno (lib/marketingAcceso.ts).
 export default function MBApp({ d, verMarketing = false, interno = false }: { d: MBData; verMarketing?: boolean; interno?: boolean }) {
+    const [sinResp, setSinResp] = useState(false);
     const [orto, setOrto] = useState<Record<string, ErrorOrto[]>>({});
     useEffect(() => {
         if (d.companyId === 'demo') return;
@@ -643,7 +646,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                             <Kpi label="Inventario activo" value={f(d.nProps)} sub={`${d.nVenta} venta · ${d.nRenta} renta`} />
                             <Kpi label="Leads únicos · últimos 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED}
                                 sub={`${dl >= 0 ? '▲' : '▼'} ${dlPct == null ? `${dl >= 0 ? '+' : ''}${f(dl)}` : `${dl >= 0 ? '+' : ''}${dlPct}%`} vs. los 30 días anteriores (${f(d.leads30prev)}) · venta ${f(d.leads30V)} · renta ${f(d.leads30R)}`} />
-                            <Kpi label="Sin responder · últimos 30 días" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`leads de 8 am a 8 pm · venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`} />
+                            <Kpi label="Sin responder · últimos 30 días" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`leads de 8 am a 8 pm · venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`}
+                                onClick={d.resp.sin > 0 && d.companyId !== 'demo' ? () => setSinResp(true) : undefined} accion="Ver cuáles son" />
                             <Kpi label="1ª respuesta (mediana · 30 días)" value={dur(d.respMedMin)}
                                 color={d.respMedMin == null ? GRY : d.respMedMin <= 60 ? SEA : d.respMedMin > 1440 ? RED : BLK}
                                 sub={`leads de 8 am a 8 pm · la mitad se contesta antes de eso · el grupo más común es ${RESP_LBL[domResp].toLowerCase()} (${RESP_RANGO[domResp]})`} />
@@ -1094,6 +1098,7 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                     </div>
                 )}
             </main>
+            {sinResp && <SinResponderModal companyId={d.companyId} onClose={() => setSinResp(false)} />}
         </div>
     );
 }

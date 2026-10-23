@@ -28,6 +28,7 @@ import { claveLead, VISITA_OK } from './mbComun';
 import { datosDe, type Aviso } from './portales/avisos';
 import { classifySource } from './portales/metrics';
 import { cierresEntre } from './portales/inmobiliaria';
+import { CUENTA_PREMIER } from './portales/avisosTipos';
 import { resolverFuentes } from './portales/fuenteCierre';
 
 const MX = 6 * 3600 * 1000;
@@ -35,12 +36,14 @@ const DIA = 86400000;
 /** regla vigente de rotación: con 30–45 leads en su lugar pagado, el aviso pasa a Simple y libera el lugar */
 export const LEADS_ROTAR = 30;
 
-/** nivel legible a partir del tipo crudo de i24 (HOME = súper destacado, como en avisos.ts) */
-export function nivelDe(raw: unknown): string {
+/** nivel legible a partir del tipo crudo de i24 (HOME = súper destacado, como en avisos.ts). Con la cuenta del
+ *  aviso: los de la cuenta Premier de DH (`ANUNCIO_PREMIERE`, 130 súper destacados desde el 22-oct-2026) van aparte. */
+export function nivelDe(raw: unknown, cuenta?: unknown): string {
     const t = String(raw ?? '').toUpperCase();
     const zd = t.includes('ZONA_DEMAND');
     if (!t || t === 'NULL' || t === 'UNDEFINED') return 'Sin aviso';
     if (t === 'OFFLINE') return 'Offline';
+    if (String(cuenta ?? '').toUpperCase() === CUENTA_PREMIER) return NIVEL_PREMIER;
     if (t.startsWith('HOME')) return zd ? 'Súper destacado zona demand' : 'Súper destacado';
     if (t.startsWith('DESTACADO')) return zd ? 'Destacado zona demand' : 'Destacado';
     if (t.startsWith('GRATIS')) return 'Gratis';
@@ -48,9 +51,10 @@ export function nivelDe(raw: unknown): string {
 }
 /** el nivel sin distinguir zona demand (para la gráfica de distribución) */
 export const nivelBase = (nivel: string) => nivel.replace(/ zona demand$/, '');
-export const NIVELES = ['Súper destacado', 'Súper destacado zona demand', 'Destacado', 'Destacado zona demand', 'Simple', 'Gratis', 'Offline', 'Sin aviso'];
-const NIVELES_BASE = ['Súper destacado', 'Destacado', 'Simple', 'Offline', 'Gratis', 'Sin aviso'];
-const PREMIUM = new Set(['Súper destacado', 'Súper destacado zona demand', 'Destacado', 'Destacado zona demand']);
+export const NIVEL_PREMIER = 'Súper destacado · Premier';
+export const NIVELES = [NIVEL_PREMIER, 'Súper destacado', 'Súper destacado zona demand', 'Destacado', 'Destacado zona demand', 'Simple', 'Gratis', 'Offline', 'Sin aviso'];
+const NIVELES_BASE = [NIVEL_PREMIER, 'Súper destacado', 'Destacado', 'Simple', 'Offline', 'Gratis', 'Sin aviso'];
+const PREMIUM = new Set([NIVEL_PREMIER, 'Súper destacado', 'Súper destacado zona demand', 'Destacado', 'Destacado zona demand']);
 const rango = (n: string) => (n.startsWith('Súper') ? 3 : n.startsWith('Destacado') ? 2 : n === 'Simple' || n === 'Gratis' ? 1 : 0);
 const TRIGGER: Record<string, string> = {
     daily: 'rotación automática', reorder: 'reordenamiento', manual: 'manual', force: 'forzado',
@@ -123,6 +127,8 @@ export interface PorNivelMk {
 }
 export interface MarketingMk {
     inmobiliaria: string; companyId: string; generado: string;
+    /** el scoring de avisos no terminó a tiempo (en frío): estrellas, rotación y trabadas salen sin puntaje */
+    scoringPendiente?: boolean;
     semana: Semana; semanaAnt: Semana;
     asignacion: {
         venta: number; renta: number;
@@ -166,9 +172,10 @@ const PRECIO = new Set(['precio caro', 'precio fuera de su zona']);
 function nivelEn(hist: Array<{ t: Date; tipo: unknown; e: Document }>, t: Date): { nivel: string; e: Document | null } | null {
     let r: { tipo: unknown; e: Document } | null = null;
     for (const h of hist) { if (h.t > t) break; if (String(h.tipo).toUpperCase() !== 'OFFLINE') r = h; }
-    return r ? { nivel: nivelDe(r.tipo), e: r.e } : null;
+    return r ? { nivel: nivelDe(r.tipo, r.e.company), e: r.e } : null;
 }
 
+const scoringEnCurso = new Map<string, ReturnType<typeof datosDe>>();
 export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const db = await getDb();
     const cid = new ObjectId(companyId);
@@ -236,8 +243,16 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         quien.set(String(a.uid), `${a.firstName ?? ''} ${a.lastName ?? ''}`.replace(/\s+/g, ' ').trim());
 
     // scoring de avisos.ts (cacheado 24 h por cuenta)
+    // En frío el scoring carga el mercado entero (~100 s) y tumbaba la pestaña completa en Vercel (oct-2026). Sólo
+    // alimenta lo interno (estrellas, rotación, trabadas): se espera 25 s y, si no está, sale sin él y sigue calentándose.
     const score = new Map<string, Aviso>();
-    try { for (const a of (await datosDe(nombre)).avisos) score.set(a.id, a); } catch (e) { console.error('[marketing] scoring', e); }
+    let scoringPendiente = false;
+    const sp = scoringEnCurso.get(nombre) ?? scoringEnCurso.set(nombre, datosDe(nombre)
+        .finally(() => setTimeout(() => scoringEnCurso.delete(nombre), 60_000))).get(nombre)!;
+    try {
+        const r = await Promise.race([sp, new Promise<null>((ok) => setTimeout(() => ok(null), 25_000))]);
+        if (r) for (const a of r.avisos) score.set(a.id, a); else scoringPendiente = true;
+    } catch (e) { console.error('[marketing] scoring', e); }
 
     const cuenta = (xs: Date[] | undefined, a: Date, b: Date) => (xs ?? []).filter((t) => t >= a && t < b).length;
     const fin = new Date(ahora.getTime() + DIA);
@@ -246,7 +261,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         const i24 = (dig(p, 'portals', 'inmuebles24') as Document) ?? {};
         const hist = (((i24.history as Document[]) ?? []).map((e) => ({ t: fechaHist(e), tipo: e.type, e })).filter((h) => h.t) as Array<{ t: Date; tipo: unknown; e: Document }>)
             .sort((a, b) => a.t.getTime() - b.t.getTime());
-        const nivel = nivelDe(i24.type);
+        const nivel = nivelDe(i24.type, i24.company);
         const codigo = String(p.internalId ?? p._id);
         // cambios: nivel al inicio y al final de cada semana
         for (const [a, b, dest] of [[L0, ahora, cambiosSem], [Lm1, L0, cambiosAnt]] as Array<[Date, Date, CambioMk[]]>) {
@@ -263,7 +278,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         let desde: Date | null = null;
         for (let k = hist.length - 1; k >= 0; k--) {
             if (String(hist[k].tipo).toUpperCase() === 'OFFLINE') continue;   // el bug de i24 no corta la racha
-            if (nivelDe(hist[k].tipo) === nivel) desde = hist[k].t; else break;
+            if (nivelDe(hist[k].tipo, hist[k].e.company) === nivel) desde = hist[k].t; else break;
         }
         const pid = String(p._id);
         const L = leadsP.get(pid), V = visP.get(pid), W = vistP.get(pid);
@@ -424,7 +439,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         },
         cambios: { semana: cambiosSem.sort((a, b) => b.fecha.localeCompare(a.fecha)), semanaAnt: cambiosAnt.sort((a, b) => b.fecha.localeCompare(a.fecha)) },
         ll: await serieLL(db, idsInmo, ahora).catch((e) => { console.error('[marketing] L/L', e); return { desde: '', dias: 0, series: [] }; }),
-        porNivel, porNivelMeli, cierres: { lista, desde90: ymd(D90), desdeAnio: ymd(inicioAnio), hasta: ymd(ahora) }, offline, avisos, reglas: { leadsRotar: LEADS_ROTAR },
+        scoringPendiente, porNivel, porNivelMeli, cierres: { lista, desde90: ymd(D90), desdeAnio: ymd(inicioAnio), hasta: ymd(ahora) }, offline, avisos, reglas: { leadsRotar: LEADS_ROTAR },
         ...derivar(avisos),
     };
 }
@@ -542,7 +557,7 @@ async function serieLL(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[],
         const h = (((dig(p, 'portals', 'inmuebles24', 'history') as Document[]) ?? []).map((e) => {
             const tt = fechaHist(e);
             const tipo = String(e.type ?? '').toUpperCase();
-            return tt ? { t: tt.getTime(), nivel: !tipo || tipo === 'OFFLINE' ? null : nivelDe(tipo) } : null;
+            return tt ? { t: tt.getTime(), nivel: !tipo || tipo === 'OFFLINE' ? null : nivelDe(tipo, e.company) } : null;
         }).filter(Boolean) as Array<{ t: number; nivel: string | null }>).sort((a, b) => a.t - b.t);
         nivelHist.set(pid, h);
         const st = (((dig(p, 'status', 'history') as Document[]) ?? []).map((e) => ({ t: isDate(e.timestamp) ? e.timestamp.getTime() : Date.parse(String(e.timestamp)), s: String(e.status ?? '') }))
@@ -563,7 +578,7 @@ async function serieLL(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[],
     const vistos = new Set<string>();
     for (let i = 0; i < ids.length; i += 500) {
         for (const l of await db.collection('leads').find({ 'property._id': { $in: ids.slice(i, i + 500) }, createdAt: { $gte: new Date(D0.getTime() - 400 * DIA) } },
-            { projection: { 'contact._id': 1, 'property._id': 1, createdAt: 1, source: 1, campaign: 1 } }).sort({ createdAt: 1 }).toArray()) {
+            { projection: { 'contact._id': 1, 'property._id': 1, createdAt: 1, source: 1, campaign: 1, 'propertyPublishPortals.portals.inmuebles24.company': 1 } }).sort({ createdAt: 1 }).toArray()) {
             if (!isDate(l.createdAt)) continue;
             const k = claveLead(l);
             if (vistos.has(k)) continue;
@@ -571,7 +586,7 @@ async function serieLL(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[],
             if (l.createdAt < D0 || classifySource(String(l.source ?? '')) !== 'i24') continue;
             const pid = String(dig(l, 'property', '_id'));
             const camp = String(l.campaign ?? '').toUpperCase();
-            const niv = /^(HOME|DESTACADO|SIMPLE)/.test(camp) ? nivelDe(camp) : nivelEnT(pid, l.createdAt.getTime());
+            const niv = /^(HOME|DESTACADO|SIMPLE)/.test(camp) ? nivelDe(camp, dig(l, 'propertyPublishPortals', 'portals', 'inmuebles24', 'company')) : nivelEnT(pid, l.createdAt.getTime());
             if (!niv) continue;
             const d = Math.floor((l.createdAt.getTime() - D0.getTime()) / DIA);
             if (d >= 0 && d < DIAS_LL) serie(niv, opDe.get(pid) ?? 'Venta').leads[d]++;

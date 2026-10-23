@@ -229,7 +229,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
     const db = await getDb();
     const props = await db.collection('properties').find(
         { 'company._id': cid, 'status.last': 'published' },
-        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, 'attributes.suites': 1, address: 1, agent: 1, publishedAt: 1, createdAt: 1, 'status.history': 1, company: 1, 'portals.inmuebles24.type': 1, 'files.type': 1, 'contract.url': 1, 'contract.exclusive.pulppo': 1, 'contract.comission': 1, 'contact.phone': 1, 'contact.email': 1 } }
+        { projection: { internalId: 1, type: 1, listing: 1, acm: 1, qualityScore: 1, 'attributes.totalSurface': 1, 'attributes.suites': 1, address: 1, agent: 1, publishedAt: 1, createdAt: 1, 'status.history': 1, company: 1, 'portals.inmuebles24.type': 1, 'portals.inmuebles24.company': 1, 'files.type': 1, 'contract.url': 1, 'contract.exclusive.pulppo': 1, 'contract.comission': 1, 'contact.phone': 1, 'contact.email': 1 } }
     ).toArray();
     if (!props.length) return null;
     const name = (dig(props[0], 'company', 'name') as string) ?? 'Inmobiliaria';
@@ -667,7 +667,7 @@ export async function fetchInmobiliaria(companyId: string): Promise<MBData | nul
             respMedMin: median(respByProp.get(hex) ?? []),
             oppScore: op === 'sale' ? Math.round(demanda / (1 + leads)) : 0, diag,
             tier: TIER[dig(p, 'portals', 'inmuebles24', 'type') as string] ?? 'Simple',
-            avisoI24: AVISO_I24[String(dig(p, 'portals', 'inmuebles24', 'type') ?? '')] ?? (dig(p, 'portals', 'inmuebles24', 'type') ? 'Simple' : 'Sin aviso'),
+            avisoI24: String(dig(p, 'portals', 'inmuebles24', 'company') ?? '').toUpperCase() === 'ANUNCIO_PREMIERE' && String(dig(p, 'portals', 'inmuebles24', 'type') ?? '').toUpperCase() !== 'OFFLINE' ? 'Súper destacado · Premier' : AVISO_I24[String(dig(p, 'portals', 'inmuebles24', 'type') ?? '')] ?? (dig(p, 'portals', 'inmuebles24', 'type') ? 'Simple' : 'Sin aviso'),
             fotos, video, tour, amenidades, errores, sugerencia,
             p1510: dig(p, 'contract', 'exclusive', 'pulppo') != null,
             comision: num(dig(p, 'contract', 'comission')),

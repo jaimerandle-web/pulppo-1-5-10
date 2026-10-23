@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     // cuando se abra a la inmobiliaria, un externo sólo puede pedir la suya
     if (!user!.internal && !(await canAccessCompany(company))) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
     const hit = cache.get(company + ':v8');
-    if (hit && req.nextUrl.searchParams.get('refresh') !== '1' && Date.now() - hit.t < CACHE_MS)
+    if (hit && req.nextUrl.searchParams.get('refresh') !== '1' && Date.now() - hit.t < ((hit.d as { scoringPendiente?: boolean }).scoringPendiente ? 2 * 60 * 1000 : CACHE_MS))
         return NextResponse.json(hit.d, { headers: { 'Cache-Control': 'private, no-store' } });
     try {
         const d = await marketingDe(company);

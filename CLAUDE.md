@@ -369,6 +369,13 @@ filtra en el cliente (canal, venta/renta, asesor, medio, búsqueda): indicadores
 teléfono y correo. Dos medidas: «respondidos» (answeredAt, como el Retool y Propiedades; antes se llamó «abierto por el asesor» y a Ale no le convenció —
 respondido) y «con conversación visible». Propiedades (sólo DH) suma la columna «Aviso i24» (`MBProp.avisoI24`).
 
+Oct-2026 (2): el scoring de avisos en frío (~100 s) tumbaba Marketing en Vercel («No se pudo calcular»): ahora se espera
+25 s y, si no está, la respuesta sale con `scoringPendiente` (caché de 2 min) y lo interno avisa. Nivel «Súper destacado ·
+Premier» (cuenta `ANUNCIO_PREMIERE`, dorado) en Marketing, L/L y la columna «Aviso i24» de Propiedades. «Cambios de nivel»
+se quitó (Ale: no da to-do). «N fuera de línea» de cada portal lleva a la sección 2 filtrada por ese portal, y en «Tus
+anuncios» cada «Fuera de línea» dice el motivo y quién lo corrige. Overview → «Sin responder · últimos 30 días» abre la
+lista (`/api/mb-sin-responder`, misma regla que el número, canAccessCompany; todas las inmobiliarias).
+
 ### (historia) /mb → Marketing (Diamond House, antes SÓLO equipo interno)
 
 `src/lib/marketingDh.ts` + `/api/mb-marketing` + `MBMarketing.tsx`. Visibilidad en `src/lib/marketingAcceso.ts`
