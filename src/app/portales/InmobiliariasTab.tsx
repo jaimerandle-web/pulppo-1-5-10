@@ -1,4 +1,6 @@
 'use client';
+import { getKam } from '@/lib/kam';
+import { armarAvisos, type AvisosPeriodo } from '@/lib/portales/avisosTipos';
 // Pestaña "Inmobiliarias" de /portales: leads y funnel comercial por fuente, por asesor, fantasmas,
 // descartados y cierres — por inmobiliaria o de toda la red, con comparación contra el periodo
 // anterior o el mismo periodo del año pasado. Cálculo en `lib/portales/inmobiliaria.ts`.
@@ -339,6 +341,19 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
             .then((j) => setDet({ q: qDet, d: j.detalle ?? {} })).catch(() => setDet({ q: qDet, d: {} }));
     }, [qDet, det?.q]);
     const detD = det?.q === qDet ? det.d : null;
+    // L/L: avisos vivos del periodo y del comparado. Aparte del resto porque contarlos lee el historial de i24
+    // de toda la red (~1 min la primera vez; luego caché 12 h en el servidor).
+    const qAv = v ? new URLSearchParams({ view: 'avisos', desde: v.filtro.desde, hasta: v.filtro.hasta, operacion: v.filtro.operacion, comparar: v.filtro.comparar,
+        ...(v.filtro.inmobiliaria ? { inmo: v.filtro.inmobiliaria } : {}) }).toString() : '';
+    const [avis, setAvis] = useState<{ q: string; actual: AvisosPeriodo | null; comparado: AvisosPeriodo | null } | null>(null);
+    useEffect(() => {
+        if (!qAv || avis?.q === qAv) return;
+        let vivo = true;
+        fetch(`/api/portales/inmobiliarias?${qAv}`).then((r) => r.json())
+            .then((j) => { if (vivo) setAvis({ q: qAv, actual: j.actual ?? null, comparado: j.comparado ?? null }); })
+            .catch(() => { if (vivo) setAvis({ q: qAv, actual: null, comparado: null }); });
+        return () => { vivo = false; };
+    }, [qAv]); // eslint-disable-line react-hooks/exhaustive-deps
     const [cargando, setCargando] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
@@ -485,6 +500,9 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
     );
 
     const A: Bloque = v.actual, C: Bloque | null = v.comparado;
+    const avListo = avis?.q === qAv;
+    const avisosA = avListo && avis!.actual && A.leadsTipo ? armarAvisos(avis!.actual, A.leadsTipo) : null;
+    const avisosC = avListo && avis!.comparado && C?.leadsTipo ? armarAvisos(avis!.comparado, C.leadsTipo) : null;
     const T = A.total, CT = C?.total ?? null;
     const buscar = (xs: Fila[] | undefined, k: string) => xs?.find((x) => x.key === k) ?? null;
     const cmpTxt = C ? (v.filtro.comparar === 'anio' ? 'vs. año pasado' : 'vs. periodo anterior') : '';
@@ -674,9 +692,19 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                         detalle={fk ? () => <DetalleAlerta d={detD?.[fk.key] ?? (detD ? { asesores: [], pubs: [] } : undefined)} fuente={fk} /> : undefined} />;
                 };
                 const spamPub = A.spamPub ?? [];
+                // Periodos largos (trimestre, YTD): «Para atender» muestra TENDENCIAS sostenidas y deja las alertas
+                // sueltas plegadas (Ale, oct-2026: «se vuelve muy denso; que sea un resumen»).
+                const largo = A.dias > 45;
+                const alertas = (!atender.length && !grupos.length ? <div style={{ fontSize: 12.5, color: GRY }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
+                            : <>
+                                {grupos.filter((g) => g.sev === 'alta').map((g) => filaGrupo(g))}
+                                {atender.map((x, i) => <FilaFlag key={i} sev={x.sev} titulo="Toda la red" items={[x.txt]} onAbrir={pedirDetalle}
+                                    detalle={() => <DetalleAlerta d={detD?.total ?? (detD ? { asesores: [], pubs: [] } : undefined)} fuente={T} red />} />)}
+                                {grupos.filter((g) => g.sev === 'media').map((g) => filaGrupo(g))}
+                            </>);
                 const filaSpam = (x: SpamPub) => (
-                    <FilaFlag key={'sp' + x.pid} sev={x.sev} titulo={x.codigo ?? '(sin código)'} etiqueta="Posible spam"
-                        items={[`${x.fuente}${x.inmo ? ` · ${x.inmo}` : ''}: ${f0(x.n)} leads — ${x.senales.join(' · ')}`]}
+                    <FilaFlag key={'sp' + x.pid} sev={x.sev} titulo={x.inmo ?? 'Sin inmobiliaria'} etiqueta={`KAM: ${getKam(x.inmo)}`}
+                        items={[`Propiedad ${x.codigo ?? '(sin código)'} · ${x.fuente}: ${f0(x.n)} leads${x.prev ? ` (antes ${f0(x.prev)})` : ' (publicación nueva)'} — ${x.senales.join(' · ')}`]}
                         detalle={() => <DetalleSpam x={x} />} />
                 );
                 // los 8 canales con más leads, y siempre las cuentas propias de i24 (NURA, Premier de Diamond House)
@@ -707,16 +735,14 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                             <p style={{ margin: '6px 0 0' }}><b>Día por día</b> (fuentes con mediana de 5+ leads diarios): pico = el doble de su mediana; caída = una cuarta parte o menos (suele ser una integración rota o un paquete apagado). El día en curso no cuenta.</p>
                             <p style={{ margin: '6px 0 0' }}>Las de la semana (respuesta, sin responder) salen sólo si el periodo incluye las últimas dos semanas.</p>
                         </>}>
-                        {!atender.length && !grupos.length && !(A.spamPub ?? []).length ? <div style={{ fontSize: 12.5, color: GRY }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
-                            : <>
-                                {grupos.filter((g) => g.sev === 'alta').map((g) => filaGrupo(g))}
-                                {spamPub.filter((x) => x.sev === 'alta').map(filaSpam)}
-                                {atender.map((x, i) => <FilaFlag key={i} sev={x.sev} titulo="Toda la red" items={[x.txt]} onAbrir={pedirDetalle}
-                                    detalle={() => <DetalleAlerta d={detD?.total ?? (detD ? { asesores: [], pubs: [] } : undefined)} fuente={T} red />} />)}
-                                {grupos.filter((g) => g.sev === 'media').map((g) => filaGrupo(g))}
-                                {spamPub.filter((x) => x.sev === 'media').map(filaSpam)}
-                            </>}
+                        {largo && <Tendencias A={A} />}
+                        {largo && (atender.length > 0 || grupos.length > 0) && <details style={{ marginTop: 10 }}><summary style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}>Ver las {atender.length + grupos.length} alertas del periodo, una por una</summary><div style={{ marginTop: 8 }}>{alertas}</div></details>}
+                        {!largo && alertas}
                     </Seccion>
+                    {spamPub.length > 0 && <Seccion titulo="Posible spam en publicaciones" sub={<>Publicaciones puntuales con señales de spam, con su inmobiliaria y su KAM para delegarlo. {Object.entries(spamPub.reduce<Record<string, number>>((m, x) => { const k = getKam(x.inmo); return { ...m, [k]: (m[k] ?? 0) + 1 }; }, {})).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}: ${n}`).join(' · ')}</>}
+                        info={<>Una publicación con 20 o más leads es sospechosa si coinciden 2 o más de: el triple de leads que el periodo anterior (o publicación nueva), madrugada ≥12%, correos con dígitos ≥40%, contactos nuevos ≥85%, conversa la mitad o menos que su fuente. Alta con 3 o más. Clic en una para ver los leads.</>}>
+                        {[...spamPub].sort((a, b) => getKam(a.inmo).localeCompare(getKam(b.inmo), 'es') || (a.sev === b.sev ? b.n - a.n : a.sev === 'alta' ? -1 : 1)).map(filaSpam)}
+                    </Seccion>}
                     {A.porDia && <Seccion titulo="Leads por fuente en el tiempo" sub="Cuántos leads entraron de cada fuente y qué parte del total fueron. En vista diaria, los puntos rojos son los días marcados en «Para atender».">
                         <LeadsPorDia A={A} senales={flags} hoy={iso(hoy)} />
                     </Seccion>}
@@ -727,10 +753,10 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                                 const fi = filasInv.find((x) => x.k === f.key.slice(2));
                                 const c = buscar(C?.fuentes, f.key);
                                 const ok = !sinCostoReal && !periodoParcial && !faltaInv;
-                                const avC = A.avisos?.canal[f.key.slice(2)];
-                                const ll = avC && avC.avisos >= 1 && A.avisos ? (f.leads / avC.avisos) * (30 / A.avisos.dias) : null;
-                                const avP = C?.avisos?.canal[f.key.slice(2)];
-                                const llC = c && avP && avP.avisos >= 1 && C?.avisos ? (c.leads / avP.avisos) * (30 / C.avisos.dias) : null;
+                                const avC = avisosA?.canal[f.key.slice(2)];
+                                const ll = avC && avC.avisos >= 1 && avisosA ? (f.leads / avC.avisos) * (30 / avisosA.dias) : null;
+                                const avP = avisosC?.canal[f.key.slice(2)];
+                                const llC = c && avP && avP.avisos >= 1 && avisosC ? (c.leads / avP.avisos) * (30 / avisosC.dias) : null;
                                 const inv = typeof fi?.inv === 'number' && fi.inv > 0 ? fi.inv : null;
                                 return (
                                     <tr key={f.key}>
@@ -748,14 +774,15 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                             })}
                         </Tabla>
                     </Seccion>
-                    {A.avisos && A.avisos.tipos.length > 0 && <Seccion titulo="L/L por tipo de aviso" sub="Leads sobre listing de cada tipo de aviso, para seguir qué nivel rinde."
+                    {!avListo && <Seccion titulo="L/L por tipo de aviso"><div style={{ fontSize: 12.5, color: GRY }}>Contando los avisos vivos del periodo… la primera vez tarda cerca de un minuto (después queda guardado 12 h). Mientras, el L/L de «Por canal» sale en —.</div></Seccion>}
+                    {avisosA && avisosA.tipos.length > 0 && <Seccion titulo="L/L por tipo de aviso" sub="Leads sobre listing de cada tipo de aviso, para seguir qué nivel rinde."
                         info={<>Cada lead cuenta en el tipo que tenía su aviso <b>cuando llegó</b> (Inmuebles24 lo manda en el lead). Avisos = los que estuvieron vivos en ese tipo durante el periodo, en promedio por día (Inmuebles24, desde el historial); MercadoLibre no guarda historial y va con la foto de hoy (*). L/L llevado a 30 días. <b>Costo</b> = precio de lista por aviso al mes × avisos; la cuenta Premier todavía no tiene precio cargado. <b>CPL</b> = ese costo ÷ leads.</>}>
                         <Tabla head={['Portal', 'Tipo de aviso', 'Avisos', 'Leads', 'L/L', 'Costo del periodo', 'CPL']} min={720}>
-                            {A.avisos.tipos.map((x) => {
-                                const d = A.avisos!.dias;
+                            {avisosA.tipos.map((x) => {
+                                const d = avisosA!.dias;
                                 const ll = x.avisos >= 1 ? (x.leads / x.avisos) * (30 / d) : null;
-                                const cx = C?.avisos?.tipos.find((y) => y.portal === x.portal && y.tipo === x.tipo);
-                                const llC = cx && cx.avisos >= 1 && C?.avisos ? (cx.leads / cx.avisos) * (30 / C.avisos.dias) : null;
+                                const cx = avisosC?.tipos.find((y) => y.portal === x.portal && y.tipo === x.tipo);
+                                const llC = cx && cx.avisos >= 1 && avisosC ? (cx.leads / cx.avisos) * (30 / avisosC.dias) : null;
                                 const costo = x.costoMes != null ? x.costoMes * x.avisos * (d / 30) : null;
                                 return (
                                     <tr key={`${x.portal}|${x.tipo}`}>
@@ -1069,5 +1096,75 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
             </div>
             </div>
         </>
+    );
+}
+
+/** Tendencias sostenidas para periodos largos: por mes (leads por día, para no castigar el mes en curso) y
+ *  por fuente con volumen, cuántos meses seguidos viene subiendo o bajando el volumen y si la falta de
+ *  respuesta del asesor (8 am – 8 pm) viene empeorando. Sólo lo que vale la pena ver. */
+function Tendencias({ A }: { A: Bloque }) {
+    const MESC = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const meses = [...new Set(A.porDia.dias.map((d) => d.slice(0, 7)))];
+    if (meses.length < 2) return null;
+    const porMes = (s: { n: number[]; lab: number[]; sin: number[] }) => meses.map((m) => {
+        const idx = A.porDia.dias.map((d, i) => (d.startsWith(m) ? i : -1)).filter((i) => i >= 0);
+        const n = idx.reduce((a, i) => a + s.n[i], 0), lab = idx.reduce((a, i) => a + s.lab[i], 0), sin = idx.reduce((a, i) => a + s.sin[i], 0);
+        return { m, dia: n / Math.max(1, idx.length), n, pSin: lab >= 30 ? (100 * sin) / lab : null };
+    });
+    const nm = (m: string) => MESC[Number(m.slice(5, 7)) - 1];
+    const total = { key: 'total', nombre: 'Toda la red', n: A.porDia.dias.map((_, i) => A.porDia.series.reduce((a, s) => a + s.n[i], 0)),
+        lab: A.porDia.dias.map((_, i) => A.porDia.series.reduce((a, s) => a + s.lab[i], 0)), sin: A.porDia.dias.map((_, i) => A.porDia.series.reduce((a, s) => a + s.sin[i], 0)) };
+    const lineas: Array<{ peso: number; sev: 'alta' | 'media' | 'ok'; txt: string }> = [];
+    for (const s of [total, ...A.porDia.series]) {
+        const xs = porMes(s);
+        if (xs.reduce((a, x) => a + x.n, 0) < 300) continue;
+        // racha al final: meses seguidos bajando (o subiendo) al menos 3% cada uno
+        let baja = 0, sube = 0;
+        for (let i = xs.length - 1; i > 0; i--) { if (xs[i].dia < xs[i - 1].dia * 0.97) baja++; else break; }
+        for (let i = xs.length - 1; i > 0; i--) { if (xs[i].dia > xs[i - 1].dia * 1.03) sube++; else break; }
+        const ult = xs[xs.length - 1];
+        const fmt = (v: number) => (v >= 100 ? Math.round(v).toLocaleString('es-MX') : v.toFixed(1));
+        const conVolumen = Math.max(...xs.map((x) => x.dia)) >= 3;
+        const racha = !conVolumen ? 0 : baja >= 2 ? baja : sube >= 2 ? sube : 0;
+        if (racha) {
+            const ini = xs[xs.length - 1 - racha], cambio = Math.round(((ult.dia - ini.dia) / ini.dia) * 100);
+            if (Math.abs(cambio) >= 10) lineas.push({ peso: Math.abs(cambio) + (s.key === 'total' ? 100 : 0), sev: baja ? (cambio <= -25 ? 'alta' : 'media') : 'ok',
+                txt: `${s.nombre}: los leads vienen ${baja ? 'bajando' : 'subiendo'} ${racha + 1 > 2 ? `${racha} meses seguidos` : 'dos meses seguidos'}, desde ${nm(ini.m)} — de ${fmt(ini.dia)} a ${fmt(ult.dia)} al día (${cambio > 0 ? '+' : ''}${cambio}%).` });
+        } else {
+            // sin racha: ¿viene bajando desde su pico (o subiendo desde su punto más bajo)? Lo de Ale: «vienen bajando
+            // los leads desde x mes». Sólo canales con volumen (3+ leads al día en su mejor mes).
+            const pico = xs.slice(0, -1).reduce((a, x) => (x.dia > a.dia ? x : a), xs[0]);
+            const valle = xs.slice(0, -1).reduce((a, x) => (x.dia < a.dia ? x : a), xs[0]);
+            const dPico = pico.dia ? Math.round(((ult.dia - pico.dia) / pico.dia) * 100) : 0;
+            const dValle = valle.dia ? Math.round(((ult.dia - valle.dia) / valle.dia) * 100) : 0;
+            if (pico.dia >= 3 && dPico <= -20) lineas.push({ peso: -dPico + (s.key === 'total' ? 100 : 0), sev: dPico <= -30 ? 'alta' : 'media',
+                txt: `${s.nombre}: viene bajando desde ${nm(pico.m)}, su mejor mes — de ${fmt(pico.dia)} a ${fmt(ult.dia)} leads al día (${dPico}%).` });
+            else if (ult.dia >= 3 && dValle >= 25) lineas.push({ peso: Math.min(dValle, 100) / 2 + (s.key === 'total' ? 100 : 0), sev: 'ok',
+                txt: `${s.nombre}: viene subiendo desde ${nm(valle.m)} — de ${fmt(valle.dia)} a ${fmt(ult.dia)} leads al día (+${dValle}%).` });
+        }
+        // la falta de respuesta viene empeorando
+        const ps = xs.filter((x) => x.pSin != null) as Array<{ m: string; pSin: number }>;
+        if (ps.length >= 3) {
+            let peor = 0;
+            for (let i = ps.length - 1; i > 0; i--) { if (ps[i].pSin > ps[i - 1].pSin + 0.5) peor++; else break; }
+            const d = ps[ps.length - 1].pSin - ps[ps.length - 1 - peor].pSin;
+            if (peor >= 2 && d >= 3) lineas.push({ peso: 50 + d, sev: 'alta',
+                txt: `${s.nombre}: los leads sin respuesta del asesor suben ${peor} meses seguidos, de ${ps[ps.length - 1 - peor].pSin.toFixed(1)}% a ${ps[ps.length - 1].pSin.toFixed(1)}% (8 am – 8 pm).` });
+        }
+    }
+    lineas.sort((a, b) => b.peso - a.peso);
+    const color = { alta: '#A52003', media: '#8A6D00', ok: '#529999' };
+    return (
+        <div>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: '#777', marginBottom: 6 }}>Tendencias del periodo · {meses.map(nm).join(' → ')}</div>
+            {!lineas.length ? <div style={{ fontSize: 12.5, color: '#777' }}>Sin tendencias sostenidas: el volumen y la respuesta se mantuvieron estables mes a mes.</div>
+                : lineas.slice(0, 8).map((l, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, padding: '7px 0', borderBottom: '1px solid #F3F3F3', fontSize: 13, lineHeight: 1.5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 4, background: color[l.sev], flexShrink: 0, marginTop: 6 }} />
+                        <span>{l.txt}</span>
+                    </div>
+                ))}
+            <div style={{ fontSize: 11, color: '#777', marginTop: 6 }}>Se compara el promedio de leads por día de cada mes (así el mes en curso no sale «bajando» sólo por estar incompleto).</div>
+        </div>
     );
 }

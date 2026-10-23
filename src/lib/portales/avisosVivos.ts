@@ -13,38 +13,9 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from '../data';
 
-export const CUENTA_PREMIER = 'ANUNCIO_PREMIERE';
-const DIA = 86400000, MX = 6 * 3600 * 1000;
-
-/** nivel legible del tipo crudo de i24 (mismo vocabulario que Marketing de /mb) */
-export function tipoI24(raw: unknown, cuenta?: unknown): string | null {
-    const t = String(raw ?? '').toUpperCase();
-    if (!t || t === 'OFFLINE' || t === 'NULL' || t === 'UNDEFINED') return null;
-    if (String(cuenta ?? '').toUpperCase() === CUENTA_PREMIER) return 'Súper destacado · Premier';
-    const zd = t.includes('ZONA_DEMAND');
-    if (t.startsWith('HOME')) return zd ? 'Súper destacado zona demand' : 'Súper destacado';
-    if (t.startsWith('DESTACADO')) return zd ? 'Destacado zona demand' : 'Destacado';
-    if (t.startsWith('GRATIS')) return 'Gratis';
-    return 'Simple';
-}
-/** nivel de MeLi legible (campaign del lead o type del aviso) */
-export const TIPO_MELI: Record<string, string> = { gold_premium: 'Gold premium', gold_pro: 'Gold pro', gold: 'Gold', silver: 'Silver', bronze: 'Bronze', free: 'Gratuito' };
-/** precio de lista por aviso al mes en i24 (mismos que /portales/avisos y Marketing de /mb); Premier: sin precio aún */
-export const COSTO_TIPO: Record<string, number> = {
-    'Súper destacado zona demand': 785, 'Súper destacado': 523.48, 'Destacado zona demand': 420, Destacado: 315, Simple: 15,
-};
-export const ORDEN_TIPOS = ['Súper destacado · Premier', 'Súper destacado', 'Súper destacado zona demand', 'Destacado', 'Destacado zona demand', 'Simple', 'Gratis'];
-
-export interface AvisosPeriodo {
-    dias: number;
-    /** aviso-días por tipo de aviso de i24 */
-    tiposI24: Record<string, number>;
-    /** aviso-días por canal de i24 (i24 · i24nura · i24premier) */
-    canalesI24: Record<string, number>;
-    /** foto de hoy (sin historial): avisos en línea por nivel de MeLi y por portal */
-    meliHoy: Record<string, number>;
-    hoy: Record<string, number>;
-}
+import { CUENTA_PREMIER, TIPO_MELI, tipoI24, type AvisosPeriodo } from './avisosTipos';
+export type { AvisosPeriodo };
+const DIA = 86400000;
 
 export async function avisosDelPeriodo(A: Date, B: Date, opc: { ids: ObjectId[] | null; operacion: 'todas' | 'sale' | 'rent'; esNura: (n: unknown) => boolean }): Promise<AvisosPeriodo> {
     const db = await getDb();
@@ -78,7 +49,7 @@ export async function avisosDelPeriodo(A: Date, B: Date, opc: { ids: ObjectId[] 
         if (!h.length || !s.length) continue;
         let iH = -1, iS = -1;
         for (let k = 0; k < nDias; k++) {
-            const tk = A.getTime() + k * DIA + 18 * 3600 * 1000;   // mediodía MX (A es 00:00 MX = 06:00 UTC)
+            const tk = A.getTime() + k * DIA + 18 * 3600 * 1000;   // mediodía MX (los cortes de /portales van en días UTC)
             if (tk > fin) break;
             while (iH + 1 < h.length && h[iH + 1].t.getTime() <= tk) iH++;
             while (iS + 1 < s.length && s[iS + 1].t.getTime() <= tk) iS++;

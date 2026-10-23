@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { asesoresDe, inmobiliariaView, opcionesInmobiliarias, type Comparar } from '@/lib/portales/inmobiliaria';
+import { asesoresDe, inmobiliariaView, opcionesInmobiliarias, type Comparar, avisosVista } from '@/lib/portales/inmobiliaria';
 import type { Operacion } from '@/lib/portales/metrics';
 
 // Pestaña "Inmobiliarias" de /portales. Sólo equipo Pulppo: el middleware no deja pasar a un master
@@ -39,6 +39,8 @@ export async function GET(req: Request) {
         const inmobiliaria = u.searchParams.get('inmo') || null;
         const asesorId = (inmobiliaria && u.searchParams.get('asesor')) || null;
 
+        // L/L: avisos vivos del periodo (y del comparado), aparte porque tarda ~1 min la primera vez (caché 12 h)
+        if (view === 'avisos') return NextResponse.json(await avisosVista({ inmobiliaria, asesorId: null, operacion, desde, hasta, comparar, detalle: false }));
         const detalle = view === 'detalle';
         const key = [view, inmobiliaria, asesorId, operacion, desde, hasta, comparar].join('|');
         const hit = cache.get(key);

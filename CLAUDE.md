@@ -508,9 +508,17 @@ de su inventario como exclusiva, 0 firmadas).
   recibe esa cuenta (3er argumento, `cuentaI24DeLead`) y devuelve `i24premier`. Igual que NURA (`i24nura`), sale
   siempre en «Por canal». Su inversión se lee del Sheet si hay una línea «I24 Premier» (alias en inversion.ts).
   Los CIERRES de Premier todavía cuentan como Inmuebles24 (la fuente del cierre no trae la cuenta).
-- **L/L** (`src/lib/portales/avisosVivos.ts`, en `Bloque.avisos`): avisos vivos por día a mediodía MX desde
+- **L/L** (`src/lib/portales/avisosVivos.ts` + `avisosTipos.ts`; vista APARTE `?view=avisos`, caché 12 h — contar avisos lee 41k historiales y tarda 50–130 s; el bloque sólo trae `leadsTipo`): avisos vivos por día a mediodía MX desde
   `portals.inmuebles24.history` + `status.history`, recortado EN MONGO ($convert/$filter/$reduce; leer el historial
   completo de la red tarda ~70 s, así ~10 s). MeLi, propiedades.com y Casas y Terrenos no tienen historial: foto de
   hoy (marcada *). Leads por tipo = `leads.campaign` (i24 manda su tipo; MeLi gold/gold_premium/silver). L/L se
   lleva a 30 días. Resumen → «Por canal» suma L/L, CPL (inversión ÷ leads) y CPV (inversión ÷ visitas), y la
   sección «L/L por tipo de aviso» con costo de lista (avisos × precio i24 al mes) y CPL por tipo.
+
+- **Para atender**: el spam por publicación va en su propia sección «Posible spam en publicaciones», con la
+  inmobiliaria como título y su KAM (`getKam`) para delegar. En periodos de más de 45 días (trimestre, YTD) se
+  muestran TENDENCIAS (componente `Tendencias`: leads por día de cada mes por fuente — racha de 2+ meses
+  bajando/subiendo, o «viene bajando desde su mejor mes» ≥20%, o «subiendo desde su punto más bajo» ≥25%; y la
+  falta de respuesta del asesor subiendo 2+ meses) y las alertas sueltas quedan plegadas.
+- ⚠️ YTD de toda la red con comparación tarda ~7 min en local (Atlas lejos); en Vercel es más rápido, pero está
+  cerca del maxDuration de 300 s.

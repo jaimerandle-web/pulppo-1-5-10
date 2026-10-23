@@ -32,7 +32,8 @@ import { CANALES, KEY2NAME, NOT, NOTP, brokerContacts, classifySource, dig, isDa
 import { FAM_LBL, FAM_ORDEN, NO_ES_DESCARTE, etiquetaMotivo, familiaDe, motivoDe } from './descarte';
 import { ALIAS_IDS, ALIAS_INMO, ORDEN_INMOBILIARIAS, SIN_CUENTA, normInmo } from './ordenInmobiliarias';
 import type { Operacion } from './metrics';
-import { avisosDelPeriodo, tipoI24, TIPO_MELI, COSTO_TIPO, ORDEN_TIPOS, CUENTA_PREMIER } from './avisosVivos';
+import { avisosDelPeriodo } from './avisosVivos';
+import { CUENTA_PREMIER, TIPO_MELI, tipoI24, type AvisosPeriodo } from './avisosTipos';
 
 const DIA = 86400000;
 const MX_MS = 6 * 3600 * 1000;
@@ -165,12 +166,9 @@ export interface Bloque {
     spamPub?: SpamPub[];
     /** sólo con `detalle`: por clave de fuente (`f:meli`, … y `total`) los asesores y las publicaciones */
     detalle?: Record<string, DetalleFuente>;
-    /** L/L: avisos vivos promedio en el periodo por canal (i24 con historial; MeLi, pcom, CyT foto de hoy) y por tipo */
-    avisos?: {
-        dias: number;
-        canal: Record<string, { avisos: number; hoy: boolean }>;
-        tipos: Array<{ portal: 'Inmuebles24' | 'MercadoLibre'; tipo: string; avisos: number; hoy: boolean; leads: number; costoMes: number | null }>;
-    };
+    /** leads por tipo de aviso (clave «Inmuebles24|Súper destacado», «MercadoLibre|Silver»…) para el L/L.
+     *  Los avisos vivos van aparte (`avisosVista`): contarlos lee el historial de toda la red (~1 min). */
+    leadsTipo?: Record<string, number>;
 }
 export interface InmoView {
     filtro: FiltroInmo;
@@ -320,8 +318,6 @@ async function bloque(
         contacto: 'whatsapp' | 'telefono' | 'form' };
     const refs: LeadRef[] = [];
     const leadsTipo = new Map<string, number>();
-    // avisos vivos del periodo (en paralelo con los leads)
-    const tareaAvisos = avisosDelPeriodo(A, B, { ids: idsInmo, operacion: f.operacion, esNura }).catch((e) => { console.error('[portales] avisos vivos', e); return null; });
     const nDias = Math.round((B.getTime() - A.getTime()) / DIA);
     const serie = new Map<string, { n: number[]; lab: number[]; sin: number[] }>();
     const filtro: Document = {
@@ -740,27 +736,9 @@ async function bloque(
             };
         }
     }
-    // L/L: avisos vivos promedio por canal y por tipo, con los leads de cada tipo
-    const av = await tareaAvisos;
-    const avisos: Bloque['avisos'] = av ? (() => {
-        const prom = (x: number) => Math.round((10 * x) / av.dias) / 10;
-        const canal: Record<string, { avisos: number; hoy: boolean }> = {};
-        for (const [k, n] of Object.entries(av.canalesI24)) canal[k] = { avisos: prom(n), hoy: false };
-        for (const [k, n] of Object.entries(av.hoy)) canal[k] = { avisos: n, hoy: true };
-        const tipos: NonNullable<Bloque['avisos']>['tipos'] = [];
-        for (const tp of ORDEN_TIPOS) {
-            const ad = av.tiposI24[tp] ?? 0, le = leadsTipo.get(`Inmuebles24|${tp}`) ?? 0;
-            if (ad || le) tipos.push({ portal: 'Inmuebles24', tipo: tp, avisos: prom(ad), hoy: false, leads: le, costoMes: COSTO_TIPO[tp] ?? null });
-        }
-        for (const tp of Object.values(TIPO_MELI)) {
-            const n = av.meliHoy[tp] ?? 0, le = leadsTipo.get(`MercadoLibre|${tp}`) ?? 0;
-            if (n || le) tipos.push({ portal: 'MercadoLibre', tipo: tp, avisos: n, hoy: true, leads: le, costoMes: null });
-        }
-        return { dias: av.dias, canal, tipos };
-    })() : undefined;
     const bIncl = new Date(B.getTime() - DIA);
     return {
-        pubs, pubN, ...(detalle ? { detalle } : {}), ...(avisos ? { avisos } : {}),
+        pubs, pubN, ...(detalle ? { detalle } : {}), leadsTipo: Object.fromEntries(leadsTipo),
         desde: ymd(A), hasta: ymd(bIncl), etiqueta: etiquetaDe(A, bIncl), dias: Math.round((B.getTime() - A.getTime()) / DIA),
         total: fila(total), fuentes, asesores, inmobiliarias,
         descarte: {
@@ -1015,4 +993,29 @@ export async function inmobiliariaView(f: FiltroInmo, now = Date.now()): Promise
         inmobiliaria: op ? { nombre: op.nombre, kam: op.kam, tier: op.tier, cuentas: op.ids.length } : null,
         actual, comparado, generado: new Date(now).toISOString(),
     };
+}
+
+// ── avisos vivos para el L/L (vista aparte, con caché larga) ─────────────────────────────────────
+// Contar los avisos vivos día por día lee el historial de i24 de toda la red: 50–70 s por periodo aunque se
+// recorte en Mongo (el costo es traer 41k documentos). Por eso NO va en `bloque`: la pantalla lo pide aparte
+// y se guarda 12 h (el historial de días pasados no cambia).
+const cacheAvisos = new Map<string, { at: number; v: AvisosPeriodo | null }>();
+const enCurso = new Map<string, Promise<AvisosPeriodo | null>>();
+export async function avisosVista(f: FiltroInmo): Promise<{ actual: AvisosPeriodo | null; comparado: AvisosPeriodo | null }> {
+    const todas = await opcionesInmobiliarias();
+    const op = f.inmobiliaria ? todas.find((x) => x.nombre === f.inmobiliaria) ?? null : null;
+    const ids = op ? op.ids.map((s) => new ObjectId(s)) : null;
+    const { A, B, cA, cB } = ventanas(f);
+    const uno = (a: Date, b: Date) => {
+        const k = [f.inmobiliaria ?? '', f.operacion, a.toISOString(), b.toISOString()].join('|');
+        const hit = cacheAvisos.get(k);
+        if (hit && Date.now() - hit.at < 12 * 3600 * 1000) return Promise.resolve(hit.v);
+        if (enCurso.has(k)) return enCurso.get(k)!;
+        const p = avisosDelPeriodo(a, b, { ids, operacion: f.operacion, esNura }).catch((e) => { console.error('[portales] avisos', e); return null; })
+            .then((v) => { cacheAvisos.set(k, { at: Date.now(), v }); enCurso.delete(k); return v; });
+        enCurso.set(k, p);
+        return p;
+    };
+    const [actual, comparado] = await Promise.all([uno(A, B), cA && cB ? uno(cA, cB) : Promise.resolve(null)]);
+    return { actual, comparado };
 }
