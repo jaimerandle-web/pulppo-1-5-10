@@ -520,5 +520,10 @@ de su inventario como exclusiva, 0 firmadas).
   muestran TENDENCIAS (componente `Tendencias`: leads por día de cada mes por fuente — racha de 2+ meses
   bajando/subiendo, o «viene bajando desde su mejor mes» ≥20%, o «subiendo desde su punto más bajo» ≥25%; y la
   falta de respuesta del asesor subiendo 2+ meses) y las alertas sueltas quedan plegadas.
+- **Diseño de alertas** (Ale: «no se leen fácil»): agrupadas por severidad (Urgente / Para revisar, filo izquierdo de color,
+  sin etiqueta ALTA/MEDIA por fila), QUIÉN a la izquierda y QUÉ a la derecha con las cifras en negritas (`conCifras`);
+  las generales van en UNA fila «Toda la red». El spam por publicación va en columnas por KAM, con el código como título,
+  los leads como cifra grande y las señales en chips. L/L por tipo muestra «Avisos hoy» (`tiposI24Hoy`) junto al promedio
+  del periodo: Premier arrancó el 22-oct y su promedio de octubre es ~10 aunque hoy tenga 130.
 - ⚠️ YTD de toda la red con comparación tarda ~7 min en local (Atlas lejos); en Vercel es más rápido, pero está
   cerca del maxDuration de 300 s.

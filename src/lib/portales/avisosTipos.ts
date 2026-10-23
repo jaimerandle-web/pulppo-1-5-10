@@ -30,11 +30,13 @@ export interface AvisosPeriodo {
     /** foto de hoy (sin historial): avisos en línea por nivel de MeLi y por portal */
     meliHoy: Record<string, number>;
     hoy: Record<string, number>;
+    /** foto de HOY de i24 por tipo (el promedio del periodo diluye un tipo que arrancó a medio periodo) */
+    tiposI24Hoy?: Record<string, number>;
 }
 export interface AvisosArmados {
     dias: number;
     canal: Record<string, { avisos: number; hoy: boolean }>;
-    tipos: Array<{ portal: 'Inmuebles24' | 'MercadoLibre'; tipo: string; avisos: number; hoy: boolean; leads: number; costoMes: number | null }>;
+    tipos: Array<{ portal: 'Inmuebles24' | 'MercadoLibre'; tipo: string; avisos: number; hoy: boolean; leads: number; costoMes: number | null; ahora: number | null }>;
 }
 /** junta los avisos vivos con los leads por tipo de un bloque (clave «Portal|tipo») */
 export function armarAvisos(av: AvisosPeriodo, leadsTipo: Record<string, number>): AvisosArmados {
@@ -45,11 +47,12 @@ export function armarAvisos(av: AvisosPeriodo, leadsTipo: Record<string, number>
     const tipos: AvisosArmados['tipos'] = [];
     for (const tp of ORDEN_TIPOS) {
         const ad = av.tiposI24[tp] ?? 0, le = leadsTipo[`Inmuebles24|${tp}`] ?? 0;
-        if (ad || le) tipos.push({ portal: 'Inmuebles24', tipo: tp, avisos: prom(ad), hoy: false, leads: le, costoMes: COSTO_TIPO[tp] ?? null });
+        const ah = av.tiposI24Hoy ? av.tiposI24Hoy[tp] ?? 0 : null;
+        if (ad || le || ah) tipos.push({ portal: 'Inmuebles24', tipo: tp, avisos: prom(ad), hoy: false, leads: le, costoMes: COSTO_TIPO[tp] ?? null, ahora: ah });
     }
     for (const tp of Object.values(TIPO_MELI)) {
         const n = av.meliHoy[tp] ?? 0, le = leadsTipo[`MercadoLibre|${tp}`] ?? 0;
-        if (n || le) tipos.push({ portal: 'MercadoLibre', tipo: tp, avisos: n, hoy: true, leads: le, costoMes: null });
+        if (n || le) tipos.push({ portal: 'MercadoLibre', tipo: tp, avisos: n, hoy: true, leads: le, costoMes: null, ahora: n });
     }
     return { dias: av.dias, canal, tipos };
 }

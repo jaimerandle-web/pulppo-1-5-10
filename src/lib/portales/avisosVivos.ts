@@ -75,5 +75,13 @@ export async function avisosDelPeriodo(A: Date, B: Date, opc: { ids: ObjectId[] 
         db.collection('properties').countDocuments({ ...base, 'status.last': 'published', 'portals.casas-y-terrenos.status': 'ONLINE' }),
     ]);
     hoy.propiedades = pcom; hoy.cyt = cyt;
-    return { dias: nDias, tiposI24, canalesI24, meliHoy, hoy };
+    // i24 HOY por tipo (Ale: «no tenemos 10 avisos premier, hay 130»: el promedio del periodo diluye una cuenta nueva)
+    const tiposI24Hoy: Record<string, number> = {};
+    for (const r of await db.collection('properties').aggregate([
+        { $match: { ...base, 'status.last': 'published', 'portals.inmuebles24.type': { $exists: true } } },
+        { $group: { _id: { t: '$portals.inmuebles24.type', c: '$portals.inmuebles24.company' }, n: { $sum: 1 } } }]).toArray()) {
+        const t = tipoI24(r._id.t, r._id.c);
+        if (t) tiposI24Hoy[t] = (tiposI24Hoy[t] ?? 0) + r.n;
+    }
+    return { dias: nDias, tiposI24, canalesI24, meliHoy, hoy, tiposI24Hoy };
 }

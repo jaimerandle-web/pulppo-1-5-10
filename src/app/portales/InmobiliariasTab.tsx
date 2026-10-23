@@ -130,10 +130,11 @@ function Info({ children, ancho = 320 }: { children: ReactNode; ancho?: number }
 
 function Kpi({ label, value, sub, delta, info }: { label: string; value: string; sub?: string; delta?: ReactNode; info?: ReactNode }) {
     return (
-        <div style={{ flex: '1 1 150px', background: '#fff', border: `1px solid ${LGT}`, padding: '12px 14px', borderRadius: R, minWidth: 0 }}>
-            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.5px', color: GRY, fontWeight: 700 }}>{label}{info && <Info>{info}</Info>}</div>
-            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.05, margin: '7px 0 3px' }}>{value}</div>
-            <div style={{ fontSize: 10.5, color: '#777', lineHeight: 1.35 }}>{delta}{delta && sub ? ' · ' : ''}{sub}</div>
+        <div style={{ flex: '1 1 150px', background: '#fff', border: '1px solid #E6E6E6', padding: '14px 16px 13px', borderRadius: R, minWidth: 0 }}>
+            <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.7px', color: '#7A7A7A', fontWeight: 700 }}>{label}{info && <Info>{info}</Info>}</div>
+            <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 32, lineHeight: 1, margin: '10px 0 6px', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+            {delta && <div style={{ fontSize: 11.5, lineHeight: 1.3 }}>{delta} <span style={{ color: '#9A9A9A' }}>vs comparado</span></div>}
+            {sub && <div style={{ fontSize: 11, color: '#7A7A7A', lineHeight: 1.35, marginTop: 2 }}>{sub}</div>}
         </div>
     );
 }
@@ -149,36 +150,73 @@ function Delta({ a, b, pts = false, invertir = false }: { a?: number | null; b?:
 
 function Seccion({ titulo, sub, info, onCopiar, children }: { titulo: string; sub?: ReactNode; info?: ReactNode; onCopiar?: () => void; children: ReactNode }) {
     return (
-        <div style={{ marginTop: 30 }}>
+        <div style={{ marginTop: 40 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-                <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 22, fontWeight: 400, margin: 0 }}>{titulo}{info && <Info ancho={380}>{info}</Info>}</h2>
+                <h2 style={{ fontFamily: 'EB Garamond, serif', fontSize: 25, fontWeight: 400, margin: 0, textWrap: 'balance' }}>{titulo}{info && <Info ancho={380}>{info}</Info>}</h2>
                 <div style={{ flex: 1 }} />
                 {onCopiar && <button onClick={onCopiar} style={{ fontSize: 11, padding: '4px 9px', border: `1px solid ${LGT}`, borderRadius: R, background: '#fff', cursor: 'pointer', fontFamily: 'inherit', color: '#555' }}>Copiar tabla</button>}
             </div>
             <div style={{ width: 50, height: 1, background: YEL, margin: '8px 0 10px' }} />
-            {sub && <div style={{ fontSize: 12, color: '#666', marginBottom: 10, lineHeight: 1.5 }}>{sub}</div>}
+            {sub && <div style={{ fontSize: 12.5, color: '#666', marginBottom: 12, lineHeight: 1.55, maxWidth: 760 }}>{sub}</div>}
             {children}
         </div>
     );
 }
 
-/** Fila de «Para atender». Con `detalle`, se abre al hacer clic y dice QUIÉN y QUÉ hacer (Ale, oct-2026). */
-function FilaFlag({ sev, titulo, items, spam, etiqueta, detalle, onAbrir }: {
-    sev: 'alta' | 'media'; titulo: string; items: string[]; spam?: boolean; etiqueta?: string;
+type SevF = 'alta' | 'media' | 'ok';
+const SEV: Record<SevF, { c: string; t: string }> = { alta: { c: RED, t: 'Urgente' }, media: { c: '#C99A00', t: 'Para revisar' }, ok: { c: SEA, t: 'Va bien' } };
+
+/** Cifras en negritas (%, pts, ×, montos): la alerta se lee de un vistazo por sus números (Ale, oct-2026). */
+function conCifras(t: string): ReactNode {
+    const partes = t.split(/((?:[+−-])?\$?\d[\d,.]*(?:\s?(?:%|pts|×|min))?)/g);
+    return partes.map((p, i) => (i % 2 ? <b key={i} style={{ fontWeight: 800 }}>{p}</b> : p));
+}
+
+/** «Fernando ALVAREZ SA DE CV» → «Fernando Alvarez»: los nombres en mayúsculas se leen como grito. */
+function nombreLimpio(n: string | null | undefined): string {
+    const x = (n ?? 'Sin inmobiliaria').replace(/,?\s+S\.?\s?A\.?(\s+DE\s+C\.?\s?V\.?)?$/i, '').trim();
+    return x === x.toUpperCase() ? x.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toUpperCase()) : x;
+}
+
+/** Encabezado de un grupo de alertas: «Urgente · 3». */
+function GrupoSev({ sev, n, children }: { sev: SevF; n: number; children: ReactNode }) {
+    if (!n) return null;
+    return (
+        <div style={{ marginTop: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.7px', color: SEV[sev].c, marginBottom: 8 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, background: SEV[sev].c }} />{SEV[sev].t} · {n}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{children}</div>
+        </div>
+    );
+}
+
+/** Una alerta: a la izquierda QUIÉN (fuente o publicación), a la derecha QUÉ pasó, una idea por línea.
+ *  El color de severidad va en el filo izquierdo; con `detalle` se abre al hacer clic (quién y qué hacer). */
+function FilaFlag({ sev, titulo, sub, items, chips, cifra, detalle, onAbrir }: {
+    sev: SevF; titulo: ReactNode; sub?: ReactNode; items: string[]; chips?: string[]; cifra?: ReactNode;
     detalle?: () => ReactNode; onAbrir?: () => void;
 }) {
     const [abierta, setAbierta] = useState(false);
     const abre = !!detalle;
     return (
-        <div style={{ borderBottom: `1px solid ${LGT}` }}>
+        <div style={{ border: `1px solid #E6E6E6`, borderLeft: `3px solid ${SEV[sev].c}`, borderRadius: R, background: '#fff' }}>
             <div onClick={abre ? () => { if (!abierta) onAbrir?.(); setAbierta(!abierta); } : undefined}
-                style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '8px 0', fontSize: 12.5, lineHeight: 1.5, cursor: abre ? 'pointer' : 'default' }}>
-                <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.5px', color: sev === 'alta' ? RED : '#8A6D00', width: 44, flexShrink: 0 }}>{sev === 'alta' ? 'ALTA' : 'MEDIA'}</span>
-                <span style={{ width: 150, flexShrink: 0, fontWeight: 700 }}>{titulo}{(spam || etiqueta) && <span style={{ display: 'inline-block', marginLeft: 6, fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: R, background: '#F3D9D3', color: RED }}>{etiqueta ?? 'Posible spam'}</span>}</span>
-                <span style={{ flex: 1 }}>{items.length === 1 ? items[0] : items.map((t, i) => <div key={i}>· {t}</div>)}</span>
-                {abre && <span style={{ fontSize: 11, color: '#777', flexShrink: 0, whiteSpace: 'nowrap' }}>{abierta ? '▾ cerrar' : '▸ ver detalle'}</span>}
+                style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', alignItems: 'flex-start', padding: '11px 14px', cursor: abre ? 'pointer' : 'default' }}>
+                <div style={{ flex: '0 0 190px', minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.35 }}>{titulo}</div>
+                    {sub && <div style={{ fontSize: 11, color: '#7A7A7A', marginTop: 2, lineHeight: 1.4 }}>{sub}</div>}
+                </div>
+                <div style={{ flex: '1 1 320px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13, lineHeight: 1.5, color: '#333' }}>
+                    {cifra}
+                    {items.map((t, i) => <div key={i}>{conCifras(t)}</div>)}
+                    {chips && chips.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {chips.map((c) => <span key={c} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: LGT, color: '#444' }}>{conCifras(c)}</span>)}
+                    </div>}
+                </div>
+                {abre && <span style={{ fontSize: 11, fontWeight: 700, color: abierta ? BLK : '#8A8A8A', flexShrink: 0, whiteSpace: 'nowrap', paddingTop: 2 }}>{abierta ? 'Cerrar ▴' : 'Detalle ▾'}</span>}
             </div>
-            {abre && abierta && <div style={{ margin: '0 0 12px 54px', padding: '12px 14px', background: '#FAFAFA', border: `1px solid ${LGT}`, borderRadius: R }}>{detalle!()}</div>}
+            {abre && abierta && <div style={{ margin: '0 14px 12px', padding: '12px 14px', background: '#FAFAFA', border: `1px solid ${LGT}`, borderRadius: R }}>{detalle!()}</div>}
         </div>
     );
 }
@@ -265,15 +303,16 @@ function Aviso({ children }: { children: ReactNode }) {
     return <div style={{ border: `1px solid ${LGT}`, borderLeft: `3px solid ${YEL}`, padding: '9px 12px', borderRadius: R, fontSize: 11.5, lineHeight: 1.5, color: '#444', marginTop: 10 }}>{children}</div>;
 }
 
-const th: CSSProperties = { textAlign: 'right', padding: '7px 8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
+const th: CSSProperties = { textAlign: 'right', padding: '8px 10px', borderBottom: `1px solid ${BLK}`, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.6px', color: '#666', whiteSpace: 'nowrap', fontWeight: 700 };
 const th0: CSSProperties = { ...th, textAlign: 'left' };
-const td: CSSProperties = { padding: '7px 8px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
+const td: CSSProperties = { padding: '9px 10px', borderBottom: `1px solid ${LGT}`, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
 const td0: CSSProperties = { ...td, textAlign: 'left' };
 
 function Tabla({ head, children, min = 760 }: { head: string[]; children: ReactNode; min?: number }) {
     return (
-        <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: min }}>
+        <div style={{ overflowX: 'auto' }} className="pt-tabla">
+            <style>{'.pt-tabla tbody tr:hover td{background:#FAFAF7}'}</style>
+            <table style={{ borderCollapse: 'collapse', fontSize: 12.5, width: '100%', minWidth: min }}>
                 <thead><tr>{head.map((h, i) => <th key={h + i} style={i ? th : th0}>{h}</th>)}</tr></thead>
                 <tbody>{children}</tbody>
             </table>
@@ -687,26 +726,36 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 // cada alerta por fuente abre su detalle: quién (asesores) y dónde (publicaciones)
                 const filaGrupo = (g: (typeof grupos)[number]) => {
                     const fk = A.fuentes.find((x) => x.nombre === g.fuente);
-                    return <FilaFlag key={g.fuente + (g.spam ? '|s' : '')} sev={g.sev} titulo={g.fuente} items={g.items} spam={g.spam}
+                    return <FilaFlag key={g.fuente + (g.spam ? '|s' : '')} sev={g.sev} titulo={g.fuente} sub={g.spam ? 'Posible spam' : undefined} items={g.items}
                         onAbrir={fk ? pedirDetalle : undefined}
                         detalle={fk ? () => <DetalleAlerta d={detD?.[fk.key] ?? (detD ? { asesores: [], pubs: [] } : undefined)} fuente={fk} /> : undefined} />;
+                };
+                // las generales (la semana, el Sheet) van juntas en UNA fila «Toda la red» por severidad, no repetidas
+                const filaRed = (sv: 'alta' | 'media') => {
+                    const xs = atender.filter((x) => x.sev === sv);
+                    return xs.length ? <FilaFlag key={'red' + sv} sev={sv} titulo="Toda la red" sub="todas las fuentes" items={xs.map((x) => x.txt)} onAbrir={pedirDetalle}
+                        detalle={() => <DetalleAlerta d={detD?.total ?? (detD ? { asesores: [], pubs: [] } : undefined)} fuente={T} red />} /> : null;
                 };
                 const spamPub = A.spamPub ?? [];
                 // Periodos largos (trimestre, YTD): «Para atender» muestra TENDENCIAS sostenidas y deja las alertas
                 // sueltas plegadas (Ale, oct-2026: «se vuelve muy denso; que sea un resumen»).
                 const largo = A.dias > 45;
-                const alertas = (!atender.length && !grupos.length ? <div style={{ fontSize: 12.5, color: GRY }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
+                const nAlta = grupos.filter((g) => g.sev === 'alta').length + (atender.some((x) => x.sev === 'alta') ? 1 : 0);
+                const nMedia = grupos.filter((g) => g.sev === 'media').length + (atender.some((x) => x.sev === 'media') ? 1 : 0);
+                const alertas = (!atender.length && !grupos.length ? <div style={{ fontSize: 12.5, color: '#777' }}>{!incluyeSemana || (alertasSemana && alertasSemana.op === b.op) ? 'Nada que atender.' : 'Revisando la semana…'}</div>
                             : <>
-                                {grupos.filter((g) => g.sev === 'alta').map((g) => filaGrupo(g))}
-                                {atender.map((x, i) => <FilaFlag key={i} sev={x.sev} titulo="Toda la red" items={[x.txt]} onAbrir={pedirDetalle}
-                                    detalle={() => <DetalleAlerta d={detD?.total ?? (detD ? { asesores: [], pubs: [] } : undefined)} fuente={T} red />} />)}
-                                {grupos.filter((g) => g.sev === 'media').map((g) => filaGrupo(g))}
+                                <GrupoSev sev="alta" n={nAlta}>{filaRed('alta')}{grupos.filter((g) => g.sev === 'alta').map((g) => filaGrupo(g))}</GrupoSev>
+                                <GrupoSev sev="media" n={nMedia}>{filaRed('media')}{grupos.filter((g) => g.sev === 'media').map((g) => filaGrupo(g))}</GrupoSev>
                             </>);
+                // spam por publicación: la propiedad es el título; el volumen, la cifra grande; las señales, en chips
                 const filaSpam = (x: SpamPub) => (
-                    <FilaFlag key={'sp' + x.pid} sev={x.sev} titulo={x.inmo ?? 'Sin inmobiliaria'} etiqueta={`KAM: ${getKam(x.inmo)}`}
-                        items={[`Propiedad ${x.codigo ?? '(sin código)'} · ${x.fuente}: ${f0(x.n)} leads${x.prev ? ` (antes ${f0(x.prev)})` : ' (publicación nueva)'} — ${x.senales.join(' · ')}`]}
+                    <FilaFlag key={'sp' + x.pid} sev={x.sev} titulo={x.codigo ?? '(sin código)'} sub={<>{nombreLimpio(x.inmo)} · {x.fuente}</>} items={[]}
+                        cifra={<div><span style={{ fontFamily: 'EB Garamond, serif', fontSize: 20, lineHeight: 1 }}>{f0(x.n)}</span> leads <span style={{ color: '#7A7A7A' }}>{x.prev ? `· antes ${f0(x.prev)}` : '· publicación nueva'}</span></div>}
+                        chips={x.senales.filter((t) => !/leads/.test(t))}
                         detalle={() => <DetalleSpam x={x} />} />
                 );
+                const porKam = Object.entries(spamPub.reduce<Record<string, SpamPub[]>>((m, x) => { const k = getKam(x.inmo); (m[k] ??= []).push(x); return m; }, {}))
+                    .sort((p, q) => q[1].length - p[1].length || p[0].localeCompare(q[0], 'es'));
                 // los 8 canales con más leads, y siempre las cuentas propias de i24 (NURA, Premier de Diamond House)
                 const top = [...A.fuentes.slice(0, 8), ...A.fuentes.slice(8).filter((x) => x.key === 'f:i24nura' || x.key === 'f:i24premier')];
                 return (<>
@@ -716,7 +765,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                         <Kpi label="Cierres del periodo" info={DEF.cierresPeriodo} value={f0(A.cierres.n)} sub={`${f0(A.cierres.venta)} venta · ${f0(A.cierres.renta)} renta`} delta={<Delta a={A.cierres.n} b={C?.cierres.n} />} />
                         <Kpi label="Regalía Pulppo" info={DEF.regalia} value={money(A.cierres.regalia)} delta={<Delta a={A.cierres.regalia} b={C?.cierres.regalia} />} />
                         <Kpi label="ROI" info={DEF.roi} value={roiTot != null ? `${roiTot.toFixed(2)}×` : '—'} sub={roiTot != null ? 'canales pagados' : sinCostoReal ? 'sólo con «Todo» y sin inmobiliaria' : faltaInv ? 'falta la inversión del mes' : periodoParcial ? 'elige meses completos' : '…'} />
-                        <Kpi label="Sin respuesta · WhatsApp" info={DEF.sinRespuesta} value={pc(T.pctSinRespuestaWa)} sub={`Por teléfono: ${pc(T.pctSinRespuestaTel)} sin contacto visible (las llamadas al celular del asesor no se registran)`} delta={<Delta a={T.pctSinRespuestaWa} b={CT?.pctSinRespuestaWa} pts invertir />} />
+                        <Kpi label="Sin respuesta · WhatsApp" info={DEF.sinRespuesta} value={pc(T.pctSinRespuestaWa)} sub={`Teléfono: ${pc(T.pctSinRespuestaTel)} sin contacto visible`} delta={<Delta a={T.pctSinRespuestaWa} b={CT?.pctSinRespuestaWa} pts invertir />} />
                     </div>
                     <Seccion titulo="Qué cambió">
                         {lineas.map(([k, txt]) => (
@@ -739,9 +788,21 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                         {largo && (atender.length > 0 || grupos.length > 0) && <details style={{ marginTop: 10 }}><summary style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}>Ver las {atender.length + grupos.length} alertas del periodo, una por una</summary><div style={{ marginTop: 8 }}>{alertas}</div></details>}
                         {!largo && alertas}
                     </Seccion>
-                    {spamPub.length > 0 && <Seccion titulo="Posible spam en publicaciones" sub={<>Publicaciones puntuales con señales de spam, con su inmobiliaria y su KAM para delegarlo. {Object.entries(spamPub.reduce<Record<string, number>>((m, x) => { const k = getKam(x.inmo); return { ...m, [k]: (m[k] ?? 0) + 1 }; }, {})).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}: ${n}`).join(' · ')}</>}
-                        info={<>Una publicación con 20 o más leads es sospechosa si coinciden 2 o más de: el triple de leads que el periodo anterior (o publicación nueva), madrugada ≥12%, correos con dígitos ≥40%, contactos nuevos ≥85%, conversa la mitad o menos que su fuente. Alta con 3 o más. Clic en una para ver los leads.</>}>
-                        {[...spamPub].sort((a, b) => getKam(a.inmo).localeCompare(getKam(b.inmo), 'es') || (a.sev === b.sev ? b.n - a.n : a.sev === 'alta' ? -1 : 1)).map(filaSpam)}
+                    {spamPub.length > 0 && <Seccion titulo="Posible spam en publicaciones" sub="Publicaciones puntuales con señales de spam, agrupadas por KAM para delegarlas. Clic en una para ver sus leads."
+                        info={<>Una publicación con 20 o más leads es sospechosa si coinciden 2 o más de: el triple de leads que el periodo anterior (o publicación nueva), madrugada ≥12%, correos con dígitos ≥40%, contactos nuevos ≥85%, conversa la mitad o menos que su fuente. Filo rojo = 3 o más señales.</>}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 460px), 1fr))', gap: '6px 22px' }}>
+                            {porKam.map(([k, xs]) => (
+                                <div key={k} style={{ minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '12px 0 8px', paddingBottom: 6, borderBottom: `1px solid ${BLK}` }}>
+                                        <span style={{ fontFamily: 'EB Garamond, serif', fontSize: 17 }}>{k === 'Sin KAM' ? 'Sin KAM' : `KAM ${k}`}</span>
+                                        <span style={{ fontSize: 11, color: '#7A7A7A' }}>{xs.length} {xs.length === 1 ? 'publicación' : 'publicaciones'}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        {[...xs].sort((p, q) => (p.sev === q.sev ? q.n - p.n : p.sev === 'alta' ? -1 : 1)).map(filaSpam)}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </Seccion>}
                     {A.porDia && <Seccion titulo="Leads por fuente en el tiempo" sub="Cuántos leads entraron de cada fuente y qué parte del total fueron. En vista diaria, los puntos rojos son los días marcados en «Para atender».">
                         <LeadsPorDia A={A} senales={flags} hoy={iso(hoy)} />
@@ -776,8 +837,8 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                     </Seccion>
                     {!avListo && <Seccion titulo="L/L por tipo de aviso"><div style={{ fontSize: 12.5, color: GRY }}>Contando los avisos vivos del periodo… la primera vez tarda cerca de un minuto (después queda guardado 12 h). Mientras, el L/L de «Por canal» sale en —.</div></Seccion>}
                     {avisosA && avisosA.tipos.length > 0 && <Seccion titulo="L/L por tipo de aviso" sub="Leads sobre listing de cada tipo de aviso, para seguir qué nivel rinde."
-                        info={<>Cada lead cuenta en el tipo que tenía su aviso <b>cuando llegó</b> (Inmuebles24 lo manda en el lead). Avisos = los que estuvieron vivos en ese tipo durante el periodo, en promedio por día (Inmuebles24, desde el historial); MercadoLibre no guarda historial y va con la foto de hoy (*). L/L llevado a 30 días. <b>Costo</b> = precio de lista por aviso al mes × avisos; la cuenta Premier todavía no tiene precio cargado. <b>CPL</b> = ese costo ÷ leads.</>}>
-                        <Tabla head={['Portal', 'Tipo de aviso', 'Avisos', 'Leads', 'L/L', 'Costo del periodo', 'CPL']} min={720}>
+                        info={<>Cada lead cuenta en el tipo que tenía su aviso <b>cuando llegó</b> (Inmuebles24 lo manda en el lead). <b>Avisos hoy</b> = publicados ahora mismo en ese tipo. <b>Promedio del periodo</b> = los que estuvieron vivos cada día, promediados (Inmuebles24, desde el historial): un tipo que arrancó a medio periodo, como la cuenta Premier de Diamond House (22-oct), sale con un promedio bajo aunque hoy tenga 130 — el L/L sí es correcto, porque divide entre los días que realmente estuvo. MercadoLibre no guarda historial y usa la foto de hoy (*). L/L llevado a 30 días. <b>Costo</b> = precio de lista por aviso al mes × avisos; la cuenta Premier todavía no tiene precio cargado. <b>CPL</b> = ese costo ÷ leads.</>}>
+                        <Tabla head={['Portal', 'Tipo de aviso', 'Avisos hoy', 'Promedio del periodo', 'Leads', 'L/L', 'Costo del periodo', 'CPL']} min={820}>
                             {avisosA.tipos.map((x) => {
                                 const d = avisosA!.dias;
                                 const ll = x.avisos >= 1 ? (x.leads / x.avisos) * (30 / d) : null;
@@ -788,7 +849,8 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                                     <tr key={`${x.portal}|${x.tipo}`}>
                                         <td style={td0}>{x.portal}</td>
                                         <td style={{ ...td0, fontWeight: 700 }}>{x.tipo}</td>
-                                        <td style={td}>{f0(Math.round(x.avisos))}{x.hoy ? '*' : ''}</td>
+                                        <td style={{ ...td, fontWeight: 700 }}>{x.ahora != null ? f0(x.ahora) : '—'}</td>
+                                        <td style={{ ...td, color: x.hoy ? GRY : undefined }}>{x.hoy ? '—*' : f0(Math.round(x.avisos))}{!x.hoy && x.ahora != null && x.ahora >= 2 * Math.max(1, x.avisos) && <div style={{ fontSize: 10, color: '#7A7A7A' }}>arrancó a medio periodo</div>}</td>
                                         <td style={td}>{f0(x.leads)}</td>
                                         <td style={{ ...td, fontWeight: 700 }}>{ll != null ? ll.toFixed(2) : '—'}{ll != null && llC != null && <div style={{ fontSize: 10, fontWeight: 400 }}><Delta a={Math.round(ll * 100)} b={Math.round(llC * 100)} /></div>}</td>
                                         <td style={td}>{costo != null ? money(costo) : '—'}</td>
@@ -797,7 +859,7 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                                 );
                             })}
                         </Tabla>
-                        <div style={{ fontSize: 11, color: GRY, marginTop: 6 }}>* MercadoLibre: avisos en línea hoy (no guarda historial). Con una inmobiliaria elegida o venta/renta, todo se filtra igual.</div>
+                        <div style={{ fontSize: 11, color: '#7A7A7A', marginTop: 6 }}>* MercadoLibre no guarda historial: su L/L usa los avisos en línea hoy. Con una inmobiliaria elegida o venta/renta, todo se filtra igual.</div>
                     </Seccion>}
                 </>);
             })()}
@@ -1153,17 +1215,14 @@ function Tendencias({ A }: { A: Bloque }) {
         }
     }
     lineas.sort((a, b) => b.peso - a.peso);
-    const color = { alta: '#A52003', media: '#8A6D00', ok: '#529999' };
+    const parte = (t: string) => { const i = t.indexOf(': '); return i < 0 ? ['', t] : [t.slice(0, i), t.slice(i + 2)]; };
+    const fila = (l: (typeof lineas)[number], i: number) => { const [quien, que] = parte(l.txt); return <FilaFlag key={i} sev={l.sev} titulo={quien} items={[que.charAt(0).toUpperCase() + que.slice(1)]} />; };
+    const top = lineas.slice(0, 8);
     return (
         <div>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: '#777', marginBottom: 6 }}>Tendencias del periodo · {meses.map(nm).join(' → ')}</div>
-            {!lineas.length ? <div style={{ fontSize: 12.5, color: '#777' }}>Sin tendencias sostenidas: el volumen y la respuesta se mantuvieron estables mes a mes.</div>
-                : lineas.slice(0, 8).map((l, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 10, padding: '7px 0', borderBottom: '1px solid #F3F3F3', fontSize: 13, lineHeight: 1.5 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 4, background: color[l.sev], flexShrink: 0, marginTop: 6 }} />
-                        <span>{l.txt}</span>
-                    </div>
-                ))}
+            <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.7px', color: '#7A7A7A' }}>Tendencias del periodo · {meses.map(nm).join(' → ')}</div>
+            {!top.length ? <div style={{ fontSize: 12.5, color: '#777', marginTop: 8 }}>Sin tendencias sostenidas: el volumen y la respuesta se mantuvieron estables mes a mes.</div>
+                : (['alta', 'media', 'ok'] as const).map((sv) => <GrupoSev key={sv} sev={sv} n={top.filter((l) => l.sev === sv).length}>{top.filter((l) => l.sev === sv).map(fila)}</GrupoSev>)}
             <div style={{ fontSize: 11, color: '#777', marginTop: 6 }}>Se compara el promedio de leads por día de cada mes (así el mes en curso no sale «bajando» sólo por estar incompleto).</div>
         </div>
     );
