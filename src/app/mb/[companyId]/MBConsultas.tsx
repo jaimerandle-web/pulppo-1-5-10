@@ -69,6 +69,14 @@ function Seccion({ titulo, nota, children, id }: { titulo: string; nota?: ReactN
 }
 const chip = (on: boolean): CSSProperties => ({ fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: R, cursor: 'pointer', border: `1px solid ${on ? BLK : LGT}`, background: on ? BLK : '#fff', color: on ? '#fff' : '#555', fontFamily: 'inherit' });
 
+// tipo de aviso con el que llegó el lead (Ale): Premier en dorado, súper destacado amarillo, destacado verde mar, simple negro
+const AVISO_LBL: Record<string, string> = { Premier: 'Súper destacado · Premier', SD: 'Súper destacado', 'SD ZD': 'Súper destacado zona demand', D: 'Destacado', 'D ZD': 'Destacado zona demand' };
+function AvisoTag({ t }: { t: string }) {
+    const [bg, fg] = t === 'Premier' ? ['#B8860B', '#fff'] : t.startsWith('SD') || t === 'Gold premium' ? ['#F6BE00', '#212322'] : t.startsWith('D') ? ['#529999', '#fff']
+        : t === 'Simple' ? ['#212322', '#fff'] : ['#F3F3F3', '#555'];
+    return <span title={AVISO_LBL[t] ?? t} style={{ display: 'inline-block', fontSize: 9.5, fontWeight: 800, letterSpacing: '.3px', padding: '1px 6px', borderRadius: 2, background: bg, color: fg, whiteSpace: 'nowrap' }}>{t.toUpperCase()}</span>;
+}
+
 export default function MBConsultas({ companyId }: { companyId: string }) {
     const [periodo, setPeriodo] = useState<Periodo>('30');
     const [d1, setD1] = useState(''), [d2, setD2] = useState('');
@@ -278,13 +286,13 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                 <Seccion id="lista-leads" titulo={`Leads · ${f0(cur.length)}`} nota="Todos los leads con los filtros de arriba. «Copiar tabla» copia sólo lo filtrado.">
                     <TablaFiltrable<LeadConsulta> filas={cur} min={1500} limite={50} orden={{ i: 0, dir: -1 }}
                         texto={(l) => [l.nombre, l.telefono, l.correo, l.codigo, l.calle, l.colonia, l.asesor, l.canal].filter(Boolean).join(' ')}
-                        selects={[{ label: 'Etapa', v: (l) => l.etapa }, { label: 'Respuesta', v: (l) => (l.abierto ? 'Respondido' : 'Sin responder') }, { label: 'Conversación', v: (l) => (l.conversacion ? 'Con conversación' : 'Sin conversación visible') }]}
+                        selects={[{ label: 'Tipo de aviso', v: (l) => l.aviso ?? '' }, { label: 'Etapa', v: (l) => l.etapa }, { label: 'Respuesta', v: (l) => (l.abierto ? 'Respondido' : 'Sin responder') }, { label: 'Conversación', v: (l) => (l.conversacion ? 'Con conversación' : 'Sin conversación visible') }]}
                         cols={[
                             { h: 'Fecha', v: (l) => l.fecha, render: (l) => new Date(l.fecha).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' }) },
                             { h: 'Nombre', v: (l) => l.nombre },
                             { h: 'Teléfono', v: (l) => l.telefono },
                             { h: 'Correo', v: (l) => l.correo, render: (l) => <span style={{ fontSize: 11.5 }}>{l.correo ?? '—'}</span> },
-                            { h: 'Canal', v: (l) => l.canal },
+                            { h: 'Canal', v: (l) => l.canal, render: (l) => <div>{l.canal}{l.aviso && <div style={{ marginTop: 3 }}><AvisoTag t={l.aviso} /></div>}</div> },
                             { h: 'Medio', v: (l) => l.medio },
                             { h: 'Propiedad', v: (l) => l.codigo, render: (l) => <div><b>{l.codigo ?? '—'}</b><OpTag op={l.operacion} /> <span style={sub}>{l.tipo}</span><div style={{ fontSize: 11 }}>{[l.calle, l.colonia].filter(Boolean).join(', ')}</div></div> },
                             { h: 'Asesor', v: (l) => l.asesor, render: (l) => <span style={{ fontSize: 11.5 }}>{l.asesor}</span> },

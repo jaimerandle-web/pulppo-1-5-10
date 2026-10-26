@@ -78,7 +78,7 @@ const pct = (a: number, b: number) => (b ? Math.round((1000 * a) / b) / 10 : nul
 export interface AvisoMk {
     id: string; codigo: string; tipo: string | null; operacion: string; colonia: string | null; calle: string | null; asesor: string;
     precio: number | null; nivel: string; meli: string; diasPublicada: number | null;
-    /** estado del aviso en cada portal: «En línea» · «Fuera de línea» · «Sin aviso» */
+    /** estado del aviso en cada portal: «En línea» · «Fuera de línea» · «Sin aviso» · «No difundida» (la inmobiliaria la marcó para no salir en portales) */
     /** eb = la cuenta de EasyBroker DE LA INMOBILIARIA (`portals.companyEasybroker`), no el envío de Pulppo */
     estado: { i24: string; meli: string; pcom: string; cyt: string; eb: string };
     fijado: boolean; fijadoPor: string | null; fijadoEl: string | null;
@@ -187,7 +187,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const D30 = new Date(ahora.getTime() - 30 * DIA), D90 = new Date(ahora.getTime() - 90 * DIA);
 
     const props = await db.collection('properties').find({ 'company._id': cid, 'status.last': 'published' }, { projection: {
-        internalId: 1, type: 1, 'listing.operation': 1, 'listing.value': 1, 'address.neighborhood.name': 1, 'address.street': 1, 'address.city.name': 1, publishedAt: 1,
+        internalId: 1, type: 1, 'listing.operation': 1, 'listing.value': 1, 'listing.publishOnPortals': 1, 'address.neighborhood.name': 1, 'address.street': 1, 'address.city.name': 1, publishedAt: 1,
         'agent.firstName': 1, 'agent.lastName': 1, 'portals.inmuebles24': 1, 'portals.mercadolibre': 1, 'portals.propiedadesDotCom': 1, 'portals.casas-y-terrenos': 1, 'portals.companyEasybroker': 1,
     } }).toArray();
     const ids = props.map((p) => p._id);
@@ -309,7 +309,8 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
             leadsSem: cuenta(L, L0, fin), leadsSemAnt: cuenta(L, Lm1, L0), leads30: cuenta(L, D30, fin), leads90: cuenta(L, D90, fin),
             visitasSem: cuenta(V, L0, fin), visitasSemAnt: cuenta(V, Lm1, L0), visitas30: cuenta(V, D30, fin), visitas90: cuenta(V, D90, fin),
             i24: embudo('i24'), meliE: embudo('meli'),
-            estado: {
+            // «No difundir en portales» (`listing.publishOnPortals: false`): decisión de la inmobiliaria, no una falla
+            estado: dig(p, 'listing', 'publishOnPortals') === false ? noDifundida(p) : {
                 i24: estadoPortal(dig(p, 'portals', 'inmuebles24')), meli: estadoPortal(dig(p, 'portals', 'mercadolibre')),
                 pcom: estadoPortal(dig(p, 'portals', 'propiedadesDotCom')), cyt: estadoPortal(dig(p, 'portals', 'casas-y-terrenos')),
                 eb: estadoPortal(dig(p, 'portals', 'companyEasybroker')),
@@ -392,6 +393,11 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const offline: OfflineMk[] = [];
     for (const p of props) {
         const codigo = String(p.internalId ?? p._id);
+        if (dig(p, 'listing', 'publishOnPortals') === false) {
+            offline.push({ codigo, portal: 'Todos los portales', desde: null, nivelAntes: null, motivo: 'La propiedad está marcada como «No difundir en portales» en Pulppo.',
+                accion: 'Si sí debe publicarse, activar «Difundir en portales» en la propiedad.', quien: 'Inmobiliaria' });
+            continue;
+        }
         const i24 = (dig(p, 'portals', 'inmuebles24') as Document) ?? {};
         if (nivelDe(i24.type) === 'Offline') {
             const hist = ((i24.history as Document[]) ?? []).map((e) => ({ t: fechaHist(e), tipo: String(e.type ?? '').toUpperCase() }))
@@ -636,6 +642,11 @@ async function enCursoDe(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[
 }
 
 /** «En línea» · «Fuera de línea» · «Sin aviso» del bloque de un portal en `properties.portals` */
+/** propiedad marcada «no difundir en portales»: lo que siga en línea se respeta, lo demás es «No difundida» */
+function noDifundida(p: Document): AvisoMk['estado'] {
+    const e = (k: string) => (estadoPortal(dig(p, 'portals', k)) === 'En línea' ? 'En línea' : 'No difundida');
+    return { i24: e('inmuebles24'), meli: e('mercadolibre'), pcom: e('propiedadesDotCom'), cyt: e('casas-y-terrenos'), eb: e('companyEasybroker') };
+}
 function estadoPortal(x: unknown): string {
     if (!x || typeof x !== 'object') return 'Sin aviso';
     const d = x as Document;

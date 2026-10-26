@@ -16,6 +16,7 @@
 //   · visitó / ofertó: visita (confirmada o pendiente) u operación del mismo contacto con la inmobiliaria,
 //     después del lead.
 // 🔴 Trae datos personales (nombre, teléfono, correo): sólo para la inmobiliaria dueña y el equipo interno.
+import { CUENTA_PREMIER, TIPO_MELI } from './portales/avisosTipos';
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { claveLead, VISITA_OK } from './mbComun';
@@ -28,6 +29,8 @@ export interface LeadConsulta {
     nombre: string | null; telefono: string | null; correo: string | null;
     canal: string; medio: 'WhatsApp' | 'Teléfono' | 'Formulario';
     operacion: 'Venta' | 'Renta';
+    /** tipo de aviso CON EL QUE LLEGÓ el lead (i24: Premier / SD / SD ZD / D / D ZD / Simple; MeLi: Gold premium / Silver…) */
+    aviso: string | null;
     codigo: string | null; tipo: string | null; calle: string | null; colonia: string | null; precio: number | null; nivel: string | null;
     asesor: string;
     abierto: boolean; minutosRespuesta: number | null; conversacion: boolean;
@@ -37,6 +40,22 @@ export interface LeadConsulta {
 export interface ConsultasData { desde: string; hasta: string; desdeAnt: string; leads: LeadConsulta[]; generado: string }
 
 const DIA = 86400000;
+/** El tipo de aviso viaja en el lead: i24 manda su tipo en `campaign` (HOME_COMBO…) y la cuenta del aviso en
+ *  `propertyPublishPortals` (ANUNCIO_PREMIERE = la cuenta Premier de DH); MeLi manda gold_premium / silver. */
+function avisoDeLead(canal: string, camp: string, cuenta: unknown): string | null {
+    const c = camp.toUpperCase();
+    if (canal === 'i24' || canal === 'i24nura') {
+        if (!c && !cuenta) return null;
+        if (String(cuenta ?? '').toUpperCase() === CUENTA_PREMIER) return 'Premier';
+        const zd = c.includes('ZONA_DEMAND') ? ' ZD' : '';
+        if (c.startsWith('HOME')) return 'SD' + zd;
+        if (c.startsWith('DESTACADO')) return 'D' + zd;
+        if (c.startsWith('GRATIS')) return 'Gratis';
+        return c ? 'Simple' : null;
+    }
+    if (canal === 'meli') return TIPO_MELI[camp.toLowerCase()] ?? null;
+    return null;
+}
 const MX = 6 * 3600 * 1000;
 const s = (x: unknown) => String(x ?? '').trim();
 const ymd = (d: Date) => new Date(d.getTime() - MX).toISOString().slice(0, 10);
@@ -81,7 +100,7 @@ export async function consultasDe(companyId: string, desde: Date, hasta: Date): 
         createdAt: 1, answeredAt: 1, source: 1, medium: 1, message: 1, phone: 1, email: 1, search: 1, 'contact._id': 1, 'contact.firstName': 1,
         'contact.lastName': 1, 'contact.email': 1, 'contact.phone': 1, 'agent.firstName': 1, 'agent.lastName': 1, 'property._id': 1,
         'property.internalId': 1, 'property.type': 1, 'property.listing.operation': 1, 'property.listing.value': 1,
-        'property.address.street': 1, 'property.address.neighborhood.name': 1,
+        'property.address.street': 1, 'property.address.neighborhood.name': 1, campaign: 1, 'propertyPublishPortals.portals.inmuebles24.company': 1,
     } }).sort({ createdAt: 1 }).toArray()) {
         if (!isDate(l.createdAt) || s(l.source).toLowerCase() === 'formulario de contacto') continue;   // spam de bots
         const k = claveLead(l);
@@ -125,8 +144,8 @@ export async function consultasDe(companyId: string, desde: Date, hasta: Date): 
                 etapa.set(String(b._id), { st: s(dig(b, 'status', 'last')), motivo: s(dig(b, 'status', 'reasonToFinish')) });
         }),
         ...lotes(props).map(async (ps) => {
-            for await (const p of db.collection('properties').find({ _id: { $in: ps } }, { projection: { 'portals.inmuebles24.type': 1 } }))
-                nivel.set(String(p._id), nivelDe(dig(p, 'portals', 'inmuebles24', 'type')));
+            for await (const p of db.collection('properties').find({ _id: { $in: ps } }, { projection: { 'portals.inmuebles24.type': 1, 'portals.inmuebles24.company': 1 } }))
+                nivel.set(String(p._id), nivelDe(dig(p, 'portals', 'inmuebles24', 'type'), dig(p, 'portals', 'inmuebles24', 'company')));
         }),
     ]);
 
@@ -146,6 +165,7 @@ export async function consultasDe(companyId: string, desde: Date, hasta: Date): 
             canal: KEY2NAME[classifySource(s(l.source))] ?? (s(l.source) ? 'Otras fuentes' : 'Sin fuente'),
             medio: MEDIO[canalContacto({ medium: l.medium, message: l.message })],
             operacion: op === 'rent' ? 'Renta' : 'Venta',
+            aviso: avisoDeLead(classifySource(s(l.source)), s(l.campaign), dig(l, 'propertyPublishPortals', 'portals', 'inmuebles24', 'company')),
             codigo: s(dig(l, 'property', 'internalId')) || null, tipo: s(dig(l, 'property', 'type')) || null,
             calle: s(dig(l, 'property', 'address', 'street')) || null, colonia: s(dig(l, 'property', 'address', 'neighborhood', 'name')) || null,
             precio: typeof dig(l, 'property', 'listing', 'value') === 'number' ? dig(l, 'property', 'listing', 'value') as number : null,

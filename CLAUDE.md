@@ -375,6 +375,10 @@ Premier» (cuenta `ANUNCIO_PREMIERE`, dorado) en Marketing, L/L y la columna «A
 se quitó (Ale: no da to-do). «N fuera de línea» de cada portal lleva a la sección 2 filtrada por ese portal, y en «Tus
 anuncios» cada «Fuera de línea» dice el motivo y quién lo corrige. Overview → «Sin responder · últimos 30 días» abre la
 lista (`/api/mb-sin-responder`, misma regla que el número, canAccessCompany; todas las inmobiliarias).
+«No difundir en portales» = `listing.publishOnPortals: false` (DH 8, red 337): en Marketing sale «No difundida», no «Fuera de
+línea», con una sola fila «Todos los portales» en la sección 2. L/L por nivel muestra los avisos de HOY junto al promedio (el
+promedio NO excluye avisos sin leads). Consultas: tag del tipo de aviso con el que llegó el lead (`aviso`: i24 `campaign` +
+cuenta de `propertyPublishPortals` → Premier/SD/SD ZD/D/D ZD/Simple; MeLi gold_premium/silver) y filtro «Tipo de aviso».
 
 ### (historia) /mb → Marketing (Diamond House, antes SÓLO equipo interno)
 

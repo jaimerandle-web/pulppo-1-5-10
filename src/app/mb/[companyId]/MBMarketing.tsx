@@ -196,10 +196,10 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
     const conv = (a: { leads30: number; visitas30: number }) => (a.leads30 ? Math.round((100 * a.visitas30) / a.leads30) : null);
 
     const Estado = ({ e, nivel, codigo, portal }: { e: string; nivel?: string; codigo?: string; portal?: string }) => {
-        const m = e !== 'En línea' && codigo && portal ? motivoDe.get(`${codigo}|${portal}`) : undefined;
+        const m = e !== 'En línea' && e !== 'No difundida' && codigo && portal ? motivoDe.get(`${codigo}|${portal}`) : undefined;
         return (<>
             <span style={{ fontSize: 11.5, color: e === 'En línea' ? (nivel === NIVEL_PREMIER ? DORADO : BLK) : e === 'Fuera de línea' ? RED : GRY, fontWeight: e === 'En línea' ? 600 : 400, whiteSpace: 'nowrap' }}>
-                {e === 'En línea' ? (nivel ?? '✓ En línea') : e === 'Fuera de línea' ? '✗ Fuera de línea' : '— Sin aviso'}
+                {e === 'En línea' ? (nivel ?? '✓ En línea') : e === 'Fuera de línea' ? '✗ Fuera de línea' : e === 'No difundida' ? '○ No difundida en portales' : '— Sin aviso'}
             </span>
             {m && <div title={`${m.motivo} · ${m.accion}`} style={{ fontSize: 10.5, color: '#777', whiteSpace: 'normal', maxWidth: 190, lineHeight: 1.35, marginTop: 2 }}>
                 {m.motivo.length > 70 ? m.motivo.slice(0, 68) + '…' : m.motivo} <span style={{ fontWeight: 700, color: m.quien === 'Inmobiliaria' ? BLK : '#999' }}>· {m.quien === 'Inmobiliaria' ? 'lo corriges tú' : 'lo revisa Pulppo'}</span>
@@ -226,6 +226,7 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
     const enLinea = (k: keyof AvisoMk['estado']) => d.avisos.filter((a) => a.estado[k] === 'En línea').length;
     const fuera = (k: keyof AvisoMk['estado']) => d.avisos.filter((a) => a.estado[k] === 'Fuera de línea').length;
     const sinAviso = (k: keyof AvisoMk['estado']) => d.avisos.filter((a) => a.estado[k] === 'Sin aviso').length;
+    const noDif = d.avisos.filter((a) => Object.values(a.estado).includes('No difundida')).length;
     const PORTALES: Array<{ k: keyof AvisoMk['estado']; nombre: string; off: string; detalle?: ReactNode }> = [
         { k: 'i24', nombre: 'Inmuebles24', off: 'Inmuebles24', detalle: <>{d.asignacion.porNivel.filter((x) => x.nivel !== 'Offline' && x.nivel !== 'Sin aviso').map((x) => <div key={x.nivel}>{x.nivel}: <b>{f0(x.n)}</b></div>)}</> },
         { k: 'meli', nombre: 'MercadoLibre', off: 'MercadoLibre', detalle: <>{d.asignacion.meli.filter((m) => !['offline', 'sin aviso'].includes(m.tipo)).map((m) => <div key={m.tipo}>{MELI_LBL[m.tipo] ?? m.tipo}: <b>{f0(m.n)}</b></div>)}</> },
@@ -242,7 +243,7 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
 
         <Resumen d={d} interno={interno} rotarAuto={rotarAuto.length} rotarAutoCod={rotarAuto.filter((x) => x.leadsEnNivel >= d.reglas.leadsRotar).map((x) => x.codigo)} manual={rotarManual.length} />
 
-        <Seccion n={1} titulo="Qué está publicado y dónde" nota={`Tus ${f0(total)} propiedades publicadas en Pulppo (${f0(d.asignacion.venta)} venta · ${f0(d.asignacion.renta)} renta) y cuántas se están mostrando en cada portal, en qué nivel.`}>
+        <Seccion n={1} titulo="Qué está publicado y dónde" nota={`Tus ${f0(total)} propiedades publicadas en Pulppo (${f0(d.asignacion.venta)} venta · ${f0(d.asignacion.renta)} renta) y cuántas se están mostrando en cada portal, en qué nivel.${noDif ? ` ${noDif === 1 ? 'Una está marcada' : `${noDif} están marcadas`} como «No difundir en portales» en Pulppo: no cuentan como fuera de línea.` : ''}`}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
                 {PORTALES.map((x) => (
                     <div key={x.k} style={{ flex: '1 1 200px', border: `1px solid ${LGT}`, borderRadius: R, padding: '10px 12px', background: '#fff' }}>
@@ -328,7 +329,7 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
                     </button>
                 ))}
             </div>
-            <LLPanel ll={d.ll} op={opNivel} />
+            <LLPanel ll={d.ll} op={opNivel} hoy={Object.fromEntries(d.porNivel[opNivel].map((x) => [x.nivel, x.avisos]))} />
             <div style={{ fontSize: 12, fontWeight: 700, margin: '18px 0 6px' }}>Inmuebles24 · embudo de 30 días <span style={{ ...sub, fontWeight: 400 }}>· leads de Inmuebles24 de los anuncios que hoy están en cada nivel</span></div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {nivelesI24.map((x) => <NivelEmbudo key={x.nivel} x={x} max={maxDe(nivelesI24)} color={COLOR_I24[x.nivel.replace(/ zona demand$/, '')]} />)}
@@ -640,7 +641,7 @@ const COLOR_LL: Record<string, { c: string; dash?: string }> = {
     'Súper destacado': { c: YEL }, 'Súper destacado zona demand': { c: '#C79A00', dash: '5 3' },
     Destacado: { c: SEA }, 'Destacado zona demand': { c: SEA, dash: '5 3' }, Simple: { c: BLK },
 };
-function LLPanel({ ll, op }: { ll: LLMk; op: Op }) {
+function LLPanel({ ll, op, hoy }: { ll: LLMk; op: Op; hoy: Record<string, number> }) {
     const [dias, setDias] = useState(30);
     const niveles = Object.keys(COLOR_LL).filter((n) => ll.series.some((s) => s.nivel === n));
     const suma = (n: string, k: 'avisoDias' | 'leads', a: number, b: number) =>
@@ -679,7 +680,10 @@ function LLPanel({ ll, op }: { ll: LLMk; op: Op }) {
                     <div key={x.n} style={{ flex: '1 1 170px', border: `1px solid ${LGT}`, borderLeft: `3px solid ${COLOR_LL[x.n].c}`, borderRadius: R, padding: '8px 10px' }}>
                         <div style={{ fontSize: 10.5, color: '#777', fontWeight: 700 }}>{x.n}</div>
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 24 }}>{x.ll == null ? '—' : x.ll.toFixed(2)} <span style={{ ...sub, fontFamily: 'Nunito Sans, sans-serif' }}>L/L</span></div>
-                        <div style={sub}>{f0(x.leads)} leads ÷ {x.avisos.toFixed(1)} avisos vivos en promedio{x.avisos < 3 ? ' · pocos avisos: tómalo con cuidado' : ''}</div>
+                        <div style={{ fontSize: 12, margin: '2px 0 3px' }}><b>{f0(hoy[x.n] ?? 0)}</b> avisos hoy · <b>{f0(x.leads)}</b> leads en {dias === 182 ? '6 meses' : `${dias} días`}</div>
+                        <div style={sub}>{(hoy[x.n] ?? 0) >= 2 * Math.max(1, x.avisos)
+                            ? <>Hoy hay más que en el periodo: en promedio estuvieron vivos {x.avisos.toFixed(1)} por día{x.n.includes('Premier') ? ' (la cuenta arrancó el 22 oct)' : ''}. El L/L divide entre los avisos que de verdad estuvieron cada día; no deja fuera los que no tuvieron leads.</>
+                            : <>L/L = leads del periodo ÷ {x.avisos.toFixed(1)} avisos vivos en promedio (con o sin leads).{x.avisos < 3 ? ' Pocos avisos: tómalo con cuidado.' : ''}</>}</div>
                     </div>
                 ))}
                 {!filas.length && <span style={sub}>Sin avisos en este filtro.</span>}
