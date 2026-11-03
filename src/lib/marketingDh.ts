@@ -24,7 +24,8 @@
 // 🔴 SIN costos ni CPL: esa lectura es interna de Pulppo y Ale no la quiere en esta pestaña.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
-import { claveLead, VISITA_OK } from './mbComun';
+import { claveLead, esSpamLead, inicioDiaMx, leadsUnicos, VISITA_OK } from './mbComun';
+import { grupoDe } from './desempenoMb';
 import { datosDe, type Aviso } from './portales/avisos';
 import { classifySource } from './portales/metrics';
 import { cierresEntre } from './portales/inmobiliaria';
@@ -130,6 +131,9 @@ export interface MarketingMk {
     /** el scoring de avisos no terminó a tiempo (en frío): estrellas, rotación y trabadas salen sin puntaje */
     scoringPendiente?: boolean;
     semana: Semana; semanaAnt: Semana;
+    /** «La semana en corto»: TODOS los leads únicos de la inmobiliaria (los mismos que Consultas), no sólo los de
+     *  los avisos publicados hoy, que son los que suman las secciones por aviso y por nivel */
+    resumen: { leadsSem: number; leadsSemAnt: number; i24Sem: number; i24SemAnt: number; meliSem: number; meliSemAnt: number };
     asignacion: {
         venta: number; renta: number;
         porNivel: Array<{ nivel: string; n: number; venta: number; renta: number }>;
@@ -182,11 +186,14 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const company = await db.collection('companies').findOne({ _id: cid }, { projection: { name: 1 } });
     const nombre = String(company?.name ?? '').trim();
     const ahora = new Date();
-    // «semana» = últimos 7 días; «semana anterior» = los 7 días previos (Ale: mismo periodo, no lunes–hoy)
-    const L0 = new Date(ahora.getTime() - 7 * DIA), Lm1 = new Date(ahora.getTime() - 14 * DIA);
-    const D30 = new Date(ahora.getTime() - 30 * DIA), D90 = new Date(ahora.getTime() - 90 * DIA);
+    const grupo = await grupoDe(companyId);
+    const comps = grupo.ids.map((x) => new ObjectId(x));
+    // «semana» = últimos 7 días de calendario hora México (de las 00:00 de hace 6 días a ahora), como Consultas;
+    // «semana anterior» = el mismo tramo 7 días antes, cortado a la misma hora (Ale: mismo periodo, no lunes–hoy)
+    const L0 = inicioDiaMx(ahora, 6), Lm1 = inicioDiaMx(ahora, 13), finAnt = new Date(ahora.getTime() - 7 * DIA);
+    const D30 = inicioDiaMx(ahora, 29), D90 = inicioDiaMx(ahora, 89);
 
-    const props = await db.collection('properties').find({ 'company._id': cid, 'status.last': 'published' }, { projection: {
+    const props = await db.collection('properties').find({ 'company._id': { $in: comps }, 'status.last': 'published' }, { projection: {
         internalId: 1, type: 1, 'listing.operation': 1, 'listing.value': 1, 'listing.publishOnPortals': 1, 'address.neighborhood.name': 1, 'address.street': 1, 'address.city.name': 1, publishedAt: 1,
         'agent.firstName': 1, 'agent.lastName': 1, 'portals.inmuebles24': 1, 'portals.mercadolibre': 1, 'portals.propiedadesDotCom': 1, 'portals.casas-y-terrenos': 1, 'portals.companyEasybroker': 1,
     } }).toArray();
@@ -198,15 +205,19 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const leadsSrc = new Map<string, Array<{ t: Date; k: string }>>();
     // propiedad|comprador → canal de su primer lead: para saber de qué portal vino cada visita
     const canalComprador = new Map<string, string>();
-    const vistos = new Set<string>();
-    for await (const l of db.collection('leads').find({ 'property._id': { $in: ids }, createdAt: { $gte: new Date(ahora.getTime() - 400 * DIA) } },
-        { projection: { 'contact._id': 1, 'property._id': 1, createdAt: 1, source: 1 } }).sort({ createdAt: 1 })) {
-        if (!isDate(l.createdAt)) continue;
-        const k = claveLead(l);
-        if (vistos.has(k)) continue;
-        vistos.add(k);
+    // mismo cargador que Consultas (mbComun.leadsUnicos); lo de los avisos usa sólo los publicados hoy
+    const resumen = { leadsSem: 0, leadsSemAnt: 0, i24Sem: 0, i24SemAnt: 0, meliSem: 0, meliSemAnt: 0 };
+    for (const l of await leadsUnicos(db, comps, new Date(ahora.getTime() - 400 * DIA), new Date(ahora.getTime() + DIA), {}, 0)) {
         const pid = String(dig(l, 'property', '_id'));
         const canal = classifySource(String(l.source ?? ''));
+        const t = l.createdAt as Date;
+        const sem = t >= L0 ? 'Sem' as const : t >= Lm1 && t < finAnt ? 'SemAnt' as const : null;
+        if (sem) {
+            resumen[`leads${sem}`]++;
+            if (canal === 'i24') resumen[`i24${sem}`]++;
+            if (canal === 'meli') resumen[`meli${sem}`]++;
+        }
+        if (!idSet.has(pid)) continue;
         (leadsP.get(pid) ?? leadsP.set(pid, []).get(pid)!).push(l.createdAt);
         (leadsSrc.get(pid) ?? leadsSrc.set(pid, []).get(pid)!).push({ t: l.createdAt, k: canal });
         const cc = `${pid}|${String(dig(l, 'contact', '_id') ?? '')}`;
@@ -285,8 +296,8 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         const embudo = (canal: string): Embudo => {
             const l = (leadsSrc.get(pid) ?? []).filter((x) => x.k === canal).map((x) => x.t);
             const v = (visSrc.get(pid) ?? []).filter((x) => x.k === canal).map((x) => x.t);
-            return { leadsSem: cuenta(l, L0, fin), leadsSemAnt: cuenta(l, Lm1, L0), leads30: cuenta(l, D30, fin),
-                visitasSem: cuenta(v, L0, fin), visitasSemAnt: cuenta(v, Lm1, L0), visitas30: cuenta(v, D30, fin) };
+            return { leadsSem: cuenta(l, L0, fin), leadsSemAnt: cuenta(l, Lm1, finAnt), leads30: cuenta(l, D30, fin),
+                visitasSem: cuenta(v, L0, fin), visitasSemAnt: cuenta(v, Lm1, finAnt), visitas30: cuenta(v, D30, fin) };
         };
         const sc = score.get(codigo);
         const perf = (i24.performance as Document) ?? {};
@@ -305,9 +316,9 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
             fijadoEl: isDate(i24.pinnedAt) ? ymd(i24.pinnedAt) : null,
             enNivelDesde: desde ? ymd(desde) : null, diasEnNivel: desde ? Math.floor((ahora.getTime() - desde.getTime()) / DIA) : null,
             leadsEnNivel: desde ? cuenta(L, desde, fin) : 0,
-            vistasSem: cuenta(W, L0, fin), vistasSemAnt: cuenta(W, Lm1, L0), vistas30: cuenta(W, D30, fin),
-            leadsSem: cuenta(L, L0, fin), leadsSemAnt: cuenta(L, Lm1, L0), leads30: cuenta(L, D30, fin), leads90: cuenta(L, D90, fin),
-            visitasSem: cuenta(V, L0, fin), visitasSemAnt: cuenta(V, Lm1, L0), visitas30: cuenta(V, D30, fin), visitas90: cuenta(V, D90, fin),
+            vistasSem: cuenta(W, L0, fin), vistasSemAnt: cuenta(W, Lm1, finAnt), vistas30: cuenta(W, D30, fin),
+            leadsSem: cuenta(L, L0, fin), leadsSemAnt: cuenta(L, Lm1, finAnt), leads30: cuenta(L, D30, fin), leads90: cuenta(L, D90, fin),
+            visitasSem: cuenta(V, L0, fin), visitasSemAnt: cuenta(V, Lm1, finAnt), visitas30: cuenta(V, D30, fin), visitas90: cuenta(V, D90, fin),
             i24: embudo('i24'), meliE: embudo('meli'),
             // «No difundir en portales» (`listing.publishOnPortals: false`): decisión de la inmobiliaria, no una falla
             estado: dig(p, 'listing', 'publishOnPortals') === false ? noDifundida(p) : {
@@ -374,9 +385,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
 
     // cierres por fuente — la MISMA regla que /portales y Desempeño (cierresEntre → resolverFuentes). La
     // inmobiliaria puede estar partida en varias compañías con el mismo nombre (Diamond House son 2).
-    const hermanas = (await db.collection('companies').find({ name: { $regex: `^\\s*${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, $options: 'i' } },
-        { projection: { email: 1 } }).toArray()).filter((c) => !/tuhabi/i.test(String(c.email ?? ''))).map((c) => String(c._id));
-    const idsInmo = [...new Set([companyId, ...hermanas])];
+    const idsInmo = grupo.ids;
     const inicioAnio = new Date(Date.UTC(new Date(ahora.getTime() - MX).getUTCFullYear(), 0, 1) + MX);
     const lista: CierreMk[] = await cierresEntre(inicioAnio, fin, { ids: idsInmo, operacion: 'todas' })
         .then(({ out }) => out.map((c) => ({ fecha: c.fecha, codigo: c.codigo, operacion: c.operacion, tipo: c.tipo, colonia: c.colonia,
@@ -431,8 +440,8 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
 
     return {
         inmobiliaria: nombre, companyId, generado: ahora.toISOString(),
-        semana: { desde: ymd(new Date(L0.getTime() + DIA)), hasta: ymd(ahora), enCurso: false },
-        semanaAnt: { desde: ymd(new Date(Lm1.getTime() + DIA)), hasta: ymd(L0), enCurso: false },
+        semana: { desde: ymd(L0), hasta: ymd(ahora), enCurso: false },
+        semanaAnt: { desde: ymd(Lm1), hasta: ymd(finAnt), enCurso: false }, resumen,
         asignacion: {
             venta, renta: avisos.length - venta,
             porNivel: NIVELES.filter((n) => porNivelMap.has(n)).map((nivel) => ({ nivel, ...porNivelMap.get(nivel)! })),
@@ -585,7 +594,7 @@ async function serieLL(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[],
     for (let i = 0; i < ids.length; i += 500) {
         for (const l of await db.collection('leads').find({ 'property._id': { $in: ids.slice(i, i + 500) }, createdAt: { $gte: new Date(D0.getTime() - 400 * DIA) } },
             { projection: { 'contact._id': 1, 'property._id': 1, createdAt: 1, source: 1, campaign: 1, 'propertyPublishPortals.portals.inmuebles24.company': 1 } }).sort({ createdAt: 1 }).toArray()) {
-            if (!isDate(l.createdAt)) continue;
+            if (!isDate(l.createdAt) || esSpamLead(l)) continue;
             const k = claveLead(l);
             if (vistos.has(k)) continue;
             vistos.add(k);

@@ -202,7 +202,7 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                     <Kpi label="Ofertaron" value={f0(a.oferto)} delta={<Delta a={a.oferto} b={b.oferto} />} nota={`${pc(a.oferto, a.n)} de los leads`} />
                 </div>
                 <div style={{ ...sub, marginTop: 6, lineHeight: 1.5, maxWidth: 900 }}>
-                    <b>Respondidos</b>: el asesor respondió el lead desde Pulppo (igual que en el Retool y en Propiedades). <b>Con conversación visible</b>: además, el cliente escribió algo real o hubo llamada — la señal de que sí hubo plática, porque el WhatsApp del asesor no se guarda. Leads únicos: misma persona + misma propiedad = 1.
+                    <b>Respondidos</b>: el asesor respondió el lead desde Pulppo (igual que en el Retool y en Propiedades). <b>Con conversación visible</b>: además, el cliente escribió algo real o hubo llamada — la señal de que sí hubo plática, porque el WhatsApp del asesor no se guarda. Leads únicos: misma persona + misma propiedad = 1, los mismos que en Marketing. El periodo anterior es el mismo tramo de días antes, hasta la misma hora.
                 </div>
 
                 <Seccion titulo="Leads por día">

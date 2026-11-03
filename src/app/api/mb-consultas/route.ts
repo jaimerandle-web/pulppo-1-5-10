@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { canAccessCompany } from '@/lib/companyAccess';
 import { consultasDe } from '@/lib/consultas';
 import { MARKETING_EMPRESAS } from '@/lib/marketingAcceso';
+import { inicioDiaMx } from '@/lib/mbComun';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -23,14 +24,18 @@ export async function GET(req: NextRequest) {
     if (!(await canAccessCompany(company))) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
     const ahora = Date.now();
     const hasta0 = fecha(sp.get('hasta'));
-    const hasta = hasta0 ? new Date(Math.min(hasta0.getTime() + 86400000, ahora)) : new Date(ahora);
-    const desde = fecha(sp.get('desde')) ?? new Date(hasta.getTime() - 30 * 86400000);
-    if (desde >= hasta || hasta.getTime() - desde.getTime() > 400 * 86400000) return NextResponse.json({ error: 'Periodo inválido (máximo 400 días)' }, { status: 400 });
+    // días de calendario (hora México): el periodo puede ir a medias (hoy hasta esta hora); el anterior es el
+    // mismo tramo `dias` días antes, cortado a la misma hora (mbComun.periodoAnterior)
+    const finDia = hasta0 ? hasta0.getTime() + 86400000 : inicioDiaMx(new Date(ahora), -1).getTime();
+    const hasta = new Date(Math.min(finDia, ahora));
+    const desde = fecha(sp.get('desde')) ?? inicioDiaMx(new Date(ahora), 29);
+    const dias = Math.round((finDia - desde.getTime()) / 86400000);
+    if (desde >= hasta || dias > 400) return NextResponse.json({ error: 'Periodo inválido (máximo 400 días)' }, { status: 400 });
     const key = `${company}|${desde.toISOString()}|${hasta0 ? hasta.toISOString() : 'hoy'}`;
     const hit = cache.get(key);
     if (hit && ahora - hit.t < CACHE_MS && sp.get('refresh') !== '1') return NextResponse.json(hit.d, { headers: { 'Cache-Control': 'private, no-store' } });
     try {
-        const d = await consultasDe(company, desde, hasta);
+        const d = await consultasDe(company, desde, hasta, dias);
         cache.set(key, { t: ahora, d });
         return NextResponse.json(d, { headers: { 'Cache-Control': 'private, no-store' } });
     } catch (e) {

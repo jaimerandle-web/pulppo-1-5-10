@@ -4,8 +4,8 @@
 //
 // Devuelve la lista de leads del periodo elegido Y del periodo anterior de la misma duración (para comparar);
 // la UI filtra y agrega en el cliente. Cada lead:
-//   · ÚNICO: misma persona + misma propiedad = 1, contado la primera vez que escribió (400 días hacia atrás),
-//     igual que Marketing y Desempeño.
+//   · ÚNICO: misma persona + misma propiedad = 1, contado la primera vez que escribió (400 días hacia atrás).
+//     Lo carga leadsUnicos (mbComun), el MISMO que Marketing: universo, spam y periodos idénticos.
 //   · canal: el de /portales (classifySource); medio: WhatsApp / teléfono / formulario (canalContacto).
 //   · DOS medidas de respuesta (Ale: «mostremos las dos»):
 //       «respondidos» = `answeredAt` (igual que el Retool y la pestaña Propiedades; sólo dice que el asesor
@@ -19,7 +19,8 @@
 import { CUENTA_PREMIER, TIPO_MELI } from './portales/avisosTipos';
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
-import { claveLead, VISITA_OK } from './mbComun';
+import { leadsUnicos, periodoAnterior, VISITA_OK } from './mbComun';
+import { grupoDe } from './desempenoMb';
 import { classifySource, KEY2NAME, dig, isDate } from './portales/metrics';
 import { canalContacto } from './portales/inmobiliaria';
 import { nivelDe } from './marketingDh';
@@ -37,7 +38,7 @@ export interface LeadConsulta {
     etapa: string; motivo: string | null; visito: boolean; oferto: boolean;
     mensaje: string | null;
 }
-export interface ConsultasData { desde: string; hasta: string; desdeAnt: string; leads: LeadConsulta[]; generado: string }
+export interface ConsultasData { desde: string; hasta: string; desdeAnt: string; hastaAnt: string; leads: LeadConsulta[]; generado: string }
 
 const DIA = 86400000;
 /** El tipo de aviso viaja en el lead: i24 manda su tipo en `campaign` (HOME_COMBO…) y la cuenta del aviso en
@@ -77,37 +78,17 @@ const msgReal = (m: string) => ({ $and: [
 ] });
 const lotes = <T,>(xs: T[], n = 1000) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, (i + 1) * n));
 
-/** Todas las compañías con el mismo nombre (Diamond House está partida en 2), sin Habi. */
-export async function companiasDe(companyId: string): Promise<string[]> {
+export async function consultasDe(companyId: string, desde: Date, hasta: Date, dias: number): Promise<ConsultasData> {
     const db = await getDb();
-    const c = await db.collection('companies').findOne({ _id: new ObjectId(companyId) }, { projection: { name: 1 } });
-    const nombre = s(c?.name);
-    if (!nombre) return [companyId];
-    const her = await db.collection('companies').find({ name: { $regex: `^\\s*${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, $options: 'i' } }, { projection: { email: 1 } }).toArray();
-    return [...new Set([companyId, ...her.filter((x) => !/tuhabi/i.test(s(x.email))).map((x) => String(x._id))])];
-}
-
-export async function consultasDe(companyId: string, desde: Date, hasta: Date): Promise<ConsultasData> {
-    const db = await getDb();
-    const ids = (await companiasDe(companyId)).map((x) => new ObjectId(x));
-    const dur = hasta.getTime() - desde.getTime();
-    const desdeAnt = new Date(desde.getTime() - dur);
-
-    // leads: 400 días antes del periodo anterior para saber si la persona ya había escrito sobre esa propiedad
-    const vistos = new Set<string>();
-    const leads: Document[] = [];
-    for (const l of await db.collection('leads').find({ 'company._id': { $in: ids }, createdAt: { $gte: new Date(desdeAnt.getTime() - 400 * DIA), $lt: hasta } }, { projection: {
-        createdAt: 1, answeredAt: 1, source: 1, medium: 1, message: 1, phone: 1, email: 1, search: 1, 'contact._id': 1, 'contact.firstName': 1,
-        'contact.lastName': 1, 'contact.email': 1, 'contact.phone': 1, 'agent.firstName': 1, 'agent.lastName': 1, 'property._id': 1,
+    const ids = (await grupoDe(companyId)).ids.map((x) => new ObjectId(x));
+    // periodo anterior = el mismo tramo `dias` días antes, cortado a la misma hora (mbComun)
+    const ant = periodoAnterior(desde, hasta, dias);
+    const leads = (await leadsUnicos(db, ids, ant.desde, hasta, {
+        answeredAt: 1, medium: 1, message: 1, phone: 1, email: 1, search: 1, 'contact.firstName': 1,
+        'contact.lastName': 1, 'contact.email': 1, 'contact.phone': 1, 'agent.firstName': 1, 'agent.lastName': 1,
         'property.internalId': 1, 'property.type': 1, 'property.listing.operation': 1, 'property.listing.value': 1,
         'property.address.street': 1, 'property.address.neighborhood.name': 1, campaign: 1, 'propertyPublishPortals.portals.inmuebles24.company': 1,
-    } }).sort({ createdAt: 1 }).toArray()) {
-        if (!isDate(l.createdAt) || s(l.source).toLowerCase() === 'formulario de contacto') continue;   // spam de bots
-        const k = claveLead(l);
-        if (vistos.has(k)) continue;
-        vistos.add(k);
-        if (l.createdAt >= desdeAnt) leads.push(l);
-    }
+    })).filter((l) => l.createdAt >= desde || l.createdAt < ant.hasta);
 
     const contactos = [...new Set(leads.map((l) => dig(l, 'contact', '_id')).filter((x): x is ObjectId => x instanceof ObjectId).map(String))].map((x) => new ObjectId(x));
     const props = [...new Set(leads.map((l) => dig(l, 'property', '_id')).filter((x): x is ObjectId => x instanceof ObjectId).map(String))].map((x) => new ObjectId(x));
@@ -178,6 +159,6 @@ export async function consultasDe(companyId: string, desde: Date, hasta: Date): 
             mensaje: s(l.message).slice(0, 160) || null,
         };
     });
-    return { desde: desde.toISOString(), hasta: hasta.toISOString(), desdeAnt: desdeAnt.toISOString(), leads: out.reverse(), generado: new Date().toISOString() };
+    return { desde: desde.toISOString(), hasta: hasta.toISOString(), desdeAnt: ant.desde.toISOString(), hastaAnt: ant.hasta.toISOString(), leads: out.reverse(), generado: new Date().toISOString() };
 }
 export { ymd };

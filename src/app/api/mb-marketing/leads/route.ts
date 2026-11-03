@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId, type Document } from 'mongodb';
 import { canAccessCompany, currentUser } from '@/lib/companyAccess';
 import { getDb } from '@/lib/data';
-import { claveLead } from '@/lib/mbComun';
+import { claveLead, inicioDiaMx } from '@/lib/mbComun';
 import { classifySource, KEY2NAME } from '@/lib/portales/metrics';
 import { canalContacto } from '@/lib/portales/inmobiliaria';
 import { MARKETING_EMPRESAS, puedeVerMarketing } from '@/lib/marketingAcceso';
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const db = await getDb();
     const prop = await db.collection('properties').findOne({ internalId: codigo }, { projection: { 'company._id': 1 } });
     if (!prop) return NextResponse.json({ error: 'No existe la propiedad' }, { status: 404 });
-    const desde = new Date(Date.now() - dias * 86400000);
+    const desde = inicioDiaMx(new Date(), dias - 1);   // días de calendario hora México, como los conteos
     const vistos = new Set<string>();
     const leads: Array<Record<string, string | null>> = [];
     // Se recorre la misma ventana que el conteo (400 días) para que «lead único» = la PRIMERA vez que esa persona

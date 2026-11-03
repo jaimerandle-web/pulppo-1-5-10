@@ -237,8 +237,8 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
 
     return (<div>
         <div style={{ background: LGT, borderLeft: `2px solid ${YEL}`, padding: '9px 13px', fontSize: 11.5, color: '#555', marginBottom: 6 }}>
-            {interno && <b>Vista interna (ves también lo que la inmobiliaria no ve, al final). </b>}«7 d» = últimos 7 días (<b>{fecha(d.semana.desde)} – {fecha(d.semana.hasta)}</b>) contra los 7 anteriores ({fecha(d.semanaAnt.desde)} – {fecha(d.semanaAnt.hasta)}).
-            Leads únicos (misma persona + misma propiedad = 1), visitas por fecha de la visita y vistas registradas por Pulppo (la mayoría de Inmuebles24).
+            {interno && <b>Vista interna (ves también lo que la inmobiliaria no ve, al final). </b>}«7 d» = últimos 7 días, igual que en Consultas (<b>{fecha(d.semana.desde)} – {fecha(d.semana.hasta)}</b>, hasta esta hora) contra el mismo tramo de la semana anterior ({fecha(d.semanaAnt.desde)} – {fecha(d.semanaAnt.hasta)}, hasta la misma hora).
+            Leads únicos (misma persona + misma propiedad = 1), visitas por fecha de la visita y vistas registradas por Pulppo (la mayoría de Inmuebles24). «La semana en corto» cuenta todos los leads de la inmobiliaria; las secciones por nivel y por anuncio, sólo los de los anuncios publicados hoy.
         </div>
 
         <Resumen d={d} interno={interno} rotarAuto={rotarAuto.length} rotarAutoCod={rotarAuto.filter((x) => x.leadsEnNivel >= d.reglas.leadsRotar).map((x) => x.codigo)} manual={rotarManual.length} />
@@ -595,9 +595,8 @@ function LeadsModal({ companyId, pedido, onClose, etiqueta }: { companyId: strin
 /** La semana en corto: lo que cambió en 7 días y qué hacer. Todo sale de las mismas secciones de abajo. */
 function Resumen({ d, interno, rotarAuto, rotarAutoCod, manual }: { d: MarketingMk; interno: boolean; rotarAuto: number; rotarAutoCod: string[]; manual: number }) {
     const s = (k: (a: AvisoMk) => number) => d.avisos.reduce((t, a) => t + k(a), 0);
-    const leads = s((a) => a.leadsSem), leadsAnt = s((a) => a.leadsSemAnt);
-    const i24 = s((a) => a.i24.leadsSem), i24Ant = s((a) => a.i24.leadsSemAnt);
-    const meli = s((a) => a.meliE.leadsSem), meliAnt = s((a) => a.meliE.leadsSemAnt);
+    // leads: TODOS los de la inmobiliaria (los mismos que Consultas), no sólo los de los avisos publicados hoy
+    const { leadsSem: leads, leadsSemAnt: leadsAnt, i24Sem: i24, i24SemAnt: i24Ant, meliSem: meli, meliSemAnt: meliAnt } = d.resumen;
     const vis = s((a) => a.visitasSem), visAnt = s((a) => a.visitasSemAnt);
     const l90 = d.cierres.lista.filter((c) => c.fecha >= d.cierres.desde90 && (c.estatus === 'Cerrada' || c.estatus === 'Cobrando'));
     const f90 = Object.entries(l90.reduce<Record<string, number>>((m, c) => ({ ...m, [c.fuente]: (m[c.fuente] ?? 0) + 1 }), {})).sort((a, b) => b[1] - a[1]);
