@@ -81,6 +81,9 @@ export default function Home() {
                     <a href="/1-5-10/campanas" className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
                         ✉️ Campañas
                     </a>
+                    <a href="/1-5-10/pauta" className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
+                        📣 Pauta Meta
+                    </a>
                     <button onClick={() => load(true)} className="rounded-lg border border-neutral-300 px-3 py-1.5 hover:bg-neutral-50">
                         🔄 Actualizar
                     </button>

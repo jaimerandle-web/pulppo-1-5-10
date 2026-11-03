@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
         '/ficha/[id]': ['./src/lib/ortografia/**'],
         '/ficha/[id]/comparables': ['./src/lib/ortografia/**'],
         '/propiedad/[id]': ['./src/lib/ortografia/**'],
+        // el logo blanco se lee de disco para estamparlo en los artes de pauta
+        '/api/pauta/arte': ['./public/pulppo-blanco.png'],
     },
     // /inventario sirve el reporte estático self-contained (public/inventario.html).
     // Queda detrás del login por el middleware (la ruta no está en la allowlist del matcher).

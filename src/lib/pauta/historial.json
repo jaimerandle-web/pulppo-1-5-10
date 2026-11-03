@@ -1,0 +1,156 @@
+{
+ "corte": "2026-11-03",
+ "cuenta": "act_352522417013101",
+ "props": {
+  "CAL-901": {
+   "gasto": 1500,
+   "clicsWa": 7,
+   "leads": 6,
+   "visitas": 1
+  },
+  "CBW-121": {
+   "gasto": 1500,
+   "clicsWa": 24,
+   "leads": 21,
+   "visitas": 1
+  },
+  "CCB-259": {
+   "gasto": 745,
+   "clicsWa": 5,
+   "leads": 4,
+   "visitas": 0
+  },
+  "CHD-819": {
+   "gasto": 1500,
+   "clicsWa": 5,
+   "leads": 4,
+   "visitas": 0
+  },
+  "CJF-239": {
+   "gasto": 3094,
+   "clicsWa": 9,
+   "leads": 19,
+   "visitas": 3
+  },
+  "CLO-335": {
+   "gasto": 1500,
+   "clicsWa": 23,
+   "leads": 20,
+   "visitas": 5
+  },
+  "CLU-491": {
+   "gasto": 2503,
+   "clicsWa": 22,
+   "leads": 3,
+   "visitas": 0
+  },
+  "CNS-687": {
+   "gasto": 1500,
+   "clicsWa": 14,
+   "leads": 0,
+   "visitas": 0
+  },
+  "CNZ-446": {
+   "gasto": 1500,
+   "clicsWa": 0,
+   "leads": 0,
+   "visitas": 0
+  },
+  "CRG-679": {
+   "gasto": 1829,
+   "clicsWa": 5,
+   "leads": 0,
+   "visitas": 0
+  },
+  "CSL-185": {
+   "gasto": 1500,
+   "clicsWa": 3,
+   "leads": 0,
+   "visitas": 0
+  },
+  "CTX-297": {
+   "gasto": 1500,
+   "clicsWa": 10,
+   "leads": 8,
+   "visitas": 0
+  },
+  "CZN-143": {
+   "gasto": 3089,
+   "clicsWa": 7,
+   "leads": 0,
+   "visitas": 0
+  },
+  "DBL-795": {
+   "gasto": 1500,
+   "clicsWa": 32,
+   "leads": 30,
+   "visitas": 0
+  },
+  "DCI-165": {
+   "gasto": 3499,
+   "clicsWa": 21,
+   "leads": 36,
+   "visitas": 5
+  },
+  "DGP-593": {
+   "gasto": 7500,
+   "clicsWa": 30,
+   "leads": 5,
+   "visitas": 1
+  },
+  "DHU-306": {
+   "gasto": 3500,
+   "clicsWa": 15,
+   "leads": 4,
+   "visitas": 0
+  },
+  "DHW-408": {
+   "gasto": 78,
+   "clicsWa": 0,
+   "leads": 0,
+   "visitas": 0
+  },
+  "DHZ-333": {
+   "gasto": 1500,
+   "clicsWa": 30,
+   "leads": 28,
+   "visitas": 6
+  },
+  "DIJ-882": {
+   "gasto": 1121,
+   "clicsWa": 6,
+   "leads": 3,
+   "visitas": 0
+  },
+  "DKT-193": {
+   "gasto": 4266,
+   "clicsWa": 18,
+   "leads": 9,
+   "visitas": 0
+  },
+  "DLI-815": {
+   "gasto": 12950,
+   "clicsWa": 45,
+   "leads": 41,
+   "visitas": 3
+  },
+  "DMU-095": {
+   "gasto": 1500,
+   "clicsWa": 9,
+   "leads": 4,
+   "visitas": 1
+  },
+  "DZL-209": {
+   "gasto": 2000,
+   "clicsWa": 4,
+   "leads": 3,
+   "visitas": 0
+  },
+  "TZA-292": {
+   "gasto": 5380,
+   "clicsWa": 19,
+   "leads": 8,
+   "visitas": 0
+  }
+ }
+}
