@@ -199,9 +199,10 @@ export function armarSegmentacion(p: DatosProp): Segmentacion {
         publico: 'Advantage+ encendido, con los intereses como sugerencia (así corrieron las de febrero). '
             + 'Opcional: subir la base de compradores de la zona (CSV en Campañas → Generar base) como público personalizado y crear un similar de 1–3%.',
         objetivo: 'Clientes potenciales · conversión en el sitio (clic al botón de WhatsApp de la ficha)',
-        presupuesto: precio >= 15e6
-            ? '$750, como pauta de marca: arriba de $15M el lead de Meta casi no llega a visita. Revisar a los 14 días.'
-            : '$1,500 por propiedad (lo que costó cada campaña de febrero). Revisar a los 14 días: si el costo por lead en el CRM pasa de $300, pausar.',
+        presupuesto: (precio >= 15e6
+            ? 'Sola: $750 por 14 días, como pauta de marca (arriba de $15M el lead de Meta casi no llega a visita).'
+            : 'Sola: $1,500 por 14 días (lo que costó cada campaña de febrero).')
+            + ' Si no es estrella, va en el carrusel de su cluster: ver el Plan. Revisar a los 14 días: si el costo por lead en el CRM pasa de $300, pausar.',
         ubicaciones: 'Automáticas (Advantage+). Subir los 4 tamaños para que Meta use el correcto en cada lugar.'
     };
 }
@@ -220,6 +221,6 @@ export function urlConUtm(p: DatosProp, campana: string): string {
     return `https://pulppo.com/propiedades/${p.id}?${q.toString()}`;
 }
 
-export function urlArte(code: string, formato: Formato, descargar = false): string {
+export function urlArte(code: string, formato: Formato | 'card', descargar = false): string {
     return `/api/pauta/arte?code=${encodeURIComponent(code)}&formato=${formato}${descargar ? '&descargar=1' : ''}`;
 }

@@ -6,8 +6,8 @@
 // · videos.json   — cortes editados en Drive por código (carpeta de multimedia). Los videos de
 //                   Mongo son ligas de YouTube y Meta no los acepta para anunciar.
 // · historial.json — lo que ya se gastó en Meta por propiedad y lo que dio en el CRM.
-import type { Document } from 'mongodb';
-import { getDb } from '../data';
+import type { Document, ObjectId } from 'mongodb';
+import { classifySource, getDb } from '../data';
 import zonaMap from '../zona_map.json';
 import videosSnap from './videos.json';
 import historialSnap from './historial.json';
@@ -39,6 +39,17 @@ const norm = (s: unknown) =>
 const num = (x: unknown): number | null => (typeof x === 'number' && !isNaN(x) ? x : null);
 
 export interface Historial { gasto: number; clicsWa: number; leads: number; visitas: number }
+
+// Demanda de los últimos 60 días, en vivo: personas únicas que preguntaron por la propiedad fuera
+// de Meta (portales, WhatsApp, correo…) y cuántas visitaron después de su primer lead.
+export interface Demanda { leads: number; leadsMeta: number; visitas: number; porCanal: Record<string, number> }
+export const DIAS_DEMANDA = 60;
+
+// Estrella = la demanda ya probó que la propiedad jala (precio y producto resuenan): va en campaña
+// propia. Medido el 3-nov-2026: con ≥10 personas y ≥3 visitas en 60 días salen 7 de las vivas, todas
+// abajo de $15M. Sin el piso de visitas se colaban avisos con ráfagas de leads de MeLi que nadie
+// visita (DTJ-191: 254 leads, 0 visitas).
+export const esEstrella = (d: Demanda | null) => !!d && d.leads >= 10 && d.visitas >= 3;
 export interface VideoCorte { formato: string; url: string }
 
 export interface PautaProp extends DatosProp {
@@ -56,6 +67,8 @@ export interface PautaProp extends DatosProp {
     videos: VideoCorte[];
     youtube: string | null;
     historial: Historial | null;
+    demanda: Demanda | null;
+    estrella: boolean;
     copies: Copies;
     seg: Segmentacion;
 }
@@ -145,17 +158,79 @@ function mapear(P: Document): PautaProp {
         videos,
         youtube: yt ?? null,
         historial,
+        demanda: null,
+        estrella: false,
         copies: armarCopies(d),
         seg: armarSegmentacion(d)
     };
 }
 
+// Cohorte estricta: la visita cuenta sólo si es posterior al primer lead de esa persona en la propiedad.
+async function demanda(db: Awaited<ReturnType<typeof getDb>>, ids: ObjectId[]): Promise<Map<string, Demanda>> {
+    const desde = new Date(Date.now() - DIAS_DEMANDA * 86400000);
+    const [leads, visitas] = await Promise.all([
+        db.collection('leads').find(
+            { 'property._id': { $in: ids }, createdAt: { $gte: desde } },
+            { projection: { 'property._id': 1, 'contact._id': 1, source: 1, createdAt: 1 } }
+        ).toArray(),
+        db.collection('visits').find(
+            { 'steps.property._id': { $in: ids }, createdAt: { $gte: desde }, 'status.last': { $ne: 'cancelled' } },
+            { projection: { 'steps.property._id': 1, 'contact._id': 1, createdAt: 1 } }
+        ).toArray()
+    ]);
+    const primero = new Map<string, Date>(); // prop|contacto → primer lead
+    const canal = new Map<string, Map<string, string>>(); // prop → contacto → canal
+    for (const l of leads) {
+        if (norm(l.source) === 'formulario de contacto') continue; // spam de bots
+        const pid = String(l.property?._id), cid = String(l.contact?._id ?? l._id);
+        const k = `${pid}|${cid}`;
+        if (!primero.has(k) || l.createdAt < primero.get(k)!) primero.set(k, l.createdAt);
+        if (!canal.has(pid)) canal.set(pid, new Map());
+        const c = classifySource(l.source as string);
+        const prev = canal.get(pid)!.get(cid);
+        if (!prev || prev === 'Redes sociales') canal.get(pid)!.set(cid, c); // si llegó por portal y por Meta, cuenta como portal
+    }
+    const visito = new Map<string, Set<string>>();
+    for (const v of visitas) {
+        const cid = String(v.contact?._id);
+        for (const st of (v.steps as Document[]) || []) {
+            const pid = String(st.property?._id);
+            const f = primero.get(`${pid}|${cid}`);
+            if (f && v.createdAt >= f) {
+                if (!visito.has(pid)) visito.set(pid, new Set());
+                visito.get(pid)!.add(cid);
+            }
+        }
+    }
+    const out = new Map<string, Demanda>();
+    for (const [pid, cs] of canal) {
+        const porCanal: Record<string, number> = {};
+        let meta = 0;
+        for (const c of cs.values()) {
+            if (c === 'Redes sociales') meta++;
+            else porCanal[c] = (porCanal[c] || 0) + 1;
+        }
+        out.set(pid, { leads: cs.size - meta, leadsMeta: meta, visitas: visito.get(pid)?.size ?? 0, porCanal });
+    }
+    return out;
+}
+
 export async function fetchPauta(): Promise<PautaProp[]> {
     const db = await getDb();
-    const props = await db.collection('properties')
+    const raw = await db.collection('properties')
         .find({ 'contract.exclusive.pulppo': { $ne: null }, 'status.last': 'published' }, { projection: PROJ })
         .toArray();
-    return props.map(mapear).sort((a, b) => a.cluster.localeCompare(b.cluster, 'es') || (a.precio ?? 0) - (b.precio ?? 0));
+    const dem = await demanda(db, raw.map((P) => P._id as ObjectId));
+    const props = raw.map((P) => {
+        const p = mapear(P);
+        p.demanda = dem.get(p.id) ?? { leads: 0, leadsMeta: 0, visitas: 0, porCanal: {} };
+        p.estrella = !p.excluida && esEstrella(p.demanda);
+        if (p.demanda.leads >= 20 && p.demanda.visitas === 0) {
+            p.avisos.push(`${p.demanda.leads} personas preguntaron en ${DIAS_DEMANDA} días y nadie visitó: revisar la calidad de esos leads y el precio antes de pautar.`);
+        }
+        return p;
+    });
+    return props.sort((a, b) => a.cluster.localeCompare(b.cluster, 'es') || (a.precio ?? 0) - (b.precio ?? 0));
 }
 
 export async function getPautaProp(code: string): Promise<PautaProp | null> {

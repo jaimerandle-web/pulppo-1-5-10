@@ -1,5 +1,7 @@
 // Arte para anuncio de Meta de una exclusiva 1·5·10, en cuatro tamaños.
-//   GET ?code=DCI-165&formato=1x1|4x5|9x16|191x1 [&descargar=1]
+//   GET ?code=DCI-165&formato=1x1|4x5|9x16|191x1|card [&descargar=1]
+//   `card` = tarjeta de carrusel 1080×1080: la foto manda y la banda sólo lleva colonia, precio y
+//   datos (el texto del anuncio va arriba del carrusel y el título debajo de cada tarjeta).
 //
 // Foto = la portada de Mongo (la #1). Diseño de marca: foto arriba (o a la izquierda en el
 // horizontal) y banda Soft Black con el texto; amarillo sólo en la etiqueta, sin sombras.
@@ -56,7 +58,10 @@ async function foto(raw: string, ancho: number): Promise<string | null> {
 export async function GET(req: Request) {
     const q = new URL(req.url).searchParams;
     const code = q.get('code') || '';
-    const f = FORMATOS.find((x) => x.id === (q.get('formato') as Formato)) || FORMATOS[0];
+    const card = q.get('formato') === 'card';
+    const f: { id: Formato | 'card'; w: number; h: number } = card
+        ? { id: 'card', w: 1080, h: 1080 }
+        : FORMATOS.find((x) => x.id === (q.get('formato') as Formato)) || FORMATOS[0];
     const p = await getPautaProp(code);
     if (!p) return Response.json({ error: `No encontré ${code}` }, { status: 404 });
     if (!p.foto) return Response.json({ error: `${p.code} no tiene foto pública` }, { status: 422 });
@@ -84,6 +89,19 @@ export async function GET(req: Request) {
         p.park ? `${p.park} est.` : null
     ].filter(Boolean).join('   ·   ');
     const fotoAlto = horizontal ? f.h : story ? Math.round(f.h * 0.6) : f.id === '4x5' ? 860 : 640;
+
+    const bandaCard = (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: SOFT, color: 'white', flexGrow: 1, padding: '0 56px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', fontFamily: 'EB Garamond', fontSize: 50, lineHeight: 1.05 }}>{p.colonia || titulo}</div>
+                <div style={{ display: 'flex', fontFamily: 'Nunito Sans', fontSize: 28, color: GRAY, marginTop: 10 }}>{datos}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', fontFamily: 'EB Garamond', fontSize: 50 }}>{precioLargo(p.precio)}</div>
+                <div style={{ display: 'flex', fontFamily: 'Nunito Sans', fontSize: 20, color: GRAY, marginTop: 10 }}>{p.code}</div>
+            </div>
+        </div>
+    );
 
     const panel = (
         <div style={{
@@ -115,9 +133,9 @@ export async function GET(req: Request) {
     const res = new ImageResponse(
         (
             <div style={{ display: 'flex', flexDirection: horizontal ? 'row' : 'column', width: f.w, height: f.h, backgroundColor: SOFT }}>
-                <img src={img} alt="" width={horizontal ? 700 : f.w} height={fotoAlto}
-                    style={{ objectFit: 'cover', width: horizontal ? 700 : f.w, height: fotoAlto }} />
-                {panel}
+                <img src={img} alt="" width={horizontal ? 700 : f.w} height={card ? 840 : fotoAlto}
+                    style={{ objectFit: 'cover', width: horizontal ? 700 : f.w, height: card ? 840 : fotoAlto }} />
+                {card ? bandaCard : panel}
             </div>
         ),
         {

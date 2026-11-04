@@ -11,7 +11,8 @@ export interface Excluida {
 }
 
 export const EXCLUIDAS: Excluida[] = [
-    { inmobiliaria: 'NURA', motivo: 'Por suspender: no se invierte en ads', desde: '2026-11-03' }
+    { inmobiliaria: 'NURA', motivo: 'Por suspender: no se invierte en ads', desde: '2026-11-03' },
+    { inmobiliaria: 'We Book Realty', motivo: 'Fraude: no se invierte en ads', desde: '2026-11-03' }
 ];
 
 export const normInmo = (s: string) =>

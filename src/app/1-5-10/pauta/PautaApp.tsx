@@ -4,14 +4,17 @@
 // (zona × rango de precio), cada propiedad con su inmobiliaria, artes en 4 tamaños, cortes de
 // video de Drive, copies, segmentación y la liga con UTM. Las inmobiliarias suspendidas y lo que
 // no es vivienda salen aparte, con el motivo, para que nadie les invierta por error.
+// Arriba, el Plan: estrellas solas, un carrusel por cluster y sueltas, recortado al presupuesto.
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FORMATOS, precioLargo, urlArte } from '@/lib/pauta/armado';
 import type { PautaProp } from '@/lib/pauta';
+import { DIAS_VUELO, type CampanaPlan } from '@/lib/pauta/plan';
 import type { Excluida } from '@/lib/pauta/excluidas';
 
 interface Payload {
     props: PautaProp[];
+    plan: CampanaPlan[];
     excluidas: Excluida[];
     corteHistorial: string;
     corteVideos: string;
@@ -126,6 +129,7 @@ function Tarjeta({ p }: { p: PautaProp }) {
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline gap-x-3">
                         <a href={p.url} target="_blank" rel="noreferrer" className="font-bold hover:underline">{p.code}</a>
+                        {p.estrella && <span className="rounded-full bg-brand-yellow px-2 py-0.5 text-[11px] font-bold">Estrella</span>}
                         <span className="text-sm font-semibold">{p.inmobiliaria}</span>
                         <span className="text-sm text-neutral-500">{p.tipo} · {p.colonia}{p.ciudad ? `, ${p.ciudad}` : ''}</span>
                     </div>
@@ -133,6 +137,7 @@ function Tarjeta({ p }: { p: PautaProp }) {
                     <div className="text-sm text-neutral-600">{datos}</div>
                     <div className="mt-1 flex flex-wrap gap-x-4 text-xs text-neutral-500">
                         <span>{p.videos.length ? `Video en Drive (${p.videos.length} cortes)` : 'Sin video en Drive'}</span>
+                        {p.demanda && <span>60 días fuera de Meta: {p.demanda.leads} personas · {p.demanda.visitas} visitas{p.demanda.leadsMeta ? ` · Meta ${p.demanda.leadsMeta}` : ''}</span>}
                         {h ? <span>Ya pautada: ${h.gasto.toLocaleString('es-MX')} · {h.leads} leads · {h.visitas} visitas{h.leads ? ` · $${Math.round(h.gasto / h.leads)}/lead` : ''}</span> : <span>Nunca pautada en Meta</span>}
                     </div>
                     {p.avisos.length > 0 && (
@@ -151,6 +156,117 @@ function Tarjeta({ p }: { p: PautaProp }) {
     );
 }
 
+const ETIQUETA: Record<CampanaPlan['tipo'], string> = { estrella: 'Estrella · sola', carrusel: 'Carrusel', suelta: 'Suelta' };
+const money = (n: number) => `$${n.toLocaleString('es-MX')}`;
+
+function Carrusel({ c }: { c: CampanaPlan }) {
+    const seg = [`Ubicación: ${c.ubicacion}`, `Edad: ${c.edad}`, `Intereses: ${c.intereses?.join(', ')}`,
+        'Objetivo: Clientes potenciales · conversión en el sitio (clic al botón de WhatsApp de la ficha)',
+        'Formato: carrusel, una tarjeta por propiedad en este orden. Desactivar "mostrar primero la tarjeta con mejor rendimiento" para que la 1ª sea la de más demanda.'].join('\n');
+    return (
+        <div className="mt-4 space-y-5 border-t border-neutral-200 pt-4">
+            <div>
+                <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-neutral-500">Tarjetas (1080×1080, en orden)</h4>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                    {c.tarjetas!.map((t, i) => (
+                        <div key={t.code} className="text-xs">
+                            <a href={urlArte(t.code, 'card', true)} title="Descargar">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={urlArte(t.code, 'card')} alt={t.titulo} loading="lazy" className="w-full border border-neutral-200 bg-light" />
+                            </a>
+                            <div className="mt-1 font-semibold">{i + 1}. {t.code}{t.video ? ' · video' : ''}</div>
+                            <div className="text-neutral-600">{t.inmobiliaria}</div>
+                            <div className="mt-1 flex items-start gap-1"><span className="flex-1">{t.titulo}</span><Copiar texto={t.titulo} /></div>
+                            <div className="mt-1 flex items-start gap-1 text-neutral-600"><span className="flex-1">{t.descripcion}</span><Copiar texto={t.descripcion} /></div>
+                            <div className="mt-1"><Copiar texto={t.url} label="Copiar liga" /></div>
+                        </div>
+                    ))}
+                </div>
+                <p className="mt-2 text-xs text-neutral-500">Cada liga lleva utm_campaign = nombre del carrusel y utm_content = código: el lead llega al CRM con su tarjeta. Si la tarjeta tiene video en Drive, puede ir en lugar de la imagen.</p>
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+                <div>
+                    <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-neutral-500">Texto principal (arriba del carrusel)</h4>
+                    <ul className="space-y-2">
+                        {c.textos!.map((t) => (
+                            <li key={t} className="flex items-start gap-2 rounded bg-light p-2 text-sm"><span className="flex-1">{t}</span><Copiar texto={t} /></li>
+                        ))}
+                    </ul>
+                </div>
+                <div>
+                    <div className="mb-2 flex items-center gap-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-500">Segmentación</h4>
+                        <Copiar texto={seg} label="Copiar todo" />
+                    </div>
+                    <p className="whitespace-pre-line text-sm">{seg}</p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function FilaPlan({ c, props, dentro }: { c: CampanaPlan; props: PautaProp[]; dentro: boolean }) {
+    const [abierta, setAbierta] = useState(false);
+    const ps = c.codes.map((k) => props.find((p) => p.code === k)).filter(Boolean) as PautaProp[];
+    return (
+        <div className={`rounded-lg border p-4 ${dentro ? 'border-neutral-200 bg-white' : 'border-dashed border-neutral-300 bg-light opacity-60'}`}>
+            <div className="flex flex-wrap items-start gap-4">
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-3">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.tipo === 'estrella' ? 'bg-brand-yellow' : 'bg-light'}`}>{ETIQUETA[c.tipo]}</span>
+                        <span className="font-semibold">{c.cluster}</span>
+                        <code className="text-xs text-neutral-500">{c.nombre}</code>
+                        <Copiar texto={c.nombre} />
+                    </div>
+                    <div className="mt-1 text-sm text-neutral-700">{c.razon}</div>
+                    <div className="mt-1 text-xs text-neutral-500">{ps.map((p) => `${p.code} (${p.inmobiliaria})`).join(' · ')}</div>
+                </div>
+                <div className="text-right">
+                    <div className="font-serif text-2xl">{money(c.presupuesto)}</div>
+                    <div className="text-xs text-neutral-500">{dentro ? `${DIAS_VUELO} días` : 'En espera: no alcanza'}</div>
+                </div>
+                <button type="button" onClick={() => setAbierta(!abierta)}
+                    className="h-fit shrink-0 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50">
+                    {abierta ? 'Cerrar' : 'Ver paquete'}
+                </button>
+            </div>
+            {abierta && (c.tipo === 'carrusel' ? <Carrusel c={c} /> : <div className="mt-4">{ps.map((p) => <Tarjeta key={p.code} p={p} />)}</div>)}
+        </div>
+    );
+}
+
+function Plan({ d }: { d: Payload }) {
+    const total = d.plan.reduce((s, c) => s + c.presupuesto, 0);
+    const [tope, setTope] = useState(total);
+    let acum = 0;
+    const filas = d.plan.map((c) => { acum += c.presupuesto; return { c, dentro: acum <= tope }; });
+    const usado = filas.filter((f) => f.dentro).reduce((s, f) => s + f.c.presupuesto, 0);
+    const cuenta = (t: CampanaPlan['tipo']) => d.plan.filter((c) => c.tipo === t).length;
+    return (
+        <div>
+            <div className="mb-4 rounded-lg bg-light p-4 text-sm">
+                <p>
+                    <b>Cómo se reparte:</b> primero las <b>estrellas</b> (≥10 personas y ≥3 visitas en 60 días fuera de Meta), cada una en su campaña.
+                    Después un <b>carrusel por cluster</b> con el resto: junta el aprendizaje de Meta y reporta clics por tarjeta.
+                    Las que quedan solas en su cluster van como anuncio sencillo. Arriba de $15M, a la mitad y al final.
+                    Vuelos de {DIAS_VUELO} días; al cierre, la tarjeta que jala pasa a estrella y la que no se saca.
+                </p>
+                <div className="mt-3 flex flex-wrap items-end gap-4">
+                    <label className="block">
+                        <span className="block text-xs text-neutral-600">Presupuesto disponible ({DIAS_VUELO} días)</span>
+                        <input type="number" step={500} min={0} value={tope} onChange={(e) => setTope(Number(e.target.value) || 0)}
+                            className="mt-1 w-40 rounded-lg border border-neutral-300 px-2 py-1.5" />
+                    </label>
+                    <span>Plan completo: <b>{money(total)}</b> · {cuenta('estrella')} estrellas · {cuenta('carrusel')} carruseles · {cuenta('suelta')} sueltas</span>
+                    <span>Alcanza para: <b>{money(usado)}</b> ({filas.filter((f) => f.dentro).length} de {filas.length} campañas)</span>
+                    <a href="/api/pauta?format=csv&tipo=plan" className="rounded-lg bg-soft px-3 py-1.5 text-white hover:opacity-90">Descargar plan (CSV)</a>
+                </div>
+            </div>
+            <div className="space-y-3">{filas.map(({ c, dentro }) => <FilaPlan key={c.nombre} c={c} props={d.props} dentro={dentro} />)}</div>
+        </div>
+    );
+}
+
 export default function PautaApp() {
     const router = useRouter();
     const [d, setD] = useState<Payload | null>(null);
@@ -158,6 +274,7 @@ export default function PautaApp() {
     const [cluster, setCluster] = useState('');
     const [inmo, setInmo] = useState('');
     const [soloVideo, setSoloVideo] = useState(false);
+    const [vista, setVista] = useState<'plan' | 'props'>('plan');
 
     useEffect(() => {
         fetch('/api/pauta')
@@ -208,12 +325,13 @@ export default function PautaApp() {
 
             {d && (
                 <>
-                    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
                         {[
                             ['Activas en el programa', d.props.length],
                             ['Se pueden pautar', pautables.length],
                             ['Fuera de pauta', fuera.length],
-                            ['Con video en Drive', pautables.filter((p) => p.videos.length).length]
+                            ['Con video en Drive', pautables.filter((p) => p.videos.length).length],
+                            ['Estrellas', pautables.filter((p) => p.estrella).length]
                         ].map(([l, v]) => (
                             <div key={l} className="rounded-lg bg-light p-3">
                                 <div className="text-xs text-neutral-600">{l}</div>
@@ -237,6 +355,18 @@ export default function PautaApp() {
                         </details>
                     )}
 
+                    <div className="mb-5 flex gap-1 border-b border-neutral-200">
+                        {([['plan', 'Plan y presupuesto'], ['props', 'Por propiedad']] as const).map(([id, label]) => (
+                            <button key={id} type="button" onClick={() => setVista(id)}
+                                className={`px-4 py-2.5 text-sm font-semibold ${vista === id ? 'border-b-2 border-brand-yellow' : 'text-neutral-400 hover:text-neutral-600'}`}>
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {vista === 'plan' && <Plan d={d} />}
+
+                    {vista === 'props' && <>
                     <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
                         <select value={cluster} onChange={(e) => setCluster(e.target.value)} className="rounded-lg border border-neutral-300 px-2 py-1.5">
                             <option value="">Todos los clusters</option>
@@ -260,6 +390,7 @@ export default function PautaApp() {
                             </section>
                         ))}
                     </div>
+                    </>}
 
                     <p className="mt-8 text-xs text-neutral-500">
                         Historial de Meta al {d.corteHistorial} (gasto en Meta y leads/visitas en el CRM). Cortes de video al {d.corteVideos}, de la{' '}
