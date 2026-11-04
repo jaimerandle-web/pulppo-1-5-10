@@ -135,7 +135,8 @@ export interface MarketingMk {
     semana: Semana; semanaAnt: Semana;
     /** «La semana en corto»: TODOS los leads únicos de la inmobiliaria (los mismos que Consultas), no sólo los de
      *  los avisos publicados hoy, que son los que suman las secciones por aviso y por nivel */
-    resumen: { leadsSem: number; leadsSemAnt: number; i24Sem: number; i24SemAnt: number; meliSem: number; meliSemAnt: number };
+    /** i24 SIN la cuenta Premier; `premier*` = leads que llegaron por la cuenta Premier (Joshua: ¿vale la pena pagarla?) */
+    resumen: { leadsSem: number; leadsSemAnt: number; i24Sem: number; i24SemAnt: number; premierSem: number; premierSemAnt: number; meliSem: number; meliSemAnt: number };
     asignacion: {
         venta: number; renta: number;
         porNivel: Array<{ nivel: string; n: number; venta: number; renta: number }>;
@@ -208,15 +209,16 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     // propiedad|comprador → canal de su primer lead: para saber de qué portal vino cada visita
     const canalComprador = new Map<string, string>();
     // mismo cargador que Consultas (mbComun.leadsUnicos); lo de los avisos usa sólo los publicados hoy
-    const resumen = { leadsSem: 0, leadsSemAnt: 0, i24Sem: 0, i24SemAnt: 0, meliSem: 0, meliSemAnt: 0 };
-    for (const l of await leadsUnicos(db, comps, new Date(ahora.getTime() - 400 * DIA), new Date(ahora.getTime() + DIA), {}, 0)) {
+    const resumen = { leadsSem: 0, leadsSemAnt: 0, i24Sem: 0, i24SemAnt: 0, premierSem: 0, premierSemAnt: 0, meliSem: 0, meliSemAnt: 0 };
+    for (const l of await leadsUnicos(db, comps, new Date(ahora.getTime() - 400 * DIA), new Date(ahora.getTime() + DIA), { 'propertyPublishPortals.portals.inmuebles24.company': 1 }, 0)) {
         const pid = String(dig(l, 'property', '_id'));
         const canal = classifySource(String(l.source ?? ''));
         const t = l.createdAt as Date;
         const sem = t >= L0 ? 'Sem' as const : t >= Lm1 && t < finAnt ? 'SemAnt' as const : null;
         if (sem) {
             resumen[`leads${sem}`]++;
-            if (canal === 'i24') resumen[`i24${sem}`]++;
+            const premier = String(dig(l, 'propertyPublishPortals', 'portals', 'inmuebles24', 'company') ?? '').toUpperCase() === CUENTA_PREMIER;
+            if (canal === 'i24') { if (premier) resumen[`premier${sem}`]++; else resumen[`i24${sem}`]++; }
             if (canal === 'meli') resumen[`meli${sem}`]++;
         }
         if (!idSet.has(pid)) continue;
