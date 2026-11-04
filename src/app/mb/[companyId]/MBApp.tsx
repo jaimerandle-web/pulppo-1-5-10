@@ -646,8 +646,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                             <Kpi label="Inventario activo" value={f(d.nProps)} sub={`${d.nVenta} venta · ${d.nRenta} renta`} />
                             <Kpi label="Leads únicos · últimos 30 días" value={f(d.leads30)} color={dl >= 0 ? SEA : RED}
                                 sub={`${dl >= 0 ? '▲' : '▼'} ${dlPct == null ? `${dl >= 0 ? '+' : ''}${f(dl)}` : `${dl >= 0 ? '+' : ''}${dlPct}%`} vs. los 30 días anteriores (${f(d.leads30prev)}) · venta ${f(d.leads30V)} · renta ${f(d.leads30R)}`} />
-                            <Kpi label="Sin responder · últimos 30 días" value={f(d.resp.sin)} color={d.resp.sin > 0 ? RED : SEA} sub={`leads de 8 am a 8 pm · venta ${f(d.respV.sin)} · renta ${f(d.respR.sin)}`}
-                                onClick={d.resp.sin > 0 && d.companyId !== 'demo' ? () => setSinResp(true) : undefined} accion="Ver cuáles son" />
+                            <Kpi label="Sin responder · últimos 30 días" value={f(d.sin30)} color={d.sin30 > 0 ? RED : SEA} sub={`de ${f(d.leads30)} leads, a cualquier hora · venta ${f(d.sin30V)} · renta ${f(d.sin30R)}`}
+                                onClick={d.sin30 > 0 && d.companyId !== 'demo' ? () => setSinResp(true) : undefined} accion="Ver cuáles son" />
                             <Kpi label="1ª respuesta (mediana · 30 días)" value={dur(d.respMedMin)}
                                 color={d.respMedMin == null ? GRY : d.respMedMin <= 60 ? SEA : d.respMedMin > 1440 ? RED : BLK}
                                 sub={`leads de 8 am a 8 pm · la mitad se contesta antes de eso · el grupo más común es ${RESP_LBL[domResp].toLowerCase()} (${RESP_RANGO[domResp]})`} />

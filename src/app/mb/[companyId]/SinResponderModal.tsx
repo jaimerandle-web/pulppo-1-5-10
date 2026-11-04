@@ -34,7 +34,7 @@ export default function SinResponderModal({ companyId, onClose }: { companyId: s
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
                     <div>
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 23 }}>Consultas sin responder · últimos 30 días</div>
-                        <div style={{ fontSize: 12, color: '#777', marginTop: 2 }}>Leads que entraron de 8 am a 8 pm y que el asesor no ha contestado desde Pulppo. Llámalos o escríbeles hoy.</div>
+                        <div style={{ fontSize: 12, color: '#777', marginTop: 2 }}>Leads de los últimos 30 días, a cualquier hora, que el asesor no ha contestado desde Pulppo. Llámalos o escríbeles hoy.</div>
                     </div>
                     <button type="button" onClick={onClose} style={{ border: `1px solid ${LGT}`, background: '#fff', borderRadius: R, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>Cerrar ✕</button>
                 </div>

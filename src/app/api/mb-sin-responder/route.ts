@@ -3,14 +3,14 @@
 //
 //   GET /api/mb-sin-responder?company=<id>
 //
-// MISMA regla que el número del Overview (fetchInmobiliaria en lib/mb.ts): propiedades publicadas de la compañía,
-// leads únicos (contacto + propiedad, el primero) de los últimos 30 días, que entraron de 8 am a 8 pm y no tienen
-// `answeredAt`. Trae teléfono y correo del cliente: es la cartera de la propia inmobiliaria (barrera canAccessCompany).
+// MISMA regla que el número del Overview (fetchInmobiliaria en lib/mb.ts): leads únicos del cargador común de /mb
+// (mbComun.leadsUnicos) de los últimos 30 días de calendario, a cualquier hora, sin `answeredAt`. Trae teléfono y correo del cliente: es la cartera de la propia inmobiliaria (barrera canAccessCompany).
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId, type Document } from 'mongodb';
 import { canAccessCompany } from '@/lib/companyAccess';
 import { getDb } from '@/lib/data';
-import { claveLead, enHorario } from '@/lib/mbComun';
+import { inicioDiaMx, leadsUnicos } from '@/lib/mbComun';
+import { grupoDe } from '@/lib/desempenoMb';
 import { classifySource, KEY2NAME } from '@/lib/portales/metrics';
 import { canalContacto } from '@/lib/portales/inmobiliaria';
 
@@ -26,25 +26,25 @@ export async function GET(req: NextRequest) {
     if (!(await canAccessCompany(company))) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
     const db = await getDb();
-    const props = await db.collection('properties').find({ 'company._id': new ObjectId(company), 'status.last': 'published' },
-        { projection: { internalId: 1, 'listing.operation': 1, 'address.street': 1, 'address.neighborhood.name': 1, 'agent._id': 1, 'agent.firstName': 1, 'agent.lastName': 1 } }).toArray();
-    const porId = new Map(props.map((p) => [String(p._id), p]));
-    const desde = new Date(Date.now() - 30 * 86400000);
-    const vistos = new Set<string>();
+    const comps = (await grupoDe(company)).ids.map((x) => new ObjectId(x));
+    // MISMA regla que el número del Overview: leads únicos del cargador común (mbComun.leadsUnicos), últimos 30
+    // días de calendario hora México, sin `answeredAt`, a CUALQUIER hora (regla mixta de /mb, nov-2026).
+    const ahora = new Date();
+    const unicos = await leadsUnicos(db, comps, inicioDiaMx(ahora, 29), new Date(ahora.getTime() + 86400000), {
+        answeredAt: 1, medium: 1, message: 1, phone: 1, email: 1, 'contact.firstName': 1, 'contact.lastName': 1,
+        'contact.email': 1, 'contact.phone': 1, 'agent.firstName': 1, 'agent.lastName': 1,
+    });
+    const sin = unicos.filter((l) => !(l.answeredAt instanceof Date));
+    const pids = [...new Set(sin.map((l) => l.property?._id).filter(Boolean).map(String))].map((x) => new ObjectId(x));
+    const porId = new Map((await db.collection('properties').find({ _id: { $in: pids } },
+        { projection: { internalId: 1, 'listing.operation': 1, 'address.street': 1, 'address.neighborhood.name': 1, 'agent.firstName': 1, 'agent.lastName': 1 } }).toArray())
+        .map((p) => [String(p._id), p as Document]));
     const leads: Array<Record<string, string | null>> = [];
-    for (const l of await db.collection('leads').find({ 'property._id': { $in: props.map((p) => p._id) }, createdAt: { $gte: desde } }, { projection: {
-        createdAt: 1, answeredAt: 1, source: 1, medium: 1, message: 1, phone: 1, email: 1, 'contact._id': 1, 'contact.firstName': 1, 'contact.lastName': 1,
-        'contact.email': 1, 'contact.phone': 1, 'agent.firstName': 1, 'agent.lastName': 1, 'property._id': 1,
-    } }).sort({ createdAt: 1 }).toArray() as Document[]) {
-        if (!(l.createdAt instanceof Date)) continue;
-        const k = claveLead(l);
-        if (vistos.has(k)) continue;
-        vistos.add(k);
-        if (!enHorario(l.createdAt) || l.answeredAt instanceof Date) continue;
+    for (const l of sin as Document[]) {
         const p = porId.get(String(l.property?._id));
         const canal = classifySource(s(l.source));
         leads.push({
-            fecha: l.createdAt.toISOString(),
+            fecha: (l.createdAt as Date).toISOString(),
             nombre: nom(l.contact),
             telefono: s(l.phone) || s(l.contact?.phone) || null,
             correo: s(l.contact?.email) || s(l.email) || null,

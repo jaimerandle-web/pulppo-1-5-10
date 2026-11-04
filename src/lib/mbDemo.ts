@@ -236,7 +236,7 @@ export function demoData(): MBData {
         leads30: Math.round(leadsTot * 0.17), leads30prev: Math.round(leadsTot * 0.14),
         leads30V: Math.round(leadsTot * 0.13), leads30R: Math.round(leadsTot * 0.04),
         leads30prevV: Math.round(leadsTot * 0.11), leads30prevR: Math.round(leadsTot * 0.03),
-        resp: respAll, respV: cuenta(V), respR: cuenta(R),
+        resp: respAll, respV: cuenta(V), respR: cuenta(R), sin30: respAll.sin, sin30V: cuenta(V).sin, sin30R: cuenta(R).sin,
         respMedMin: mediana(props.map((p) => p.respMedMin).filter((x): x is number => x != null)),
         calAltaPct: Math.round((cal(props).alta / total) * 100),
         calAltaVenta: cal(V).alta, calAltaRenta: cal(R).alta,
