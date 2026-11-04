@@ -353,6 +353,31 @@ el PDF imprime las dos con las listas abiertas.
 - Validado contra el Python de Lau (Andina, sep-2026 y ene–oct 2026): leads, visitas, funnel,
   cierres, comisión y días por etapa IGUALES; sólo cambian etiquetas de fuente («Contacto directo»).
 
+## /mb → UN SOLO CÁLCULO en todas las pestañas (nov-2026)
+
+Overview, Propiedades (filtro de fechas), Sin responder, Desempeño, Marketing, Consultas y Análisis cuentan igual
+(`src/lib/mbComun.ts`). DH 30 d: Overview = Consultas = 764 leads / 636 previos / 20 sin responder.
+- **Leads** = `leadsUnicos(db, comps, desde, hasta)`: de la inmobiliaria por `company._id` O por propiedad suya
+  (cualquier estatus; ~2% de WhatsApp llega sin company), sin «formulario de contacto», primera vez del par
+  contacto + propiedad en 400 días. Compañías = `grupoDe` (desempenoMb.ts).
+- **Periodos** en días de calendario hora México (`inicioDiaMx`); el anterior = mismo tramo N días antes, cortado a
+  la misma hora (`periodoAnterior`). En mb.ts las fechas se recalculan en cada llamada (antes se congelaban).
+- **Respondidos / sin responder** sobre TODOS los leads (cualquier hora); **tiempo de 1ª respuesta** sólo con leads de
+  8 am a 8 pm (regla mixta, Ale).
+- **Visitas** con nombre: «Visitas» = las que ocurrieron en el periodo, una por persona y propiedad; «Visitaron» (Consultas,
+  embudo) = de los leads del periodo, cuántos visitaron después.
+- **Cierres** = `cierresMb` en todas (Marketing también: comisión cobrada del lado de la inmobiliaria). En Marketing lo EN
+  CURSO (contrato, oferta aceptada, oferta) = todas las operaciones vivas sin filtro de fecha (DMA-067 de 2025 se perdía).
+- **Ofertas** = sin canceladas (Análisis las contaba).
+- /portales NO está migrado (días UTC, leads crudos): pendiente decidir con Ale porque cuadra con los reportes mensuales.
+- Ligas a la ficha desde /mb SIEMPRE con `token` (sin él el master broker rebota a /inicio). `/icon.png` va fuera del middleware.
+- Marketing: barra «Filtrar todo» (operación, nivel i24, MeLi, tipo, asesor, 1·5·10; Ctrl+Z) que recalcula toda la pestaña en
+  el cliente; orden: 1 Qué está publicado · 2 Tus anuncios · 3 Propiedades offline · 4 Desempeño por nivel (con «Cómo viene
+  cada nivel») · 5 Cierres. Consultas: canal «Inmuebles24 · Premier» aparte (`canalDeLead`), totales por día/semana/mes,
+  filtro «Respuesta», chips de filtros y Ctrl+Z. Colores por portal en `src/lib/portalColores.ts`.
+- Exclusivas del Overview: además de «Muy probable», MISMA calle (normalizada) y, si ambos traen número, el mismo número;
+  sin calle o >1 km = fuera (`mismaCalleEstricta` en exclusivas.ts).
+
 ## /mb → Marketing y Consultas (Diamond House; ABIERTAS a la inmobiliaria el 20-oct-2026)
 
 **Marketing** = transparencia: qué está publicado en cada portal y en qué nivel (i24, MeLi, propiedades.com, Casas y

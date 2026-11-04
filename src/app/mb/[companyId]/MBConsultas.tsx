@@ -8,7 +8,7 @@
  * y «con conversación visible» (el cliente escribió o hubo llamada). Motor: lib/consultas.ts.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { ConsultasData, LeadConsulta } from '@/lib/consultas';
 import TablaFiltrable, { inp } from './TablaFiltrable';
 import { Actualizar, OpTag } from './MBMarketing';
@@ -205,7 +205,6 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
         });
     }, [cubetas, cur, canalesCur, verDia, gran]);
     const conTotales = serie.length <= 62;   // con más barras los números se enciman: se ven al pasar el cursor
-    const totalArriba = <LabelList dataKey="total" position="top" style={{ fontSize: serie.length > 31 ? 8.5 : 10, fill: BLK, fontWeight: 700 }} formatter={(v: unknown) => (Number(v) ? f0(Number(v)) : '')} />;
 
     const agrupa = (key: (l: LeadConsulta) => string) => [...cur.reduce((m, l) => { const k = key(l); (m.get(k) ?? m.set(k, []).get(k)!).push(l); return m; }, new Map<string, LeadConsulta[]>())]
         .map(([k, xs]) => ({ k, xs, ...stats(xs) })).sort((x, y) => y.n - x.n);
@@ -334,9 +333,16 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                                 <Tooltip contentStyle={{ fontSize: 11, borderRadius: R }}
                                     labelFormatter={(l, p) => `${l} · ${f0(Number((p?.[0]?.payload as { total?: number } | undefined)?.total ?? 0))} leads`} />
                                 <Legend wrapperStyle={{ fontSize: 11 }} />
+                                {/* dataKey como función: recharts lee «Propiedades.com» como ruta (a.b) y la serie salía vacía */}
                                 {verDia === 'canal'
-                                    ? canalesCur.map((c, i) => <Bar key={c} dataKey={c} stackId="a" fill={colorCanal(c, i)}>{conTotales && i === canalesCur.length - 1 ? totalArriba : null}</Bar>)
-                                    : [<Bar key="ab" dataKey="Respondidos" stackId="a" fill={SEA} />, <Bar key="sa" dataKey="Sin responder" stackId="a" fill={RED}>{conTotales ? totalArriba : null}</Bar>]}
+                                    ? canalesCur.map((c, i) => <Bar key={c} name={c} dataKey={(r: Record<string, number | string>) => r[c]} stackId="a" fill={colorCanal(c, i)} />)
+                                    : [<Bar key="ab" dataKey="Respondidos" stackId="a" fill={SEA} />, <Bar key="sa" dataKey="Sin responder" stackId="a" fill={RED} />]}
+                                {/* serie casi sin altura (con 0 recharts no la dibuja) hasta arriba de la pila: ahí se cuelga el total (en la última serie sólo salía si ésa tenía leads) */}
+                                {conTotales && <Bar dataKey={() => 0.001} stackId="a" fill="transparent" legendType="none" tooltipType="none" isAnimationActive={false}
+                                    label={(p: { x?: number | string; y?: number | string; width?: number | string; index?: number }) => {
+                                        const t = Number(serie[p.index ?? 0]?.total ?? 0);
+                                        return t ? <text x={Number(p.x) + Number(p.width) / 2} y={Number(p.y) - 4} textAnchor="middle" fontSize={serie.length > 31 ? 8.5 : 10} fontWeight={700} fill={BLK}>{f0(t)}</text> : <g />;
+                                    }} />}
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
