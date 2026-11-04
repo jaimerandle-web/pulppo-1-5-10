@@ -6,7 +6,8 @@
 // la UI filtra y agrega en el cliente. Cada lead:
 //   · ÚNICO: misma persona + misma propiedad = 1, contado la primera vez que escribió (400 días hacia atrás).
 //     Lo carga leadsUnicos (mbComun), el MISMO que Marketing: universo, spam y periodos idénticos.
-//   · canal: el de /portales (classifySource); medio: WhatsApp / teléfono / formulario (canalContacto).
+//   · canal: el de /portales (canalDeLead: «Inmuebles24 · Premier» y «Inmuebles24 · NURA» van aparte, por la
+//     cuenta de i24 del aviso en el momento del lead — Joshua, nov-2026); medio: WhatsApp / teléfono / formulario (canalContacto).
 //   · DOS medidas de respuesta (Ale: «mostremos las dos»):
 //       «respondidos» = `answeredAt` (igual que el Retool y la pestaña Propiedades; sólo dice que el asesor
 //       abrió el chat desde la app, no que contestó) y
@@ -22,7 +23,7 @@ import { getDb } from './data';
 import { enHorario, leadsUnicos, periodoAnterior, VISITA_OK } from './mbComun';
 import { grupoDe } from './desempenoMb';
 import { classifySource, KEY2NAME, dig, isDate } from './portales/metrics';
-import { canalContacto } from './portales/inmobiliaria';
+import { canalContacto, canalDeLead, cuentaI24DeLead, nombreCanal } from './portales/inmobiliaria';
 import { nivelDe } from './marketingDh';
 
 export interface LeadConsulta {
@@ -60,6 +61,8 @@ function avisoDeLead(canal: string, camp: string, cuenta: unknown): string | nul
     return null;
 }
 const MX = 6 * 3600 * 1000;
+/** nombre visible del canal: Premier y NURA aparte de Inmuebles24; sin fuente reconocida → «Otras fuentes» / «Sin fuente» */
+const canalVisible = (k: string, source: string) => (k === 'i24premier' || k === 'i24nura' ? nombreCanal(k) : KEY2NAME[k] ?? (source ? 'Otras fuentes' : 'Sin fuente'));
 const s = (x: unknown) => String(x ?? '').trim();
 const ymd = (d: Date) => new Date(d.getTime() - MX).toISOString().slice(0, 10);
 const MEDIO = { whatsapp: 'WhatsApp', telefono: 'Teléfono', form: 'Formulario' } as const;
@@ -90,6 +93,7 @@ export async function consultasDe(companyId: string, desde: Date, hasta: Date, d
         'contact.lastName': 1, 'contact.email': 1, 'contact.phone': 1, 'agent.firstName': 1, 'agent.lastName': 1,
         'property.internalId': 1, 'property.type': 1, 'property.listing.operation': 1, 'property.listing.value': 1,
         'property.address.street': 1, 'property.address.neighborhood.name': 1, campaign: 1, 'propertyPublishPortals.portals.inmuebles24.company': 1,
+        'company.name': 1,
     })).filter((l) => l.createdAt >= desde || l.createdAt < ant.hasta);
 
     const contactos = [...new Set(leads.map((l) => dig(l, 'contact', '_id')).filter((x): x is ObjectId => x instanceof ObjectId).map(String))].map((x) => new ObjectId(x));
@@ -145,7 +149,7 @@ export async function consultasDe(companyId: string, desde: Date, hasta: Date, d
             nombre: [dig(l, 'contact', 'firstName'), dig(l, 'contact', 'lastName')].map(s).filter(Boolean).join(' ') || null,
             telefono: s(l.phone) || s(dig(l, 'contact', 'phone')) || null,
             correo: s(dig(l, 'contact', 'email')) || s(l.email) || null,
-            canal: KEY2NAME[classifySource(s(l.source))] ?? (s(l.source) ? 'Otras fuentes' : 'Sin fuente'),
+            canal: canalVisible(canalDeLead(s(l.source), dig(l, 'company', 'name'), cuentaI24DeLead(l)), s(l.source)),
             medio: MEDIO[canalContacto({ medium: l.medium, message: l.message })],
             operacion: op === 'rent' ? 'Renta' : 'Venta',
             aviso: avisoDeLead(classifySource(s(l.source)), s(l.campaign), dig(l, 'propertyPublishPortals', 'portals', 'inmuebles24', 'company')),

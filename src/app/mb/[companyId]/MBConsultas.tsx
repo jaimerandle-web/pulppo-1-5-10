@@ -7,11 +7,12 @@
  * Dos medidas, con su nombre (Ale): «respondidos» (`answeredAt`, igual que el Retool y la pestaña Propiedades)
  * y «con conversación visible» (el cliente escribió o hubo llamada). Motor: lib/consultas.ts.
  */
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { ConsultasData, LeadConsulta } from '@/lib/consultas';
 import TablaFiltrable, { inp } from './TablaFiltrable';
 import { Actualizar, OpTag } from './MBMarketing';
+import { colorCanal } from '@/lib/portalColores';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
 const R = 2;
@@ -25,7 +26,6 @@ const diaMx = (iso: string) => ymdMx(new Date(iso));
 const fCorta = (ymd: string) => `${Number(ymd.slice(8, 10))} ${MES[Number(ymd.slice(5, 7)) - 1]}`;
 const mediana = (xs: number[]) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const tiempo = (min: number | null) => (min == null ? '—' : min < 60 ? `${Math.round(min)} min` : min < 1440 ? `${(min / 60).toFixed(1)} h` : `${(min / 1440).toFixed(1)} d`);
-const COLORES_CANAL = [BLK, YEL, SEA, '#8A8C8B', '#C79A00', '#9FC7C7', '#D6D6D6', '#5E6160', '#E8D48A', '#3E7A7A', '#B7B7B7', '#F0E0A0'];
 
 type Periodo = '7' | '30' | 'mes' | 'mesAnt' | '90' | 'anio' | 'fechas';
 const PERIODOS: Array<[Periodo, string]> = [['7', 'Últimos 7 días'], ['30', 'Últimos 30 días'], ['mes', 'Este mes'], ['mesAnt', 'Mes pasado'], ['90', 'Últimos 90 días'], ['anio', 'Este año'], ['fechas', 'Fechas…']];
@@ -39,8 +39,28 @@ function rango(p: Periodo, d1: string, d2: string): { desde: string; hasta: stri
     if (p === 'mes') return { desde: `${hoy.slice(0, 7)}-01`, hasta: hoy };
     if (p === 'mesAnt') { const a = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; const fin = new Date(Date.UTC(Number(a.slice(0, 4)), Number(a.slice(5, 7)), 0)).toISOString().slice(0, 10); return { desde: `${a}-01`, hasta: fin }; }
     if (p === 'anio') return { desde: `${y}-01-01`, hasta: hoy };
-    return { desde: d1 || menos(29), hasta: d2 || hoy };
+    const [x1, x2] = [d1 || menos(29), d2 || hoy];
+    return x1 <= x2 ? { desde: x1, hasta: x2 } : { desde: x2, hasta: x1 };   // si las pone al revés, se voltean
 }
+const MES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+/** «del 4 de octubre al 3 de noviembre de 2026 · 31 días» */
+function rangoEnPalabras(desde: string, hasta: string) {
+    const d = (ymd: string, anio: boolean) => `${Number(ymd.slice(8, 10))} de ${MES_LARGO[Number(ymd.slice(5, 7)) - 1]}${anio ? ` de ${ymd.slice(0, 4)}` : ''}`;
+    const n = Math.round((Date.parse(hasta) - Date.parse(desde)) / 86400000) + 1;
+    return `Del ${d(desde, desde.slice(0, 4) !== hasta.slice(0, 4))} al ${d(hasta, true)} · ${f0(n)} ${n === 1 ? 'día' : 'días'}`;
+}
+
+// ── filtros: un solo estado, con historial para Ctrl+Z / Cmd+Z ──
+type Resp = '' | 'Respondidos' | 'Sin responder';
+interface Filtros { periodo: Periodo; d1: string; d2: string; canales: string[]; oper: 'Todas' | 'Venta' | 'Renta'; asesor: string; medio: string; resp: Resp; q: string }
+const BASE: Filtros = { periodo: '30', d1: '', d2: '', canales: [], oper: 'Todas', asesor: '', medio: '', resp: '', q: '' };
+const HIST_MAX = 30;
+
+// leads por día / semana (lunes) / mes
+type Gran = 'dia' | 'semana' | 'mes';
+const lunesDe = (ymd: string) => { const t = Date.parse(`${ymd}T12:00:00Z`); return new Date(t - ((new Date(t).getUTCDay() + 6) % 7) * 86400000).toISOString().slice(0, 10); };
+const cubeta = (ymd: string, g: Gran) => (g === 'dia' ? ymd : g === 'semana' ? lunesDe(ymd) : ymd.slice(0, 7));
+const etiquetaCubeta = (k: string, g: Gran) => (g === 'dia' ? fCorta(k) : g === 'semana' ? `sem ${fCorta(k)}` : `${MES[Number(k.slice(5, 7)) - 1]} ${k.slice(2, 4)}`);
 
 function Kpi({ label, value, nota, delta }: { label: string; value: string; nota?: ReactNode; delta?: ReactNode }) {
     return (
@@ -78,8 +98,39 @@ function AvisoTag({ t }: { t: string }) {
 }
 
 export default function MBConsultas({ companyId }: { companyId: string }) {
-    const [periodo, setPeriodo] = useState<Periodo>('30');
-    const [d1, setD1] = useState(''), [d2, setD2] = useState('');
+    // filtros que filtran TODO (periodo incluido), en un solo estado para poder deshacer
+    const [f, setF] = useState<Filtros>(BASE);
+    const hist = useRef<Filtros[]>([]);
+    const [nHist, setNHist] = useState(0);
+    const ultimo = useRef({ campo: '', t: 0 });
+    /** cambia filtros guardando el estado anterior; teclear en el buscador cuenta como UN paso */
+    const cambia = (p: Partial<Filtros>) => {
+        const campo = Object.keys(p).join(','), t = Date.now();
+        const seguido = campo === ultimo.current.campo && (campo === 'q' || campo === 'd1' || campo === 'd2') && t - ultimo.current.t < 1500;
+        if (!seguido) { hist.current = [...hist.current, f].slice(-HIST_MAX); setNHist(hist.current.length); }
+        ultimo.current = { campo, t };
+        setF({ ...f, ...p });
+    };
+    const deshacer = useCallback(() => {
+        const prev = hist.current.pop();
+        if (!prev) return false;
+        setNHist(hist.current.length); ultimo.current = { campo: '', t: 0 };
+        setF(prev);
+        return true;
+    }, []);
+    // Ctrl+Z / Cmd+Z fuera de un campo de texto (ahí el navegador deshace lo que escribiste)
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+            const el = e.target as HTMLElement | null;
+            if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return;
+            if (deshacer()) e.preventDefault();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [deshacer]);
+    const { periodo, d1, d2, oper, asesor, medio, resp, q } = f;
+    const canales = useMemo(() => new Set(f.canales), [f.canales]);
     const { desde, hasta } = rango(periodo, d1, d2);
     const [data, setData] = useState<ConsultasData | null>(null);
     const [err, setErr] = useState('');
@@ -95,24 +146,32 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
         return () => { vivo = false; };
     }, [companyId, desde, hasta, vuelta]);
 
-    // filtros que filtran TODO
-    const [canales, setCanales] = useState<Set<string>>(new Set());
-    const [oper, setOper] = useState<'Todas' | 'Venta' | 'Renta'>('Todas');
-    const [asesor, setAsesor] = useState('');
-    const [medio, setMedio] = useState('');
-    const [q, setQ] = useState('');
     const [verDia, setVerDia] = useState<'canal' | 'abierto'>('canal');
+    const [gran, setGran] = useState<Gran>('dia');
 
     const pasa = (l: LeadConsulta) => (!canales.size || canales.has(l.canal)) && (oper === 'Todas' || l.operacion === oper)
         && (!asesor || l.asesor === asesor) && (!medio || l.medio === medio)
+        && (!resp || (resp === 'Respondidos') === l.abierto)
         && (!q || [l.codigo, l.nombre, l.telefono, l.correo, l.calle, l.colonia].filter(Boolean).join(' ').toLowerCase().includes(q.toLowerCase()));
     const enPeriodo = useMemo(() => (data ? data.leads.filter((l) => l.fecha >= data.desde) : []), [data]);
     const previo = useMemo(() => (data ? data.leads.filter((l) => l.fecha < data.desde) : []), [data]);
-    const cur = useMemo(() => enPeriodo.filter(pasa), [enPeriodo, canales, oper, asesor, medio, q]); // eslint-disable-line react-hooks/exhaustive-deps
-    const ant = useMemo(() => previo.filter(pasa), [previo, canales, oper, asesor, medio, q]); // eslint-disable-line react-hooks/exhaustive-deps
+    const cur = useMemo(() => enPeriodo.filter(pasa), [enPeriodo, canales, oper, asesor, medio, resp, q]); // eslint-disable-line react-hooks/exhaustive-deps
+    const ant = useMemo(() => previo.filter(pasa), [previo, canales, oper, asesor, medio, resp, q]); // eslint-disable-line react-hooks/exhaustive-deps
     const listaCanales = useMemo(() => [...enPeriodo.reduce((m, l) => m.set(l.canal, (m.get(l.canal) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]), [enPeriodo]);
     const asesores = useMemo(() => [...new Set(enPeriodo.map((l) => l.asesor))].sort((a, b) => a.localeCompare(b, 'es')), [enPeriodo]);
     const verLista = () => setTimeout(() => document.getElementById('lista-leads')?.scrollIntoView({ behavior: 'smooth' }), 50);
+
+    const verSinResponder = () => { cambia({ resp: 'Sin responder' }); verLista(); };
+    // chips de filtros activos (todo lo que no está en el default, periodo incluido)
+    const activos: Array<{ k: string; t: string; quitar: () => void }> = [
+        ...(periodo !== BASE.periodo ? [{ k: 'periodo', t: periodo === 'fechas' ? `${fCorta(desde)} – ${fCorta(hasta)} ${hasta.slice(0, 4)}` : PERIODOS.find((x) => x[0] === periodo)![1], quitar: () => cambia({ periodo: BASE.periodo, d1: '', d2: '' }) }] : []),
+        ...f.canales.map((c) => ({ k: `c:${c}`, t: c, quitar: () => cambia({ canales: f.canales.filter((x) => x !== c) }) })),
+        ...(oper !== 'Todas' ? [{ k: 'oper', t: oper, quitar: () => cambia({ oper: 'Todas' }) }] : []),
+        ...(asesor ? [{ k: 'asesor', t: `Asesor: ${asesor}`, quitar: () => cambia({ asesor: '' }) }] : []),
+        ...(medio ? [{ k: 'medio', t: `Medio: ${medio}`, quitar: () => cambia({ medio: '' }) }] : []),
+        ...(resp ? [{ k: 'resp', t: `Respuesta: ${resp}`, quitar: () => cambia({ resp: '' }) }] : []),
+        ...(q ? [{ k: 'q', t: `Búsqueda: «${q}»`, quitar: () => cambia({ q: '' }) }] : []),
+    ];
 
     const stats = (xs: LeadConsulta[]) => ({
         n: xs.length, venta: xs.filter((l) => l.operacion === 'Venta').length, renta: xs.filter((l) => l.operacion === 'Renta').length,
@@ -124,20 +183,29 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
     const a = stats(cur), b = stats(ant);
     const pct = (x: number, n: number) => (n ? (100 * x) / n : null);
 
-    // leads por día
-    const dias = useMemo(() => {
+    // leads por día / semana (lunes) / mes, con el total arriba de cada barra (Joshua)
+    const cubetas = useMemo(() => {
         const out: string[] = [];
-        for (let t = Date.parse(`${desde}T12:00:00Z`); t <= Date.parse(`${hasta}T12:00:00Z`); t += 86400000) out.push(new Date(t).toISOString().slice(0, 10));
+        for (let t = Date.parse(`${desde}T12:00:00Z`); t <= Date.parse(`${hasta}T12:00:00Z`); t += 86400000) {
+            const k = cubeta(new Date(t).toISOString().slice(0, 10), gran);
+            if (out[out.length - 1] !== k) out.push(k);
+        }
         return out;
-    }, [desde, hasta]);
+    }, [desde, hasta, gran]);
     const canalesCur = useMemo(() => [...new Set(cur.map((l) => l.canal))].sort((x, y) => cur.filter((l) => l.canal === y).length - cur.filter((l) => l.canal === x).length), [cur]);
-    const serie = useMemo(() => dias.map((dd) => {
-        const xs = cur.filter((l) => diaMx(l.fecha) === dd);
-        const row: Record<string, number | string> = { dia: fCorta(dd) };
-        if (verDia === 'canal') for (const c of canalesCur) row[c] = xs.filter((l) => l.canal === c).length;
-        else { row['Respondidos'] = xs.filter((l) => l.abierto).length; row['Sin responder'] = xs.filter((l) => !l.abierto).length; }
-        return row;
-    }), [dias, cur, canalesCur, verDia]);
+    const serie = useMemo(() => {
+        const por = new Map<string, LeadConsulta[]>();
+        for (const l of cur) { const k = cubeta(diaMx(l.fecha), gran); (por.get(k) ?? por.set(k, []).get(k)!).push(l); }
+        return cubetas.map((k) => {
+            const xs = por.get(k) ?? [];
+            const row: Record<string, number | string> = { dia: etiquetaCubeta(k, gran), total: xs.length };
+            if (verDia === 'canal') for (const c of canalesCur) row[c] = xs.filter((l) => l.canal === c).length;
+            else { row['Respondidos'] = xs.filter((l) => l.abierto).length; row['Sin responder'] = xs.filter((l) => !l.abierto).length; }
+            return row;
+        });
+    }, [cubetas, cur, canalesCur, verDia, gran]);
+    const conTotales = serie.length <= 62;   // con más barras los números se enciman: se ven al pasar el cursor
+    const totalArriba = <LabelList dataKey="total" position="top" style={{ fontSize: serie.length > 31 ? 8.5 : 10, fill: BLK, fontWeight: 700 }} formatter={(v: unknown) => (Number(v) ? f0(Number(v)) : '')} />;
 
     const agrupa = (key: (l: LeadConsulta) => string) => [...cur.reduce((m, l) => { const k = key(l); (m.get(k) ?? m.set(k, []).get(k)!).push(l); return m; }, new Map<string, LeadConsulta[]>())]
         .map(([k, xs]) => ({ k, xs, ...stats(xs) })).sort((x, y) => y.n - x.n);
@@ -163,33 +231,69 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
             {data && <Actualizar generado={data.generado} cargando={cargando} onClick={() => setVuelta((x) => x + 1)} />}
             {/* ── filtros ── */}
             <div style={{ position: 'sticky', top: 0, zIndex: 5, background: '#fff', borderBottom: `1px solid ${LGT}`, padding: '10px 0', display: 'grid', gap: 8 }}>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {PERIODOS.map(([k, t]) => <button key={k} type="button" onClick={() => setPeriodo(k)} style={chip(periodo === k)}>{t}</button>)}
-                    {periodo === 'fechas' && <><input type="date" value={d1} onChange={(e) => setD1(e.target.value)} style={inp} /><input type="date" value={d2} onChange={(e) => setD2(e.target.value)} style={inp} /></>}
-                    <span style={sub}>{fCorta(desde)} {desde.slice(0, 4)} – {fCorta(hasta)} {hasta.slice(0, 4)}{cargando ? ' · cargando…' : ''}</span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {/* periodos como control segmentado: una sola pieza, el elegido en negro */}
+                    <div role="group" aria-label="Periodo" style={{ display: 'inline-flex', flexWrap: 'wrap', border: `1px solid ${LGT}`, borderRadius: R, overflow: 'hidden' }}>
+                        {PERIODOS.map(([k, t], i) => (
+                            <button key={k} type="button" aria-pressed={periodo === k}
+                                onClick={() => (k === 'fechas' ? cambia({ periodo: k, d1: d1 || desde, d2: d2 || hasta }) : cambia({ periodo: k }))}
+                                style={{ ...chip(periodo === k), border: 0, borderRadius: 0, borderLeft: i ? `1px solid ${LGT}` : 0, padding: '5px 11px' }}>{t}</button>
+                        ))}
+                    </div>
+                    {periodo === 'fechas' && (
+                        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+                            <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>Desde <input type="date" value={d1} max={d2 || undefined} onChange={(e) => cambia({ d1: e.target.value })} style={inp} /></label>
+                            <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>Hasta <input type="date" value={d2} min={d1 || undefined} max={ymdMx(new Date())} onChange={(e) => cambia({ d2: e.target.value })} style={inp} /></label>
+                        </span>
+                    )}
+                    <span style={{ fontSize: 12, color: '#555' }}><b>{rangoEnPalabras(desde, hasta)}</b>{cargando ? <span style={sub}> · cargando…</span> : ''}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <details style={{ position: 'relative' }}>
                         <summary style={{ ...inp, listStyle: 'none', cursor: 'pointer', display: 'inline-block', minWidth: 170 }}>
-                            Canal: {canales.size ? [...canales].join(', ') : 'todos'} ▾
+                            Canal: {canales.size ? (canales.size === 1 ? [...canales][0] : `${canales.size} canales`) : 'todos'} ▾
                         </summary>
-                        <div style={{ position: 'absolute', zIndex: 10, top: '110%', left: 0, background: '#fff', border: `1px solid ${LGT}`, borderRadius: R, padding: '8px 10px', minWidth: 210, boxShadow: 'none' }}>
+                        <div style={{ position: 'absolute', zIndex: 10, top: '110%', left: 0, background: '#fff', border: `1px solid ${LGT}`, borderRadius: R, padding: '8px 10px', minWidth: 230, boxShadow: 'none' }}>
                             <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, padding: '3px 0', cursor: 'pointer', fontWeight: 700 }}>
-                                <input type="checkbox" checked={!canales.size} onChange={() => setCanales(new Set())} /> Todos
+                                <input type="checkbox" checked={!canales.size} onChange={() => cambia({ canales: [] })} /> Todos
                             </label>
-                            {listaCanales.map(([c]) => (
+                            {listaCanales.map(([c, n]) => (
                                 <label key={c} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, padding: '3px 0', cursor: 'pointer' }}>
-                                    <input type="checkbox" checked={canales.has(c)} onChange={() => setCanales((p) => { const x = new Set(p); if (x.has(c)) x.delete(c); else x.add(c); return x; })} /> {c}
+                                    <input type="checkbox" checked={canales.has(c)} onChange={() => cambia({ canales: canales.has(c) ? f.canales.filter((x) => x !== c) : [...f.canales, c] })} />
+                                    <span style={{ width: 8, height: 8, borderRadius: 1, background: colorCanal(c), display: 'inline-block' }} /> {c} <span style={sub}>{f0(n)}</span>
                                 </label>
                             ))}
                         </div>
                     </details>
-                    {(['Todas', 'Venta', 'Renta'] as const).map((o) => <button key={o} type="button" onClick={() => setOper(o)} style={chip(oper === o)}>{o === 'Todas' ? 'Venta y renta' : o}</button>)}
-                    <select value={asesor} onChange={(e) => setAsesor(e.target.value)} style={inp}><option value="">Asesor: todos</option>{asesores.map((x) => <option key={x} value={x}>{x}</option>)}</select>
-                    <select value={medio} onChange={(e) => setMedio(e.target.value)} style={inp}><option value="">Medio: todos</option>{['WhatsApp', 'Teléfono', 'Formulario'].map((x) => <option key={x} value={x}>{x}</option>)}</select>
-                    <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar código, nombre, teléfono, calle…" style={{ ...inp, minWidth: 220 }} />
-                    {(canales.size > 0 || oper !== 'Todas' || asesor || medio || q) && link('Quitar filtros', () => { setCanales(new Set()); setOper('Todas'); setAsesor(''); setMedio(''); setQ(''); })}
+                    <div role="group" aria-label="Operación" style={{ display: 'inline-flex', border: `1px solid ${LGT}`, borderRadius: R, overflow: 'hidden' }}>
+                        {(['Todas', 'Venta', 'Renta'] as const).map((o, i) => <button key={o} type="button" aria-pressed={oper === o} onClick={() => cambia({ oper: o })} style={{ ...chip(oper === o), border: 0, borderRadius: 0, borderLeft: i ? `1px solid ${LGT}` : 0 }}>{o === 'Todas' ? 'Venta y renta' : o}</button>)}
+                    </div>
+                    <select value={asesor} onChange={(e) => cambia({ asesor: e.target.value })} style={inp}><option value="">Asesor: todos</option>{asesores.map((x) => <option key={x} value={x}>{x}</option>)}</select>
+                    <select value={medio} onChange={(e) => cambia({ medio: e.target.value })} style={inp}><option value="">Medio: todos</option>{['WhatsApp', 'Teléfono', 'Formulario'].map((x) => <option key={x} value={x}>{x}</option>)}</select>
+                    <select value={resp} onChange={(e) => cambia({ resp: e.target.value as Resp })} style={inp}><option value="">Respuesta: todos</option><option value="Respondidos">Respondidos</option><option value="Sin responder">Sin responder</option></select>
+                    <input type="search" value={q} onChange={(e) => cambia({ q: e.target.value })} placeholder="Buscar código, nombre, teléfono, calle…" style={{ ...inp, minWidth: 220 }} />
                 </div>
+                {/* filtros activos: cada uno con su × para quitarlo solo */}
+                {(activos.length > 0 || nHist > 0) && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {activos.length > 0 && <span style={{ ...sub, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6 }}>Filtrando por</span>}
+                        {activos.map((x) => (
+                            <span key={x.k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, background: LGT, borderRadius: R, padding: '3px 4px 3px 9px' }}>
+                                {x.t}
+                                <button type="button" aria-label={`Quitar ${x.t}`} title="Quitar este filtro" onClick={x.quitar}
+                                    style={{ border: 0, background: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 4px', color: '#555', fontFamily: 'inherit' }}>×</button>
+                            </span>
+                        ))}
+                        {activos.length > 0 && (
+                            <button type="button" onClick={() => cambia(BASE)}
+                                style={{ fontSize: 11.5, fontWeight: 700, padding: '4px 12px', borderRadius: R, cursor: 'pointer', border: `1px solid ${BLK}`, background: '#fff', color: BLK, fontFamily: 'inherit' }}>Quitar filtros</button>
+                        )}
+                        {nHist > 0 && (
+                            <button type="button" onClick={deshacer} title="Vuelve a los filtros de antes (Ctrl+Z / ⌘Z)"
+                                style={{ fontSize: 11.5, padding: '4px 10px', borderRadius: R, cursor: 'pointer', border: `1px solid ${LGT}`, background: '#fff', color: '#555', fontFamily: 'inherit' }}>↶ Deshacer <span style={{ color: GRY }}>Ctrl+Z</span></button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {err && <p style={{ color: RED, fontSize: 13 }}>{err}</p>}
@@ -197,31 +301,42 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
             {data && (<>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
                     <Kpi label="Leads" value={f0(a.n)} delta={<Delta a={a.n} b={b.n} />} nota={<>{f0(a.venta)} venta · {f0(a.renta)} renta · vs {f0(b.n)} el periodo anterior</>} />
-                    <Kpi label="Respondidos" value={a.n ? pc(a.abiertos, a.n) : '—'} delta={<Delta a={pct(a.abiertos, a.n)} b={pct(b.abiertos, b.n)} pts />} nota={<>{f0(a.n - a.abiertos)} sin responder · 1ª respuesta {tiempo(a.med)} (mediana)</>} />
+                    <Kpi label="Respondidos" value={a.n ? pc(a.abiertos, a.n) : '—'} delta={<Delta a={pct(a.abiertos, a.n)} b={pct(b.abiertos, b.n)} pts />} nota={<>{a.n - a.abiertos > 0 && resp !== 'Sin responder'
+                        ? <button type="button" onClick={verSinResponder} title="Filtrar y ver la lista de los que no se han respondido" style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', color: RED, fontWeight: 700, fontFamily: 'inherit', fontSize: 'inherit', textDecoration: 'underline' }}>{f0(a.n - a.abiertos)} sin responder →</button>
+                        : <>{f0(a.n - a.abiertos)} sin responder</>} · 1ª respuesta {tiempo(a.med)} (mediana)</>} />
                     <Kpi label="Con conversación visible" value={a.n ? pc(a.conv, a.n) : '—'} delta={<Delta a={pct(a.conv, a.n)} b={pct(b.conv, b.n)} pts />} nota="el cliente escribió o hubo llamada" />
-                    <Kpi label="Visitaron" value={f0(a.visito)} delta={<Delta a={a.visito} b={b.visito} />} nota={`${pc(a.visito, a.n)} de los leads`} />
-                    <Kpi label="Ofertaron" value={f0(a.oferto)} delta={<Delta a={a.oferto} b={b.oferto} />} nota={`${pc(a.oferto, a.n)} de los leads`} />
+                    <Kpi label="Visitaron" value={f0(a.visito)} delta={<Delta a={a.visito} b={b.visito} />} nota={`${pc(a.visito, a.n)} de los ${f0(a.n)} leads del periodo (aunque la visita sea después)`} />
+                    <Kpi label="Ofertaron" value={f0(a.oferto)} delta={<Delta a={a.oferto} b={b.oferto} />} nota={`${pc(a.oferto, a.n)} de los ${f0(a.n)} leads del periodo (aunque la oferta sea después)`} />
                 </div>
                 <div style={{ ...sub, marginTop: 6, lineHeight: 1.5, maxWidth: 900 }}>
                     <b>Respondidos</b>: el asesor respondió el lead desde Pulppo, a cualquier hora (igual que en el Retool y en Propiedades). La <b>1ª respuesta</b> se mide sólo con los leads que llegaron de 8 am a 8 pm. <b>Con conversación visible</b>: además, el cliente escribió algo real o hubo llamada — la señal de que sí hubo plática, porque el WhatsApp del asesor no se guarda. Leads únicos: misma persona + misma propiedad = 1, los mismos que en Marketing. El periodo anterior es el mismo tramo de días antes, hasta la misma hora.
                 </div>
 
-                <Seccion titulo="Leads por día">
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                        <button type="button" onClick={() => setVerDia('canal')} style={chip(verDia === 'canal')}>Por canal</button>
-                        <button type="button" onClick={() => setVerDia('abierto')} style={chip(verDia === 'abierto')}>Respondidos vs sin responder</button>
+                <Seccion titulo={`Leads por ${gran === 'dia' ? 'día' : gran === 'semana' ? 'semana' : 'mes'}`}
+                    nota={<>El número arriba de cada barra es el total de leads.{gran === 'semana' ? ' Semanas de lunes a domingo.' : ''}{gran !== 'dia' ? ` La primera y la última ${gran === 'semana' ? 'semana' : 'barra'} pueden ir incompletas (cortadas por el periodo).` : ''}{!conTotales ? ' Con tantas barras el total sale al pasar el cursor: cambia a Semana o Mes para verlo arriba.' : ''}</>}>
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+                        <div role="group" aria-label="Agrupar por" style={{ display: 'inline-flex', border: `1px solid ${LGT}`, borderRadius: R, overflow: 'hidden' }}>
+                            {([['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes']] as Array<[Gran, string]>).map(([k, t], i) => (
+                                <button key={k} type="button" aria-pressed={gran === k} onClick={() => setGran(k)} style={{ ...chip(gran === k), border: 0, borderRadius: 0, borderLeft: i ? `1px solid ${LGT}` : 0 }}>{t}</button>
+                            ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                            <button type="button" onClick={() => setVerDia('canal')} style={chip(verDia === 'canal')}>Por canal</button>
+                            <button type="button" onClick={() => setVerDia('abierto')} style={chip(verDia === 'abierto')}>Respondidos vs sin responder</button>
+                        </div>
                     </div>
                     <div style={{ width: '100%', height: 240 }}>
                         <ResponsiveContainer>
-                            <BarChart data={serie} margin={{ top: 6, right: 8, left: -20, bottom: 0 }}>
+                            <BarChart data={serie} margin={{ top: conTotales ? 18 : 6, right: 8, left: -20, bottom: 0 }}>
                                 <CartesianGrid stroke={LGT} vertical={false} />
                                 <XAxis dataKey="dia" tick={{ fontSize: 10, fill: '#777' }} interval={Math.max(0, Math.ceil(serie.length / 15) - 1)} />
                                 <YAxis tick={{ fontSize: 10, fill: '#777' }} allowDecimals={false} />
-                                <Tooltip contentStyle={{ fontSize: 11, borderRadius: R }} />
+                                <Tooltip contentStyle={{ fontSize: 11, borderRadius: R }}
+                                    labelFormatter={(l, p) => `${l} · ${f0(Number((p?.[0]?.payload as { total?: number } | undefined)?.total ?? 0))} leads`} />
                                 <Legend wrapperStyle={{ fontSize: 11 }} />
                                 {verDia === 'canal'
-                                    ? canalesCur.map((c, i) => <Bar key={c} dataKey={c} stackId="a" fill={COLORES_CANAL[i % COLORES_CANAL.length]} />)
-                                    : [<Bar key="ab" dataKey="Respondidos" stackId="a" fill={SEA} />, <Bar key="sa" dataKey="Sin responder" stackId="a" fill={RED} />]}
+                                    ? canalesCur.map((c, i) => <Bar key={c} dataKey={c} stackId="a" fill={colorCanal(c, i)}>{conTotales && i === canalesCur.length - 1 ? totalArriba : null}</Bar>)
+                                    : [<Bar key="ab" dataKey="Respondidos" stackId="a" fill={SEA} />, <Bar key="sa" dataKey="Sin responder" stackId="a" fill={RED}>{conTotales ? totalArriba : null}</Bar>]}
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -229,16 +344,17 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
 
                 <Seccion titulo="Por canal" nota="De dónde llegan y qué tan bien se atienden. Clic en un canal para filtrar todo por ese canal.">
                     <TablaFiltrable filas={porCanal} min={900} limite={20} texto={(r) => r.k}
-                        cols={colsBase('Canal', (r) => link(r.k, () => setCanales(new Set([r.k]))))} />
+                        cols={colsBase('Canal', (r) => link(r.k, () => cambia({ canales: [r.k] })))} />
                 </Seccion>
 
-                <Seccion titulo="Embudo" nota="Qué pasó con estos leads: si visitaron u ofertaron con la inmobiliaria después del lead, y en qué etapa va su búsqueda hoy.">
+                <Seccion titulo="Embudo" nota={<>Qué pasó con estos leads: si visitaron u ofertaron con la inmobiliaria después del lead, y en qué etapa va su búsqueda hoy.<br />
+                    <b>Se cuenta sobre los {f0(a.n)} leads que llegaron del {fCorta(desde)} al {fCorta(hasta)}</b>: de ellos, cuántos visitaron u ofertaron después, aunque la visita o la oferta haya caído fuera del periodo. No son las visitas ni las ofertas que hubo en esas fechas.</>}>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                         {[['Leads', a.n], ['Con conversación', a.conv], ['Visitaron', a.visito], ['Ofertaron', a.oferto]].map(([t, n], i, arr) => (
                             <div key={t as string} style={{ flex: '1 1 140px', background: LGT, borderRadius: R, padding: '10px 12px' }}>
                                 <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 24 }}>{f0(n as number)}</div>
                                 <div style={{ fontSize: 11, fontWeight: 700 }}>{t}</div>
-                                {i > 0 && <div style={sub}>{pc(n as number, arr[0][1] as number)} de los leads</div>}
+                                {i > 0 && <div style={sub}>{pc(n as number, arr[0][1] as number)} de los {f0(arr[0][1] as number)} leads del periodo</div>}
                             </div>
                         ))}
                     </div>
@@ -263,7 +379,7 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
 
                 <Seccion titulo="Por asesor" nota="Clic en un asesor para filtrar todo por él y ver sus leads.">
                     <TablaFiltrable filas={porAsesor} min={980} limite={30} texto={(r) => r.k}
-                        cols={colsBase('Asesor', (r) => link(r.k, () => { setAsesor(r.k); verLista(); }))} />
+                        cols={colsBase('Asesor', (r) => link(r.k, () => { cambia({ asesor: r.k }); verLista(); }))} />
                 </Seccion>
 
                 <Seccion titulo="Por propiedad" nota="Clic en una propiedad para ver sus leads.">
@@ -273,7 +389,7 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                         cols={[
                             { h: 'Propiedad', v: (r) => r.k, render: (r) => { const l = r.xs[0]; return (
                                 <div style={{ minWidth: 170 }}>
-                                    {link(r.k, () => { setQ(r.k); verLista(); })}<OpTag op={l?.operacion} /> <span style={sub}>{l?.tipo}</span>
+                                    {link(r.k, () => { cambia({ q: r.k }); verLista(); })}<OpTag op={l?.operacion} /> <span style={sub}>{l?.tipo}</span>
                                     <div style={{ fontSize: 11.5 }}>{[l?.calle, l?.colonia].filter(Boolean).join(', ')}</div>
                                     <div style={sub}>{[...new Set(r.xs.map((x) => x.asesor))].join(' / ')}</div>
                                 </div>); } },
