@@ -252,12 +252,16 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
     const [ovrComprador, setOvrComprador] = useState<MBCierreComprador[] | null>(null);
     const [rloading, setRloading] = useState(false);
     useEffect(() => {
+        // días de calendario hora México (UTC−6), como toda /mb: «30 días» = de las 00:00 de hace 29 días a ahora
         const now = new Date();
+        const diaMx = (ymd: string) => new Date(`${ymd}T06:00:00Z`);
+        const hoyMx = new Date(now.getTime() - 6 * 3600e3).toISOString().slice(0, 10);
+        const menos = (n: number) => new Date(diaMx(hoyMx).getTime() - n * 864e5);
         let from: Date | null = null; let to: Date = now;
-        if (rango === 'Últimos 30 días') from = new Date(Date.now() - 30 * 864e5);
-        else if (rango === 'Últimos 90 días') from = new Date(Date.now() - 90 * 864e5);
-        else if (rango === 'Este año') from = new Date(now.getFullYear(), 0, 1);
-        else if (rango === 'Personalizado' && cfrom && cto) { from = new Date(cfrom); to = new Date(`${cto}T23:59:59`); }
+        if (rango === 'Últimos 30 días') from = menos(29);
+        else if (rango === 'Últimos 90 días') from = menos(89);
+        else if (rango === 'Este año') from = diaMx(`${hoyMx.slice(0, 4)}-01-01`);
+        else if (rango === 'Personalizado' && cfrom && cto) { from = diaMx(cfrom); to = new Date(diaMx(cto).getTime() + 864e5 - 1); }
         if (!from) { setOvr(null); setOvrFuera(null); setOvrComprador(null); return; }
         let cancel = false; setRloading(true);
         fetch('/api/mb-metrics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId: d.companyId, from: from.toISOString(), to: to.toISOString() }) })

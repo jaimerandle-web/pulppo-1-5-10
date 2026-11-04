@@ -1,7 +1,8 @@
 // Motor del "Análisis general" — port de gen_reporte_plus.py (Track B ampliado).
 // Fase 1: Inventario (P1) + Precio × calidad (P2). Lee Mongo en vivo (read-only).
 // Las secciones YoY / Top 10 / destacados / funnel se irán agregando después.
-import { VISITA_OK, cierresInmobiliaria, enHorario } from './mbComun';
+import { VISITA_OK, cierresInmobiliaria, enHorario, esSpamLead, inicioDiaMx } from './mbComun';
+import { grupoDe } from './desempenoMb';
 import { CANALES_TODOS, canalDeLead } from './portales/inmobiliaria';
 import { ObjectId, type Db, type Document } from 'mongodb';
 import { getDb } from './data';
@@ -103,7 +104,10 @@ type Rng = { start: Date; end: Date; label: string };
 // 'month' = la ventana es un mes de calendario (su comparación natural es el mes anterior);
 // 'span'  = la ventana es un tramo de N días/meses (su comparación natural es el tramo previo).
 type RngKind = 'month' | 'span';
-const mStartUTC = (y: number, m: number) => new Date(Date.UTC(y, m, 1));
+// meses en hora de México (UTC−6, como toda /mb): el día 1 empieza a las 00:00 MX = 06:00 UTC. Antes cortaba
+// a las 6 pm de México del último día del mes anterior.
+const MX_MS = 6 * 3600 * 1000;
+const mStartUTC = (y: number, m: number) => new Date(Date.UTC(y, m, 1) + MX_MS);
 const addMonthsUTC = (d: Date, n: number) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()));
 const addYearsUTC = (d: Date, n: number) => new Date(Date.UTC(d.getUTCFullYear() + n, d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()));
 const mesLabel = (d: Date) => `${MES_L[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
@@ -114,7 +118,8 @@ const mesLabel = (d: Date) => `${MES_L[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 // como tramo previo y se lee siempre contra el año pasado a la misma fecha.
 type Perf = Rng & { kind: RngKind; meses?: number; ytd?: boolean };
 function perfRange(win: string, mes: string | undefined, now: Date): Perf {
-    const y = now.getUTCFullYear(), m = now.getUTCMonth();
+    const mx = new Date(now.getTime() - MX_MS);
+    const y = mx.getUTCFullYear(), m = mx.getUTCMonth();
     if (win === 'Mes específico' && mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) {
         const yy = parseInt(mes.slice(0, 4)), mm = parseInt(mes.slice(5, 7)) - 1;
         const s = mStartUTC(yy, mm);
@@ -124,14 +129,14 @@ function perfRange(win: string, mes: string | undefined, now: Date): Perf {
     }
     if (win === 'Mes actual') {
         const s = mStartUTC(y, m);
-        return { start: s, end: now, label: `${mesLabel(s)} (al día ${now.getUTCDate()})`, kind: 'month' };
+        return { start: s, end: now, label: `${mesLabel(s)} (al día ${mx.getUTCDate()})`, kind: 'month' };
     }
     if (win === 'Mes anterior') {
         const s = mStartUTC(y, m - 1);
         return { start: s, end: mStartUTC(y, m), label: mesLabel(s), kind: 'month' };
     }
     for (const n of [3, 6, 12]) {
-        if (win === `Últimos ${n} meses`) return { start: addMonthsUTC(now, -n), end: now, label: `últimos ${n} meses`, kind: 'span', meses: n };
+        if (win === `Últimos ${n} meses`) return { start: inicioDiaMx(addMonthsUTC(now, -n)), end: now, label: `últimos ${n} meses`, kind: 'span', meses: n };
     }
     // 'Año en curso (YTD)' (default)
     return { start: mStartUTC(y, 0), end: now, label: `${y} a la fecha`, kind: 'span', ytd: true };
@@ -352,8 +357,10 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
         const r = await resolveCompany(db, cfg.inmo); CID = r.id; CNAME = r.name;
     }
 
+    // la inmobiliaria = su grupo de compañías (desempenoMb.grupoDe), como todas las pestañas de /mb
+    const COMPS = (await grupoDe(String(CID))).ids.map((x) => new ObjectId(x));
     const NOW = new Date();
-    const YTD0 = new Date(Date.UTC(NOW.getUTCFullYear(), 0, 1));
+    const YTD0 = mStartUTC(new Date(NOW.getTime() - MX_MS).getUTCFullYear(), 0);
     // --- ventana de DESEMPEÑO (funnel, asesores, leads por propiedad, sin actividad) ---
     const legacy = legacyDesempeno(cfg);
     const PERF = perfRange(cfg.desempeno || legacy.win, cfg.desempenoMes, NOW);
@@ -384,7 +391,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     // tabla "cómo están tus asesores" eso NO puede aparecer, así que la lista sale de la colección
     // `agents` de la inmobiliaria y lo demás se cuenta aparte como actividad de la red.
     const internos = new Map<string, string>();
-    for (const a of await db.collection('agents').find({ 'company._id': CID },
+    for (const a of await db.collection('agents').find({ 'company._id': { $in: COMPS } },
         { projection: { firstName: 1, lastName: 1 } }).toArray()) {
         const n = agName(a);
         if (n) internos.set(String(a._id), n);
@@ -400,7 +407,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
 
     // --- propiedades publicadas ---
     const pub = await db.collection('properties').find(
-        { 'company._id': CID, 'status.last': 'published', ...agentFilter },
+        { 'company._id': { $in: COMPS }, 'status.last': 'published', ...agentFilter },
         { projection: {
             listing: 1, type: 1, 'acm.price.value': 1, qualityScore: 1, pictures: 1, videos: 1,
             virtualTour: 1, 'address.neighborhood': 1, 'address.city': 1, internalId: 1, publishedAt: 1,
@@ -666,7 +673,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     // ===================== FUNNEL (venta vs renta) + ASESORES + RECOMENDACIONES =====================
     // El funnel usa TODO el inventario (incl. vendido/dado de baja), no solo lo publicado hoy, y se
     // mide dentro de la VENTANA DE DESEMPEÑO elegida (antes estaba clavado a YTD, ignorando el filtro).
-    const allprops = await db.collection('properties').find({ 'company._id': CID, ...agentFilter },
+    const allprops = await db.collection('properties').find({ 'company._id': { $in: COMPS }, ...agentFilter },
         { projection: { 'listing.operation': 1, qualityScore: 1, publishedAt: 1, 'status.last': 1, 'status.history': 1, agent: 1 } }).toArray();
     const pid2op = new Map(allprops.map((p) => [String(p._id), gv(p, 'listing', 'operation') as string]));
     const allpids = allprops.map((p) => p._id as ObjectId);
@@ -735,16 +742,19 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const dupSet = new Set<string>();   // clave propiedad+contacto → repetición = duplicado
     const seenA = new Set<string>(), seenB = new Set<string>();   // dedup por período de comparación
     const srcCount: Record<string, number> = {};   // leads únicos por fuente (ventana de desempeño)
-    const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: leadScanStart, $lt: PERF.end } },
+    // LEADS ÚNICOS con la regla de toda /mb (mbComun): sin spam y «primera vez del par contacto + propiedad en
+    // 400 días». Se leen 400 días antes de la ventana sólo para marcar a quién ya se había contado.
+    const lc = db.collection('leads').find({ 'property._id': { $in: allpids }, createdAt: { $gte: new Date(leadScanStart.getTime() - 400 * 864e5), $lt: PERF.end } },
         { projection: { 'property._id': 1, 'property.agent': 1, agent: 1, answeredAt: 1, createdAt: 1, source: 1, 'company.name': 1, 'contact.phone': 1, 'contact.email': 1, 'contact.company._id': 1, 'contact._id': 1, 'propertyPublishPortals.portals.inmuebles24.company': 1 } });
     for await (const l of lc) {
-        const d = asDt(l.createdAt); if (!d) continue;
+        const d = asDt(l.createdAt); if (!d || esSpamLead(l)) continue;
         const pid = String(gv(l, 'property', '_id'));
         const op = pid2op.get(pid);
         const phone = gv(l, 'contact', 'phone'), email = gv(l, 'contact', 'email');
         // lead único = contacto + propiedad (antes era teléfono/correo: el mismo contacto con dos
         // teléfonos contaba doble y no cuadraba con Desempeño)
         const kk = `${pid}|${String(gv(l, 'contact', '_id') || l._id)}`;
+        if (d < leadScanStart) { dupSet.add(kk); seenA.add(kk); seenB.add(kk); continue; }   // ya contado antes
         if (inPerf(d) && (op === 'sale' || op === 'rent')) {
             // duplicado = mismo contacto en la misma propiedad → se descarta de TODO el funnel
             if (dupSet.has(kk)) { compDup++; }
@@ -828,10 +838,12 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const opsAll = await db.collection('operations').find({ 'property._id': { $in: allpids } },
         { projection: { 'status.last': 1, closedAt: 1, createdAt: 1, 'property._id': 1, 'property.agent': 1,
             'seller.broker': 1, 'buyer.broker': 1, 'closeValue.value': 1, 'comission.value': 1 } }).toArray();
+    // (status.last viene en la proyección: las canceladas no cuentan como oferta)
     for (const o of opsAll) {
         const pid = String(gv(o, 'property', '_id'));
         const t = pid2op.get(pid);
         if (t !== 'sale' && t !== 'rent') continue;
+        if (gv(o, 'status', 'last') === 'cancelled') continue;   // una oferta cancelada no es oferta (= Overview)
         const cd = asDt(o.createdAt), xd = asDt(gv(o, 'closedAt'));
         const abierta = inPerf(cd) || inPerf(xd);
         if (abierta) offersByOp[t]++;
@@ -875,7 +887,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     //     solo tiene sentido contar las ABIERTAS EN EL PERÍODO, no un acumulado. ---
     // Se cuenta con $size en el servidor: `properties` trae fichas completas y traerlas sería carísimo.
     const busqAgg = await db.collection('searches').aggregate([
-        { $match: { 'company._id': CID, createdAt: { $gte: PERF.start, $lt: PERF.end }, ...agentFilter } },
+        { $match: { 'company._id': { $in: COMPS }, createdAt: { $gte: PERF.start, $lt: PERF.end }, ...agentFilter } },
         { $group: {
             _id: '$agent._id',
             busquedas: { $sum: 1 },
@@ -1072,7 +1084,7 @@ export async function buildAnalisis(cfg: AnalisisConfig): Promise<AnalisisData> 
     const mkey = (y: number, m: number) => `${y}-${m}`;
 
     const histProps = await db.collection('properties').find(
-        { 'company._id': CID, 'portals.inmuebles24': { $exists: true } },
+        { 'company._id': { $in: COMPS }, 'portals.inmuebles24': { $exists: true } },
         { projection: { 'portals.inmuebles24.history': 1, 'portals.inmuebles24.type': 1, updatedAt: 1 } }
     ).toArray();
     const pid2seq = new Map<string, [Date, string | null][]>();

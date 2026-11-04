@@ -7,7 +7,9 @@
 //
 // Definiciones (de Lau):
 //   · Meses y días en hora de México (UTC−6 fijo).
-//   · Leads ÚNICOS: `leads` por `company._id`, deduplicados por contacto + propiedad.
+//   · Leads ÚNICOS: el cargador común de /mb (mbComun.leadsUnicos, nov-2026): por compañía O por propiedad,
+//     sin spam, primera vez del par contacto + propiedad en 400 días. Mismo número que Overview y Consultas.
+//   · Sin responder: sobre TODOS los leads, a cualquier hora (regla mixta de /mb).
 //   · Visitas: por `agent.company._id`, fecha = `startTime` (cuándo ocurre), confirmadas + pendientes.
 //   · Funnel comercial | Búsquedas: por CAMBIO DE ETAPA (`searches.status.history`). De las búsquedas
 //     abiertas en una etapa durante el periodo, cuántas pasaron a la siguiente dentro del periodo. NO
@@ -77,8 +79,8 @@ export interface DesempenoMb {
     sinOperacion: { leads: number; visitas: number };
     /** leads únicos por asesor y mes (mapa de calor), por operación */
     porAsesor: Array<{ id: string; nombre: string; activo: boolean; meses: Record<string, Record<Op, number>> }>;
-    /** atención: leads únicos que entraron de 8 am a 8 pm (8:00–19:59 MX) y cuántos quedaron sin respuesta del asesor.
-     *  Mismo horario en todo /portales y /mb (Lau, oct-2026). */
+    /** atención: leads únicos del periodo y cuántos quedaron sin respuesta del asesor, a cualquier hora (regla mixta de /mb,
+     *  nov-2026: el tiempo de respuesta se mide en horario; el «sin responder», sobre todos). */
     atencion: Record<Op, { base: number; sin: number }>;
     /** foto de HOY: operaciones en oferta o contrato */
     ofertasActivas: Record<Op, number>;
@@ -166,22 +168,12 @@ export async function desempenoMb(companyId: string, desde: string, hasta: strin
 
     // ── leads únicos (contacto + propiedad) ────────────────────────────────
     const tareaLeads = (async () => {
-        const vistos = new Set<string>();
+        const { leadsUnicos } = await import('./mbComun');   // dinámico: mbComun importa este módulo
         const out: Array<{ op: Op; at: Date; agent: string | null; sinResp: boolean | null }> = [];
-        const cur = db.collection('leads').find(
-            { 'company._id': { $in: ids }, createdAt: { $gte: A, $lt: B }, ...(aid ? { 'agent._id': aid } : {}) },
-            { projection: { 'contact._id': 1, 'property._id': 1, 'property.listing.operation': 1, createdAt: 1, answeredAt: 1, 'agent._id': 1 }, batchSize: 10000 },
-        ).sort({ createdAt: 1 });
-        for await (const l of cur) {
-            if (!isDate(l.createdAt)) continue;
-            const c = dig(l, 'contact', '_id'), p = dig(l, 'property', '_id');
-            const k = c && p ? `${String(c)}|${String(p)}` : String(l._id);
-            if (vistos.has(k)) continue;
-            vistos.add(k);
-            const h = new Date(l.createdAt.getTime() - MX).getUTCHours();
+        for (const l of await leadsUnicos(db, ids, A, B, { 'property.listing.operation': 1, answeredAt: 1, 'agent._id': 1 })) {
             const ag = dig(l, 'agent', '_id');
-            out.push({ op: opDe(dig(l, 'property', 'listing', 'operation')), at: l.createdAt, agent: ag ? String(ag) : null,
-                sinResp: h >= 8 && h <= 19 ? !isDate(l.answeredAt) : null });
+            if (aid && String(ag) !== String(aid)) continue;
+            out.push({ op: opDe(dig(l, 'property', 'listing', 'operation')), at: l.createdAt, agent: ag ? String(ag) : null, sinResp: !isDate(l.answeredAt) });
         }
         return out;
     })();

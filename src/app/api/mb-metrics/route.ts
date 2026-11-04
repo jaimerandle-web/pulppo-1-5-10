@@ -1,11 +1,14 @@
 import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/data';
 import { canAccessCompany } from '@/lib/companyAccess';
-import { VISITA_OK, claveLead, cierresInmobiliaria, enHorario, ladoVendedor } from '@/lib/mbComun';
+import { VISITA_OK, cierresInmobiliaria, enHorario, ladoVendedor, leadsUnicos } from '@/lib/mbComun';
+import { grupoDe } from '@/lib/desempenoMb';
 
 // Métricas por propiedad (vistas/leads/visitas/ofertas) para un RANGO de fechas, para el filtro de
 // fechas del listado /mb. Devuelve mapas { propId: n }. Datos en vivo, read-only.
-// Mismas reglas que el resto de /mb (lib/mbComun.ts): leads ÚNICOS, atención sólo en horario
+// Mismas reglas que el resto de /mb (lib/mbComun.ts): leads ÚNICOS del cargador común (leadsUnicos, grupo de
+// compañías), rango en días de calendario hora México (lo arma el cliente), respondidos a cualquier hora y
+// tiempo de respuesta sólo en horario
 // (8 am – 8 pm MX), visitas por fecha de la visita (confirmadas + pendientes) y los cierres de
 // Desempeño (ambos lados, sin duplicar). Las ofertas siguen por fecha de creación (Ale: el funnel
 // se queda acumulado, no por cohorte).
@@ -22,10 +25,11 @@ export async function POST(req: Request) {
         if (!(await canAccessCompany(companyId))) return Response.json({ error: 'No autorizado' }, { status: 403 });
         const fromD = new Date(from), toD = new Date(to);
         const db = await getDb();
-        const cid = new ObjectId(companyId);
-        const props = await db.collection('properties').find({ 'company._id': cid, 'status.last': 'published' }, { projection: { _id: 1 } }).toArray();
+        const comps = (await grupoDe(companyId)).ids.map((x) => new ObjectId(x));
+        const props = await db.collection('properties').find({ 'company._id': { $in: comps }, 'status.last': 'published' }, { projection: { _id: 1 } }).toArray();
         const ids = props.map((p) => p._id as ObjectId);
         const rng = { $gte: fromD, $lte: toD };
+        const unicos = await leadsUnicos(db, comps, fromD, new Date(toD.getTime() + 1), { answeredAt: 1 });
 
         const byField = async (coll: string, field: string, match: Record<string, unknown>): Promise<Record<string, number>> => {
             const rows = await db.collection(coll).aggregate([{ $match: match }, { $group: { _id: `$${field}`, n: { $sum: 1 } } }], { allowDiskUse: true }).toArray();
@@ -37,13 +41,10 @@ export async function POST(req: Request) {
             const out = { leads: {} as Record<string, number>, respondidos: {} as Record<string, number>, lab: {} as Record<string, number>,
                 labSin: {} as Record<string, number>, respMed: {} as Record<string, number> };
             const mins: Record<string, number[]> = {};
-            const visto = new Set<string>();
-            const docs = (await db.collection('leads').find({ 'property._id': { $in: pids }, createdAt: rng },
-                { projection: { 'property._id': 1, 'contact._id': 1, createdAt: 1, answeredAt: 1 } }).toArray())
-                .sort((a, b) => (a.createdAt as Date).getTime() - (b.createdAt as Date).getTime());
+            const set = new Set(pids.map(String));
             const inc = (m: Record<string, number>, k: string) => { m[k] = (m[k] ?? 0) + 1; };
-            for (const l of docs) {
-                const k = claveLead(l); if (visto.has(k)) continue; visto.add(k);
+            for (const l of unicos) {
+                if (!set.has(String((l.property as { _id?: unknown })?._id))) continue;
                 const pid = String((l.property as { _id?: unknown })?._id), ca = l.createdAt as Date, aa = l.answeredAt;
                 inc(out.leads, pid);
                 if (aa instanceof Date) inc(out.respondidos, pid);
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
         // --- actividad del rango en propiedades que YA NO están publicadas (ver MBFuera en lib/mb.ts) ---
         // Al cerrarse, una propiedad sale de `published`: contando solo el inventario vivo, ofertas y
         // cierres del funnel daban ~0 siempre. Van aparte, con los campos que necesitan los filtros.
-        const allProps = await db.collection('properties').find({ 'company._id': cid }, { projection: { _id: 1 } }).toArray();
+        const allProps = await db.collection('properties').find({ 'company._id': { $in: comps } }, { projection: { _id: 1 } }).toArray();
         const allIds = allProps.map((p) => p._id as ObjectId);
         const pubSet = new Set(ids.map((x) => String(x)));
         const outIds = ((await db.collection('operations').distinct('property._id', {
