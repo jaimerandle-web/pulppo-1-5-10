@@ -94,6 +94,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
 }
 
+// El ícono de la pestaña (src/app/icon.png → /icon.png) va libre: antes el middleware se lo redirigía a los
+// master brokers y en su Chrome (Joshua, Windows) salía el globo genérico; los internos sí lo veían.
 export const config = {
-    matcher: ['/((?!login|api/auth|api/alertas|_next/static|_next/image|favicon.ico|pulppo-icon.png).*)']
+    matcher: ['/((?!login|api/auth|api/alertas|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|pulppo-icon.png).*)']
 };

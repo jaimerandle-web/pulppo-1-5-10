@@ -25,10 +25,10 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { claveLead, esSpamLead, inicioDiaMx, leadsUnicos, VISITA_OK } from './mbComun';
-import { grupoDe } from './desempenoMb';
+import { cierresMb, grupoDe } from './desempenoMb';
+import { fichaToken } from './token';
 import { datosDe, type Aviso } from './portales/avisos';
 import { classifySource } from './portales/metrics';
-import { cierresEntre } from './portales/inmobiliaria';
 import { CUENTA_PREMIER } from './portales/avisosTipos';
 import { resolverFuentes } from './portales/fuenteCierre';
 
@@ -83,6 +83,8 @@ export interface AvisoMk {
     /** eb = la cuenta de EasyBroker DE LA INMOBILIARIA (`portals.companyEasybroker`), no el envío de Pulppo */
     estado: { i24: string; meli: string; pcom: string; cyt: string; eb: string };
     fijado: boolean; fijadoPor: string | null; fijadoEl: string | null;
+    /** firma de la liga a la ficha (sin ella el master broker rebota a /inicio) y si es exclusiva 1·5·10 */
+    token: string; p1510: boolean;
     /** desde cuándo está en su nivel actual (inicio de la racha en el historial), días y leads únicos desde entonces */
     enNivelDesde: string | null; diasEnNivel: number | null; leadsEnNivel: number;
     vistasSem: number; vistasSemAnt: number; vistas30: number;
@@ -154,7 +156,7 @@ export interface MarketingMk {
     porNivelMeli: Record<Op, PorNivelMk[]>;
     /** cierres del año de la inmobiliaria (cualquier lado), con la regla de /portales; la UI filtra periodo,
      *  estatus y operación. Revenue = comisión sin IVA que recibe la inmobiliaria. */
-    cierres: { lista: CierreMk[]; desde90: string; desdeAnio: string; hasta: string };
+    cierres: { lista: CierreMk[]; desde90: string; desdeAnio: string; desde12: string; hasta: string };
     offline: OfflineMk[];
     ll: LLMk;
     avisos: AvisoMk[];
@@ -195,7 +197,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
 
     const props = await db.collection('properties').find({ 'company._id': { $in: comps }, 'status.last': 'published' }, { projection: {
         internalId: 1, type: 1, 'listing.operation': 1, 'listing.value': 1, 'listing.publishOnPortals': 1, 'address.neighborhood.name': 1, 'address.street': 1, 'address.city.name': 1, publishedAt: 1,
-        'agent.firstName': 1, 'agent.lastName': 1, 'portals.inmuebles24': 1, 'portals.mercadolibre': 1, 'portals.propiedadesDotCom': 1, 'portals.casas-y-terrenos': 1, 'portals.companyEasybroker': 1,
+        'agent.firstName': 1, 'agent.lastName': 1, 'portals.inmuebles24': 1, 'portals.mercadolibre': 1, 'portals.propiedadesDotCom': 1, 'portals.casas-y-terrenos': 1, 'portals.companyEasybroker': 1, 'contract.exclusive.pulppo': 1,
     } }).toArray();
     const ids = props.map((p) => p._id);
     const idSet = new Set(ids.map(String));
@@ -223,16 +225,18 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         const cc = `${pid}|${String(dig(l, 'contact', '_id') ?? '')}`;
         if (!canalComprador.has(cc)) canalComprador.set(cc, canal);
     }
-    const visP = new Map<string, Date[]>();
-    const visSrc = new Map<string, Array<{ t: Date; k: string }>>();
+    // visitas que OCURRIERON en el periodo (startTime), una por persona y propiedad en cada ventana (mbComun)
+    const visP = new Map<string, Array<{ t: Date; c: string }>>();
+    const visSrc = new Map<string, Array<{ t: Date; k: string; c: string }>>();
     for await (const v of db.collection('visits').find({ 'steps.property._id': { $in: ids }, 'status.last': { $in: VISITA_OK }, startTime: { $gte: D90 } },
-        { projection: { 'steps.property._id': 1, startTime: 1, 'contact._id': 1 } })) {
+        { projection: { _id: 1, 'steps.property._id': 1, startTime: 1, 'contact._id': 1 } })) {
         if (!isDate(v.startTime)) continue;
         for (const pid of new Set(((v.steps as Document[]) ?? []).map((s) => String(dig(s, 'property', '_id'))))) {
             if (!idSet.has(pid)) continue;
-            (visP.get(pid) ?? visP.set(pid, []).get(pid)!).push(v.startTime);
-            const k = canalComprador.get(`${pid}|${String(dig(v, 'contact', '_id') ?? '')}`) ?? 'otros';
-            (visSrc.get(pid) ?? visSrc.set(pid, []).get(pid)!).push({ t: v.startTime, k });
+            const c = String(dig(v, 'contact', '_id') ?? v._id);
+            (visP.get(pid) ?? visP.set(pid, []).get(pid)!).push({ t: v.startTime, c });
+            const k = canalComprador.get(`${pid}|${c}`) ?? 'otros';
+            (visSrc.get(pid) ?? visSrc.set(pid, []).get(pid)!).push({ t: v.startTime, k, c });
         }
     }
     // vistas fechadas (metrics type 'view'): las mismas que usa la tabla de propiedades de /mb
@@ -245,7 +249,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     }
     const ofertas = new Map<string, number>();
     for (const r of await db.collection('operations').aggregate([
-        { $match: { 'property._id': { $in: ids }, 'status.last': { $ne: 'cancelled' } } },
+        { $match: { 'property._id': { $in: ids }, 'status.last': { $in: ['offer', 'offer_blocked', 'contract', 'paying', 'closed'] } } },   // = Overview (mb.ts ADVANCED)
         { $group: { _id: '$property._id', n: { $sum: 1 } } }]).toArray()) ofertas.set(String(r._id), r.n as number);
     // quién fijó a mano: pinnedBy es el uid de Firebase del usuario
     const uids = [...new Set(props.map((p) => dig(p, 'portals', 'inmuebles24', 'pinnedBy')).flat().filter(Boolean).map(String))];
@@ -266,8 +270,10 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     } catch (e) { console.error('[marketing] scoring', e); }
 
     const cuenta = (xs: Date[] | undefined, a: Date, b: Date) => (xs ?? []).filter((t) => t >= a && t < b).length;
+    const cuentaU = (xs: Array<{ t: Date; c: string }> | undefined, a: Date, b: Date) => new Set((xs ?? []).filter((x) => x.t >= a && x.t < b).map((x) => x.c)).size;
     const fin = new Date(ahora.getTime() + DIA);
     const cambiosSem: CambioMk[] = [], cambiosAnt: CambioMk[] = [];
+    const tokens = new Map(await Promise.all(props.map(async (p) => [String(p._id), await fichaToken(String(p._id))] as const)));
     const avisos: AvisoMk[] = props.map((p) => {
         const i24 = (dig(p, 'portals', 'inmuebles24') as Document) ?? {};
         const hist = (((i24.history as Document[]) ?? []).map((e) => ({ t: fechaHist(e), tipo: e.type, e })).filter((h) => h.t) as Array<{ t: Date; tipo: unknown; e: Document }>)
@@ -295,9 +301,9 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         const L = leadsP.get(pid), V = visP.get(pid), W = vistP.get(pid);
         const embudo = (canal: string): Embudo => {
             const l = (leadsSrc.get(pid) ?? []).filter((x) => x.k === canal).map((x) => x.t);
-            const v = (visSrc.get(pid) ?? []).filter((x) => x.k === canal).map((x) => x.t);
+            const v = (visSrc.get(pid) ?? []).filter((x) => x.k === canal);
             return { leadsSem: cuenta(l, L0, fin), leadsSemAnt: cuenta(l, Lm1, finAnt), leads30: cuenta(l, D30, fin),
-                visitasSem: cuenta(v, L0, fin), visitasSemAnt: cuenta(v, Lm1, finAnt), visitas30: cuenta(v, D30, fin) };
+                visitasSem: cuentaU(v, L0, fin), visitasSemAnt: cuentaU(v, Lm1, finAnt), visitas30: cuentaU(v, D30, fin) };
         };
         const sc = score.get(codigo);
         const perf = (i24.performance as Document) ?? {};
@@ -305,7 +311,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         const pub = isDate(p.publishedAt) ? p.publishedAt : null;
         const num = (v: unknown) => (typeof v === 'number' ? v : null);
         return {
-            id: pid, codigo, tipo: (p.type as string) ?? null, operacion: dig(p, 'listing', 'operation') === 'rent' ? 'Renta' : 'Venta',
+            id: pid, token: tokens.get(pid) ?? '', p1510: dig(p, 'contract', 'exclusive', 'pulppo') != null, codigo, tipo: (p.type as string) ?? null, operacion: dig(p, 'listing', 'operation') === 'rent' ? 'Renta' : 'Venta',
             colonia: (dig(p, 'address', 'neighborhood', 'name') as string) ?? null,
             calle: String(dig(p, 'address', 'street') ?? '').replace(/\s+/g, ' ').trim() || null,
             asesor: `${dig(p, 'agent', 'firstName') ?? ''} ${dig(p, 'agent', 'lastName') ?? ''}`.replace(/\s+/g, ' ').trim() || '—',
@@ -318,7 +324,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
             leadsEnNivel: desde ? cuenta(L, desde, fin) : 0,
             vistasSem: cuenta(W, L0, fin), vistasSemAnt: cuenta(W, Lm1, finAnt), vistas30: cuenta(W, D30, fin),
             leadsSem: cuenta(L, L0, fin), leadsSemAnt: cuenta(L, Lm1, finAnt), leads30: cuenta(L, D30, fin), leads90: cuenta(L, D90, fin),
-            visitasSem: cuenta(V, L0, fin), visitasSemAnt: cuenta(V, Lm1, finAnt), visitas30: cuenta(V, D30, fin), visitas90: cuenta(V, D90, fin),
+            visitasSem: cuentaU(V, L0, fin), visitasSemAnt: cuentaU(V, Lm1, finAnt), visitas30: cuentaU(V, D30, fin), visitas90: cuentaU(V, D90, fin),
             i24: embudo('i24'), meliE: embudo('meli'),
             // «No difundir en portales» (`listing.publishOnPortals: false`): decisión de la inmobiliaria, no una falla
             estado: dig(p, 'listing', 'publishOnPortals') === false ? noDifundida(p) : {
@@ -383,16 +389,20 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
     const porNivel = Object.fromEntries(OPS.map((o) => [o, nivelI24(o)])) as Record<Op, PorNivelMk[]>;
     const porNivelMeli = Object.fromEntries(OPS.map((o) => [o, nivelMeli(o)])) as Record<Op, PorNivelMk[]>;
 
-    // cierres por fuente — la MISMA regla que /portales y Desempeño (cierresEntre → resolverFuentes). La
-    // inmobiliaria puede estar partida en varias compañías con el mismo nombre (Diamond House son 2).
+    // cierres por fuente — la MISMA función que Overview, Propiedades y Desempeño (cierresMb): del lado en que
+    // participa la inmobiliaria, con la comisión COBRADA (pagos) y la fuente de resolverFuentes. 12 meses para
+    // el selector de periodo. Las operaciones EN CURSO cuentan todas las vivas, sin importar cuándo se crearon
+    // (Joshua, nov-2026: un contrato de 2025 que sigue vivo es pipeline de hoy).
     const idsInmo = grupo.ids;
     const inicioAnio = new Date(Date.UTC(new Date(ahora.getTime() - MX).getUTCFullYear(), 0, 1) + MX);
-    const lista: CierreMk[] = await cierresEntre(inicioAnio, fin, { ids: idsInmo, operacion: 'todas' })
-        .then(({ out }) => out.map((c) => ({ fecha: c.fecha, codigo: c.codigo, operacion: c.operacion, tipo: c.tipo, colonia: c.colonia,
-            fuente: c.fuente, comision: c.comision || 0, estatus: c.estatus ?? 'Cerrada', lado: c.lado, asesor: c.asesor })))
-        .catch((e) => { console.error('[marketing] cierres', e); return []; });
-    // en curso (para el filtro de estatus): ofertas, aceptadas y contratos creados en el año
-    lista.push(...await enCursoDe(db, idsInmo, inicioAnio).catch((e) => { console.error('[marketing] en curso', e); return [] as CierreMk[]; }));
+    const desde12 = inicioDiaMx(ahora, 364);
+    const desdeCierres = desde12 < inicioAnio ? desde12 : inicioAnio;
+    const lista: CierreMk[] = await cierresMb(comps, new Set(idsInmo), desdeCierres, fin, null)
+        .then((xs) => xs.map((c) => ({ fecha: c.fechaCierre.slice(0, 10), codigo: c.codigo, operacion: c.op === 'rent' ? 'Renta' : 'Venta', tipo: c.tipo,
+            colonia: c.direccion || null, fuente: c.fuente, comision: c.comision ?? 0, estatus: c.estado === 'paying' ? 'Cobrando' as const : 'Cerrada' as const,
+            lado: c.lado, asesor: c.asesor })))
+        .catch((e) => { console.error('[marketing] cierres', e); return [] as CierreMk[]; });
+    lista.push(...await enCursoDe(db, idsInmo).catch((e) => { console.error('[marketing] en curso', e); return [] as CierreMk[]; }));
 
     // Lo que no se muestra en cada portal, por qué y qué hacer. i24: sin código de aviso = nunca llegó;
     // EXCLUDED_BY_RULE = i24 lo sacó (p. ej. duplicado); si no, desde cuándo y en qué nivel estaba. MeLi,
@@ -454,7 +464,7 @@ export async function marketingDe(companyId: string): Promise<MarketingMk> {
         },
         cambios: { semana: cambiosSem.sort((a, b) => b.fecha.localeCompare(a.fecha)), semanaAnt: cambiosAnt.sort((a, b) => b.fecha.localeCompare(a.fecha)) },
         ll: await serieLL(db, idsInmo, ahora).catch((e) => { console.error('[marketing] L/L', e); return { desde: '', dias: 0, series: [] }; }),
-        scoringPendiente, porNivel, porNivelMeli, cierres: { lista, desde90: ymd(D90), desdeAnio: ymd(inicioAnio), hasta: ymd(ahora) }, offline, avisos, reglas: { leadsRotar: LEADS_ROTAR },
+        scoringPendiente, porNivel, porNivelMeli, cierres: { lista, desde90: ymd(D90), desdeAnio: ymd(inicioAnio), desde12: ymd(desde12), hasta: ymd(ahora) }, offline, avisos, reglas: { leadsRotar: LEADS_ROTAR },
         ...derivar(avisos),
     };
 }
@@ -613,11 +623,11 @@ async function serieLL(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[],
 // Operaciones EN CURSO de la inmobiliaria (cualquier lado), con la misma regla de fuente que los cierres.
 // resolverFuentes compara contra la fecha de cierre; como aún no la tienen, se usa «hoy».
 const EN_CURSO: Record<string, CierreMk['estatus']> = { offer: 'Oferta', offer_blocked: 'Oferta aceptada', contract: 'Contrato' };
-async function enCursoDe(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[], desde: Date): Promise<CierreMk[]> {
+async function enCursoDe(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[]): Promise<CierreMk[]> {
     const oids = idsInmo.map((x) => new ObjectId(x));
     const idSet = new Set(idsInmo);
     const ops = await db.collection('operations').find({
-        'status.last': { $in: Object.keys(EN_CURSO) }, createdAt: { $gte: desde },
+        'status.last': { $in: Object.keys(EN_CURSO) },
         $or: [{ 'seller.company._id': { $in: oids } }, { 'buyer.company._id': { $in: oids } }],
     }, { projection: {
         id: 1, createdAt: 1, 'status.last': 1, 'property._id': 1, 'property.internalId': 1, 'property.listing.operation': 1, 'property.type': 1,
@@ -644,7 +654,7 @@ async function enCursoDe(db: Awaited<ReturnType<typeof getDb>>, idsInmo: string[
             fuente: fuentes.get(String(o._id))?.fuente ?? 'Sin registro',
             comision: typeof dig(o, 'comission', 'value') === 'number' ? dig(o, 'comission', 'value') as number : 0,
             estatus: EN_CURSO[String(dig(o, 'status', 'last'))],
-            lado: vende && compra ? 'ambos' : vende ? 'vendedor' : 'comprador',
+            lado: vende && compra ? 'Ambos' : vende ? 'Vendedor' : 'Comprador',   // mismas etiquetas que cierresMb
             asesor: [vende ? nom(o, 'seller') : '', compra ? nom(o, 'buyer') : ''].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' / ') || '—',
         };
     });

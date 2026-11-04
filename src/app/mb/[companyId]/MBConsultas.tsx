@@ -118,7 +118,8 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
         n: xs.length, venta: xs.filter((l) => l.operacion === 'Venta').length, renta: xs.filter((l) => l.operacion === 'Renta').length,
         abiertos: xs.filter((l) => l.abierto).length, conv: xs.filter((l) => l.conversacion).length,
         visito: xs.filter((l) => l.visito).length, oferto: xs.filter((l) => l.oferto).length,
-        med: mediana(xs.map((l) => l.minutosRespuesta).filter((x): x is number => x != null)),
+        // 1ª respuesta: sólo leads que entraron de 8 am a 8 pm (los de madrugada no miden al asesor)
+        med: mediana(xs.filter((l) => l.enHorario).map((l) => l.minutosRespuesta).filter((x): x is number => x != null)),
     });
     const a = stats(cur), b = stats(ant);
     const pct = (x: number, n: number) => (n ? (100 * x) / n : null);
@@ -202,7 +203,7 @@ export default function MBConsultas({ companyId }: { companyId: string }) {
                     <Kpi label="Ofertaron" value={f0(a.oferto)} delta={<Delta a={a.oferto} b={b.oferto} />} nota={`${pc(a.oferto, a.n)} de los leads`} />
                 </div>
                 <div style={{ ...sub, marginTop: 6, lineHeight: 1.5, maxWidth: 900 }}>
-                    <b>Respondidos</b>: el asesor respondió el lead desde Pulppo (igual que en el Retool y en Propiedades). <b>Con conversación visible</b>: además, el cliente escribió algo real o hubo llamada — la señal de que sí hubo plática, porque el WhatsApp del asesor no se guarda. Leads únicos: misma persona + misma propiedad = 1, los mismos que en Marketing. El periodo anterior es el mismo tramo de días antes, hasta la misma hora.
+                    <b>Respondidos</b>: el asesor respondió el lead desde Pulppo, a cualquier hora (igual que en el Retool y en Propiedades). La <b>1ª respuesta</b> se mide sólo con los leads que llegaron de 8 am a 8 pm. <b>Con conversación visible</b>: además, el cliente escribió algo real o hubo llamada — la señal de que sí hubo plática, porque el WhatsApp del asesor no se guarda. Leads únicos: misma persona + misma propiedad = 1, los mismos que en Marketing. El periodo anterior es el mismo tramo de días antes, hasta la misma hora.
                 </div>
 
                 <Seccion titulo="Leads por día">

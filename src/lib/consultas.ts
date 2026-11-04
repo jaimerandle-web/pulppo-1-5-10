@@ -19,7 +19,7 @@
 import { CUENTA_PREMIER, TIPO_MELI } from './portales/avisosTipos';
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
-import { leadsUnicos, periodoAnterior, VISITA_OK } from './mbComun';
+import { enHorario, leadsUnicos, periodoAnterior, VISITA_OK } from './mbComun';
 import { grupoDe } from './desempenoMb';
 import { classifySource, KEY2NAME, dig, isDate } from './portales/metrics';
 import { canalContacto } from './portales/inmobiliaria';
@@ -35,6 +35,8 @@ export interface LeadConsulta {
     codigo: string | null; tipo: string | null; calle: string | null; colonia: string | null; precio: number | null; nivel: string | null;
     asesor: string;
     abierto: boolean; minutosRespuesta: number | null; conversacion: boolean;
+    /** entró de 8 am a 8 pm: sólo éstos cuentan para el tiempo de 1ª respuesta (regla mixta de /mb, nov-2026) */
+    enHorario: boolean;
     etapa: string; motivo: string | null; visito: boolean; oferto: boolean;
     mensaje: string | null;
 }
@@ -152,7 +154,7 @@ export async function consultasDe(companyId: string, desde: Date, hasta: Date, d
             precio: typeof dig(l, 'property', 'listing', 'value') === 'number' ? dig(l, 'property', 'listing', 'value') as number : null,
             nivel: nivel.get(pid) ?? null,
             asesor: [dig(l, 'agent', 'firstName'), dig(l, 'agent', 'lastName')].map(s).filter(Boolean).join(' ').replace(/\s+/g, ' ') || 'Sin asesor',
-            abierto: resp != null, minutosRespuesta: resp != null && resp >= 0 ? resp : null,
+            abierto: resp != null, minutosRespuesta: resp != null && resp >= 0 ? resp : null, enHorario: enHorario(l.createdAt as Date),
             conversacion: (conv.get(cid) ?? []).some((x) => x >= t - 30 * DIA && x <= t + 14 * DIA),
             etapa: b ? (ETAPA[b.st] ?? 'Buscando') : 'Sin búsqueda', motivo: mot,
             visito: (visitas.get(cid) ?? []).some((x) => x >= t), oferto: (ofertas.get(cid) ?? []).some((x) => x >= t),

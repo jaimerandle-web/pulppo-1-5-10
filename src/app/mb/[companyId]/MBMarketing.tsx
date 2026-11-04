@@ -148,6 +148,11 @@ function NivelEmbudo({ x, max, color }: { x: PorNivelMk; max: { v: number; l: nu
     );
 }
 
+/** exclusiva del programa 1·5·10 (Joshua: que se vea en todas las propiedades) */
+export function Tag1510() {
+    return <span title="Exclusiva 1·5·10" style={{ marginLeft: 6, padding: '1px 5px', fontSize: 9.5, fontWeight: 800, letterSpacing: '.3px', background: BLK, color: YEL, borderRadius: R, verticalAlign: 'middle' }}>1·5·10</span>;
+}
+
 const btnLiga: CSSProperties = { background: 'none', border: 0, padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 700, textDecoration: 'underline dotted' };
 
 function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
@@ -169,8 +174,9 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
         const a = porCodigo.get(codigo);
         return (
             <div style={{ minWidth: 170 }}>
-                <a href={`/ficha/${encodeURIComponent(a?.id ?? codigo)}`} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700, textDecoration: 'none' }}>{codigo}</a>
-                {a && <><OpTag op={a.operacion} /><span style={{ ...sub, marginLeft: 6 }}>{a.tipo}</span></>}
+                {/* con token: sin él el master broker rebota al menú /inicio (Studio / Panel). Igual que Propiedades. */}
+                <a href={a ? `/ficha/${a.id}?${a.p1510 ? '' : 'v=simple&'}token=${a.token}` : '#'} target="_blank" rel="noreferrer" style={{ color: SEA, fontWeight: 700, textDecoration: 'none' }}>{codigo}</a>
+                {a && <><OpTag op={a.operacion} />{a.p1510 && <Tag1510 />}<span style={{ ...sub, marginLeft: 6 }}>{a.tipo}</span></>}
                 <div style={{ fontSize: 11.5, whiteSpace: 'normal' }}>{[a?.calle, a?.colonia].filter(Boolean).join(', ') || 'sin dirección'}</div>
                 {a?.asesor && a.asesor !== '—' && <div style={{ ...sub, whiteSpace: 'normal' }}>{a.asesor}</div>}
             </div>
@@ -464,14 +470,19 @@ function Vista({ d, interno }: { d: MarketingMk; interno: boolean }) {
 /** Cierres por fuente con filtros de periodo, estatus y operación (Joshua). Revenue = comisión sin IVA que
  *  recibe la inmobiliaria; los % van contra el revenue, no contra el número de operaciones. */
 function CierresPanel({ d }: { d: MarketingMk }) {
-    const [periodo, setPeriodo] = useState<'d90' | 'anio'>('d90');
+    // periodo (Joshua: selector de tiempos). Sólo filtra lo CERRADO, por fecha de cierre; lo que está en curso
+    // (contrato, oferta aceptada, oferta) es el pipeline vivo de hoy y cuenta completo, sin importar cuándo se creó.
+    const PERIODOS_C = [['mes', 'Este mes'], ['d90', 'Últimos 90 días'], ['anio', 'Este año'], ['d365', 'Últimos 12 meses']] as const;
+    const [periodo, setPeriodo] = useState<(typeof PERIODOS_C)[number][0]>('d90');
+    const desdeP = { mes: `${d.cierres.hasta.slice(0, 7)}-01`, d90: d.cierres.desde90, anio: d.cierres.desdeAnio, d365: d.cierres.desde12 }[periodo];
+    const enCurso = (e: string) => e !== 'Cerrada' && e !== 'Cobrando';
     // estatus con casillas (Ale): se suman los que marques. Cerradas y cobrando = cierres; el resto, en curso.
     const ESTATUS_OPC = ['Cerrada', 'Cobrando', 'Contrato', 'Oferta aceptada', 'Oferta'] as const;
     const [estatus, setEstatus] = useState<Set<string>>(new Set(['Cerrada', 'Cobrando']));
     const pasa = (e: string) => estatus.has(e);
     const esperado = [...estatus].some((e) => e !== 'Cerrada' && e !== 'Cobrando');
     const [oper, setOper] = useState<'Total' | 'Venta' | 'Renta'>('Total');
-    const base = d.cierres.lista.filter((c) => (periodo === 'anio' || c.fecha >= d.cierres.desde90) && pasa(c.estatus));
+    const base = d.cierres.lista.filter((c) => (enCurso(c.estatus) || c.fecha >= desdeP) && pasa(c.estatus));
     const xs = base.filter((c) => oper === 'Total' || c.operacion === oper);
     const rev = xs.reduce((s, c) => s + c.comision, 0);
     const revBase = base.reduce((s, c) => s + c.comision, 0);
@@ -485,7 +496,7 @@ function CierresPanel({ d }: { d: MarketingMk }) {
     return (
         <div>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-                <span style={{ display: 'flex', gap: 6 }}><Boton v="d90" act={periodo} set={setPeriodo}>Últimos 90 días</Boton><Boton v="anio" act={periodo} set={setPeriodo}>En el año</Boton></span>
+                <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{PERIODOS_C.map(([k, t]) => <Boton key={k} v={k} act={periodo} set={setPeriodo}>{t}</Boton>)}</span>
                 <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 12, border: `1px solid ${LGT}`, borderRadius: R, padding: '5px 10px' }}>
                     {ESTATUS_OPC.map((k) => (
                         <label key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -497,6 +508,7 @@ function CierresPanel({ d }: { d: MarketingMk }) {
                 <span style={{ display: 'flex', gap: 6 }}>{(['Total', 'Venta', 'Renta'] as const).map((k) => <Boton key={k} v={k} act={oper} set={setOper}>{k}</Boton>)}</span>
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+                {esperado && <div style={{ ...sub, flexBasis: '100%' }}>El periodo sólo filtra lo cerrado (por fecha de cierre). Contrato, oferta aceptada y oferta son todas las operaciones vivas hoy, sin importar cuándo empezaron.</div>}
                 <Kpi label={esperado ? 'Revenue esperado' : 'Revenue'} value={money(rev)} nota={`${f0(xs.length)} ${esperado ? 'operaciones en curso' : 'cierres'} · comisión sin IVA`} />
                 {porOp.map((x) => <Kpi key={x.o} label={`${x.o} · % del revenue`} value={pc(x.rev, revBase)} nota={`${money(x.rev)} · ${f0(x.n)} ${esperado ? 'operaciones' : 'cierres'}`} />)}
             </div>

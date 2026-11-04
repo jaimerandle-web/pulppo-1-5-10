@@ -8,7 +8,7 @@ import MBAnalisis from './MBAnalisis';
 import MBDestacados from './MBDestacados';
 import MBDesempeno from './MBDesempeno';
 import MBBusquedas from './MBBusquedas';
-import MBMarketing from './MBMarketing';
+import MBMarketing, { Tag1510 } from './MBMarketing';
 import MBConsultas from './MBConsultas';
 import { MARKETING_EMPRESAS } from '@/lib/marketingAcceso';
 import { NURA_ID } from '@/lib/nura';
@@ -479,7 +479,7 @@ function PropTable({ d, seg, setSeg }: { d: MBData; seg: Seg; setSeg: (s: Seg) =
                         <tbody>
                             {rows.map((p) => (
                                 <tr key={p.id}>
-                                    <td style={td}><Link href={urlFicha(p)} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                    <td style={td}><Link href={urlFicha(p)} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link>{p.p1510 && <Tag1510 />}</td>
                                     <td style={td}>{p.type}</td>
                                     <td style={td}>{p.asesor}</td><td style={td}>{p.op}</td>
                                     {conAviso && <td style={{ ...td, whiteSpace: 'nowrap', fontWeight: 600, color: p.avisoI24 === 'Offline' || p.avisoI24 === 'Sin aviso' ? RED : p.avisoI24?.startsWith('Súper') ? '#8A6D00' : p.avisoI24?.startsWith('Destacado') ? SEA : BLK }}>{p.avisoI24 ?? '—'}</td>}
@@ -851,7 +851,7 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                                 <tbody>
                                     {topOpp.map((p) => (
                                         <tr key={p.id}>
-                                            <td style={ttd}><Link href={urlFicha(p)} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link></td>
+                                            <td style={ttd}><Link href={urlFicha(p)} target="_blank" style={{ color: SEA, fontWeight: 700 }}>{p.code}</Link>{p.p1510 && <Tag1510 />}</td>
                                             <td style={{ ...ttd, color: GRY }}>{p.colonia}</td><td style={ttd}>{p.op}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{money(p.precio)}</td>
                                             <td style={{ ...ttd, textAlign: 'right' }}>{vsCell(p.vsOferta)}</td>
