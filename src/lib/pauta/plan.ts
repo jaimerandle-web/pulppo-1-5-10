@@ -1,6 +1,9 @@
 // Plan de pauta: cómo se reparte el presupuesto entre campañas. Lógica pura (la UI recorta el plan
 // al presupuesto disponible en el navegador).
 //
+// Antes que todo, las REACTIVACIONES (reactivaciones.ts): campañas que ya corrieron y se vuelven a
+// prender con cambios decididos a mano; esa propiedad no entra a estrella ni carrusel.
+//
 // Tres tipos de campaña, en este orden de prioridad:
 // 1. ESTRELLA, sola: la demanda en portales ya probó que la propiedad jala (ver esEstrella). Es la
 //    apuesta más segura por peso invertido; si recibe oferta se apaga.
@@ -19,11 +22,12 @@
 // el lead de Meta casi no llega a visita).
 import type { PautaProp } from './index';
 import { BANDAS, precioCorto, precioLargo } from './armado';
+import { REACTIVACIONES, reactivacionDe, type Reactivacion } from './reactivaciones';
 
 export const DIAS_VUELO = 14;
 export const MAX_TARJETAS = 10;
 
-export type TipoCampana = 'estrella' | 'carrusel' | 'suelta';
+export type TipoCampana = 'reactivacion' | 'estrella' | 'carrusel' | 'suelta';
 
 export interface Tarjeta {
     code: string;
@@ -49,6 +53,9 @@ export interface CampanaPlan {
     ubicacion?: string;
     edad?: string;
     intereses?: string[];
+    // Sólo reactivación:
+    brief?: Reactivacion;
+    url?: string;
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -122,8 +129,22 @@ function carrusel(cluster: string, ps: PautaProp[], prioridad: number): CampanaP
 }
 
 export function armarPlan(props: PautaProp[]): CampanaPlan[] {
-    const pautables = props.filter((p) => !p.excluida && p.foto);
     const plan: CampanaPlan[] = [];
+    for (const r of REACTIVACIONES) {
+        const p = props.find((x) => x.code === r.code && !x.excluida);
+        if (!p) continue; // ya no está viva o su inmobiliaria salió de pauta
+        const nombre = `${p.campana}_v2`;
+        // utm_content va como macro de Meta, sin codificar, para que Meta la sustituya por el id del anuncio.
+        const url = `${urlTarjeta(p, nombre).replace(/&utm_content=[^&]*/, '')}&utm_content={{ad.id}}`;
+        plan.push({
+            tipo: 'reactivacion', nombre, cluster: p.cluster, codes: [p.code], presupuesto: r.presupuesto, prioridad: 0,
+            razon: `Se vuelve a prender con cambios (decidido ${r.desde}). Antes: ${r.anterior.resultado}`,
+            textos: r.textos, brief: r, url,
+            ubicacion: r.cambios.find((c) => c.tema === 'Ubicación')?.despues,
+            edad: r.cambios.find((c) => c.tema === 'Edad')?.despues
+        });
+    }
+    const pautables = props.filter((p) => !p.excluida && p.foto && !reactivacionDe(p.code));
 
     for (const p of pautables.filter((x) => x.estrella).sort(porDemanda)) {
         const d = p.demanda!;

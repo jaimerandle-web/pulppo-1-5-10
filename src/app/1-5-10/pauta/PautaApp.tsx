@@ -156,7 +156,7 @@ function Tarjeta({ p }: { p: PautaProp }) {
     );
 }
 
-const ETIQUETA: Record<CampanaPlan['tipo'], string> = { estrella: 'Estrella · sola', carrusel: 'Carrusel', suelta: 'Suelta' };
+const ETIQUETA: Record<CampanaPlan['tipo'], string> = { reactivacion: 'Reactivación · ASAP', estrella: 'Estrella · sola', carrusel: 'Carrusel', suelta: 'Suelta' };
 const money = (n: number) => `$${n.toLocaleString('es-MX')}`;
 
 function Carrusel({ c }: { c: CampanaPlan }) {
@@ -205,15 +205,70 @@ function Carrusel({ c }: { c: CampanaPlan }) {
     );
 }
 
+function Brief({ c }: { c: CampanaPlan }) {
+    const r = c.brief!;
+    const h4 = 'mb-2 text-xs font-bold uppercase tracking-wider text-neutral-500';
+    return (
+        <div className="mt-4 space-y-5 border-t border-neutral-200 pt-4 text-sm">
+            <div className="rounded bg-light p-3">
+                <b>Campaña anterior:</b> <code className="text-xs">{r.anterior.nombre}</code> (id {r.anterior.id}) · {r.anterior.periodo}
+                <div className="mt-1">{r.anterior.resultado}</div>
+            </div>
+            <div>
+                <h4 className={h4}>Antes de prender (sin esto no sale)</h4>
+                <ul className="space-y-1">{r.condiciones.map((x) => <li key={x}>☐ {x}</li>)}</ul>
+            </div>
+            <div>
+                <h4 className={h4}>Qué cambia</h4>
+                <div className="overflow-x-auto">
+                    <table className="w-full min-w-[560px] text-left">
+                        <thead><tr className="border-b border-neutral-300 text-xs text-neutral-500"><th className="py-1 pr-3">Tema</th><th className="py-1 pr-3">Antes</th><th className="py-1">Ahora</th></tr></thead>
+                        <tbody>{r.cambios.map((x) => (
+                            <tr key={x.tema} className="border-b border-neutral-100 align-top">
+                                <td className="py-1.5 pr-3 font-semibold">{x.tema}</td>
+                                <td className="py-1.5 pr-3 text-neutral-500">{x.antes}</td>
+                                <td className="py-1.5">{x.despues}</td>
+                            </tr>
+                        ))}</tbody>
+                    </table>
+                </div>
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+                <div>
+                    <h4 className={h4}>Texto principal</h4>
+                    <ul className="space-y-2">{r.textos.map((t) => (
+                        <li key={t} className="flex items-start gap-2 rounded bg-light p-2"><span className="flex-1">{t}</span><Copiar texto={t} /></li>
+                    ))}</ul>
+                    <div className="mt-2 flex items-start gap-2"><span className="flex-1"><b>Título:</b> {r.titulo}</span><Copiar texto={r.titulo} /></div>
+                    <p className="mt-2 text-neutral-600"><b>Anuncios:</b> {r.anuncios}</p>
+                </div>
+                <div>
+                    <div className="mb-2 flex items-center gap-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-500">Formulario de mayor intención</h4>
+                        <Copiar texto={r.formulario.join('\n')} label="Copiar preguntas" />
+                    </div>
+                    <ol className="list-decimal space-y-1 pl-5">{r.formulario.map((x) => <li key={x}>{x}</li>)}</ol>
+                    <div className="mt-3 flex items-start gap-2"><span className="flex-1 break-all text-xs"><b>Liga (pantalla final y remarketing):</b> {c.url}</span><Copiar texto={c.url!} label="Copiar liga" /></div>
+                </div>
+            </div>
+            <div>
+                <h4 className={h4}>Medición</h4>
+                <ul className="list-disc space-y-1 pl-5">{r.medicion.map((x) => <li key={x}>{x}</li>)}</ul>
+            </div>
+            <p className="rounded bg-brand-yellow/40 p-3"><b>Regla para apagar:</b> {r.reglaApagado}</p>
+        </div>
+    );
+}
+
 function FilaPlan({ c, props, dentro }: { c: CampanaPlan; props: PautaProp[]; dentro: boolean }) {
-    const [abierta, setAbierta] = useState(false);
+    const [abierta, setAbierta] = useState(c.tipo === 'reactivacion');
     const ps = c.codes.map((k) => props.find((p) => p.code === k)).filter(Boolean) as PautaProp[];
     return (
         <div className={`rounded-lg border p-4 ${dentro ? 'border-neutral-200 bg-white' : 'border-dashed border-neutral-300 bg-light opacity-60'}`}>
             <div className="flex flex-wrap items-start gap-4">
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline gap-x-3">
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.tipo === 'estrella' ? 'bg-brand-yellow' : 'bg-light'}`}>{ETIQUETA[c.tipo]}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.tipo === 'reactivacion' ? 'bg-soft text-white' : c.tipo === 'estrella' ? 'bg-brand-yellow' : 'bg-light'}`}>{ETIQUETA[c.tipo]}</span>
                         <span className="font-semibold">{c.cluster}</span>
                         <code className="text-xs text-neutral-500">{c.nombre}</code>
                         <Copiar texto={c.nombre} />
@@ -230,6 +285,7 @@ function FilaPlan({ c, props, dentro }: { c: CampanaPlan; props: PautaProp[]; de
                     {abierta ? 'Cerrar' : 'Ver paquete'}
                 </button>
             </div>
+            {abierta && c.brief && <Brief c={c} />}
             {abierta && (c.tipo === 'carrusel' ? <Carrusel c={c} /> : <div className="mt-4">{ps.map((p) => <Tarjeta key={p.code} p={p} />)}</div>)}
         </div>
     );
@@ -246,7 +302,7 @@ function Plan({ d }: { d: Payload }) {
         <div>
             <div className="mb-4 rounded-lg bg-light p-4 text-sm">
                 <p>
-                    <b>Cómo se reparte:</b> primero las <b>estrellas</b> (≥10 personas y ≥3 visitas en 60 días fuera de Meta), cada una en su campaña.
+                    <b>Cómo se reparte:</b> primero las <b>reactivaciones</b> (campañas que ya corrieron y vuelven con cambios: el brief dice qué cambia y cuándo apagar). Luego las <b>estrellas</b> (≥10 personas y ≥3 visitas en 60 días fuera de Meta), cada una en su campaña.
                     Después un <b>carrusel por cluster</b> con el resto: junta el aprendizaje de Meta y reporta clics por tarjeta.
                     Las que quedan solas en su cluster van como anuncio sencillo. Arriba de $15M, a la mitad y al final.
                     Vuelos de {DIAS_VUELO} días; al cierre, la tarjeta que jala pasa a estrella y la que no se saca.
@@ -257,7 +313,7 @@ function Plan({ d }: { d: Payload }) {
                         <input type="number" step={500} min={0} value={tope} onChange={(e) => setTope(Number(e.target.value) || 0)}
                             className="mt-1 w-40 rounded-lg border border-neutral-300 px-2 py-1.5" />
                     </label>
-                    <span>Plan completo: <b>{money(total)}</b> · {cuenta('estrella')} estrellas · {cuenta('carrusel')} carruseles · {cuenta('suelta')} sueltas</span>
+                    <span>Plan completo: <b>{money(total)}</b> · {cuenta('reactivacion') ? `${cuenta('reactivacion')} reactivación · ` : ''}{cuenta('estrella')} estrellas · {cuenta('carrusel')} carruseles · {cuenta('suelta')} sueltas</span>
                     <span>Alcanza para: <b>{money(usado)}</b> ({filas.filter((f) => f.dentro).length} de {filas.length} campañas)</span>
                     <a href="/api/pauta?format=csv&tipo=plan" className="rounded-lg bg-soft px-3 py-1.5 text-white hover:opacity-90">Descargar plan (CSV)</a>
                 </div>

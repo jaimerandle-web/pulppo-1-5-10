@@ -5,7 +5,7 @@ import { armarPlan } from '@/lib/pauta/plan';
 // Paquete de pauta de Meta de todas las exclusivas 1·5·10 vivas.
 //   GET            → JSON para la página /1-5-10/pauta
 //   GET ?format=csv → una fila por propiedad pautable, para quien monta las campañas
-//   GET ?format=csv&tipo=plan → una fila por campaña del plan (estrellas, carruseles y sueltas),
+//   GET ?format=csv&tipo=plan → una fila por campaña del plan (reactivaciones, estrellas, carruseles y sueltas),
 //                     y en los carruseles una fila por tarjeta
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -32,7 +32,11 @@ export async function GET(req: Request) {
             const base = new URL(req.url).origin;
             const rows: unknown[][] = [];
             for (const c of plan) {
-                const cab = [c.prioridad, c.tipo, c.nombre, c.cluster, c.presupuesto, c.razon, c.textos?.[0], c.textos?.[1], c.textos?.[2],
+                const razon = c.brief
+                    ? [c.razon, `Antes de prender: ${c.brief.condiciones.join(' / ')}`, `Cambios: ${c.brief.cambios.map((x) => `${x.tema}: ${x.despues}`).join(' / ')}`,
+                        `Formulario: ${c.brief.formulario.join(' / ')}`, `Liga: ${c.url}`, `Apagar: ${c.brief.reglaApagado}`].join(' || ')
+                    : c.razon;
+                const cab = [c.prioridad, c.tipo, c.nombre, c.cluster, c.presupuesto, razon, c.textos?.[0], c.textos?.[1], c.textos?.[2],
                     c.ubicacion, c.edad, c.intereses?.join(' | ')];
                 if (c.tarjetas) c.tarjetas.forEach((t, i) => rows.push([...cab, i + 1, t.code, t.inmobiliaria, t.titulo, t.descripcion, t.url,
                     `${base}/api/pauta/arte?code=${t.code}&formato=card&descargar=1`]));
