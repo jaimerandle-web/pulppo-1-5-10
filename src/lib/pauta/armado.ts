@@ -199,10 +199,7 @@ export function armarSegmentacion(p: DatosProp): Segmentacion {
         publico: 'Advantage+ encendido, con los intereses como sugerencia (así corrieron las de febrero). '
             + 'Opcional: subir la base de compradores de la zona (CSV en Campañas → Generar base) como público personalizado y crear un similar de 1–3%.',
         objetivo: 'Clientes potenciales · conversión en el sitio (clic al botón de WhatsApp de la ficha)',
-        presupuesto: (precio >= 15e6
-            ? 'Sola: $750 por 14 días, como pauta de marca (arriba de $15M el lead de Meta casi no llega a visita).'
-            : 'Sola: $1,500 por 14 días (lo que costó cada campaña de febrero).')
-            + ' Si no es estrella, va en el carrusel de su cluster: ver el Plan. Revisar a los 14 días: si el costo por lead en el CRM pasa de $300, pausar.',
+        presupuesto: 'Lo define el Plan del mes (pestaña Plan): máximo $1,500 al mes por campaña. Si la propiedad no está en el Plan, no se pauta este mes.',
         ubicaciones: 'Automáticas (Advantage+). Subir los 4 tamaños para que Meta use el correcto en cada lugar.'
     };
 }

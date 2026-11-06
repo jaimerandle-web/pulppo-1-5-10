@@ -4,17 +4,22 @@
 // (zona × rango de precio), cada propiedad con su inmobiliaria, artes en 4 tamaños, cortes de
 // video de Drive, copies, segmentación y la liga con UTM. Las inmobiliarias suspendidas y lo que
 // no es vivienda salen aparte, con el motivo, para que nadie les invierta por error.
-// Arriba, el Plan: estrellas solas, un carrusel por cluster y sueltas, recortado al presupuesto.
+// Arriba, el Plan del mes (lib/pauta/mes.ts): instrucciones para montar, cada campaña con su paquete
+// y lo que queda fuera con el motivo.
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FORMATOS, precioLargo, urlArte } from '@/lib/pauta/armado';
 import type { PautaProp } from '@/lib/pauta';
-import { DIAS_VUELO, type CampanaPlan } from '@/lib/pauta/plan';
+import type { CampanaPlan, FueraMes } from '@/lib/pauta/plan';
+import type { Mes } from '@/lib/pauta/mes';
 import type { Excluida } from '@/lib/pauta/excluidas';
 
 interface Payload {
     props: PautaProp[];
     plan: CampanaPlan[];
+    fuera: FueraMes[];
+    faltan: string[];
+    mes: Mes;
     excluidas: Excluida[];
     corteHistorial: string;
     corteVideos: string;
@@ -156,11 +161,14 @@ function Tarjeta({ p }: { p: PautaProp }) {
     );
 }
 
-const ETIQUETA: Record<CampanaPlan['tipo'], string> = { reactivacion: 'Reactivación · ASAP', estrella: 'Estrella · sola', carrusel: 'Carrusel', suelta: 'Suelta' };
+const ETIQUETA: Record<CampanaPlan['tipo'], string> = { reactivacion: 'Reactivación', sola: 'Estrella sola', carrusel: 'Carrusel', remarketing: 'Remarketing' };
 const money = (n: number) => `$${n.toLocaleString('es-MX')}`;
 
 function Carrusel({ c }: { c: CampanaPlan }) {
-    const seg = [`Ubicación: ${c.ubicacion}`, `Edad: ${c.edad}`, `Intereses: ${c.intereses?.join(', ')}`,
+    const seg = [`Ubicación: ${c.ubicacion}`, `Edad: ${c.edad}`,
+        c.tipo === 'remarketing'
+            ? 'Público personalizado (incluir): visitantes de pulppo.com cuya URL contiene "/propiedades/" en los últimos 30 días + quien interactuó con la página o el Instagram de Pulppo en 60 días + quien vio 50%+ de un video de 1·5·10. Excluir: evento Lead del pixel en 30 días (ya escribieron). Advantage+ audience APAGADO.'
+            : `Intereses: ${c.intereses?.join(', ')}`,
         'Objetivo: Clientes potenciales · conversión en el sitio (clic al botón de WhatsApp de la ficha)',
         'Formato: carrusel, una tarjeta por propiedad en este orden. Desactivar "mostrar primero la tarjeta con mejor rendimiento" para que la 1ª sea la de más demanda.'].join('\n');
     return (
@@ -260,15 +268,15 @@ function Brief({ c }: { c: CampanaPlan }) {
     );
 }
 
-function FilaPlan({ c, props, dentro }: { c: CampanaPlan; props: PautaProp[]; dentro: boolean }) {
+function FilaPlan({ c, props }: { c: CampanaPlan; props: PautaProp[] }) {
     const [abierta, setAbierta] = useState(c.tipo === 'reactivacion');
     const ps = c.codes.map((k) => props.find((p) => p.code === k)).filter(Boolean) as PautaProp[];
     return (
-        <div className={`rounded-lg border p-4 ${dentro ? 'border-neutral-200 bg-white' : 'border-dashed border-neutral-300 bg-light opacity-60'}`}>
+        <div className="rounded-lg border border-neutral-200 bg-white p-4">
             <div className="flex flex-wrap items-start gap-4">
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline gap-x-3">
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.tipo === 'reactivacion' ? 'bg-soft text-white' : c.tipo === 'estrella' ? 'bg-brand-yellow' : 'bg-light'}`}>{ETIQUETA[c.tipo]}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.tipo === 'reactivacion' ? 'bg-soft text-white' : c.mitad === 'estrellas' ? 'bg-brand-yellow' : 'bg-light'}`}>{ETIQUETA[c.tipo]}</span>
                         <span className="font-semibold">{c.cluster}</span>
                         <code className="text-xs text-neutral-500">{c.nombre}</code>
                         <Copiar texto={c.nombre} />
@@ -278,7 +286,7 @@ function FilaPlan({ c, props, dentro }: { c: CampanaPlan; props: PautaProp[]; de
                 </div>
                 <div className="text-right">
                     <div className="font-serif text-2xl">{money(c.presupuesto)}</div>
-                    <div className="text-xs text-neutral-500">{dentro ? `${DIAS_VUELO} días` : 'En espera: no alcanza'}</div>
+                    <div className="text-xs text-neutral-500">al mes · ${Math.round(c.presupuesto / 30)} al día</div>
                 </div>
                 <button type="button" onClick={() => setAbierta(!abierta)}
                     className="h-fit shrink-0 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50">
@@ -286,39 +294,79 @@ function FilaPlan({ c, props, dentro }: { c: CampanaPlan; props: PautaProp[]; de
                 </button>
             </div>
             {abierta && c.brief && <Brief c={c} />}
-            {abierta && (c.tipo === 'carrusel' ? <Carrusel c={c} /> : <div className="mt-4">{ps.map((p) => <Tarjeta key={p.code} p={p} />)}</div>)}
+            {abierta && (c.tarjetas ? <Carrusel c={c} /> : <div className="mt-4">{ps.map((p) => <Tarjeta key={p.code} p={p} />)}</div>)}
         </div>
     );
 }
 
+// Instrucciones para quien monta (Habi). Lo que no cambia de un mes a otro.
+const PASOS: [string, string][] = [
+    ['Una campaña por fila', 'Cada fila de abajo es UNA campaña. El nombre va exacto (botón Copiar): es el mismo utm_campaign de las ligas y así el lead llega al CRM con su campaña.'],
+    ['Presupuesto', 'Presupuesto diario de campaña = el monto al día de cada fila ($1,500 al mes = $50 al día). Ninguna campaña pasa de $1,500 al mes. Total del mes: $13,000.'],
+    ['Objetivo', 'Clientes potenciales · conversión en el sitio web · evento Lead del pixel de Pulppo (es el clic al botón de WhatsApp de la ficha). Excepción: la reactivación de DLI-815 va con formulario instantáneo (ver su brief).'],
+    ['Ubicaciones', 'Advantage+ (automáticas). En las estrellas solas, subir los 4 tamaños del arte para que Meta use el correcto en cada lugar.'],
+    ['Carruseles', 'Una tarjeta por propiedad, en el orden de la página, con el arte de tarjeta (1080×1080) y la liga de esa tarjeta (lleva utm_content = código). Desactivar "Mostrar primero las tarjetas con mejor rendimiento". Si la tarjeta tiene video en Drive, puede ir el corte 1:1 en lugar de la imagen.'],
+    ['Copy', 'Cargar los 3 textos principales como variantes (creativo dinámico). Sin emojis. Botón: Enviar mensaje por WhatsApp o Más información.'],
+    ['Lo que NO se pauta', 'Sólo las campañas de esta página. Lo de "Fuera este mes" y las inmobiliarias excluidas no llevan un peso.'],
+    ['Si una propiedad recibe oferta', 'Pausar su tarjeta o su campaña y avisar a Ale.']
+];
+
 function Plan({ d }: { d: Payload }) {
+    const m = d.mes;
     const total = d.plan.reduce((s, c) => s + c.presupuesto, 0);
-    const [tope, setTope] = useState(total);
-    let acum = 0;
-    const filas = d.plan.map((c) => { acum += c.presupuesto; return { c, dentro: acum <= tope }; });
-    const usado = filas.filter((f) => f.dentro).reduce((s, f) => s + f.c.presupuesto, 0);
-    const cuenta = (t: CampanaPlan['tipo']) => d.plan.filter((c) => c.tipo === t).length;
+    const suma = (mitad: CampanaPlan['mitad']) => d.plan.filter((c) => c.mitad === mitad).reduce((s, c) => s + c.presupuesto, 0);
+    const grupos: [string, CampanaPlan[]][] = [
+        ['Mitad estrellas', d.plan.filter((c) => c.mitad === 'estrellas')],
+        ['Mitad prueba', d.plan.filter((c) => c.mitad === 'prueba')],
+        ['Remarketing (compartido)', d.plan.filter((c) => c.mitad === 'compartido')]
+    ];
+    const h3 = 'mb-2 text-xs font-bold uppercase tracking-wider text-neutral-500';
     return (
-        <div>
-            <div className="mb-4 rounded-lg bg-light p-4 text-sm">
-                <p>
-                    <b>Cómo se reparte:</b> primero las <b>reactivaciones</b> (campañas que ya corrieron y vuelven con cambios: el brief dice qué cambia y cuándo apagar). Luego las <b>estrellas</b> (≥10 personas y ≥3 visitas en 60 días fuera de Meta), cada una en su campaña.
-                    Después un <b>carrusel por cluster</b> con el resto: junta el aprendizaje de Meta y reporta clics por tarjeta.
-                    Las que quedan solas en su cluster van como anuncio sencillo. Arriba de $15M, a la mitad y al final.
-                    Vuelos de {DIAS_VUELO} días; al cierre, la tarjeta que jala pasa a estrella y la que no se saca.
-                </p>
-                <div className="mt-3 flex flex-wrap items-end gap-4">
-                    <label className="block">
-                        <span className="block text-xs text-neutral-600">Presupuesto disponible ({DIAS_VUELO} días)</span>
-                        <input type="number" step={500} min={0} value={tope} onChange={(e) => setTope(Number(e.target.value) || 0)}
-                            className="mt-1 w-40 rounded-lg border border-neutral-300 px-2 py-1.5" />
-                    </label>
-                    <span>Plan completo: <b>{money(total)}</b> · {cuenta('reactivacion') ? `${cuenta('reactivacion')} reactivación · ` : ''}{cuenta('estrella')} estrellas · {cuenta('carrusel')} carruseles · {cuenta('suelta')} sueltas</span>
-                    <span>Alcanza para: <b>{money(usado)}</b> ({filas.filter((f) => f.dentro).length} de {filas.length} campañas)</span>
+        <div className="space-y-6">
+            <div className="rounded-lg bg-light p-4 text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                    <h2 className="font-serif text-2xl">Plan de {m.periodo}</h2>
                     <a href="/api/pauta?format=csv&tipo=plan" className="rounded-lg bg-soft px-3 py-1.5 text-white hover:opacity-90">Descargar plan (CSV)</a>
                 </div>
+                <p className="mt-2">
+                    <b>{money(total)}</b> al mes en {d.plan.length} campañas (tope {money(m.tope)} por campaña):
+                    estrellas <b>{money(suma('estrellas'))}</b> · prueba <b>{money(suma('prueba'))}</b> · remarketing <b>{money(suma('compartido'))}</b>.
+                    Arranca el {m.desde}; revisión de tarjetas el <b>{m.revision}</b>.
+                </p>
+                {total !== m.total && <p className="mt-2 text-brand-red">Ojo: el plan suma {money(total)} y el presupuesto del mes es {money(m.total)}.</p>}
+                {d.faltan.length > 0 && <p className="mt-2 text-brand-red">Ya no están vivas o salieron de pauta: {d.faltan.join(', ')}. Avisar a Ale para reemplazarlas.</p>}
+                <p className="mt-2 text-neutral-700">
+                    Mitad estrellas: la misma estrella sola contra la estrella en carrusel, para saber qué rinde más. Las solas rotan cada mes.
+                    Mitad prueba: carruseles por cluster y la reactivación de DLI-815.
+                </p>
             </div>
-            <div className="space-y-3">{filas.map(({ c, dentro }) => <FilaPlan key={c.nombre} c={c} props={d.props} dentro={dentro} />)}</div>
+
+            <details className="rounded-lg border border-neutral-200 p-4 text-sm" open>
+                <summary className="cursor-pointer font-semibold">Cómo montar este mes</summary>
+                <ol className="mt-3 list-decimal space-y-2 pl-5">
+                    {PASOS.map(([t, x]) => <li key={t}><b>{t}.</b> {x}</li>)}
+                    <li>
+                        <b>Revisión del {m.revision}.</b> En cada carrusel, la tarjeta con 0 clics se cambia por otra del mismo cluster (pedir el reemplazo a Ale).
+                        La que trae visitas sube a carrusel de estrellas el mes siguiente. Si una campaña gastó $750 sin un solo lead en el CRM, se pausa.
+                    </li>
+                </ol>
+            </details>
+
+            {grupos.map(([titulo, cs]) => cs.length > 0 && (
+                <section key={titulo}>
+                    <h3 className={h3}>{titulo} · {money(cs.reduce((s, c) => s + c.presupuesto, 0))}</h3>
+                    <div className="space-y-3">{cs.map((c) => <FilaPlan key={c.nombre} c={c} props={d.props} />)}</div>
+                </section>
+            ))}
+
+            <details className="rounded-lg border border-dashed border-neutral-300 p-4 text-sm">
+                <summary className="cursor-pointer font-semibold">Fuera este mes ({d.fuera.length}) — no se pautan</summary>
+                <ul className="mt-3 space-y-1.5">
+                    {d.fuera.map((x) => (
+                        <li key={x.code}><b>{x.code}</b> <span className="text-neutral-600">({x.inmobiliaria}, {x.donde})</span>: {x.motivo}</li>
+                    ))}
+                </ul>
+            </details>
         </div>
     );
 }

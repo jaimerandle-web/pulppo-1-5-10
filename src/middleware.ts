@@ -3,12 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAllowed } from '@/lib/access';
 import { fichaToken, userToken } from '@/lib/token';
 import { previewDe } from '@/lib/preview';
+import { rutaPauta, soloPauta } from '@/lib/accesoPauta';
 
 // Enforcea el acceso en TODAS las rutas/API (no solo en el login). Dos tipos de usuario:
 //  - Interno (equipo Pulppo, allowlist) → acceso total.
 //  - Externo (master broker) → el panel de su inmobiliaria /mb/{company} + sus APIs + Studio,
 //    con /inicio como menú para elegir entre los dos.
 //  - Externo (asesor) → SOLO /studio.
+//  - Externo de pauta (Habi) → SOLO /1-5-10/pauta.
 // La identidad (cookie cm-user) se valida con su firma cm-sig para que no sea suplantable. Edge-safe:
 // solo isAllowed (lista estática) + userToken (Web Crypto); la verificación contra Mongo vive en el server.
 export async function middleware(req: NextRequest) {
@@ -18,6 +20,16 @@ export async function middleware(req: NextRequest) {
 
     // Interno con identidad válida → acceso total.
     if (validId && isAllowed(email)) return NextResponse.next();
+
+    // Externo de pauta (Habi) → encerrado en /1-5-10/pauta. Ver lib/accesoPauta.ts.
+    if (validId && soloPauta(email)) {
+        if (rutaPauta(req.nextUrl.pathname)) return NextResponse.next();
+        if (req.nextUrl.pathname.startsWith('/api')) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        const url = req.nextUrl.clone();
+        url.pathname = '/1-5-10/pauta';
+        url.search = '';
+        return NextResponse.redirect(url);
+    }
 
     // Acceso público a una ficha (y su "ver más" de comparables) con token válido (link para brokers, sin login).
     const m = req.nextUrl.pathname.match(/^\/ficha\/([^/]+)(?:\/comparables)?\/?$/);

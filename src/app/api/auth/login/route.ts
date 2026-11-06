@@ -4,6 +4,7 @@ import { isAllowed } from '@/lib/access';
 import { userToken } from '@/lib/token';
 import { asesorDeEmail, masterCompanyForEmail } from '@/lib/companyAccess';
 import { tieneStudio } from '@/lib/studioPiloto';
+import { soloPauta } from '@/lib/accesoPauta';
 
 // POST /api/auth/login { idToken } — SOLO Google: verifica el idToken de Firebase
 // contra Google (accounts:lookup) y recién ahí valida allowlist + setea cookies.
@@ -30,22 +31,25 @@ export async function POST(req: NextRequest) {
     // Interno (equipo Pulppo) por allowlist, o externo (master broker de una inmobiliaria). Un email
     // que es ambas cosas se trata como interno (acceso total, sin redirect a su panel).
     const internal = isAllowed(mail);
-    const companyId = internal ? null : await masterCompanyForEmail(mail);
+    // Externo de pauta (Habi): sólo /1-5-10/pauta. No se busca como master ni asesor.
+    const pauta = !internal && soloPauta(mail);
+    const companyId = internal || pauta ? null : await masterCompanyForEmail(mail);
     // Tercer tipo: asesor (type:'associate'). Solo se prueba si no es interno ni master, así que
     // ni el equipo ni los master brokers cambian de comportamiento. Único acceso: /studio.
-    const asesor = internal || companyId ? null : await asesorDeEmail(mail);
+    const asesor = internal || pauta || companyId ? null : await asesorDeEmail(mail);
     // 🔴 Studio es de UNA inmobiliaria (ver lib/studioPiloto.ts). Sin este corte, un asesor de
     // cualquiera de las otras cuentas caía en el Studio de Diamond House, que no es su
     // herramienta. Se le niega el acceso con un mensaje, en vez de dejarlo en una pantalla
     // que no le sirve.
     const asesorId = asesor && tieneStudio(asesor.companyId) ? asesor.id : null;
-    if (!internal && !companyId && !asesorId) {
+    if (!internal && !pauta && !companyId && !asesorId) {
         return Response.json({ error: 'Tu email no tiene acceso. Pedí que te agreguen al equipo.' }, { status: 403 });
     }
     // A dónde entra cada quien. El menú /inicio sólo tiene sentido para quien tiene DOS
     // herramientas —el titular de la inmobiliaria del Studio—; al resto lo mandaba a elegir
     // entre su panel y una herramienta ajena.
     const destino = internal ? '/'
+        : pauta ? '/1-5-10/pauta'
         : companyId ? (tieneStudio(companyId) ? '/inicio' : `/mb/${companyId}`)
             : '/studio/index.html';
 

@@ -14,7 +14,7 @@ export interface Cambio {
 export interface Reactivacion {
     code: string;
     desde: string;           // AAAA-MM-DD en que se decidió
-    presupuesto: number;     // por vuelo de 14 días
+    presupuesto: number;     // al mes
     anterior: { nombre: string; id: string; periodo: string; resultado: string };
     condiciones: string[];   // sin esto no se prende
     cambios: Cambio[];
@@ -30,7 +30,7 @@ export const REACTIVACIONES: Reactivacion[] = [
     {
         code: 'DLI-815',
         desde: '2026-11-05',
-        presupuesto: 750,
+        presupuesto: 1500,
         anterior: {
             nombre: 'B2C_DLI-815_mx_exc_BosqueTabachines327',
             id: '120250477579640750',
@@ -54,7 +54,7 @@ export const REACTIVACIONES: Reactivacion[] = [
             { tema: 'Anuncios', antes: '9 anuncios', despues: '2: V2 y Highlights' },
             { tema: 'Copy', antes: 'Aspiracional ("Vive en una de las zonas más exclusivas…")', despues: 'Precio y m² en la primera línea (textos abajo)' },
             { tema: 'Botón', antes: 'Ver más', despues: 'Más información' },
-            { tema: 'Presupuesto', antes: '$50 al día (~$3,100 al mes)', despues: '$750 por 14 días (~$1,500 al mes), 70% público nuevo y 30% remarketing' }
+            { tema: 'Presupuesto', antes: '$50 al día (~$3,100 al mes)', despues: '$1,500 al mes ($50 al día), 70% público nuevo y 30% remarketing' }
         ],
         formulario: [
             '¿Cuándo planeas comprar? (Este mes · 1 a 3 meses · 3 a 6 meses · Solo estoy viendo)',

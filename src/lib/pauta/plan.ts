@@ -1,33 +1,23 @@
-// Plan de pauta: cómo se reparte el presupuesto entre campañas. Lógica pura (la UI recorta el plan
-// al presupuesto disponible en el navegador).
+// Plan de pauta del mes: las campañas que define MES (mes.ts), armadas con los datos vivos de cada
+// propiedad (artes, demanda, ligas). El reparto lo decide Ale; aquí sólo se arma el paquete y se
+// calcula qué queda fuera y por qué.
 //
-// Antes que todo, las REACTIVACIONES (reactivaciones.ts): campañas que ya corrieron y se vuelven a
-// prender con cambios decididos a mano; esa propiedad no entra a estrella ni carrusel.
+// Tipos de campaña:
+// - REACTIVACIÓN (reactivaciones.ts): campaña que ya corrió y vuelve con cambios.
+// - SOLA: estrella en su propia campaña (rota cada mes).
+// - CARRUSEL: de estrellas (por perfil de comprador) o de prueba (por cluster). Una tarjeta por
+//   propiedad; Meta reporta clics por tarjeta.
+// - REMARKETING: quien ya vio una ficha de 1·5·10 y no escribió.
 //
-// Tres tipos de campaña, en este orden de prioridad:
-// 1. ESTRELLA, sola: la demanda en portales ya probó que la propiedad jala (ver esEstrella). Es la
-//    apuesta más segura por peso invertido; si recibe oferta se apaga.
-// 2. CARRUSEL por cluster (zona × rango de precio): una campaña con una tarjeta por propiedad.
-//    Junta el aprendizaje de Meta en un solo conjunto en vez de 50 campañas de $1,500 que nunca
-//    salen de aprendizaje, y Meta reporta clics por tarjeta: la que jala se vuelve estrella y la
-//    que no se saca. Las estrellas NO van en el carrusel de su cluster: competirían por el mismo
-//    público en la misma subasta.
-// 3. SUELTA: el cluster quedó con una sola propiedad (Meta pide 2+ tarjetas para carrusel). Antes
-//    de dejarla sola se suma al carrusel de su misma zona en otro rango (abajo de $15M): el público
-//    es el mismo por geografía.
-//
-// Montos por vuelo de 14 días. Base: $1,500 por propiedad de las campañas de febrero, las más
-// baratas de la cuenta. En carrusel cada tarjeta rinde más porque comparten aprendizaje, por eso
-// $500 por tarjeta con piso de $1,500 y techo de $4,000. Arriba de $15M, la mitad (pauta de marca:
-// el lead de Meta casi no llega a visita).
+// Presupuestos AL MES (tope por campaña en MES.tope).
 import type { PautaProp } from './index';
-import { BANDAS, precioCorto, precioLargo } from './armado';
-import { REACTIVACIONES, reactivacionDe, type Reactivacion } from './reactivaciones';
+import { precioCorto, precioLargo } from './armado';
+import { REACTIVACIONES, type Reactivacion } from './reactivaciones';
+import { MES, type Mitad } from './mes';
 
-export const DIAS_VUELO = 14;
-export const MAX_TARJETAS = 10;
+export const MAX_TARJETAS = 5;
 
-export type TipoCampana = 'reactivacion' | 'estrella' | 'carrusel' | 'suelta';
+export type TipoCampana = 'reactivacion' | 'sola' | 'carrusel' | 'remarketing';
 
 export interface Tarjeta {
     code: string;
@@ -44,8 +34,8 @@ export interface CampanaPlan {
     nombre: string;
     cluster: string;
     codes: string[];
-    presupuesto: number;
-    prioridad: number;   // menor = primero
+    presupuesto: number; // al mes
+    mitad: Mitad;
     razon: string;
     // Sólo carrusel:
     textos?: string[];
@@ -59,18 +49,6 @@ export interface CampanaPlan {
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const slug = (s: string) =>
-    s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\$/g, '').replace(/–/g, 'a').replace(/[^A-Za-z0-9]+/g, ' ').trim()
-        .split(' ').map(cap).join('');
-const alta = (p: PautaProp) => (p.precio ?? 0) >= 15e6;
-const tasaVisita = (p: PautaProp) => (p.demanda && p.demanda.leads ? p.demanda.visitas / p.demanda.leads : 0);
-
-// Orden dentro del carrusel: la que más visitas trae va primero (Meta muestra primero la 1ª tarjeta).
-// Las que juntan leads sin visitas (ráfagas de portal) van al final, no arriba por volumen.
-const sinVisitas = (p: PautaProp) => (p.demanda?.leads ?? 0) >= 20 && (p.demanda?.visitas ?? 0) === 0;
-const porDemanda = (a: PautaProp, b: PautaProp) =>
-    Number(sinVisitas(a)) - Number(sinVisitas(b))
-    || (b.demanda?.visitas ?? 0) - (a.demanda?.visitas ?? 0) || (b.demanda?.leads ?? 0) - (a.demanda?.leads ?? 0);
 
 function tituloTarjeta(p: PautaProp): string {
     const tipo = cap((p.tipo || 'Propiedad').toLowerCase());
@@ -83,10 +61,8 @@ export function urlTarjeta(p: PautaProp, campana: string): string {
     return `https://pulppo.com/propiedades/${p.id}?${q.toString()}`;
 }
 
-function carrusel(cluster: string, ps: PautaProp[], prioridad: number): CampanaPlan {
-    const [zona, banda] = cluster.split(' · ');
-    const nombre = `B2C_CAR_${slug(zona)}_${slug(banda)}_exc`;
-    const orden = [...ps].sort(porDemanda).slice(0, MAX_TARJETAS);
+function carrusel(nombreLegible: string, slugCampana: string, mitad: Mitad, orden: PautaProp[], presupuesto: number, perfil: string): CampanaPlan {
+    const nombre = `B2C_CAR_${slugCampana}_exc`;
     const precios = orden.map((p) => p.precio).filter((x): x is number => x != null).sort((a, b) => a - b);
     const rango = precios.length ? (precios[0] === precios[precios.length - 1]
         ? precioLargo(precios[0]) : `de ${precioCorto(precios[0])} a ${precioCorto(precios[precios.length - 1])}`) : '';
@@ -111,16 +87,12 @@ function carrusel(cluster: string, ps: PautaProp[], prioridad: number): CampanaP
         estrella: p.estrella,
         video: p.videos.length > 0
     }));
-    const marca = banda === BANDAS[2];
-    const presupuesto = Math.round(Math.min(4000, Math.max(1500, 500 * n)) * (marca ? 0.5 : 1));
     // Segmentación: un pin por propiedad con el radio de su rango (el más amplio de las tarjetas).
     const radio = Math.max(...orden.map((p) => p.seg.radioKm));
     const intereses = [...new Set(orden.flatMap((p) => p.seg.intereses))];
     return {
-        tipo: 'carrusel', nombre, cluster, codes: orden.map((p) => p.code), presupuesto, prioridad,
-        razon: marca
-            ? `${n} propiedades de $15M+: carrusel a la mitad del monto, como pauta de marca.`
-            : `${n} propiedades del mismo público en una sola campaña. A los ${DIAS_VUELO} días, revisar clics por tarjeta.`,
+        tipo: 'carrusel', nombre, cluster: nombreLegible, codes: orden.map((p) => p.code), presupuesto, mitad,
+        razon: `${perfil} ${n} tarjetas.`,
         textos, tarjetas,
         ubicacion: `${radio} km alrededor de cada propiedad (un pin por tarjeta): ${orden.map((p) => p.lat != null ? `${p.code} ${p.lat.toFixed(5)}, ${p.lng!.toFixed(5)}` : `${p.code} sin coordenadas`).join(' · ')}`,
         edad: orden.some((p) => (p.precio ?? 0) >= 10e6) ? '30–65' : '25–65',
@@ -128,59 +100,79 @@ function carrusel(cluster: string, ps: PautaProp[], prioridad: number): CampanaP
     };
 }
 
-export function armarPlan(props: PautaProp[]): CampanaPlan[] {
+export interface FueraMes {
+    code: string;
+    inmobiliaria: string;
+    donde: string;
+    motivo: string;
+}
+
+const motivoFuera = (p: PautaProp): string => {
+    if (MES.fueraMotivo[p.code]) return MES.fueraMotivo[p.code];
+    if ((p.precio ?? 0) >= 15e6) return 'Más de $15M: el lead de Meta casi no llega a visita (DLI-815: $4,317 por visita).';
+    if (['Morelos', 'Querétaro', 'Toluca y Valle de Bravo'].includes(p.zona)) return `Fuera del área metropolitana (${p.zona}): poca demanda y otra subasta.`;
+    if (!p.foto) return 'Sin foto pública para el arte.';
+    if ((p.demanda?.leads ?? 0) >= 20 && !p.demanda?.visitas) return `${p.demanda!.leads} leads y 0 visitas en 60 días: ráfaga sin intención de compra.`;
+    const v = p.demanda?.visitas ?? 0;
+    return `Poca demanda en 60 días (${p.demanda?.leads ?? 0} personas, ${v} ${v === 1 ? 'visita' : 'visitas'}): entra a la rotación si se libera una tarjeta.`;
+};
+
+export function armarPlan(props: PautaProp[]): { plan: CampanaPlan[]; fuera: FueraMes[]; faltan: string[] } {
     const plan: CampanaPlan[] = [];
+    const vivas = new Map(props.filter((p) => !p.excluida).map((p) => [p.code, p]));
+    const faltan: string[] = []; // códigos del MES que ya no están vivos o salieron de pauta
+    const tomar = (codes: string[]) => codes.flatMap((k) => { const p = vivas.get(k); if (!p) faltan.push(k); return p ? [p] : []; });
+
     for (const r of REACTIVACIONES) {
-        const p = props.find((x) => x.code === r.code && !x.excluida);
-        if (!p) continue; // ya no está viva o su inmobiliaria salió de pauta
+        const [p] = tomar([r.code]);
+        if (!p) continue;
         const nombre = `${p.campana}_v2`;
         // utm_content va como macro de Meta, sin codificar, para que Meta la sustituya por el id del anuncio.
         const url = `${urlTarjeta(p, nombre).replace(/&utm_content=[^&]*/, '')}&utm_content={{ad.id}}`;
         plan.push({
-            tipo: 'reactivacion', nombre, cluster: p.cluster, codes: [p.code], presupuesto: r.presupuesto, prioridad: 0,
-            razon: `Se vuelve a prender con cambios (decidido ${r.desde}). Antes: ${r.anterior.resultado}`,
+            tipo: 'reactivacion', nombre, cluster: `Reactivación · ${p.code}`, codes: [p.code], presupuesto: r.presupuesto, mitad: 'prueba',
+            razon: `Vuelve con cambios (decidido ${r.desde}). Antes: ${r.anterior.resultado}`,
             textos: r.textos, brief: r, url,
             ubicacion: r.cambios.find((c) => c.tema === 'Ubicación')?.despues,
             edad: r.cambios.find((c) => c.tema === 'Edad')?.despues
         });
     }
-    const pautables = props.filter((p) => !p.excluida && p.foto && !reactivacionDe(p.code));
 
-    for (const p of pautables.filter((x) => x.estrella).sort(porDemanda)) {
-        const d = p.demanda!;
+    for (const p of tomar(MES.solas)) {
+        const d = p.demanda;
         plan.push({
-            tipo: 'estrella', nombre: p.campana, cluster: p.cluster, codes: [p.code],
-            presupuesto: alta(p) ? 750 : 1500, prioridad: 1,
-            razon: `${d.leads} personas y ${d.visitas} visitas en 60 días fuera de Meta (${Math.round(tasaVisita(p) * 100)}% visita). Si recibe oferta, apagar.`
+            tipo: 'sola', nombre: p.campana, cluster: `Estrella sola · ${p.code}`, codes: [p.code], presupuesto: MES.tope, mitad: 'estrellas',
+            razon: `${d?.leads ?? 0} personas y ${d?.visitas ?? 0} visitas en 60 días fuera de Meta. Rota a fin de mes: vuelve a su carrusel y entra otra estrella. Si recibe oferta, apagar.`
         });
     }
 
-    const resto = new Map<string, PautaProp[]>();
-    for (const p of pautables.filter((x) => !x.estrella)) resto.set(p.cluster, [...(resto.get(p.cluster) || []), p]);
-    for (const [cluster, ps] of [...resto]) {
-        if (ps.length !== 1 || cluster.endsWith(BANDAS[2])) continue;
-        const zona = cluster.split(' · ')[0];
-        const destino = [...resto.entries()].find(([k, v]) => k !== cluster && k.startsWith(`${zona} · `) && !k.endsWith(BANDAS[2]) && v.length >= 2);
-        if (destino) { destino[1].push(ps[0]); resto.delete(cluster); }
-    }
-    for (const [cluster, ps] of resto) {
-        const marca = cluster.endsWith(BANDAS[2]);
-        if (ps.length >= 2) {
-            plan.push(carrusel(cluster, ps, marca ? 4 : 2));
-        } else {
-            const p = ps[0];
-            plan.push({
-                tipo: 'suelta', nombre: p.campana, cluster, codes: [p.code],
-                presupuesto: alta(p) ? 500 : 750, prioridad: marca ? 4 : 3,
-                razon: 'Única propiedad de su cluster (el carrusel pide 2+ tarjetas): anuncio sencillo con su paquete.'
-            });
-        }
+    for (const c of MES.carruseles) {
+        const ps = tomar(c.codes).slice(0, MAX_TARJETAS);
+        if (ps.length < 2) continue; // Meta pide 2+ tarjetas
+        plan.push(carrusel(c.nombre, c.slug, c.mitad, ps, MES.tope, c.perfil));
     }
 
-    // Dentro de cada prioridad, primero lo que más demanda trae por propiedad.
-    const visitasDe = (c: CampanaPlan) => {
-        const ps = c.codes.map((k) => props.find((p) => p.code === k)!);
-        return ps.reduce((s, p) => s + (p.demanda?.visitas ?? 0), 0) / ps.length;
-    };
-    return plan.sort((a, b) => a.prioridad - b.prioridad || visitasDe(b) - visitasDe(a));
+    // Remarketing: las tarjetas de las estrellas (lo que más convierte) a quien ya vio una ficha.
+    const estrellasMes = [...MES.solas, ...MES.carruseles.filter((c) => c.mitad === 'estrellas').flatMap((c) => c.codes)];
+    const rm = tomar(estrellasMes).slice(0, MAX_TARJETAS);
+    if (rm.length >= 2) {
+        const c = carrusel('Remarketing', 'Remarketing_1510', 'compartido', rm, MES.remarketing, 'Quien ya vio una ficha de 1·5·10 en 30 días y no escribió:');
+        plan.push({
+            ...c, tipo: 'remarketing',
+            textos: [
+                '¿Te quedaste pensando en alguna? Estas exclusivas Pulppo siguen disponibles. Un solo asesor te da toda la información y te agenda la visita por WhatsApp.',
+                'Siguen disponibles. Desliza, elige la que te late y agenda tu visita por WhatsApp.',
+                c.textos![0]
+            ],
+            ubicacion: 'Sin ubicación: público personalizado (ver instrucciones de remarketing).',
+            edad: '25–65',
+            intereses: []
+        });
+    }
+
+    const dentro = new Set(plan.flatMap((c) => c.codes));
+    const fuera = props.filter((p) => !p.excluida && !dentro.has(p.code)).map((p) => ({
+        code: p.code, inmobiliaria: p.inmobiliaria, donde: `${p.colonia || p.ciudad || ''}${p.precio ? ` · ${precioCorto(p.precio)}` : ''}`, motivo: motivoFuera(p)
+    })).sort((a, b) => a.motivo.localeCompare(b.motivo, 'es'));
+    return { plan, fuera, faltan: [...new Set(faltan)] };
 }
