@@ -1,7 +1,10 @@
 // Externos con acceso SÓLO a la pauta de Meta de 1·5·10 (/1-5-10/pauta y sus APIs): el equipo de
 // Habi que monta las campañas. No ven el resto de la herramienta. Edge-safe (lista estática) porque
 // la lee el middleware.
-const PAUTA_EMAILS: string[] = [
+//
+// Entran con la liga personal de /api/auth/pauta (la saca un interno desde la página de pauta):
+// el login con Google no les sirve porque no tienen usuario en la plataforma Pulppo.
+export const PAUTA_EMAILS: string[] = [
     'andresaponte@habi.co' // Habi, monta las campañas (6-nov-2026)
 ];
 

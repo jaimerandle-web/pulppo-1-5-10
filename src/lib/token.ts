@@ -20,3 +20,13 @@ export async function userToken(email: string): Promise<string> {
     const sig = await crypto.subtle.sign('HMAC', key, enc.encode('user:' + String(email).trim().toLowerCase()));
     return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
 }
+
+// Liga de acceso para externos de pauta (lib/accesoPauta.ts): no tienen usuario en la plataforma
+// Pulppo, así que el login con Google les responde "No agent found". La liga es HMAC del email con
+// otro prefijo que cm-sig, para que una no sirva como la otra. Se revoca sacando el email de la lista.
+export async function pautaToken(email: string): Promise<string> {
+    const secret = process.env.AUTH_SECRET || process.env.FICHA_SECRET || 'pulppo-1-5-10-auth';
+    const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', key, enc.encode('pauta:' + String(email).trim().toLowerCase()));
+    return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+}

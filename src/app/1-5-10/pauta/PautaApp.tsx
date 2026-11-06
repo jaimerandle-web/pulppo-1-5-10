@@ -371,6 +371,28 @@ function Plan({ d }: { d: Payload }) {
     );
 }
 
+// Ligas personales de los externos de pauta (Habi). Sólo responde a internos: a un externo el
+// endpoint le da 403 y aquí no se pinta nada.
+function AccesoExternos() {
+    const [ligas, setLigas] = useState<{ email: string; url: string }[]>([]);
+    useEffect(() => {
+        fetch('/api/pauta/acceso').then((r) => (r.ok ? r.json() : { ligas: [] })).then((j) => setLigas(j.ligas || [])).catch(() => {});
+    }, []);
+    if (!ligas.length) return null;
+    return (
+        <details className="mb-6 rounded-lg border border-neutral-200 p-4 text-sm">
+            <summary className="cursor-pointer font-semibold">Acceso de Habi ({ligas.length}) — sólo lo ve el equipo Pulppo</summary>
+            <p className="mt-2 text-neutral-600">
+                No tienen usuario en la plataforma Pulppo, así que el botón de Google les dice &quot;No agent found&quot;. Entran con su liga personal
+                (dura 90 días por navegador, sólo abre esta página). Es personal: no reenviar. Para quitar el acceso, sacar el email de <code>src/lib/accesoPauta.ts</code>.
+            </p>
+            <ul className="mt-2 space-y-1">
+                {ligas.map((l) => <li key={l.email} className="flex items-center gap-2"><span className="flex-1">{l.email}</span><Copiar texto={l.url} label="Copiar liga" /></li>)}
+            </ul>
+        </details>
+    );
+}
+
 export default function PautaApp() {
     const router = useRouter();
     const [d, setD] = useState<Payload | null>(null);
@@ -443,6 +465,8 @@ export default function PautaApp() {
                             </div>
                         ))}
                     </div>
+
+                    <AccesoExternos />
 
                     {fuera.length > 0 && (
                         <details className="mb-6 rounded-lg border border-neutral-200 p-4">
