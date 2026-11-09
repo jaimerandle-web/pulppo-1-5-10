@@ -142,14 +142,16 @@ async function fetchTab(mes: string): Promise<InversionMes> {
         return s.startsWith('results') && s.includes(mesTab);
     });
     // Plan mensual fijo (Ale, 5-oct-2026): el tab de septiembre es una copia del de agosto y su
-    // bloque sigue diciendo «RESULTS AGOSTO». Se acepta SÓLO si es el mes inmediato anterior y es
-    // el primer bloque RESULTS del tab; cualquier otro mes se sigue rechazando (el fallback de gviz
-    // a la primera hoja trae «RESULTS ENERO»).
+    // bloque sigue diciendo «RESULTS AGOSTO» (octubre también, con montos propios). Se acepta si el
+    // primer bloque RESULTS del tab nombra CUALQUIER mes anterior MENOS enero: el fallback de gviz a
+    // la primera hoja trae «RESULTS ENERO». Espejo de lib/inversion_sheet.py (portales, 9-nov-2026).
     let copiaDe: string | undefined;
     if (ini < 0) {
-        const mesAnt = norm(TAB[m === 1 ? 12 : m - 1]);
         const primero = rows.findIndex((r) => norm(r[1] || '').startsWith('results'));
-        if (primero >= 0 && norm(rows[primero][1] || '').includes(mesAnt)) { ini = primero; copiaDe = TAB[m === 1 ? 12 : m - 1].toLowerCase(); }
+        const etiqueta = primero >= 0 ? norm(rows[primero][1] || '') : '';
+        for (let k = m - 1; k >= 2 && primero >= 0; k--) {
+            if (etiqueta.includes(norm(TAB[k]))) { ini = primero; copiaDe = TAB[k].toLowerCase(); break; }
+        }
     }
     if (ini < 0) return vacio;
 
