@@ -28,6 +28,11 @@ function LoginContent() {
         // respondía `Error 400: invalid_request` antes de llegar a nuestro código.
         // Le pasaba sólo a quien tenía esos permisos concedidos, por eso no fallaba para todos.
         include_granted_scopes: false,
+        // Desde nov-2026 el backend de Pulppo (api.pulppo.com/login) RECHAZA el code si no trae
+        // Calendar y Gmail («Para entrar a Pulppo necesitas darle acceso a tu Google Calendar y a
+        // tu Gmail…»). Se piden los mismos que broker.pulppo.com, SIN los de YouTube: con
+        // include_granted_scopes en false no se mezclan y no vuelve el Error 400.
+        scope: 'openid profile email https://www.googleapis.com/auth/calendar https://mail.google.com/ https://www.googleapis.com/auth/gmail.send',
         onSuccess: async (codeResponse) => {
             setError('');
             setLoading(true);
