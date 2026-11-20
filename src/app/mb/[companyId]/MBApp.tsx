@@ -1045,8 +1045,8 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                             ¿Cómo te fue este año y a quién hay que reconocer?
                         </div>
                         <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 700 }}>
-                            Tu año contra ti mismo y contra las inmobiliarias de tu tamaño, y los campeones de tu equipo con
-                            su carta de reconocimiento y sus piezas para redes.
+                            Tu año contra los dos anteriores, y los reconocimientos de tu equipo con su carta, sus piezas
+                            para redes y un diploma para cada broker.
                         </div>
                         <MBTu2026 companyId={d.companyId} abierta={TU2026_ABIERTA} interno={interno} />
                     </div>

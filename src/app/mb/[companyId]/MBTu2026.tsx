@@ -21,7 +21,7 @@ const tag: CSSProperties = { fontSize: 11, fontWeight: 700, textTransform: 'uppe
 const fmt = (v: number | null, f: Metrica['fmt']) => {
     if (v == null) return '—';
     if (f === 'money') return v >= 1e6 ? `$${(v / 1e6).toFixed(1)} MDP` : `$${Math.round(v).toLocaleString('es-MX')}`;
-    if (f === 'pct') { const p = v * 100; return `${p < 10 ? p.toFixed(1) : Math.round(p)}%`; }
+    if (f === 'pct') { const p = v * 100; return `${p < 1 ? p.toFixed(2) : p < 10 ? p.toFixed(1) : Math.round(p)}%`; }
     if (f === 'min') return v >= 90 ? `${(v / 60).toFixed(1)} h` : `${Math.round(v)} min`;
     return Math.round(v).toLocaleString('es-MX');
 };
@@ -70,6 +70,27 @@ export default function MBTu2026({ companyId, abierta, interno }: { companyId: s
     );
 }
 
+/** «ⓘ» que se abre al picarle (antes era un `title`: sólo con hover y nunca en el celular). La explicación se
+ *  dibuja sobre la tarjeta (`position: relative` en el padre), así no se sale de la pantalla. */
+function Ayuda({ texto }: { texto: string }) {
+    const [abierta, setAbierta] = useState(false);
+    return (
+        <>
+            <button onClick={() => setAbierta((x) => !x)} aria-label="Qué significa" aria-expanded={abierta}
+                style={{ background: 'none', border: 'none', padding: '0 2px', margin: 0, cursor: 'pointer', color: abierta ? BLK : MUTED, fontSize: 'inherit', fontFamily: 'inherit', fontWeight: 400 }}>ⓘ</button>
+            {abierta && (
+                <div role="note" onClick={() => setAbierta(false)} style={{
+                    position: 'absolute', left: 10, right: 10, top: 40, zIndex: 5, background: BLK, color: '#fff', padding: '12px 14px',
+                    fontSize: 12.5, fontWeight: 400, lineHeight: 1.5, textTransform: 'none', letterSpacing: 0, cursor: 'pointer',
+                }}>
+                    {texto}
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)', marginTop: 6 }}>Toca para cerrar</div>
+                </div>
+            )}
+        </>
+    );
+}
+
 // ── TU AÑO ────────────────────────────────────────────────────────────────────
 function TuAnioView({ companyId, interno }: { companyId: string; interno: boolean }) {
     const { d, err } = useApi<TuAnio>(`/api/mb-tu2026?company=${companyId}&vista=anio`);
@@ -101,9 +122,9 @@ function TuAnioView({ companyId, interno }: { companyId: string; interno: boolea
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 34 }}>
                 <Hallazgos titulo="Logros del año" color={SEA} items={d.logros}
-                    vacio={sinAnterior ? 'Es tu primer año completo en Pulppo: el próximo ya tendrás contra qué compararte.' : `Ninguna métrica creció 10% o más contra ${ant}.`} />
+                    vacio={sinAnterior ? 'Es tu primer año completo en Pulppo: el próximo ya tendrás contra qué compararte.' : `Ninguna métrica creció 5% o más contra ${ant}.`} />
                 <Hallazgos titulo="Lo que faltó para romperla" color={RED} items={d.falto}
-                    vacio={sinAnterior ? '—' : `Nada quedó 10% o más por debajo de ${ant}.`} />
+                    vacio={sinAnterior ? '—' : `Nada quedó 5% o más por debajo de ${ant}.`} />
             </div>
 
             {grupos.map((g) => (
@@ -111,7 +132,7 @@ function TuAnioView({ companyId, interno }: { companyId: string; interno: boolea
                     <div style={{ ...tag, marginBottom: 12 }}>{g}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
                         {d.metricas.filter((m) => m.grupo === g).map((m) => (
-                            <MetricaCard key={m.key} m={m} años={d.años} marca={marca.get(m.key)} pares={interno && conPares} grande={g === 'Resultados'} />
+                            <MetricaCard key={m.key} m={m} años={d.años} corte={d.corte} marca={marca.get(m.key)} pares={interno && conPares} grande={g === 'Resultados'} />
                         ))}
                     </div>
                 </div>
@@ -137,24 +158,26 @@ function Hallazgos({ titulo, color, items, vacio }: { titulo: string; color: str
     );
 }
 
-function MetricaCard({ m, años, marca, pares, grande }: { m: Metrica; años: number[]; marca?: 'logro' | 'falto'; pares: boolean; grande: boolean }) {
+function MetricaCard({ m, años, corte, marca, pares, grande }: { m: Metrica; años: number[]; corte: string; marca?: 'logro' | 'falto'; pares: boolean; grande: boolean }) {
     const [a0, a1, a2] = años;
     const v = m.valores[a2], ant = m.valores[a1];
     const ch = v != null && ant != null && ant > 0 ? (v - ant) / ant : null;
     const orient = ch == null || m.dir === 0 ? 0 : ch * m.dir;
-    const color = orient >= 0.1 ? SEA : orient <= -0.1 ? RED : FAINT;
+    // verde/rojo desde ±5% (Ale: que se sientan los logros); entre −5% y +5%, gris
+    // (con el % ya redondeado: si dice «5%», se pinta, igual que en los logros)
     const pct = ch == null ? null : Math.round(Math.abs(ch) * 100);
+    const color = pct == null || pct < 5 ? MUTED : orient > 0 ? SEA : RED;
     return (
-        <div style={{ border: `0.5px solid ${LINE}`, borderTop: `2px solid ${marca === 'logro' ? SEA : marca === 'falto' ? RED : LINE}`, padding: '14px 16px 12px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'relative', border: `0.5px solid ${LINE}`, borderTop: `2px solid ${marca === 'logro' ? SEA : marca === 'falto' ? RED : LINE}`, padding: '14px 16px 12px', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700 }} title={m.ayuda}>{m.label} <span style={{ color: MUTED, fontWeight: 400, cursor: 'help' }}>ⓘ</span></span>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>{m.label} <Ayuda texto={`${m.ayuda} Periodo: ${corte}, igual en los tres años.`} /></span>
                 {marca && <span style={{ ...tag, fontSize: 9, color: MUTED, whiteSpace: 'nowrap' }}>{marca === 'logro' ? 'Logro' : 'Faltó'}</span>}
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: serif, fontSize: grande ? 38 : 32, lineHeight: 1 }}>{fmt(v, m.fmt)}</span>
                 {pct != null && (
-                    <span style={{ fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        {pct === 0 ? null : <span style={{ color: m.dir === 0 ? MUTED : color, fontSize: 10 }}>{ch! > 0 ? '▲' : '▼'}</span>}
+                    <span style={{ fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4, color: m.dir === 0 ? MUTED : color }}>
+                        {pct === 0 ? null : <span style={{ fontSize: 10 }}>{ch! > 0 ? '▲' : '▼'}</span>}
                         {pct === 0 ? `igual que ${a1}` : `${pct}% vs ${a1}`}
                     </span>
                 )}
@@ -174,7 +197,7 @@ function Barras({ vals, años, f }: { vals: (number | null)[]; años: number[]; 
     const max = Math.max(...vals.map((x) => x ?? 0), 0);
     const H = 54;
     return (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginTop: 14 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginTop: 'auto', paddingTop: 14 }}>
             {vals.map((x, i) => {
                 const h = x == null || max <= 0 ? 0 : Math.max(2, Math.round((x / max) * H));
                 const ultimo = i === vals.length - 1;
@@ -184,7 +207,7 @@ function Barras({ vals, años, f }: { vals: (number | null)[]; años: number[]; 
                             {fmt(x, f)}
                         </div>
                         <div style={{ height: H, display: 'flex', alignItems: 'flex-end' }}>
-                            <div style={{ width: '100%', height: h, background: ultimo ? YEL : FAINT, borderRadius: '4px 4px 0 0' }} />
+                            <div style={{ width: '100%', height: h, background: ultimo ? YEL : FAINT }} />
                         </div>
                         <div style={{ fontSize: 10, color: MUTED, textAlign: 'center', marginTop: 4, borderTop: `1px solid ${LINE}`, paddingTop: 3 }}>{años[i]}</div>
                     </div>
@@ -300,19 +323,21 @@ function Acciones({ p, g, d, f, compactas }: { p: Premio; g: Ganador; d: Reconoc
 function PremioCard({ p, d, f }: { p: Premio; d: Reconocimientos; f: Firmas }) {
     const [g1, ...resto] = p.podio;
     return (
-        <div style={{ border: `0.5px solid ${LINE}`, padding: 18, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'relative', border: `0.5px solid ${LINE}`, padding: 18, display: 'flex', flexDirection: 'column' }}>
             <div style={{ height: 3, width: 32, background: YEL, marginBottom: 12 }} />
             <div style={{ fontFamily: serif, fontSize: 24, lineHeight: 1.15 }}>{p.titulo}</div>
-            <div style={{ fontSize: 12, color: MUTED, marginTop: 4, marginBottom: 14 }} title={p.regla}>{p.porque} <span style={{ cursor: 'help' }}>ⓘ</span></div>
+            <div style={{ fontSize: 12, color: MUTED, marginTop: 4, marginBottom: 14 }}>{p.porque} <Ayuda texto={p.regla} /></div>
             {p.varios ? (
                 p.podio.map((g) => (
                     <div key={g.email} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderTop: `0.5px solid ${LINE}` }}>
                         <Foto g={g} size={40} />
-                        <div style={{ minWidth: 0 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontSize: 14, fontWeight: 700 }}>{g.nombre}</div>
                             <div style={{ fontSize: 12, color: MUTED }}>{g.valor} · {g.detalle}</div>
                             <Acciones p={p} g={g} d={d} f={f} compactas />
                         </div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {g.badge && <img src={NIVEL[g.badge].img} alt={NIVEL[g.badge].label} title={NIVEL[g.badge].label} style={{ width: 52, height: 52, objectFit: 'contain', flex: 'none' }} />}
                     </div>
                 ))
             ) : (
@@ -387,8 +412,22 @@ function Diplomas({ d, f }: { d: Reconocimientos; f: Firmas }) {
 // ── documentos para imprimir (se guardan como PDF desde el diálogo de impresión) ──
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const firma = (n: string, c: string) => `<div class="firma"><div class="raya"></div><div class="fn">${esc(n || ' ')}</div><div class="fc">${esc(c)}</div></div>`;
+/** Sello de Pulppo en lugar de una firma de persona: anillo con texto + el pulpo al centro sobre un disco amarillo.
+ *  Si en «Firmas y textos» escriben un nombre para Pulppo, va debajo del sello. */
+let nSello = 0;
+function sello(o: string, f: Firmas, año: number): string {
+    const id = `anillo${++nSello}`;
+    return `<div class="sello"><svg viewBox="0 0 200 200" aria-label="Sello Pulppo">
+<defs><path id="${id}" d="M100,100 m-75,0 a75,75 0 1,1 150,0 a75,75 0 1,1 -150,0"/></defs>
+<circle cx="100" cy="100" r="97" fill="none" stroke="${BLK}" stroke-width="2.5"/>
+<circle cx="100" cy="100" r="90" fill="none" stroke="${BLK}" stroke-width="0.8"/>
+<circle cx="100" cy="100" r="58" fill="${YEL}"/>
+<text font-family="Nunito Sans, Arial, sans-serif" font-weight="700" font-size="14.5" fill="${BLK}"><textPath href="#${id}" textLength="465" lengthAdjust="spacing">PULPPO · MASTER EXPERIENCE · ${año} ·</textPath></text>
+<image href="${o}/tu2026/pulppo-icon.png" x="70" y="70" width="60" height="60"/></svg>
+${f.pulppo ? `<div class="fn">${esc(f.pulppo)}</div><div class="fc">${esc(f.pulppoCargo)}</div>` : ''}</div>`;
+}
 const encabezado = (d: Reconocimientos, origen: string) =>
-    `<div class="top">${d.logo ? `<img src="${esc(d.logo)}" alt="">` : `<b style="font-size:14pt">${esc(d.inmobiliaria)}</b>`}<img class="pulppo" src="${origen}/pulppo-wordmark-black.png" alt="Pulppo"></div>`;
+    `<div class="top">${d.logo ? `<img src="${esc(d.logo)}" alt="">` : `<b style="font-size:14pt">${esc(d.inmobiliaria)}</b>`}<img class="pulppo" src="${origen}/tu2026/pulppo-negro.png" alt="Pulppo"></div>`;
 
 function cartaHtml(p: Premio, g: Ganador, d: Reconocimientos, f: Firmas): string {
     const o = window.location.origin;
@@ -396,13 +435,14 @@ function cartaHtml(p: Premio, g: Ganador, d: Reconocimientos, f: Firmas): string
     const motivo = podio ? `por quedar en ${LUGAR[g.lugar].toLowerCase()} de «${p.titulo}»` : p.porque.replace(/^Por /, 'por ').replace(/\.$/, '');
     return `<div class="hoja carta">${encabezado(d, o)}
 <div class="eyebrow">Reconocimiento ${d.año}</div><div class="acento"></div>
+${g.badge ? `<img class="badge-asc" src="${o}${NIVEL[g.badge].img}" alt="${esc(NIVEL[g.badge].label)}">` : ''}
 <h1>${esc(p.titulo)}</h1>${podio ? `<div class="lugar-premio">${LUGAR[g.lugar]}</div>` : ''}
 <div class="otorga">Se otorga a</div>
 <div class="nombre">${esc(g.nombre)}</div>
 <div class="texto">${esc(`De parte de ${d.inmobiliaria} y Pulppo, ${motivo}.`)} ${esc(f.cierre)}</div>
 <div class="dato"><span class="v">${esc(g.valor)}</span><span class="s">${esc(g.detalle)}</span></div>
 <div class="pie"><div class="lugar">${esc(f.lugarFecha)}</div>
-<div class="firmas">${firma(f.dueno, `${f.duenoCargo} · ${d.inmobiliaria}`)}${firma(f.pulppo, f.pulppoCargo)}</div></div>
+<div class="firmas">${firma(f.dueno, `${f.duenoCargo} · ${d.inmobiliaria}`)}${sello(o, f, d.año)}</div></div>
 <div class="barra"></div></div>`;
 }
 
@@ -426,7 +466,7 @@ ${x.subio ? `<div class="subio">Este año subió de nivel: ${esc(x.subio)}</div>
 <div class="texto">${esc(f[nv.msg])}</div>
 ${hechos.length ? `<div class="hechos">En ${d.año}: ${esc(hechos.join(' · '))}</div>` : ''}
 <div class="pie"><div class="lugar">${esc(f.lugarFecha)}</div>
-<div class="firmas">${firma(f.dueno, `${f.duenoCargo} · ${d.inmobiliaria}`)}${firma(f.pulppo, f.pulppoCargo)}</div></div>
+<div class="firmas">${firma(f.dueno, `${f.duenoCargo} · ${d.inmobiliaria}`)}${sello(o, f, d.año)}</div></div>
 </div><div class="barra"></div></div>`;
 }
 
@@ -446,8 +486,8 @@ html, body { margin: 0; background: #fff; color: ${BLK}; font-family: 'Nunito Sa
 .hoja:last-child { page-break-after: auto; break-after: auto; }
 .carta { padding: 0.9in 0.9in 0.8in; display: flex; flex-direction: column; }
 .top { display: flex; justify-content: space-between; align-items: center; height: 56px; }
-.top img { max-height: 56px; max-width: 200px; object-fit: contain; }
-.top .pulppo { max-height: 26px; }
+.top img { max-height: 64px; max-width: 220px; object-fit: contain; }
+.top .pulppo { height: 40px; max-height: 40px; }
 .eyebrow { margin-top: 1.1in; font-size: 11pt; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .acento { width: 48px; height: 3px; background: ${YEL}; margin: 14px 0 22px; }
 h1 { font-family: 'Heldane', 'EB Garamond', serif; font-weight: 400; font-size: 40pt; line-height: 1.05; margin: 0; }
@@ -460,8 +500,12 @@ h1 { font-family: 'Heldane', 'EB Garamond', serif; font-weight: 400; font-size: 
 .dato .s, .hechos, .subio { font-size: 11pt; color: ${MUTED}; }
 .pie { margin-top: auto; }
 .lugar { font-size: 11pt; color: ${MUTED}; margin-bottom: 0.6in; }
-.firmas { display: flex; gap: 0.6in; }
+.firmas { display: flex; gap: 0.6in; align-items: flex-end; }
 .firma { flex: 1; }
+.sello { flex: none; text-align: center; transform: rotate(-8deg); }
+.sello svg { width: 1.25in; height: 1.25in; display: block; margin: 0 auto; }
+.sello .fn { margin-top: 6px; }
+.badge-asc { position: absolute; top: 2.55in; right: 0.9in; width: 1.6in; height: 1.6in; object-fit: contain; }
 .raya { border-top: 0.5pt solid ${BLK}; margin-bottom: 8px; }
 .fn { font-size: 12pt; font-weight: 700; min-height: 16pt; }
 .fc { font-size: 11pt; color: ${MUTED}; }
@@ -476,7 +520,8 @@ h1 { font-family: 'Heldane', 'EB Garamond', serif; font-weight: 400; font-size: 
 .diploma .subio { margin-top: 8px; font-weight: 700; color: ${BLK}; }
 .diploma .texto { margin-top: 0.22in; max-width: 6in; }
 .diploma .hechos { margin-top: 0.18in; }
-.diploma .lugar { margin-bottom: 0.45in; }
+.diploma .lugar { margin-bottom: 0.2in; }
+.diploma .sello svg { width: 1.1in; height: 1.1in; }
 @media screen { body { background: ${LGT}; } .hoja { margin: 24px auto; background: #fff; } }
 </style></head><body>${hojas.join('\n')}
 <script>Promise.all([document.fonts.ready, ...[...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))]).then(() => setTimeout(() => window.print(), 250));</script>
@@ -528,6 +573,10 @@ async function descargarPieza(p: Premio, g: Ganador, d: Reconocimientos, tipo: '
         ctx.fillText(iniciales(g), W / 2, cy); ctx.textBaseline = 'alphabetic';
     }
     ctx.restore();
+    if (g.badge) {
+        const bd = await loadImg(NIVEL[g.badge].img);
+        if (bd) { const b = Math.round(R * 0.95), bh = (b * bd.naturalHeight) / bd.naturalWidth; ctx.drawImage(bd, W / 2 + R * 0.62, cy + R * 0.62 - bh * 0.75, b, bh); }
+    }
 
     let y = cy + R + Math.round(120 * k);
     ctx.fillStyle = '#fff'; ctx.font = `400 ${Math.round(92 * k)}px ${HEL}`;
@@ -562,8 +611,8 @@ async function descargarPieza(p: Premio, g: Ganador, d: Reconocimientos, tipo: '
         ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = `700 34px ${NUN}`;
         ctx.fillText(d.inmobiliaria, 80, pieY + 60); ctx.textAlign = 'center';
     }
-    const pl = await loadImg('/pulppo-blanco.png');
-    if (pl) { const h = 48, w = (pl.naturalWidth * h) / pl.naturalHeight; ctx.drawImage(pl, W - 80 - w, pieY + 24, w, h); }
+    const pl = await loadImg('/tu2026/pulppo-blanco.png');
+    if (pl) { const h = 62, w = (pl.naturalWidth * h) / pl.naturalHeight; ctx.drawImage(pl, W - 80 - w, pieY + (96 - h) / 2, w, h); }
 
     cv.toBlob((b) => {
         if (!b) return;

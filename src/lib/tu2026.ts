@@ -85,6 +85,18 @@ function ascensoDelPeriodo(hs: [Date, string][], A: Date, B: Date): { de: string
     return out;
 }
 
+/** Para la métrica de la inmobiliaria: ¿termina el periodo en un nivel más alto que con el que lo empezó?
+ *  (nivel vigente el 1-ene contra el del último corte del periodo). Sin la regla de «primera vez» del premio:
+ *  aquí se mide si el equipo creció, no a quién se reconoce. Sin nivel al arrancar (llegó en el año) no cuenta. */
+function subidaNeta(hs: [Date, string][], A: Date, B: Date): boolean {
+    let ini: string | null = null, fin: string | null = null;
+    for (const [ts, l] of hs) {
+        if (ts.getTime() <= A.getTime() + 2 * DIA) ini = l;
+        if (ts.getTime() < B.getTime() + 2 * DIA) fin = l;
+    }
+    return !!ini && !!fin && (ORD[fin] ?? 0) > (ORD[ini] ?? 0);
+}
+
 interface Base { am: AgentMaps; bajas: Set<string>; compInmo: Map<string, string>; agenteInmo: Map<string, string> }
 let baseCache: { at: number; p: Promise<Base> } | null = null;
 function base(): Promise<Base> {
@@ -236,11 +248,11 @@ async function barrer(y: number, c: [number, number]): Promise<Red> {
         r.contactosCierre = new Set([...r.contactosCierre].filter((x) => r.contactos.has(x)));
     }
     for (const s of asesor.values()) s.cierres = new Set([...s.cierres].filter((x) => s.contactos.has(x)));
-    // ascensos: subidas de nivel con corte dentro del periodo (el corte del día 1 de M es el desempeño de M−1)
+    // asesores que terminan el periodo en un nivel más alto que con el que lo empezaron
     for (const [e, hs] of am.hist) {
         const k = agenteInmo.get(e);
         if (!k) continue;
-        if (ascensoDelPeriodo(hs, A, B)) I(k).ascensos += 1;
+        if (subidaNeta(hs, A, B)) I(k).ascensos += 1;
     }
     return { inmo, asesor, ventas };
 }
@@ -299,36 +311,36 @@ export interface TuAnio {
 type Calc = (r: Inmo | undefined) => number | null;
 const DEF: Array<{ key: string; label: string; grupo: string; fmt: Fmt; dir: 1 | -1 | 0; peso: number; min?: (r: Inmo) => boolean; f: Calc; ayuda: string; frase?: (v: string) => string }> = [
     { key: 'cobrada', frase: (v) => `${v} de comisión cobrada`,  label: 'Comisión cobrada', grupo: 'Resultados', fmt: 'money', dir: 1, peso: 1.6, f: (r) => r?.cobrada ?? 0,
-        ayuda: 'Pagos de comisión registrados en el periodo, de las operaciones de tu inmobiliaria.' },
+        ayuda: 'La comisión que ya te pagaron en el periodo (no cuenta la que está por cobrar).' },
     { key: 'cierresVenta', frase: (v) => `${v} ventas cerradas`,  label: 'Ventas cerradas', grupo: 'Resultados', fmt: 'int', dir: 1, peso: 1.3, f: (r) => r?.cierresVenta ?? 0,
-        ayuda: 'Operaciones de venta cerradas o en pago en el periodo.' },
+        ayuda: 'Ventas que tu inmobiliaria cerró en el periodo.' },
     { key: 'cierresRenta', frase: (v) => `${v} rentas cerradas`,  label: 'Rentas cerradas', grupo: 'Resultados', fmt: 'int', dir: 1, peso: 1.1, f: (r) => r?.cierresRenta ?? 0,
-        ayuda: 'Operaciones de renta cerradas o en pago en el periodo.' },
-    { key: 'ticket', label: 'Ticket mediano de venta', grupo: 'Resultados', fmt: 'money', dir: 0, peso: 0, f: (r) => median(r?.ventas ?? []),
-        ayuda: 'Precio de cierre mediano de tus ventas. Es descriptivo: ni más alto ni más bajo es mejor.' },
+        ayuda: 'Rentas que tu inmobiliaria cerró en el periodo.' },
+    { key: 'ticket', label: 'Ticket mediano de venta', grupo: 'Resultados', fmt: 'money', dir: 1, peso: 0.8, f: (r) => median(r?.ventas ?? []),
+        ayuda: 'El precio de cierre de la venta de en medio: la mitad de tus ventas se cerró arriba de este precio y la mitad abajo.' },
     { key: 'leads', frase: (v) => `${v} leads`,  label: 'Leads', grupo: 'Comercial', fmt: 'int', dir: 1, peso: 1, f: (r) => r?.leads ?? 0,
-        ayuda: 'Leads únicos (misma persona + misma propiedad = 1), de todos los canales.' },
+        ayuda: 'Personas que preguntaron por alguna de tus propiedades. Si la misma persona pregunta varias veces por la misma propiedad, cuenta una sola vez.' },
     // Sin «leads respondidos» ni «tiempo de 1ª respuesta»: en 2026 hubo muchos problemas con WhatsApp y
     // `answeredAt` depende de que el asesor lo tenga vinculado; comparar contra 2025 sería injusto (Ale, 20-nov).
     { key: 'visitas', frase: (v) => `${v} visitas`,  label: 'Visitas', grupo: 'Comercial', fmt: 'int', dir: 1, peso: 1, f: (r) => r?.visitas ?? 0,
-        ayuda: 'Visitas confirmadas o pendientes, por la fecha de la visita.' },
+        ayuda: 'Visitas del periodo, confirmadas o por confirmar, contadas por el día de la visita.' },
     { key: 'tasaVisita', label: 'Leads que visitan', grupo: 'Comercial', fmt: 'pct', dir: 1, peso: 1.2, min: (r) => r.contactos.size >= 50,
-        f: (r) => (r && r.contactos.size ? r.contactosVisita.size / r.contactos.size : null), ayuda: 'De las personas que te escribieron en el periodo, cuántas visitaron con tu inmobiliaria.' },
+        f: (r) => (r && r.contactos.size ? r.contactosVisita.size / r.contactos.size : null), ayuda: 'De cada 100 personas que te escribieron en el periodo, cuántas fueron a ver una propiedad con tu equipo.' },
     { key: 'leadCierre', label: 'Leads que cierran', grupo: 'Comercial', fmt: 'pct', dir: 1, peso: 1.2, min: (r) => r.contactos.size >= 100,
-        f: (r) => (r && r.contactos.size ? r.contactosCierre.size / r.contactos.size : null), ayuda: 'De las personas que te escribieron en el periodo, cuántas cerraron contigo en el periodo.' },
+        f: (r) => (r && r.contactos.size ? r.contactosCierre.size / r.contactos.size : null), ayuda: 'De cada 100 personas que te escribieron en el periodo, cuántas terminaron comprando o rentando con tu equipo.' },
     { key: 'captaciones', frase: (v) => `${v} propiedades captadas`,  label: 'Propiedades captadas', grupo: 'Inventario y equipo', fmt: 'int', dir: 1, peso: 1, f: (r) => r?.captaciones ?? 0,
-        ayuda: 'Propiedades dadas de alta en el periodo.' },
+        ayuda: 'Propiedades nuevas que tu equipo dio de alta en Pulppo en el periodo.' },
     { key: 'firmadas', frase: (v) => `${v} exclusivas firmadas`,  label: 'Exclusivas firmadas', grupo: 'Inventario y equipo', fmt: 'int', dir: 1, peso: 1.1, f: (r) => r?.firmadas ?? 0,
-        ayuda: 'Exclusivas que arrancaron en el periodo con el contrato completo en la plataforma.' },
+        ayuda: 'Exclusivas nuevas del periodo con el contrato firmado y cargado en Pulppo.' },
     { key: 'asesoresCobro', frase: (v) => `${v} asesores cobrando`,  label: 'Asesores que cobraron', grupo: 'Inventario y equipo', fmt: 'int', dir: 1, peso: 1, f: (r) => r?.asesoresCobro.size ?? 0,
-        ayuda: 'Asesores con al menos un pago de comisión en el periodo.' },
-    { key: 'ascensos', frase: (v) => `${v} ascensos de nivel`,  label: 'Ascensos de nivel', grupo: 'Inventario y equipo', fmt: 'int', dir: 1, peso: 0.9, f: (r) => r?.ascensos ?? 0,
-        ayuda: 'Subidas de nivel (Estándar → Profesional → Élite) de tus asesores en el periodo.' },
+        ayuda: 'Cuántos de tus asesores cobraron al menos una comisión en el periodo.' },
+    { key: 'ascensos', frase: (v) => `${v} asesores subieron de nivel`,  label: 'Asesores que subieron de nivel', grupo: 'Inventario y equipo', fmt: 'int', dir: 1, peso: 0.9, f: (r) => r?.ascensos ?? 0,
+        ayuda: 'Asesores que terminan el periodo en un nivel más alto (Estándar → Profesional → Élite) que el que tenían el 1 de enero.' },
 ];
 
 const fmtVal = (v: number, f: Fmt) => {
     if (f === 'money') return v >= 1e6 ? `$${(v / 1e6).toFixed(1)} MDP` : `$${Math.round(v).toLocaleString('es-MX')}`;
-    if (f === 'pct') { const p = v * 100; return `${p < 10 ? p.toFixed(1) : Math.round(p)}%`; }
+    if (f === 'pct') { const p = v * 100; return `${p < 1 ? p.toFixed(2) : p < 10 ? p.toFixed(1) : Math.round(p)}%`; }
     if (f === 'min') return v >= 90 ? `${(v / 60).toFixed(1)} h` : `${Math.round(v)} min`;
     return Math.round(v).toLocaleString('es-MX');
 };
@@ -367,19 +379,27 @@ export async function tuAnio(companyId: string): Promise<TuAnio | null> {
     });
 
     // ── hallazgos: SÓLO contra sí misma (Ale, 20-nov): contra los pares sería spoiler de la gala y, para las grandes,
-    //    no dice nada (Diamond House está lejísimos de las de su cuartil). Un veredicto por métrica, ±10% o más. ──
+    //    no dice nada (Diamond House está lejísimos de las de su cuartil). Un veredicto por métrica, ±5% o más
+    //    (el mismo umbral que pinta de verde/rojo las tarjetas). ──
     const r26i = R[AÑO].inmo.get(k);
+    const UMBRAL = 0.05;
     const cand: Array<Hallazgo & { s: number; tipo: 'logro' | 'falto' }> = [];
     for (const m of metricas) {
         const d = DEF.find((x) => x.key === m.key)!;
         if (m.dir === 0) continue;
-        const v = m.valores[AÑO], ant = m.valores[AÑO - 1];
+        const v = m.valores[AÑO], ant = m.valores[AÑO - 1], ant2 = m.valores[AÑO - 2];
         if (v == null || ant == null || ant <= 0 || (m.fmt === 'int' && ant < 5 && v < 5)) continue;
         const cambio = ((v - ant) / ant) * m.dir;
-        if (Math.abs(cambio) < 0.1) continue;
         const F = (x: number) => fmtVal(x, m.fmt);
         const dicho = d.frase ? d.frase(F(v)) : `${m.label}: ${F(v)}`;
         const Dicho = dicho.charAt(0).toUpperCase() + dicho.slice(1);
+        if (Math.round(Math.abs(cambio) * 100) < UMBRAL * 100) {
+            // sin cambio claro contra el año pasado, pero el mejor de los tres años: también es logro (con menos peso)
+            if (ant2 != null && ant2 > 0 && v * m.dir > Math.max(ant, ant2) * m.dir && ((v - ant2) / ant2) * m.dir >= UMBRAL)
+                cand.push({ tipo: 'logro', s: 0.02 * d.peso, metrica: m.key, titulo: m.label,
+                    texto: `${Dicho}: tu mejor cifra de los tres años, ${sigPct((v - ant2) / ant2)} contra ${AÑO - 2}.` });
+            continue;
+        }
         const sube = cambio > 0;
         let t: string;
         if (m.fmt === 'pct') {
@@ -391,19 +411,26 @@ export async function tuAnio(companyId: string): Promise<TuAnio | null> {
         } else t = `${Dicho}, ${sigPct((v - ant) / ant)} contra el mismo periodo de ${AÑO - 1} (${F(Math.abs(v - ant))} ${v > ant ? 'más' : 'menos'}).`;
         cand.push({ tipo: sube ? 'logro' : 'falto', s: Math.min(Math.abs(cambio), 1.5) * d.peso, metrica: m.key, titulo: m.label, texto: t });
     }
-    const elegir = (t: 'logro' | 'falto') => {
+    // leads respondidos: NO se compara contra 2025 (problemas de WhatsApp en 2026 y casi toda la red está en ~99%),
+    // pero si el equipo le contestó a casi todos, se presume como logro.
+    if (r26i && r26i.leads >= 50 && r26i.respondidos / r26i.leads >= 0.95)
+        cand.push({ tipo: 'logro', s: 0.01, metrica: 'respondidos', titulo: 'Leads respondidos',
+            texto: `Tu equipo le respondió al ${fmtVal(r26i.respondidos / r26i.leads, 'pct')} de los ${r26i.leads.toLocaleString('es-MX')} leads del año.` });
+    const elegir = (t: 'logro' | 'falto', max: number) => {
         const usados = new Set<string>(), out: Hallazgo[] = [];
         for (const h of cand.filter((x) => x.tipo === t).sort((a, b) => b.s - a.s)) {
-            if (usados.has(h.metrica) || out.length >= 3) continue;
+            if (usados.has(h.metrica) || out.length >= max) continue;
             usados.add(h.metrica); out.push({ titulo: h.titulo, texto: h.texto, metrica: h.metrica });
         }
         return out;
     };
-
+    // parejos: tantos pendientes como logros (Ale no quería 1 logro contra 3 pendientes); al menos uno si lo hay
+    const logros = elegir('logro', 3);
+    const falto = elegir('falto', Math.max(1, logros.length));
     return {
         inmobiliaria: k, corte: corteTexto(c), años,
         pares: { n: grupo.length, desde: grupo[0]?.[1] ?? 0, hasta: grupo[grupo.length - 1]?.[1] ?? 0, publicadas: inv.get(k) ?? 0 },
-        metricas, logros: elegir('logro'), falto: elegir('falto'), generado: new Date().toISOString(),
+        metricas, logros, falto, generado: new Date().toISOString(),
     };
 }
 
@@ -417,6 +444,8 @@ export interface Ganador {
     valor: string; detalle: string;
     /** para redes: SIN montos, para no exponer a nadie (Ale, 20-nov). Vacío = no se pone dato. */
     valorRed: string; detalleRed: string;
+    /** «Ascenso del año»: el nivel al que llegó, para ponerle su badge */
+    badge?: NivelKey;
 }
 export interface Premio { key: string; titulo: string; porque: string; regla: string; podio: Ganador[]; varios?: boolean }
 export type NivelKey = 'elite' | 'professional' | 'standard';
@@ -507,7 +536,8 @@ export async function reconocimientos(companyId: string): Promise<Reconocimiento
         if (!x) continue;
         const t = `${LVL[x.de]} → ${LVL[x.a]}`;
         subio.set(e, t);
-        asc.push(persona(e, 1, t, `desde ${MES[new Date(x.ts.getTime() - DIA).getUTCMonth()]}`));
+        const badge = x.a === 'elite' || x.a === 'professional' ? (x.a as NivelKey) : undefined;
+        asc.push({ ...persona(e, 1, t, `desde ${MES[new Date(x.ts.getTime() - DIA).getUTCMonth()]}`), badge });
     }
     premios.push({ key: 'ascenso', titulo: 'Ascenso del año', porque: 'Por subir de nivel gracias a su desempeño.', varios: true,
         regla: 'Brokers que llegaron por primera vez a un nivel (Profesional o Élite) en algún corte del año; si ya lo habían tenido antes, no cuenta. Lo recibe cada uno.',
