@@ -21,8 +21,8 @@ import { unstable_cache } from 'next/cache';
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from '../data';
 import { claveLead, enHorario, VISITA_OK } from '../mbComun';
-import { NOT, dig, isDate } from './metrics';
-import { canalDeLead, cierresEntre, cuentaI24DeLead, opcionesInmobiliarias } from './inmobiliaria';
+import { NOT, NOTP, classifySource, dig, isDate, num } from './metrics';
+import { canalDeLead, cierresEntre, cuentaI24DeLead, nombreCanal, opcionesInmobiliarias } from './inmobiliaria';
 
 const MX = 6 * 3600 * 1000;
 const DIA = 86400000;
@@ -33,11 +33,13 @@ const CERRADA = new Set(['closed', 'paying']);
  *  leads · leads en horario · respondidos en <1 h (de los de horario) · respondidos · visitaron · ofertaron · cerraron */
 export type CeldaMes = [string, string, 's' | 'r' | '', number, number, number, number, number, number, number];
 export const C = { canal: 0, inmo: 1, op: 2, leads: 3, hor: 4, r1h: 5, resp: 6, vis: 7, ofe: 8, clo: 9 } as const;
-/** cierre del mes: fuente · inmobiliaria vendedora · compradora · operación · regalía · comisión */
-export type CierreMes = [string, string, string, 's' | 'r' | '', number, number];
+/** cierre del mes: fuente · inmobiliaria vendedora · compradora · operación · regalía · comisión · estatus */
+export type CierreMes = [string, string, string, 's' | 'r' | '', number, number, 'closed' | 'paying'];
+/** operación VIVA creada en el mes (el forecast): fuente · vendedora · compradora · operación · estatus · comisión */
+export type PipeMes = [string, string, string, 's' | 'r' | '', 'offer' | 'offer_blocked' | 'contract', number];
 export interface MesCubo {
     mes: string; desde: string; hasta: string; parcial: boolean; generado: string;
-    celdas: CeldaMes[]; cierres: CierreMes[];
+    celdas: CeldaMes[]; cierres: CierreMes[]; pipeline: PipeMes[];
 }
 /** inventario publicado en Pulppo: inmobiliaria · operación · propiedades, por mes */
 export type InvFila = [string, 's' | 'r' | '', number];
@@ -161,11 +163,26 @@ async function calcularMes(mes: string): Promise<MesCubo> {
     const cierres: CierreMes[] = out.map((x) => [
         x.fuente, nombreDe.get(x.vendeId ?? '') ?? '', nombreDe.get(x.compraId ?? '') ?? '',
         x.operacion === 'Venta' ? 's' : x.operacion === 'Renta' ? 'r' : '', Math.round(x.regalia), Math.round(x.comision),
+        x.estatus === 'Cobrando' ? 'paying' : 'closed',
     ]);
+
+    // 7) el forecast: operaciones que siguen vivas (oferta, oferta aceptada, contrato) y se crearon en el mes. La fuente es
+    // la que trae la operación (`buyer.source`); a diferencia de los cierres, aquí no se infiere la que falta.
+    const pipeline: PipeMes[] = [];
+    for await (const o of db.collection('operations').find(
+        { 'status.last': { $in: ['offer', 'offer_blocked', 'contract'] }, createdAt: { $gte: A, $lt: B }, ...NOTP },
+        { projection: { 'status.last': 1, 'buyer.source': 1, 'seller.company._id': 1, 'buyer.company._id': 1, 'property.listing.operation': 1, 'comission.value': 1 } })) {
+        const src = dig(o, 'buyer', 'source');
+        pipeline.push([
+            src ? nombreCanal(classifySource(String(src))) : 'Sin fuente',
+            nombreDe.get(String(dig(o, 'seller', 'company', '_id') ?? '')) ?? '', nombreDe.get(String(dig(o, 'buyer', 'company', '_id') ?? '')) ?? '',
+            opDe(dig(o, 'property', 'listing', 'operation')), String(dig(o, 'status', 'last')) as PipeMes[4], Math.round(num(dig(o, 'comission', 'value'))),
+        ]);
+    }
 
     return {
         mes, desde: A.toISOString(), hasta: B.toISOString(), parcial: B.getTime() < inicioMes(sigMes(mes)).getTime(),
-        generado: new Date().toISOString(), celdas: [...cubo.values()], cierres,
+        generado: new Date().toISOString(), celdas: [...cubo.values()], cierres, pipeline,
     };
 }
 
@@ -173,7 +190,7 @@ async function calcularMes(mes: string): Promise<MesCubo> {
 export async function mesCubo(mes: string, fresco = false): Promise<MesCubo> {
     if (fresco) return calcularMes(mes);
     const enCurso = mes >= mesActual();
-    return unstable_cache(() => calcularMes(mes), ['portales-anual-mes-v1', mes], { revalidate: enCurso ? 1800 : 43200, tags: ['portales-anual'] })();
+    return unstable_cache(() => calcularMes(mes), ['portales-anual-mes-v2', mes], { revalidate: enCurso ? 1800 : 43200, tags: ['portales-anual'] })();
 }
 
 // ── inventario publicado en Pulppo por mes ────────────────────────────────────────────────────────

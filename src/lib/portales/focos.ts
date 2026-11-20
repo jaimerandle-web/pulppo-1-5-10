@@ -124,78 +124,112 @@ export interface Serie { quien: string; filtro?: Foco['filtro']; meses: Agg[] }
 const prom = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 const pctTxt = (x: number) => `${x > 0 ? '+' : ''}${Math.round(x)}%`;
 
-/** Focos de UNA serie (un portal, una inmobiliaria, o un portal dentro de una inmobiliaria). */
-export function focosDe(s: Serie, meses: MesInfo[], base: { leads: number; visita: number }, now = Date.now()): Foco[] {
+/** promedio por mes de varios meses (las tasas no cambian: son cocientes de sumas) */
+export function promedio(xs: Agg[]): Agg {
+    const k = Math.max(xs.length, 1), out = vacio();
+    for (const x of xs) {
+        out.leads += x.leads; out.hor += x.hor; out.r1h += x.r1h; out.resp += x.resp; out.vis += x.vis; out.ofe += x.ofe; out.clo += x.clo;
+        out.cierres += x.cierres; out.regalia += x.regalia;
+        if (x.inventario != null) out.inventario = (out.inventario ?? 0) + x.inventario;
+    }
+    for (const c of ['leads', 'hor', 'r1h', 'resp', 'vis', 'ofe', 'clo', 'cierres', 'regalia'] as const) out[c] = out[c] / k;
+    if (out.inventario != null) out.inventario = out.inventario / k;
+    return out;
+}
+/** suma de varios meses */
+export function sumar(xs: Agg[]): Agg {
+    const k = xs.length, p = promedio(xs);
+    const out = { ...p };
+    for (const c of ['leads', 'hor', 'r1h', 'resp', 'vis', 'ofe', 'clo', 'cierres', 'regalia'] as const) out[c] = Math.round(p[c] * k);
+    return out;
+}
+/** periodo elegido: índices [a, b] dentro de los meses (por default, el último mes cerrado) */
+export interface Rango { a: number; b: number }
+export const etiquetaRango = (meses: MesInfo[], r: Rango) => (r.a === r.b ? mesLargo(meses[r.a].mes).split(' ')[0] : `${mesCorto(meses[r.a].mes)} – ${mesCorto(meses[r.b].mes)}`);
+
+/** Focos de UNA serie (un portal, una inmobiliaria, o un portal dentro de una inmobiliaria) en el periodo `r`
+ *  (promedio por mes del periodo contra el promedio de los 3 meses previos al periodo). */
+export function focosDe(s: Serie, meses: MesInfo[], base: { leads: number; visita: number }, rango?: Rango, now = Date.now()): Foco[] {
     const { cerrado: i, maduro: j } = referencias(meses, now);
-    if (i < 3) return [];
+    const r = rango ?? { a: i, b: i };
+    if (r.a < 3 || r.b < 0) return [];
+    const k = r.b - r.a + 1;
     const out: Foco[] = [];
     const M = s.meses;
-    const ref = M[i], ant = M.slice(i - 3, i);
-    const avgL = prom(ant.map((a) => a.leads));
-    const mesTxt = mesLargo(meses[i].mes).split(' ')[0];
+    const ref = promedio(M.slice(r.a, r.b + 1)), ant = M.slice(r.a - 3, r.a);
+    const avgL = prom(ant.map((x) => x.leads));
+    const mesTxt = etiquetaRango(meses, r);
+    const n = (x: number) => Math.round(x).toLocaleString('es-MX');
+    const lbl = k === 1 ? `en ${mesTxt}` : `/mes en ${mesTxt}`;
 
     // 1) volumen. Primero «se apagó» (≤10% de su promedio): si pasó eso, la caída ya está dicha.
     const apagado = avgL >= base.leads && ref.leads <= avgL * 0.1;
-    if (apagado) out.push({ sev: 'alta', quien: s.quien, filtro: s.filtro, peso: avgL,
-        que: `Prácticamente dejó de recibir leads en ${mesTxt}. ¿Se cayó la integración o se despublicó?`, cifra: `${ref.leads} vs ${Math.round(avgL)} al mes` });
+    if (apagado) out.push({ sev: 'alta', quien: s.quien, filtro: s.filtro, peso: avgL * k,
+        que: `Prácticamente dejó de recibir leads (${mesTxt}). ¿Se cayó la integración o se despublicó?`, cifra: `${n(ref.leads)}${lbl} vs ${n(avgL)} al mes` });
     if (avgL >= base.leads && !apagado) {
         const d = (100 * (ref.leads - avgL)) / avgL;
-        const lppRef = tasa.lpp(ref), lppAnt = prom(ant.map((a) => tasa.lpp(a) ?? 0));
+        const lppRef = tasa.lpp(ref), lppAnt = prom(ant.map((x) => tasa.lpp(x) ?? 0));
         const dLpp = lppRef != null && lppAnt ? (100 * (lppRef - lppAnt)) / lppAnt : null;
-        const racha = M[i].leads < M[i - 1].leads * 0.9 && M[i - 1].leads < M[i - 2].leads * 0.9;
+        const racha = k === 1 && r.a >= 2 && M[r.a].leads < M[r.a - 1].leads * 0.9 && M[r.a - 1].leads < M[r.a - 2].leads * 0.9;
         if (d <= -25 || (racha && d <= -15)) {
             if (dLpp != null && dLpp > -10) {
-                out.push({ sev: 'nota', quien: s.quien, filtro: s.filtro, peso: avgL - ref.leads,
+                out.push({ sev: 'nota', quien: s.quien, filtro: s.filtro, peso: (avgL - ref.leads) * k,
                     que: `Bajó también el inventario: por propiedad se sostiene (${pctTxt(dLpp)}).`,
-                    cifra: `${ref.leads.toLocaleString('es-MX')} leads en ${mesTxt} · ${pctTxt(d)}` });
+                    cifra: `${n(ref.leads)} leads${lbl} · ${pctTxt(d)}` });
             } else {
-                out.push({ sev: d <= -40 || racha ? 'alta' : 'media', quien: s.quien, filtro: s.filtro, peso: avgL - ref.leads,
+                out.push({ sev: d <= -40 || racha ? 'alta' : 'media', quien: s.quien, filtro: s.filtro, peso: (avgL - ref.leads) * k,
                     que: `${racha ? 'Dos meses seguidos bajando. ' : ''}${dLpp != null ? `No es inventario: por propiedad también cae (${pctTxt(dLpp)}).` : 'Leads abajo de su promedio de 3 meses.'}`,
-                    cifra: `${ref.leads.toLocaleString('es-MX')} en ${mesTxt} vs ${Math.round(avgL).toLocaleString('es-MX')} prom. · ${pctTxt(d)}` });
+                    cifra: `${n(ref.leads)}${lbl} vs ${n(avgL)} prom. · ${pctTxt(d)}` });
             }
         } else if (d >= 25) {
-            out.push({ sev: 'bueno', quien: s.quien, filtro: s.filtro, peso: ref.leads - avgL,
-                que: 'Leads arriba de su promedio de 3 meses.',
-                cifra: `${ref.leads.toLocaleString('es-MX')} en ${mesTxt} vs ${Math.round(avgL).toLocaleString('es-MX')} prom. · ${pctTxt(d)}` });
+            out.push({ sev: 'bueno', quien: s.quien, filtro: s.filtro, peso: (ref.leads - avgL) * k,
+                que: 'Leads arriba de su promedio de los 3 meses previos.',
+                cifra: `${n(ref.leads)}${lbl} vs ${n(avgL)} prom. · ${pctTxt(d)}` });
         }
     }
 
     // 2) atención (sin responder) — sólo con volumen
     if (ref.leads >= base.leads) {
-        const sr = tasa.sinResp(ref) ?? 0, srAnt = prom(ant.map((a) => tasa.sinResp(a) ?? 0));
-        if (sr >= 8 && sr - srAnt >= 3) out.push({ sev: sr >= 15 ? 'alta' : 'media', quien: s.quien, filtro: s.filtro, peso: ((sr - srAnt) / 100) * ref.leads,
-            que: `Más leads sin responder en ${mesTxt}.`, cifra: `${sr}% sin responder (antes ${Math.round(srAnt * 10) / 10}%)` });
-        else if (srAnt >= 8 && srAnt - sr >= 3) out.push({ sev: 'bueno', quien: s.quien, filtro: s.filtro, peso: ((srAnt - sr) / 100) * ref.leads,
-            que: `Mejoró la atención en ${mesTxt}: menos leads sin responder.`, cifra: `${sr}% sin responder (antes ${Math.round(srAnt * 10) / 10}%)` });
-        const r = tasa.r1h(ref), rAnt = prom(ant.map((a) => tasa.r1h(a) ?? 0));
-        if (r != null && ref.hor >= base.leads && rAnt - r >= 10) out.push({ sev: 'media', quien: s.quien, filtro: s.filtro, peso: ((rAnt - r) / 100) * ref.hor * 0.5,
-            que: `Se alentó la primera respuesta en ${mesTxt} (leads de 8 am a 8 pm).`, cifra: `${r}% en menos de 1 h (antes ${Math.round(rAnt)}%)` });
+        const sr = tasa.sinResp(ref) ?? 0, srAnt = prom(ant.map((x) => tasa.sinResp(x) ?? 0));
+        if (sr >= 8 && sr - srAnt >= 3) out.push({ sev: sr >= 15 ? 'alta' : 'media', quien: s.quien, filtro: s.filtro, peso: ((sr - srAnt) / 100) * ref.leads * k,
+            que: `Más leads sin responder (${mesTxt}).`, cifra: `${sr}% sin responder (antes ${Math.round(srAnt * 10) / 10}%)` });
+        else if (srAnt >= 8 && srAnt - sr >= 3) out.push({ sev: 'bueno', quien: s.quien, filtro: s.filtro, peso: ((srAnt - sr) / 100) * ref.leads * k,
+            que: `Mejoró la atención (${mesTxt}): menos leads sin responder.`, cifra: `${sr}% sin responder (antes ${Math.round(srAnt * 10) / 10}%)` });
+        const rr = tasa.r1h(ref), rAnt = prom(ant.map((x) => tasa.r1h(x) ?? 0));
+        if (rr != null && ref.hor >= base.leads && rAnt - rr >= 10) out.push({ sev: 'media', quien: s.quien, filtro: s.filtro, peso: ((rAnt - rr) / 100) * ref.hor * 0.5 * k,
+            que: `Se alentó la primera respuesta (${mesTxt}, leads de 8 am a 8 pm).`, cifra: `${rr}% en menos de 1 h (antes ${Math.round(rAnt)}%)` });
     }
 
-    // 3) conversión a visita en el último mes maduro
-    if (j >= 3 && M[j].leads >= base.visita) {
-        const v = tasa.vis(M[j]) ?? 0, vAnt = prom(M.slice(j - 3, j).map((a) => tasa.vis(a) ?? 0));
-        const mj = mesLargo(meses[j].mes).split(' ')[0];
-        if (vAnt > 0 && vAnt - v >= 2 && (vAnt - v) / vAnt >= 0.25) out.push({ sev: 'media', quien: s.quien, filtro: s.filtro, peso: ((vAnt - v) / 100) * M[j].leads * 5,
-            que: `Los leads de ${mj} visitaron menos que los meses anteriores.`, cifra: `${v}% visitó (antes ${Math.round(vAnt * 10) / 10}%)` });
-        else if (vAnt > 0 && v - vAnt >= 2 && (v - vAnt) / vAnt >= 0.25) out.push({ sev: 'bueno', quien: s.quien, filtro: s.filtro, peso: ((v - vAnt) / 100) * M[j].leads * 5,
-            que: `Los leads de ${mj} visitaron más que los meses anteriores.`, cifra: `${v}% visitó (antes ${Math.round(vAnt * 10) / 10}%)` });
+    // 3) conversión a visita: los meses MADUROS del periodo (o el último maduro, si el periodo es todo reciente)
+    const vb = Math.min(r.b, j), va = r.a <= vb ? r.a : vb;
+    if (vb >= 3 && va >= 3) {
+        const V = promedio(M.slice(va, vb + 1));
+        const vAnt = prom(M.slice(va - 3, va).map((x) => tasa.vis(x) ?? 0));
+        const v = tasa.vis(V) ?? 0;
+        const mj = etiquetaRango(meses, { a: va, b: vb });
+        if (V.leads >= base.visita) {
+            if (vAnt > 0 && vAnt - v >= 2 && (vAnt - v) / vAnt >= 0.25) out.push({ sev: 'media', quien: s.quien, filtro: s.filtro, peso: ((vAnt - v) / 100) * V.leads * 5 * (vb - va + 1),
+                que: `Los leads de ${mj} visitaron menos que los de los meses previos.`, cifra: `${v}% visitó (antes ${Math.round(vAnt * 10) / 10}%)` });
+            else if (vAnt > 0 && v - vAnt >= 2 && (v - vAnt) / vAnt >= 0.25) out.push({ sev: 'bueno', quien: s.quien, filtro: s.filtro, peso: ((v - vAnt) / 100) * V.leads * 5 * (vb - va + 1),
+                que: `Los leads de ${mj} visitaron más que los de los meses previos.`, cifra: `${v}% visitó (antes ${Math.round(vAnt * 10) / 10}%)` });
+        }
     }
 
-    // 4) cierres: los últimos 3 meses cerrados contra los 3 de antes
-    if (i >= 5) {
-        const c3 = M.slice(i - 2, i + 1).reduce((a, x) => a + x.cierres, 0), c3a = M.slice(i - 5, i - 2).reduce((a, x) => a + x.cierres, 0);
+    // 4) cierres: los 3 meses que terminan en el periodo (o el periodo, si es más largo) contra el tramo igual de antes
+    const largo = Math.max(3, k), cb = r.b, ca = cb - largo + 1;
+    if (ca - largo >= 0) {
+        const c3 = M.slice(ca, cb + 1).reduce((x, y) => x + y.cierres, 0), c3a = M.slice(ca - largo, ca).reduce((x, y) => x + y.cierres, 0);
         if (c3a >= 5 && c3 <= c3a * 0.5) out.push({ sev: 'media', quien: s.quien, filtro: s.filtro, peso: (c3a - c3) * 15,
-            que: 'Cierra la mitad o menos que el trimestre anterior.', cifra: `${c3} cierres en 3 meses vs ${c3a}` });
+            que: `Cierra la mitad o menos que en los ${largo} meses anteriores.`, cifra: `${c3} cierres en ${largo} meses vs ${c3a}` });
         else if (c3 >= 5 && c3 >= c3a * 1.5) out.push({ sev: 'bueno', quien: s.quien, filtro: s.filtro, peso: (c3 - c3a) * 15,
-            que: 'Cierra bastante más que el trimestre anterior.', cifra: `${c3} cierres en 3 meses vs ${c3a}` });
+            que: `Cierra bastante más que en los ${largo} meses anteriores.`, cifra: `${c3} cierres en ${largo} meses vs ${c3a}` });
     }
 
-    // 5) el mes en curso, si ya lleva una semana y viene muy abajo
+    // 5) el mes en curso, si ya lleva una semana y viene muy abajo (sólo con el periodo por default)
     const ult = meses[meses.length - 1];
-    if (ult.parcial && i === meses.length - 2) {
+    if (ult.parcial && i === meses.length - 2 && r.a === i && r.b === i) {
         const { corridos } = avanceMes(ult);
-        const prev = meses[i], dPrev = avanceMes(prev).total;
+        const dPrev = avanceMes(meses[i]).total;
         const ritmo = M[meses.length - 1].leads / Math.max(corridos, 1), ritmoPrev = M[i].leads / dPrev;
         if (corridos >= 7 && M[i].leads >= base.leads && ritmo <= ritmoPrev * 0.7) out.push({ sev: 'media', quien: s.quien, filtro: s.filtro, peso: (ritmoPrev - ritmo) * avanceMes(ult).total,
             que: `${mesLargo(ult.mes).split(' ')[0][0].toUpperCase()}${mesLargo(ult.mes).split(' ')[0].slice(1)} viene abajo: a este ritmo cerraría muy por debajo de ${mesTxt}.`,
