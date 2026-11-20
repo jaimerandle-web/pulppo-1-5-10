@@ -24,6 +24,12 @@ export async function GET(req: NextRequest) {
     try {
         const d = vista === 'anio' ? await tuAnio(company) : await reconocimientos(company);
         if (!d) return NextResponse.json({ error: 'Esta inmobiliaria no está en la lista de clientes' }, { status: 404 });
+        // La comparación con los pares es SÓLO para el equipo Pulppo (preparar las 1:1): a la inmobiliaria no se le
+        // muestra (spoiler de la gala y, para las grandes, no dice nada). Ale, 20-nov.
+        if (vista === 'anio' && 'metricas' in d && !u?.internal) {
+            d.pares = null;
+            d.metricas = d.metricas.map((m) => ({ ...m, pares: null, pctl: null }));
+        }
         return NextResponse.json(d, { headers: { 'Cache-Control': 'private, no-store' } });
     } catch (e) {
         console.error('[mb-tu2026]', e);

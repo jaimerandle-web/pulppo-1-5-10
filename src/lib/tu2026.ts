@@ -61,7 +61,7 @@ interface Inmo {
     contactos: Set<string>; contactosVisita: Set<string>; contactosCierre: Set<string>;
     captaciones: number; exclusivas: number; firmadas: number; asesoresCobro: Set<string>; ascensos: number;
 }
-interface Asesor { cobrada: number; ops: Set<string>; leads: number; contactos: Set<string>; cierres: Set<string>; resp: number[]; visitas: number; exclusivas: number; firmadas: number }
+interface Asesor { cobrada: number; ops: Set<string>; leads: number; contactos: Set<string>; cierres: Set<string>; resp: number[]; visitas: number; exclusivas: number; firmadas: number; cerradas: Set<string>; captaciones: number }
 interface Venta { e: string | null; v: number; codigo: string | null; closed: Date; created: Date | null; cid: string | null; raw: unknown; tipo: string }
 interface Red { inmo: Map<string, Inmo>; asesor: Map<string, Asesor>; ventas: Map<string, Venta[]> }
 
@@ -70,7 +70,20 @@ const nuevaInmo = (): Inmo => ({
     contactos: new Set(), contactosVisita: new Set(), contactosCierre: new Set(), captaciones: 0, exclusivas: 0, firmadas: 0,
     asesoresCobro: new Set(), ascensos: 0,
 });
-const nuevoAsesor = (): Asesor => ({ cobrada: 0, ops: new Set(), leads: 0, contactos: new Set(), cierres: new Set(), resp: [], visitas: 0, exclusivas: 0, firmadas: 0 });
+const nuevoAsesor = (): Asesor => ({ cobrada: 0, ops: new Set(), leads: 0, contactos: new Set(), cierres: new Set(), resp: [], visitas: 0, exclusivas: 0, firmadas: 0, cerradas: new Set(), captaciones: 0 });
+
+/** Ascenso que cuenta: subir con un corte del periodo a un nivel que NUNCA había tenido (Ale, 20-nov: si ya fue élite
+ *  alguna vez, volver a élite no es «ascenso del año»). El corte del día 1 de M es el desempeño de M−1. */
+function ascensoDelPeriodo(hs: [Date, string][], A: Date, B: Date): { de: string; a: string; ts: Date } | null {
+    let prev: string | null = null, max = 0, out: { de: string; a: string; ts: Date } | null = null;
+    for (const [ts, l] of hs) {
+        const o = ORD[l] ?? 0;
+        if (prev && o > (ORD[prev] ?? 0) && o > max && ts >= new Date(A.getTime() + 30 * DIA) && ts < new Date(B.getTime() + 2 * DIA)) out = { de: prev, a: l, ts };
+        max = Math.max(max, o);
+        prev = l;
+    }
+    return out;
+}
 
 interface Base { am: AgentMaps; bajas: Set<string>; compInmo: Map<string, string>; agenteInmo: Map<string, string> }
 let baseCache: { at: number; p: Promise<Base> } | null = null;
@@ -150,6 +163,8 @@ async function barrer(y: number, c: [number, number]): Promise<Red> {
                     .map((x) => String(x ?? '')).find((x) => x && agenteInmo.get(x) === k) ?? null;
                 const be = String(dig(o, 'buyer', 'broker', 'email') ?? '');
                 if (cid && be && agenteInmo.get(be) === k) S(be).cierres.add(cid);
+                for (const x of new Set([dig(o, 'buyer', 'broker', 'email'), dig(o, 'seller', 'broker', 'email'), dig(o, 'property', 'agent', 'email')].map((y) => String(y ?? ''))))
+                    if (x && agenteInmo.get(x) === k) S(x).cerradas.add(String(o._id));
                 if (op === 'sale' && cv > 0) (ventas.get(k) ?? ventas.set(k, []).get(k)!).push({
                     e, v: cv, codigo: (dig(o, 'property', 'internalId') as string) ?? null, closed: o.closedAt as Date,
                     created: isDate(o.createdAt) ? o.createdAt : null, cid, raw, tipo: String(dig(o, 'property', 'type') ?? ''),
@@ -203,7 +218,8 @@ async function barrer(y: number, c: [number, number]): Promise<Red> {
                 const k = deComp(p.company);
                 if (!k) continue;
                 const r = I(k);
-                if (isDate(p.createdAt) && p.createdAt >= A && p.createdAt < B) r.captaciones += 1;
+                const ea = String(dig(p, 'agent', 'email') ?? '');
+                if (isDate(p.createdAt) && p.createdAt >= A && p.createdAt < B) { r.captaciones += 1; if (ea && agenteInmo.get(ea) === k) S(ea).captaciones += 1; }
                 const ex = dig(p, 'contract', 'exclusive', 'start');
                 if (isDate(ex) && ex >= A && ex < B) {
                     const firm = dig(p, 'contract', 'status') === 'completed';
@@ -224,12 +240,7 @@ async function barrer(y: number, c: [number, number]): Promise<Red> {
     for (const [e, hs] of am.hist) {
         const k = agenteInmo.get(e);
         if (!k) continue;
-        let prev = 0;
-        for (const [ts, l] of hs) {
-            const o = ORD[l] ?? 0;
-            if (o > prev && prev > 0 && ts >= new Date(A.getTime() + 30 * DIA) && ts < new Date(B.getTime() + 2 * DIA)) I(k).ascensos += 1;
-            prev = o;
-        }
+        if (ascensoDelPeriodo(hs, A, B)) I(k).ascensos += 1;
     }
     return { inmo, asesor, ventas };
 }
@@ -278,7 +289,8 @@ export interface Metrica {
 export interface Hallazgo { titulo: string; texto: string; metrica: string }
 export interface TuAnio {
     inmobiliaria: string; corte: string; años: number[];
-    pares: { n: number; desde: number; hasta: number; publicadas: number };
+    /** null para la inmobiliaria: los pares sólo los ve el equipo Pulppo */
+    pares: { n: number; desde: number; hasta: number; publicadas: number } | null;
     metricas: Metrica[];
     logros: Hallazgo[]; falto: Hallazgo[];
     generado: string;
@@ -296,10 +308,8 @@ const DEF: Array<{ key: string; label: string; grupo: string; fmt: Fmt; dir: 1 |
         ayuda: 'Precio de cierre mediano de tus ventas. Es descriptivo: ni más alto ni más bajo es mejor.' },
     { key: 'leads', frase: (v) => `${v} leads`,  label: 'Leads', grupo: 'Comercial', fmt: 'int', dir: 1, peso: 1, f: (r) => r?.leads ?? 0,
         ayuda: 'Leads únicos (misma persona + misma propiedad = 1), de todos los canales.' },
-    { key: 'pctResp', label: 'Leads respondidos', grupo: 'Comercial', fmt: 'pct', dir: 1, peso: 1, min: (r) => r.leads >= 50,
-        f: (r) => (r && r.leads ? r.respondidos / r.leads : null), ayuda: 'Porcentaje de leads con respuesta del asesor en la plataforma.' },
-    { key: 'respMin', label: 'Tiempo de 1ª respuesta', grupo: 'Comercial', fmt: 'min', dir: -1, peso: 1, min: (r) => r.resp.length >= 30,
-        f: (r) => median(r?.resp ?? []), ayuda: 'Mediana, sólo leads que llegaron de 8 am a 8 pm y sin respuestas automáticas.' },
+    // Sin «leads respondidos» ni «tiempo de 1ª respuesta»: en 2026 hubo muchos problemas con WhatsApp y
+    // `answeredAt` depende de que el asesor lo tenga vinculado; comparar contra 2025 sería injusto (Ale, 20-nov).
     { key: 'visitas', frase: (v) => `${v} visitas`,  label: 'Visitas', grupo: 'Comercial', fmt: 'int', dir: 1, peso: 1, f: (r) => r?.visitas ?? 0,
         ayuda: 'Visitas confirmadas o pendientes, por la fecha de la visita.' },
     { key: 'tasaVisita', label: 'Leads que visitan', grupo: 'Comercial', fmt: 'pct', dir: 1, peso: 1.2, min: (r) => r.contactos.size >= 50,
@@ -356,49 +366,30 @@ export async function tuAnio(companyId: string): Promise<TuAnio | null> {
         return { key: d.key, label: d.label, grupo: d.grupo, fmt: d.fmt, dir: d.dir, ayuda: d.ayuda, valores, pares: median(pv), pctl };
     });
 
-    // ── hallazgos: UN veredicto por métrica. Manda la comparación contra sí misma (lo que pidió Ale); los
-    //    pares dan contexto, y deciden solos sólo si el año quedó parejo (±10%) o no hay año anterior. ──
+    // ── hallazgos: SÓLO contra sí misma (Ale, 20-nov): contra los pares sería spoiler de la gala y, para las grandes,
+    //    no dice nada (Diamond House está lejísimos de las de su cuartil). Un veredicto por métrica, ±10% o más. ──
     const r26i = R[AÑO].inmo.get(k);
     const cand: Array<Hallazgo & { s: number; tipo: 'logro' | 'falto' }> = [];
     for (const m of metricas) {
         const d = DEF.find((x) => x.key === m.key)!;
         if (m.dir === 0) continue;
         const v = m.valores[AÑO], ant = m.valores[AÑO - 1];
-        if (v == null) continue;
+        if (v == null || ant == null || ant <= 0 || (m.fmt === 'int' && ant < 5 && v < 5)) continue;
+        const cambio = ((v - ant) / ant) * m.dir;
+        if (Math.abs(cambio) < 0.1) continue;
         const F = (x: number) => fmtVal(x, m.fmt);
         const dicho = d.frase ? d.frase(F(v)) : `${m.label}: ${F(v)}`;
         const Dicho = dicho.charAt(0).toUpperCase() + dicho.slice(1);
-        // tasas: lo que significa la diferencia en personas / leads / cierres
-        const base = m.key === 'pctResp' ? r26i?.leads ?? 0 : r26i?.contactos.size ?? 0;
-        const enCosas = (ref: number, de: string) => {
-            const n = Math.round(Math.abs(ref - v) * base);
-            if (n < 1) return '';
-            if (m.key === 'tasaVisita') return ` Con la tasa ${de} serían ~${n.toLocaleString('es-MX')} personas más visitando.`;
-            if (m.key === 'leadCierre') return ` Con la conversión ${de} serían ~${n} cierres más.`;
-            if (m.key === 'pctResp') return ` Con el nivel ${de} serían ~${n.toLocaleString('es-MX')} leads más con respuesta.`;
-            return '';
-        };
-        const contexto = m.pares == null || m.pctl == null ? ''
-            : m.pctl >= 60 ? ` Arriba de las inmobiliarias de tu tamaño (su mediana: ${F(m.pares)}).`
-                : m.pctl <= 40 ? ` Las inmobiliarias de tu tamaño: ${F(m.pares)}.` : '';
-        const cambio = ant != null && ant > 0 && !(m.fmt === 'int' && ant < 5 && v < 5) ? ((v - ant) / ant) * m.dir : null;
-        if (cambio != null && Math.abs(cambio) >= 0.1) {
-            const sube = cambio > 0;
-            let t: string;
-            if (m.fmt === 'pct') t = `${m.label}: ${F(v)}, contra ${F(ant!)} en ${AÑO - 1}.${sube ? '' : enCosas(ant!, `de ${AÑO - 1}`)}`;
-            else if (m.fmt === 'min') t = sube ? `Tu equipo responde en ${F(v)}; en ${AÑO - 1} tardaba ${F(ant!)}.` : `Tu equipo tarda ${F(v)} en responder; en ${AÑO - 1} eran ${F(ant!)}.`;
-            else t = `${Dicho}, ${sigPct((v - ant!) / ant!)} contra el mismo periodo de ${AÑO - 1} (${F(Math.abs(v - ant!))} ${v > ant! ? 'más' : 'menos'}).`;
-            cand.push({ tipo: sube ? 'logro' : 'falto', s: Math.min(Math.abs(cambio), 1.5) * d.peso + 0.3, metrica: m.key, titulo: m.label, texto: t + contexto });
-        } else if (m.pctl != null && m.pares != null && (m.pctl >= 75 || m.pctl <= 35)) {
-            const arriba = m.pctl >= 75;
-            const t = m.fmt === 'min'
-                ? `Tu equipo responde en ${F(v)}; las inmobiliarias de tu tamaño, en ${F(m.pares)}.`
-                : arriba
-                    ? `${Dicho}: en el ${100 - m.pctl <= 10 ? '10' : '25'}% más alto de las inmobiliarias de tu tamaño (su mediana: ${F(m.pares)}).`
-                    : `${Dicho}, contra ${F(m.pares)} de las inmobiliarias de tu tamaño.${enCosas(m.pares, 'de tus pares')}`;
-            const parejo = cambio != null ? ` Parejo con ${AÑO - 1} (${sigPct(((v - ant!) / ant!))}).` : '';
-            cand.push({ tipo: arriba ? 'logro' : 'falto', s: (Math.abs(m.pctl - 50) / 50) * d.peso * 0.8, metrica: m.key, titulo: m.label, texto: t + parejo });
-        }
+        const sube = cambio > 0;
+        let t: string;
+        if (m.fmt === 'pct') {
+            t = `${m.label}: ${F(v)}, contra ${F(ant)} en ${AÑO - 1}.`;
+            const n = Math.round(Math.abs(ant - v) * (r26i?.contactos.size ?? 0));
+            if (n >= 1) t += m.key === 'tasaVisita'
+                ? (sube ? ` Son ~${n.toLocaleString('es-MX')} personas más visitando que con la tasa de ${AÑO - 1}.` : ` Con la tasa de ${AÑO - 1} serían ~${n.toLocaleString('es-MX')} personas más visitando.`)
+                : (sube ? ` Son ~${n} cierres más que con la conversión de ${AÑO - 1}.` : ` Con la conversión de ${AÑO - 1} serían ~${n} cierres más.`);
+        } else t = `${Dicho}, ${sigPct((v - ant) / ant)} contra el mismo periodo de ${AÑO - 1} (${F(Math.abs(v - ant))} ${v > ant ? 'más' : 'menos'}).`;
+        cand.push({ tipo: sube ? 'logro' : 'falto', s: Math.min(Math.abs(cambio), 1.5) * d.peso, metrica: m.key, titulo: m.label, texto: t });
     }
     const elegir = (t: 'logro' | 'falto') => {
         const usados = new Set<string>(), out: Hallazgo[] = [];
@@ -417,12 +408,32 @@ export async function tuAnio(companyId: string): Promise<TuAnio | null> {
 }
 
 // ── RECONOCIMIENTOS ───────────────────────────────────────────────────────────
+// Títulos neutros («Broker del año», no «Asesor/Asesora»): la base no guarda el género y no lo adivinamos por el nombre.
 export interface Ganador {
     email: string; nombre: string; first: string; last: string; photo: string | null; nivel: string | null;
+    /** 1, 2 o 3 en el podio (en «Ascenso del año» todos son 1) */
+    lugar: number;
+    /** para la carta (interna): puede llevar montos */
     valor: string; detalle: string;
+    /** para redes: SIN montos, para no exponer a nadie (Ale, 20-nov). Vacío = no se pone dato. */
+    valorRed: string; detalleRed: string;
 }
 export interface Premio { key: string; titulo: string; porque: string; regla: string; podio: Ganador[]; varios?: boolean }
-export interface Reconocimientos { inmobiliaria: string; logo: string | null; corte: string; año: number; premios: Premio[]; generado: string }
+export type NivelKey = 'elite' | 'professional' | 'standard';
+/** Diploma de cierre de año para TODO el equipo activo: su nivel de hoy y lo que hizo en el año (sin montos). */
+export interface Diploma {
+    email: string; nombre: string; first: string; last: string; photo: string | null; nivel: NivelKey;
+    cierres: number; visitas: number; captaciones: number; exclusivas: number; subio: string | null;
+}
+export interface Reconocimientos {
+    inmobiliaria: string; logo: string | null; corte: string; año: number; premios: Premio[];
+    /** master brokers activos: firman por la inmobiliaria */
+    masters: string[];
+    equipo: Diploma[];
+    generado: string;
+}
+
+const limpio = (s: string) => s.replace(/\s+/g, ' ').trim();
 
 export async function reconocimientos(companyId: string): Promise<Reconocimientos | null> {
     const { am, bajas, compInmo, agenteInmo } = await base();
@@ -431,46 +442,47 @@ export async function reconocimientos(companyId: string): Promise<Reconocimiento
     const c = corte();
     const r = await red(AÑO, c);
     const { A, B } = ventana(AÑO, c);
+    const db = await getDb();
     const mios = [...r.asesor.entries()].filter(([e]) => agenteInmo.get(e) === k && !bajas.has(e));
-    const persona = (e: string, valor: string, detalle: string): Ganador => {
+    const persona = (e: string, lugar: number, valor: string, detalle: string, valorRed = valor, detalleRed = detalle): Ganador => {
         const [first, last] = am.parts.get(e) ?? [am.name.get(e) ?? e, ''];
-        const limpio = (s: string) => s.replace(/\s+/g, ' ').trim();
-        return { email: e, nombre: limpio(am.name.get(e) ?? e), first: limpio(first), last: limpio(last), photo: am.photo.get(e) ?? null, nivel: LVL[am.level.get(e) ?? ''] ?? null, valor, detalle };
+        return { email: e, nombre: limpio(am.name.get(e) ?? e), first: limpio(first), last: limpio(last), photo: am.photo.get(e) ?? null,
+            nivel: LVL[am.level.get(e) ?? ''] ?? null, lugar, valor, detalle, valorRed, detalleRed };
     };
-    const top = <T,>(xs: T[], n = 3) => xs.slice(0, n);
+    const top3 = <T,>(xs: T[]) => xs.slice(0, 3);
     const money = (v: number) => fmtVal(v, 'money');
     const ops = (n: number) => `${n} ${n === 1 ? 'operación' : 'operaciones'}`;
 
     const premios: Premio[] = [];
-    premios.push({ key: 'asesor', titulo: 'Asesor del año', porque: 'Por ser quien más comisión cobró este año.',
-        regla: 'Comisión cobrada en el año, repartida por rol en cada operación (como en los premios de la gala).',
-        podio: top(mios.filter(([, s]) => s.cobrada > 0).sort((a, b) => b[1].cobrada - a[1].cobrada))
-            .map(([e, s]) => persona(e, money(s.cobrada), ops(s.ops.size))) });
-    premios.push({ key: 'captador', titulo: 'Gran captador', porque: 'Por firmar más exclusivas que nadie en el equipo.',
+    premios.push({ key: 'broker', titulo: 'Broker del año', porque: 'Por ser quien más comisión cobró este año.',
+        regla: 'Comisión cobrada en el año, repartida por rol en cada operación (como en los premios de la gala). En redes sólo se muestran las operaciones.',
+        podio: top3(mios.filter(([, s]) => s.cobrada > 0).sort((a, b) => b[1].cobrada - a[1].cobrada))
+            .map(([e, s], i) => persona(e, i + 1, money(s.cobrada), ops(s.ops.size), ops(s.ops.size), 'cobradas en el año')) });
+    premios.push({ key: 'captacion', titulo: 'Captación del año', porque: 'Por firmar más exclusivas que nadie en el equipo.',
         regla: 'Exclusivas que arrancaron en el año con contrato completo en la plataforma; desempata el total de exclusivas.',
-        podio: top(mios.filter(([, s]) => s.firmadas > 0).sort((a, b) => b[1].firmadas - a[1].firmadas || b[1].exclusivas - a[1].exclusivas))
-            .map(([e, s]) => persona(e, `${s.firmadas} ${s.firmadas === 1 ? 'exclusiva firmada' : 'exclusivas firmadas'}`, `de ${s.exclusivas} exclusivas`)) });
+        podio: top3(mios.filter(([, s]) => s.firmadas > 0).sort((a, b) => b[1].firmadas - a[1].firmadas || b[1].exclusivas - a[1].exclusivas))
+            .map(([e, s], i) => persona(e, i + 1, `${s.firmadas} ${s.firmadas === 1 ? 'exclusiva firmada' : 'exclusivas firmadas'}`, `de ${s.exclusivas} exclusivas`)) });
     premios.push({ key: 'relampago', titulo: 'Respuesta relámpago', porque: 'Por ser quien más rápido le contesta a sus clientes.',
         regla: 'Mediana del tiempo de 1ª respuesta con al menos 20 leads respondidos de 8 am a 8 pm; sin respuestas automáticas (<10 s).',
-        podio: top(mios.filter(([, s]) => s.resp.length >= 20).map(([e, s]) => [e, median(s.resp)!, s.resp.length] as const).sort((a, b) => a[1] - b[1]))
-            .map(([e, m, n]) => persona(e, fmtVal(m, 'min'), `${n} leads respondidos`)) });
-    premios.push({ key: 'visitas', titulo: 'Rey de las visitas', porque: 'Por ser quien más visitas hizo en el año.',
+        podio: top3(mios.filter(([, s]) => s.resp.length >= 20).map(([e, s]) => [e, median(s.resp)!, s.resp.length] as const).sort((a, b) => a[1] - b[1]))
+            .map(([e, m, n], i) => persona(e, i + 1, fmtVal(m, 'min'), `${n} leads respondidos`, fmtVal(m, 'min'), 'para contestar a sus clientes')) });
+    premios.push({ key: 'visitas', titulo: 'Récord de visitas', porque: 'Por ser quien más visitas hizo en el año.',
         regla: 'Visitas confirmadas o pendientes con fecha en el año (mínimo 5).',
-        podio: top(mios.filter(([, s]) => s.visitas >= 5).sort((a, b) => b[1].visitas - a[1].visitas))
-            .map(([e, s]) => persona(e, `${s.visitas.toLocaleString('es-MX')} visitas`, `${s.leads.toLocaleString('es-MX')} leads atendidos`)) });
+        podio: top3(mios.filter(([, s]) => s.visitas >= 5).sort((a, b) => b[1].visitas - a[1].visitas))
+            .map(([e, s], i) => persona(e, i + 1, `${s.visitas.toLocaleString('es-MX')} visitas`, `${s.leads.toLocaleString('es-MX')} leads atendidos`, `${s.visitas.toLocaleString('es-MX')} visitas`, 'en el año')) });
     premios.push({ key: 'conversion', titulo: 'Mejor conversión', porque: 'Por convertir en cierre la mayor parte de sus leads.',
-        regla: 'De las personas que le escribieron en el año (mínimo 40), cuántas compraron o rentaron con él o ella.',
-        podio: top(mios.filter(([, s]) => s.contactos.size >= 40 && s.cierres.size > 0)
+        regla: 'De las personas que le escribieron en el año (mínimo 40), cuántas compraron o rentaron con esa persona.',
+        podio: top3(mios.filter(([, s]) => s.contactos.size >= 40 && s.cierres.size > 0)
             .sort((a, b) => b[1].cierres.size / b[1].contactos.size - a[1].cierres.size / a[1].contactos.size || b[1].cierres.size - a[1].cierres.size))
-            .map(([e, s]) => persona(e, fmtVal(s.cierres.size / s.contactos.size, 'pct'), `${s.cierres.size} de ${s.contactos.size} personas`)) });
+            .map(([e, s], i) => persona(e, i + 1, fmtVal(s.cierres.size / s.contactos.size, 'pct'), `${s.cierres.size} de ${s.contactos.size} personas`, `${s.cierres.size} de ${s.contactos.size}`, 'personas que le escribieron cerraron')) });
 
     const ventas = (r.ventas.get(k) ?? []).filter((v) => v.e && !bajas.has(v.e));
     premios.push({ key: 'ventaMayor', titulo: 'Venta del año', porque: 'Por cerrar la venta de mayor valor de la inmobiliaria.',
-        regla: 'Precio de cierre de las ventas cerradas en el año.',
-        podio: top([...ventas].sort((a, b) => b.v - a.v).filter((v, i, xs) => xs.findIndex((x) => x.e === v.e) === i)).map((v) => persona(v.e!, money(v.v), v.codigo ?? '')) });
+        regla: 'Precio de cierre de las ventas cerradas en el año (la mejor de cada broker). En redes no se muestra el monto.',
+        podio: top3([...ventas].sort((a, b) => b.v - a.v).filter((v, i, xs) => xs.findIndex((x) => x.e === v.e) === i))
+            .map((v, i) => persona(v.e!, i + 1, money(v.v), v.codigo ?? '', '', '')) });
 
     // venta más rápida: primer lead del comprador → cierre; ventas de $2M+ sin terrenos, lead anterior a la operación (reglas de la gala)
-    const db = await getDb();
     const rapidas = ventas.filter((v) => v.cid && v.v >= 2_000_000 && !/terreno|lote/i.test(v.tipo));
     const primer = new Map<string, number>();
     if (rapidas.length) for await (const l of db.collection('leads').find({ 'contact._id': { $in: rapidas.map((v) => v.raw as ObjectId) } }, { projection: { 'contact._id': 1, createdAt: 1 } })) {
@@ -479,31 +491,48 @@ export async function reconocimientos(companyId: string): Promise<Reconocimiento
     }
     premios.push({ key: 'ventaRapida', titulo: 'Venta más rápida', porque: 'Por llevar a un cliente del primer contacto al cierre en tiempo récord.',
         regla: 'Días del primer lead del comprador al cierre. Ventas de $2 MDP o más, sin terrenos, con el lead anterior a la operación.',
-        podio: top(rapidas.map((v) => {
+        podio: top3(rapidas.map((v) => {
             const l = primer.get(v.cid!);
             const ok = l != null && (!v.created || l <= v.created.getTime());
             return { v, d: ok ? (v.closed.getTime() - l!) / DIA : null };
-        }).filter((x) => x.d != null && x.d >= 1).sort((a, b) => a.d! - b.d!))
-            .map(({ v, d }) => persona(v.e!, `${Math.round(d!)} días`, `${v.codigo ?? ''} · ${money(v.v)}`)) });
+        }).filter((x) => x.d != null && x.d >= 1).sort((a, b) => a.d! - b.d!).filter((x, i, xs) => xs.findIndex((y) => y.v.e === x.v.e) === i))
+            .map(({ v, d }, i) => persona(v.e!, i + 1, `${Math.round(d!)} días`, `${v.codigo ?? ''} · ${money(v.v)}`, `${Math.round(d!)} días`, 'del primer contacto al cierre')) });
 
-    // ascenso del año: TODOS los que subieron de nivel con un corte del periodo (cada uno se lleva su reconocimiento)
+    // ascenso del año: TODOS los que llegaron por PRIMERA VEZ a un nivel (cada uno se lleva su reconocimiento)
     const asc: Ganador[] = [];
+    const subio = new Map<string, string>();
     for (const [e, hs] of am.hist) {
         if (agenteInmo.get(e) !== k || bajas.has(e)) continue;
-        let prev: string | null = null, sube: { de: string; a: string; ts: Date } | null = null;
-        for (const [ts, l] of hs) {
-            if (prev && ORD[l] > ORD[prev] && ts >= new Date(A.getTime() + 30 * DIA) && ts < new Date(B.getTime() + 2 * DIA)) sube = { de: prev, a: l, ts };
-            prev = l;
-        }
-        if (sube) asc.push(persona(e, `${LVL[sube.de]} → ${LVL[sube.a]}`, `desde ${MES[new Date(sube.ts.getTime() - DIA).getUTCMonth()]}`));
+        const x = ascensoDelPeriodo(hs, A, B);
+        if (!x) continue;
+        const t = `${LVL[x.de]} → ${LVL[x.a]}`;
+        subio.set(e, t);
+        asc.push(persona(e, 1, t, `desde ${MES[new Date(x.ts.getTime() - DIA).getUTCMonth()]}`));
     }
     premios.push({ key: 'ascenso', titulo: 'Ascenso del año', porque: 'Por subir de nivel gracias a su desempeño.', varios: true,
-        regla: 'Asesores que subieron de nivel (Estándar → Profesional → Élite) en algún corte del año. Lo recibe cada uno.',
+        regla: 'Brokers que llegaron por primera vez a un nivel (Profesional o Élite) en algún corte del año; si ya lo habían tenido antes, no cuenta. Lo recibe cada uno.',
         podio: asc.sort((a, b) => b.valor.localeCompare(a.valor)) });
+
+    // diplomas: todo el equipo activo, con su nivel de HOY
+    const comps = [...compInmo.entries()].filter(([, n]) => n === k).map(([id]) => new ObjectId(id));
+    const activos = await db.collection('agents').find({ 'company._id': { $in: comps }, status: 'active', email: { $exists: true } },
+        { projection: { email: 1, type: 1, firstName: 1, lastName: 1 } }).toArray();
+    const masters = activos.filter((a) => a.type === 'master').map((a) => limpio(`${a.firstName ?? ''} ${a.lastName ?? ''}`)).filter(Boolean);
+    // fuera cuentas de servicio que no son brokers («Operaciones Temp» en DH)
+    const servicio = (a: Document) => /\b(temp|prueba|test|operaciones|demo)\b/i.test(`${a.firstName ?? ''} ${a.lastName ?? ''}`);
+    const equipo: Diploma[] = activos.filter((a) => !bajas.has(a.email as string) && !servicio(a)).map((a) => {
+        const e = a.email as string, s = r.asesor.get(e);
+        const g = persona(e, 1, '', '');
+        const lv = am.level.get(e);
+        return { email: e, nombre: g.nombre, first: g.first, last: g.last, photo: g.photo,
+            nivel: (lv === 'elite' || lv === 'professional' ? lv : 'standard') as NivelKey,
+            cierres: s?.cerradas.size ?? 0, visitas: s?.visitas ?? 0, captaciones: s?.captaciones ?? 0, exclusivas: s?.exclusivas ?? 0,
+            subio: subio.get(e) ?? null };
+    }).sort((a, b) => (ORD[b.nivel] - ORD[a.nivel]) || a.nombre.localeCompare(b.nombre, 'es'));
 
     // logo de la inmobiliaria (7,800 companies traen el placeholder de i24: eso no es logo)
     const co = await db.collection('companies').findOne({ _id: new ObjectId(companyId) }, { projection: { 'logo.default': 1 } });
     const lg = String(dig(co, 'logo', 'default') ?? '');
     const logo = lg && !/placeholder-img/.test(lg) ? lg : null;
-    return { inmobiliaria: k, logo, corte: corteTexto(c), año: AÑO, premios, generado: new Date().toISOString() };
+    return { inmobiliaria: k, logo, corte: corteTexto(c), año: AÑO, premios, masters, equipo, generado: new Date().toISOString() };
 }

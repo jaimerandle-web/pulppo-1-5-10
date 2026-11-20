@@ -1048,7 +1048,7 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                             Tu año contra ti mismo y contra las inmobiliarias de tu tamaño, y los campeones de tu equipo con
                             su carta de reconocimiento y sus piezas para redes.
                         </div>
-                        <MBTu2026 companyId={d.companyId} abierta={TU2026_ABIERTA} />
+                        <MBTu2026 companyId={d.companyId} abierta={TU2026_ABIERTA} interno={interno} />
                     </div>
                 )}
 
