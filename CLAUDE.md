@@ -563,3 +563,26 @@ de su inventario como exclusiva, 0 firmadas).
   del periodo: Premier arrancó el 22-oct y su promedio de octubre es ~10 aunque hoy tenga 130.
 - ⚠️ YTD de toda la red con comparación tarda ~7 min en local (Atlas lejos); en Vercel es más rápido, pero está
   cerca del maxDuration de 300 s.
+
+## /portales → la vista del año (nov-2026): Tablero · Por portal · Por inmobiliaria · Publicación
+
+Ale: «verlo por portal, filtrar por inmobiliaria, el desempeño a través del año y focos rojos reales a primera
+vista». Es la portada de /portales; las pestañas de antes quedan abajo en el menú como «Detalle de un periodo».
+
+- **Motor:** `src/lib/portales/anual.ts`. Cada MES es un cubo `canal × inmobiliaria × operación` (leads, en horario,
+  <1 h, respondidos, visitaron, ofertaron, cerraron) + sus cierres (`cierresEntre`, con `vendeId`/`compraId`). Se
+  guarda con `unstable_cache` (caché de datos de Vercel, compartida entre instancias): mes cerrado 12 h, en curso
+  30 min. El navegador pide los 13 meses de 4 en 4 (`/api/portales/anual?view=mes&mes=`); en frío cada mes son
+  30–90 s. Inventario publicado por mes (día 15 a mediodía) en `?view=inventario`.
+- **MISMO CÁLCULO QUE /mb** (decisión de Ale, 20-nov-2026): leads únicos contacto + propiedad en 400 días, meses en
+  hora México, respondidos a cualquier hora, <1 h sólo de 8 a 20, visitaron/ofertaron = Consultas de /mb. Por eso
+  esta vista NO cuadra al lead con «Detalle de un periodo» ni con los PDFs mensuales (días UTC, leads crudos).
+- **Focos rojos:** `src/lib/portales/focos.ts` (lógica pura, corre en el navegador). Último mes cerrado vs promedio
+  de los 3 anteriores, con base mínima (portal 100 leads, inmobiliaria 30); si los leads por propiedad se sostienen
+  es «salió inventario» (nota, no foco); visita en el último mes MADURO (cerrado hace 30+ días); ordenados por
+  LEADS AFECTADOS. Las inmobiliarias con `seQueda: false` o tier «Baja» en `ordenInmobiliarias.ts` van a notas.
+- **Publicación:** `src/lib/portales/publicacion.ts` (`?view=publicacion`, caché 1 h). Cupo = último registro de
+  `adassignmentcompanycupos` por compañía y portal (i24: súper destacado/destacado con sus ZD, simple; MeLi:
+  oro-meli = Oro Premium, plata-meli = Oro, simple-meli = Plata) contra avisos en línea y con ≥1 lead único en 30 días.
+- **Siguiente:** fase 2 = descargable para portales (top 3 bueno / top 3 riesgos + desglose); fase 3 = asignación
+  editable con las reglas (SD/D % del inventario en venta y tope de reinversión por modelo).

@@ -121,6 +121,8 @@ export interface Cierre {
     inferida?: boolean;
     /** inmobiliaria del lado vendedor (para la lista de «Sin registro» que revisan los KAMs) */
     vende?: string | null;
+    /** compañías de cada lado (para repartir el cierre por inmobiliaria en el cubo anual) */
+    vendeId?: string | null; compraId?: string | null;
     /** qué evidencia se usó cuando la fuente no venía en la operación (con fecha) */
     evidencia?: string | null;
     /** quién trajo al comprador si no fue la inmobiliaria: «Broker externo» / «Red Pulppo» (no es fuente) */
@@ -879,6 +881,7 @@ export async function cierresEntre(
             })(),
             lado: ladoX, asesor: nombres.join(' / ') || '—',
             vende: String(dig(o, 'seller', 'company', 'name') ?? '').trim() || null,
+            vendeId: sc || null, compraId: bc || null,
             estatus: dig(o, 'status', 'last') === 'paying' ? 'Cobrando' : 'Cerrada',
         });
         if (!fuenteCapturada(dig(o, 'buyer', 'source'))) sinFuenteOrig += 1;

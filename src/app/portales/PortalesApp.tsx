@@ -4,10 +4,11 @@
 //
 // Diseño: los mismos tokens que /mb y /plus (7 colores oficiales, R=2, EB Garamond en cifras,
 // sin sombras, sin emoji).
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { PulseView } from '@/lib/portales/pulse';
 import type { HistoricoView } from '@/lib/portales/historico';
 import InmobiliariasTab from './InmobiliariasTab';
+import VistaAnual, { type VistaA } from './VistaAnual';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2;
@@ -23,9 +24,11 @@ const mesLargo = (mk: string) => `${MESL[mk.slice(5)]} ${mk.slice(0, 4)}`;
 
 // Menú por PREGUNTA (Ale, 5-oct-2026). Las cuatro primeras comparten una sola consulta y una sola
 // barra de filtros (InmobiliariasTab): así un número es el mismo en todas las pestañas.
-export type Section = 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias' | 'pulso' | 'historico' | 'comoleer';
+export type Section = 'tablero' | 'portal' | 'inmos' | 'publicacion' | 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias' | 'pulso' | 'historico' | 'comoleer';
 export type SeccionV2 = 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias';
 const V2: Section[] = ['resumen', 'inversion', 'leads', 'embudo', 'inmobiliarias'];
+// La vista del año (nov-2026): cuatro secciones sobre los mismos datos y la misma barra de filtros (VistaAnual).
+const ANUAL: Section[] = ['tablero', 'portal', 'inmos', 'publicacion'];
 
 /** Mini-barras horizontales para una serie semanal. Sin librería: son 8 divs. */
 function Spark({ vals, color = BLK }: { vals: number[]; color?: string }) {
@@ -82,6 +85,9 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
     /** venta/renta compartido entre las secciones nuevas y el pulso */
     op: 'todas' | 'sale' | 'rent'; setOp: (o: 'todas' | 'sale' | 'rent') => void;
 }) {
+    // una vez que se abre la vista del año se queda montada (sus 13 meses no se vuelven a pedir)
+    const [anualVisto, setAnualVisto] = useState(false);
+    useEffect(() => { if (ANUAL.includes(section)) setAnualVisto(true); }, [section]);
 
     const tth: CSSProperties = { textAlign: 'right', padding: '7px 8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
     const tth0: CSSProperties = { ...tth, textAlign: 'left' };
@@ -95,11 +101,25 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
     const hace = cacheAt ? Math.round((Date.now() - cacheAt) / 60000) : null;
 
     return (
-        <div style={{ fontFamily: 'Nunito Sans, sans-serif', color: BLK, background: '#fff', minHeight: '100vh', display: 'flex' }}>
+        <div className="pa-root" style={{ fontFamily: 'Nunito Sans, sans-serif', color: BLK, background: '#fff', minHeight: '100vh', display: 'flex' }}>
+            <style>{`
+                @media (max-width:760px){
+                    .pa-root{flex-direction:column}
+                    .pa-nav{width:auto!important;position:static!important;border-right:none!important;border-bottom:1px solid ${LGT};padding:14px 16px 8px!important;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+                    .pa-nav > *{margin-bottom:0!important}
+                    .pa-nav .pa-sep,.pa-nav .pa-sub{display:none}
+                    .pa-main{padding:16px!important}
+                }
+            `}</style>
             {/* ── nav ── */}
-            <div style={{ width: 208, flexShrink: 0, borderRight: `1px solid ${LGT}`, padding: '22px 12px', position: 'sticky', top: 0, alignSelf: 'flex-start' }}>
+            <div className="pa-nav" style={{ width: 208, flexShrink: 0, borderRight: `1px solid ${LGT}`, padding: '22px 12px', position: 'sticky', top: 0, alignSelf: 'flex-start' }}>
                 <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 21, lineHeight: 1.1, padding: '0 8px 4px' }}>Análisis de portales</div>
-                <div style={{ fontSize: 10.5, color: GRY, padding: '0 8px 16px' }}>Leads, costo y resultados de cada portal</div>
+                <div className="pa-sub" style={{ fontSize: 10.5, color: GRY, padding: '0 8px 16px' }}>Leads, costo y resultados de cada portal</div>
+                {nav('tablero', 'Tablero')}
+                {nav('portal', 'Por portal')}
+                {nav('inmos', 'Por inmobiliaria')}
+                {nav('publicacion', 'Publicación')}
+                <div className="pa-sep" style={{ fontSize: 9.5, color: GRY, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', padding: '16px 8px 6px' }}>Detalle de un periodo</div>
                 {nav('resumen', 'Resumen')}
                 {nav('inversion', 'Inversión y retorno')}
                 {nav('leads', 'Leads y calidad')}
@@ -118,7 +138,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                         </button>
                     </div>
                 )}
-                <div style={{ marginTop: 20, padding: '0 8px', display: V2.includes(section) ? 'none' : 'block' }}>
+                <div className="pa-sep" style={{ marginTop: 20, padding: '0 8px', display: V2.includes(section) || ANUAL.includes(section) ? 'none' : 'block' }}>
                     <button onClick={onRefresh} disabled={cargando}
                         style={{ width: '100%', padding: '8px 10px', borderRadius: R, border: `1px solid ${BLK}`, background: cargando ? LGT : '#fff', color: BLK, fontSize: 11.5, fontWeight: 700, cursor: cargando ? 'default' : 'pointer', fontFamily: 'inherit' }}>
                         {cargando ? 'Consultando Mongo…' : 'Recargar datos'}
@@ -132,7 +152,14 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
             </div>
 
             {/* ── contenido ── */}
-            <div style={{ flex: 1, padding: '24px 28px', maxWidth: 1180, minWidth: 0 }}>
+            <div className="pa-main" style={{ flex: 1, padding: '24px 28px', maxWidth: 1180, minWidth: 0 }}>
+
+                {/* La vista del año: montada una sola vez (no recalcula al ir y volver), escondida en las demás. */}
+                {(ANUAL.includes(section) || anualVisto) && (
+                    <div style={{ display: ANUAL.includes(section) ? 'block' : 'none' }}>
+                        <VistaAnual vista={(ANUAL.includes(section) ? section : 'tablero') as VistaA} setVista={(v) => setSection(v)} />
+                    </div>
+                )}
 
                 {/* Las cuatro secciones nuevas: UNA instancia (mismo lugar del árbol) → comparten filtros y datos. */}
                 {V2.includes(section) && <InmobiliariasTab section={section as SeccionV2} op={op} setOp={setOp} />}
