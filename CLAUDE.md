@@ -584,5 +584,14 @@ vista». Es la portada de /portales; las pestañas de antes quedan abajo en el m
 - **Publicación:** `src/lib/portales/publicacion.ts` (`?view=publicacion`, caché 1 h). Cupo = último registro de
   `adassignmentcompanycupos` por compañía y portal (i24: súper destacado/destacado con sus ZD, simple; MeLi:
   oro-meli = Oro Premium, plata-meli = Oro, simple-meli = Plata) contra avisos en línea y con ≥1 lead único en 30 días.
+- **Periodo** (mes · trimestre · rango · año): se compara el PROMEDIO MENSUAL del periodo contra los 3 meses previos
+  (`promedio`/`sumar`/`Rango` en focos.ts). El cubo v2 trae el estatus de cada cierre y `pipeline` = operaciones VIVAS
+  (oferta, oferta aceptada, contrato) por mes de creación, con la fuente de `buyer.source` (sin inferir).
+- **Plan contratado** (Publicación): hoja «Calculadora» del Sheet de asignación (`planContratado`): bolsa de i24 en
+  pesos para elevados + Premier, precio de lista por nivel, simples contratados, Oro Premium incluidos de MeLi. Usado =
+  avisos en línea en NUESTRAS cuentas (ANUNCIO_SIMPLE, ANUNCIOS_DEGOHOUSE, ANUNCIO_PREMIERE) × precio; el Premier va a
+  su costo fijo. 🔴 El cupo «super-destacado» de Diamond House (130) ES el Premier: cuenta como súper destacado.
+- **Caídos** se cuentan por aviso (una propiedad caída en 3 portales suma 3), con motivo y quién lo corrige. MeLi
+  OFFLINE sin error en una inmobiliaria con cupo 0 = «por regla» (20-nov-2026: 362 de 583).
 - **Siguiente:** fase 2 = descargable para portales (top 3 bueno / top 3 riesgos + desglose); fase 3 = asignación
   editable con las reglas (SD/D % del inventario en venta y tope de reinversión por modelo).
