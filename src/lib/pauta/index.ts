@@ -215,10 +215,13 @@ async function demanda(db: Awaited<ReturnType<typeof getDb>>, ids: ObjectId[]): 
     return out;
 }
 
-export async function fetchPauta(): Promise<PautaProp[]> {
+// Por default, las exclusivas 1·5·10 vivas. Con `codes`, esas propiedades publicadas (planes por
+// inmobiliaria, inmobiliarias.ts).
+export async function fetchPauta(codes?: string[]): Promise<PautaProp[]> {
     const db = await getDb();
+    const filtro = codes ? { internalId: { $in: codes } } : { 'contract.exclusive.pulppo': { $ne: null } };
     const raw = await db.collection('properties')
-        .find({ 'contract.exclusive.pulppo': { $ne: null }, 'status.last': 'published' }, { projection: PROJ })
+        .find({ ...filtro, 'status.last': 'published' }, { projection: PROJ })
         .toArray();
     const dem = await demanda(db, raw.map((P) => P._id as ObjectId));
     const props = raw.map((P) => {

@@ -14,6 +14,7 @@ import type { PautaProp } from './index';
 import { precioCorto, precioLargo } from './armado';
 import { REACTIVACIONES, type Reactivacion } from './reactivaciones';
 import { MES, type Mitad } from './mes';
+import { enPlanInmo, type PlanInmo } from './inmobiliarias';
 
 export const MAX_TARJETAS = 5;
 
@@ -61,8 +62,7 @@ export function urlTarjeta(p: PautaProp, campana: string): string {
     return `https://pulppo.com/propiedades/${p.id}?${q.toString()}`;
 }
 
-function carrusel(nombreLegible: string, slugCampana: string, mitad: Mitad, orden: PautaProp[], presupuesto: number, perfil: string): CampanaPlan {
-    const nombre = `B2C_CAR_${slugCampana}_exc`;
+function carrusel(nombreLegible: string, nombre: string, mitad: Mitad, orden: PautaProp[], presupuesto: number, perfil: string): CampanaPlan {
     const precios = orden.map((p) => p.precio).filter((x): x is number => x != null).sort((a, b) => a - b);
     const rango = precios.length ? (precios[0] === precios[precios.length - 1]
         ? precioLargo(precios[0]) : `de ${precioCorto(precios[0])} a ${precioCorto(precios[precios.length - 1])}`) : '';
@@ -109,6 +109,8 @@ export interface FueraMes {
 
 const motivoFuera = (p: PautaProp): string => {
     if (MES.fueraMotivo[p.code]) return MES.fueraMotivo[p.code];
+    const inmo = enPlanInmo(p.code);
+    if (inmo) return `Va en el plan de ${inmo.nombre} (con su propio presupuesto).`;
     if ((p.precio ?? 0) >= 15e6) return 'Más de $15M: el lead de Meta casi no llega a visita (DLI-815: $4,317 por visita).';
     if (['Morelos', 'Querétaro', 'Toluca y Valle de Bravo'].includes(p.zona)) return `Fuera del área metropolitana (${p.zona}): poca demanda y otra subasta.`;
     if (!p.foto) return 'Sin foto pública para el arte.';
@@ -149,14 +151,14 @@ export function armarPlan(props: PautaProp[]): { plan: CampanaPlan[]; fuera: Fue
     for (const c of MES.carruseles) {
         const ps = tomar(c.codes).slice(0, MAX_TARJETAS);
         if (ps.length < 2) continue; // Meta pide 2+ tarjetas
-        plan.push(carrusel(c.nombre, c.slug, c.mitad, ps, MES.tope, c.perfil));
+        plan.push(carrusel(c.nombre, `B2C_CAR_${c.slug}_exc`, c.mitad, ps, MES.tope, c.perfil));
     }
 
     // Remarketing: las tarjetas de las estrellas (lo que más convierte) a quien ya vio una ficha.
     const estrellasMes = [...MES.solas, ...MES.carruseles.filter((c) => c.mitad === 'estrellas').flatMap((c) => c.codes)];
     const rm = tomar(estrellasMes).slice(0, MAX_TARJETAS);
     if (rm.length >= 2) {
-        const c = carrusel('Remarketing', 'Remarketing_1510', 'compartido', rm, MES.remarketing, 'Quien ya vio una ficha de 1·5·10 en 30 días y no escribió:');
+        const c = carrusel('Remarketing', 'B2C_CAR_Remarketing_1510_exc', 'compartido', rm, MES.remarketing, 'Quien ya vio una ficha de 1·5·10 en 30 días y no escribió:');
         plan.push({
             ...c, tipo: 'remarketing',
             textos: [
@@ -175,4 +177,19 @@ export function armarPlan(props: PautaProp[]): { plan: CampanaPlan[]; fuera: Fue
         code: p.code, inmobiliaria: p.inmobiliaria, donde: `${p.colonia || p.ciudad || ''}${p.precio ? ` · ${precioCorto(p.precio)}` : ''}`, motivo: motivoFuera(p)
     })).sort((a, b) => a.motivo.localeCompare(b.motivo, 'es'));
     return { plan, fuera, faltan: [...new Set(faltan)] };
+}
+
+// Plan de una inmobiliaria (inmobiliarias.ts): sus carruseles por zona con sus montos y textos.
+// Una tarjeta que no llegó (no publicada todavía) va en `faltan`; si al carrusel le quedan menos de
+// 2 tarjetas, no sale (Meta pide 2+).
+export function armarPlanInmo(cfg: PlanInmo, props: PautaProp[]): { plan: CampanaPlan[]; faltan: string[] } {
+    const vivas = new Map(props.map((p) => [p.code, p]));
+    const faltan: string[] = [];
+    const plan: CampanaPlan[] = [];
+    for (const c of cfg.carruseles) {
+        const ps = c.codes.flatMap((k) => { const p = vivas.get(k); if (!p) faltan.push(k); return p ? [p] : []; }).slice(0, MAX_TARJETAS);
+        if (ps.length < 2) continue;
+        plan.push({ ...carrusel(c.nombre, `B2C_CAR_${c.slug}`, 'prueba', ps, c.presupuesto, c.perfil), textos: c.textos });
+    }
+    return { plan, faltan };
 }

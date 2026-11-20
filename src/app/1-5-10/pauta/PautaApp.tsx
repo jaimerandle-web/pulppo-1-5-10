@@ -12,6 +12,7 @@ import { FORMATOS, precioLargo, urlArte } from '@/lib/pauta/armado';
 import type { PautaProp } from '@/lib/pauta';
 import type { CampanaPlan, FueraMes } from '@/lib/pauta/plan';
 import type { Mes } from '@/lib/pauta/mes';
+import { PLANES_INMO, type PlanInmo } from '@/lib/pauta/inmobiliarias';
 import type { Excluida } from '@/lib/pauta/excluidas';
 
 interface Payload {
@@ -299,11 +300,12 @@ function FilaPlan({ c, props }: { c: CampanaPlan; props: PautaProp[] }) {
     );
 }
 
-// Instrucciones para quien monta (Habi). Lo que no cambia de un mes a otro.
-const PASOS: [string, string][] = [
+// Instrucciones para quien monta (Habi). Lo que no cambia de un mes a otro; cambian el presupuesto
+// y las excepciones de cada plan.
+const pasos = (presupuesto: string, excepcion = ''): [string, string][] => [
     ['Una campaña por fila', 'Cada fila de abajo es UNA campaña. El nombre va exacto (botón Copiar): es el mismo utm_campaign de las ligas y así el lead llega al CRM con su campaña.'],
-    ['Presupuesto', 'Presupuesto diario de campaña = el monto al día de cada fila ($1,500 al mes = $50 al día). Ninguna campaña pasa de $1,500 al mes. Total del mes: $13,000.'],
-    ['Objetivo', 'Clientes potenciales · conversión en el sitio web · evento Lead del pixel de Pulppo (es el clic al botón de WhatsApp de la ficha). Excepción: la reactivación de DLI-815 va con formulario instantáneo (ver su brief).'],
+    ['Presupuesto', `Presupuesto diario de campaña = el monto al día de cada fila. ${presupuesto}`],
+    ['Objetivo', `Clientes potenciales · conversión en el sitio web · evento Lead del pixel de Pulppo (es el clic al botón de WhatsApp de la ficha).${excepcion ? ` ${excepcion}` : ''}`],
     ['Ubicaciones', 'Advantage+ (automáticas). En las estrellas solas, subir los 4 tamaños del arte para que Meta use el correcto en cada lugar.'],
     ['Carruseles', 'Una tarjeta por propiedad, en el orden de la página, con el arte de tarjeta (1080×1080) y la liga de esa tarjeta (lleva utm_content = código). Desactivar "Mostrar primero las tarjetas con mejor rendimiento". Si la tarjeta tiene video en Drive, puede ir el corte 1:1 en lugar de la imagen.'],
     ['Copy', 'Cargar los 3 textos principales como variantes (creativo dinámico). Sin emojis. Botón: Enviar mensaje por WhatsApp o Más información.'],
@@ -344,7 +346,7 @@ function Plan({ d }: { d: Payload }) {
             <details className="rounded-lg border border-neutral-200 p-4 text-sm" open>
                 <summary className="cursor-pointer font-semibold">Cómo montar este mes</summary>
                 <ol className="mt-3 list-decimal space-y-2 pl-5">
-                    {PASOS.map(([t, x]) => <li key={t}><b>{t}.</b> {x}</li>)}
+                    {pasos('Ninguna campaña pasa de $1,500 al mes ($50 al día). Total del mes: $13,000.', 'Excepción: la reactivación de DLI-815 va con formulario instantáneo (ver su brief).').map(([t, x]) => <li key={t}><b>{t}.</b> {x}</li>)}
                     <li>
                         <b>Revisión del {m.revision}.</b> En cada carrusel, la tarjeta con 0 clics se cambia por otra del mismo cluster (pedir el reemplazo a Ale).
                         La que trae visitas sube a carrusel de estrellas el mes siguiente. Si una campaña gastó $750 sin un solo lead en el CRM, se pausa.
@@ -393,6 +395,74 @@ function AccesoExternos() {
     );
 }
 
+// Plan de una inmobiliaria (inmobiliarias.ts): mismo paquete que 1·5·10, con su presupuesto y sus
+// clusters por zona.
+function PlanInmoVista({ slug }: { slug: string }) {
+    const router = useRouter();
+    const [d, setD] = useState<(Payload & { inmo: PlanInmo }) | null>(null);
+    const [error, setError] = useState('');
+    useEffect(() => {
+        setD(null);
+        fetch(`/api/pauta?inmo=${slug}`)
+            .then(async (r) => {
+                if (r.status === 401) { router.push('/login'); return; }
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.error || 'Error');
+                setD(j);
+            })
+            .catch((e) => setError(e.message));
+    }, [slug, router]);
+    if (error) return <p className="text-brand-red">{error}</p>;
+    if (!d) return <p className="text-neutral-500">Cargando el plan…</p>;
+    const m = d.inmo;
+    const total = d.plan.reduce((s, c) => s + c.presupuesto, 0);
+    const pendiente = m.carruseles.reduce((s, c) => s + c.presupuesto, 0) - total;
+    return (
+        <div className="space-y-6">
+            <div className="rounded-lg bg-light p-4 text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                    <h2 className="font-serif text-2xl">{m.nombre} · {m.periodo}</h2>
+                    <a href={`/api/pauta?inmo=${m.slug}&format=csv&tipo=plan`} className="rounded-lg bg-soft px-3 py-1.5 text-white hover:opacity-90">Descargar plan (CSV)</a>
+                </div>
+                <p className="mt-2">
+                    <b>{money(total)}</b> al mes en {d.plan.length} carruseles por zona, desde la cuenta de Pulppo. Arranca el {m.desde}; revisión de tarjetas el <b>{m.revision}</b>.
+                </p>
+                <p className="mt-2 text-neutral-700">{m.origen}</p>
+                {d.faltan.length > 0 && (
+                    <p className="mt-2 text-brand-red">
+                        Todavía no publicadas: {d.faltan.join(', ')}. Su tarjeta entra sola al carrusel en cuanto se publique (recargar esta página antes de montar).
+                        {pendiente > 0 && ` Hay ${money(pendiente)} de carruseles que no salen por tener menos de 2 tarjetas.`}
+                    </p>
+                )}
+            </div>
+
+            <details className="rounded-lg border border-neutral-200 p-4 text-sm" open>
+                <summary className="cursor-pointer font-semibold">Cómo montar este plan</summary>
+                <ol className="mt-3 list-decimal space-y-2 pl-5">
+                    {pasos(`Cada carrusel lleva su monto (de ${money(Math.min(...m.carruseles.map((c) => c.presupuesto)))} a ${money(Math.max(...m.carruseles.map((c) => c.presupuesto)))} al mes). Total: ${money(total)} al mes. Es un presupuesto aparte del de 1·5·10.`)
+                        .map(([t, x]) => <li key={t}><b>{t}.</b> {x}</li>)}
+                    <li>
+                        <b>Revisión del {m.revision}.</b> En cada carrusel, la tarjeta con 0 clics se cambia por otra de la misma zona (pedir el reemplazo a Ale).
+                        Si un carrusel gastó la mitad de su mes sin un solo lead en el CRM, se pausa.
+                    </li>
+                </ol>
+            </details>
+
+            <section>
+                <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-neutral-500">Carruseles por zona · {money(total)}</h3>
+                <div className="space-y-3">{d.plan.map((c) => <FilaPlan key={c.nombre} c={c} props={d.props} />)}</div>
+            </section>
+
+            <details className="rounded-lg border border-dashed border-neutral-300 p-4 text-sm">
+                <summary className="cursor-pointer font-semibold">Fuera de este plan ({d.fuera.length}) — no se pautan</summary>
+                <ul className="mt-3 space-y-1.5">
+                    {d.fuera.map((x) => <li key={x.code}><b>{x.code}</b> <span className="text-neutral-600">({x.donde})</span>: {x.motivo}</li>)}
+                </ul>
+            </details>
+        </div>
+    );
+}
+
 export default function PautaApp() {
     const router = useRouter();
     const [d, setD] = useState<Payload | null>(null);
@@ -401,6 +471,7 @@ export default function PautaApp() {
     const [inmo, setInmo] = useState('');
     const [soloVideo, setSoloVideo] = useState(false);
     const [vista, setVista] = useState<'plan' | 'props'>('plan');
+    const [programa, setPrograma] = useState('1510');
 
     useEffect(() => {
         fetch('/api/pauta')
@@ -437,7 +508,7 @@ export default function PautaApp() {
         <main className="mx-auto max-w-6xl px-4 py-8">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h1 className="font-serif text-3xl">Pauta de Meta · Exclusivas 1·5·10</h1>
+                    <h1 className="font-serif text-3xl">Pauta de Meta</h1>
                     <p className="text-sm text-neutral-600">Paquete por propiedad para montar las campañas: artes, video, copies, segmentación y liga con UTM.</p>
                 </div>
                 <div className="flex gap-2 text-sm">
@@ -446,6 +517,18 @@ export default function PautaApp() {
                 </div>
             </div>
 
+            <div className="mb-6 flex flex-wrap gap-2 text-sm">
+                {[['1510', 'Exclusivas 1·5·10'], ...PLANES_INMO.map((p) => [p.slug, p.nombre])].map(([id, label]) => (
+                    <button key={id} type="button" onClick={() => setPrograma(id)}
+                        className={`rounded-full border px-3 py-1.5 ${programa === id ? 'border-transparent bg-soft text-white' : 'border-neutral-300 hover:bg-neutral-50'}`}>
+                        {label}
+                    </button>
+                ))}
+            </div>
+
+            {programa !== '1510' && <PlanInmoVista slug={programa} />}
+
+            {programa === '1510' && <>
             {error && <p className="text-brand-red">{error}</p>}
             {!d && !error && <p className="text-neutral-500">Cargando las exclusivas…</p>}
 
@@ -526,6 +609,7 @@ export default function PautaApp() {
                     </p>
                 </>
             )}
+            </>}
         </main>
     );
 }

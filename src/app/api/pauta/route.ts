@@ -1,10 +1,13 @@
 import { fetchPauta, CORTE_HISTORIAL, CORTE_VIDEOS, CARPETA_VIDEOS } from '@/lib/pauta';
 import { EXCLUIDAS } from '@/lib/pauta/excluidas';
-import { armarPlan } from '@/lib/pauta/plan';
+import { armarPlan, armarPlanInmo } from '@/lib/pauta/plan';
+import { planInmo } from '@/lib/pauta/inmobiliarias';
+import { precioCorto } from '@/lib/pauta/armado';
 import { MES } from '@/lib/pauta/mes';
 
 // Paquete de pauta de Meta de todas las exclusivas 1·5·10 vivas.
 //   GET            → JSON para la página /1-5-10/pauta
+//   GET ?inmo=<slug> → lo mismo para el plan de una inmobiliaria (inmobiliarias.ts); acepta los mismos format/tipo
 //   GET ?format=csv → una fila por propiedad pautable, para quien monta las campañas
 //   GET ?format=csv&tipo=plan → una fila por campaña del plan del mes (reactivación, estrellas solas, carruseles y remarketing) y las que quedan fuera,
 //                     y en los carruseles una fila por tarjeta
@@ -18,9 +21,19 @@ const csvCell = (v: unknown) => {
 
 export async function GET(req: Request) {
     try {
-        const props = await fetchPauta();
-        const { plan, fuera, faltan } = armarPlan(props);
         const q = new URL(req.url).searchParams;
+        const inmo = planInmo(q.get('inmo'));
+        if (q.get('inmo') && !inmo) return Response.json({ error: 'Plan no encontrado' }, { status: 404 });
+        const props = await fetchPauta(inmo ? [...inmo.carruseles.flatMap((c) => c.codes), ...inmo.fuera.flatMap((f) => f.codes)] : undefined);
+        const { plan, fuera, faltan } = inmo
+            ? {
+                ...armarPlanInmo(inmo, props),
+                fuera: inmo.fuera.flatMap((f) => f.codes.map((code) => {
+                    const p = props.find((x) => x.code === code);
+                    return { code, inmobiliaria: inmo.inmobiliaria, donde: p ? `${p.colonia || p.ciudad || ''}${p.precio ? ` · ${p.precio < 500000 ? `renta $${p.precio.toLocaleString('es-MX')}` : precioCorto(p.precio)}` : ''}` : 'no publicada', motivo: f.motivo };
+                }))
+            }
+            : armarPlan(props);
         const csvResp = (rows: unknown[][], nombre: string) => new Response('﻿' + rows.map((r) => r.map(csvCell).join(',')).join('\n'), {
             headers: {
                 'Content-Type': 'text/csv; charset=utf-8',
@@ -44,7 +57,7 @@ export async function GET(req: Request) {
                 else rows.push([...cab, '', c.codes[0], props.find((p) => p.code === c.codes[0])?.inmobiliaria, '', '', '', '']);
             }
             for (const x of fuera) rows.push(['fuera este mes', '', '', '', 0, x.motivo, '', '', '', '', '', '', '', x.code, x.inmobiliaria, '', '', '', '']);
-            return csvResp([head, ...rows], 'plan-pauta-1510');
+            return csvResp([head, ...rows], inmo ? `plan-pauta-${inmo.slug}` : 'plan-pauta-1510');
         }
         if (q.get('format') === 'csv') {
             const head = ['codigo', 'inmobiliaria', 'cluster', 'tipo', 'colonia', 'ciudad', 'precio', 'campana', 'url_con_utm',
@@ -61,7 +74,7 @@ export async function GET(req: Request) {
             return csvResp([head, ...rows], 'pauta-1510');
         }
         return Response.json({
-            props, plan, fuera, faltan, mes: MES, excluidas: EXCLUIDAS,
+            props, plan, fuera, faltan, mes: MES, inmo, excluidas: EXCLUIDAS,
             corteHistorial: CORTE_HISTORIAL, corteVideos: CORTE_VIDEOS, carpetaVideos: CARPETA_VIDEOS
         });
     } catch (e) {
