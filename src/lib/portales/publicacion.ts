@@ -23,6 +23,7 @@ import { claveLead } from '../mbComun';
 import { NOT, dig } from './metrics';
 import { canalDeLead, cuentaI24DeLead, opcionesInmobiliarias } from './inmobiliaria';
 import { CUENTA_PREMIER } from './avisosTipos';
+import { MELI_PAQUETE } from './inversion';
 
 const DIA = 86400000;
 /** inmobiliaria · portal · nivel · cupo asignado · en línea · con lead 30 d */
@@ -36,8 +37,8 @@ export interface PlanContratado {
     fuente: string; ok: boolean; nota?: string;
     /** i24: bolsa en pesos para elevados + Premier, precio de lista por nivel, simples contratados */
     bolsaI24: number | null; precios: Record<string, number>; premier: number | null; simplesI24: number | null;
-    /** MeLi: Oro Premium incluidos en el deal */
-    oroPremiumMeli: number | null;
+    /** MeLi: Oro Premium y publicaciones incluidos en el paquete (MELI_PAQUETE, no el Sheet) */
+    oroPremiumMeli: number | null; publicacionesMeli: number | null;
 }
 export interface PublicacionView {
     generado: string; filas: PubFila[]; offline: OffFila[]; inventario: Array<[string, number]>;
@@ -122,7 +123,7 @@ function csv(texto: string): string[][] {
 const pesos = (s: string | undefined) => { const n = Number(String(s ?? '').replace(/[$,\s]/g, '')); return Number.isFinite(n) && /\d/.test(String(s)) ? n : null; };
 export async function planContratado(): Promise<PlanContratado> {
     const fuente = `docs.google.com/spreadsheets/d/${SHEET_ASIGNACION} · hoja Calculadora`;
-    const vacio: PlanContratado = { fuente, ok: false, bolsaI24: null, precios: {}, premier: null, simplesI24: null, oroPremiumMeli: null };
+    const vacio: PlanContratado = { fuente, ok: false, bolsaI24: null, precios: {}, premier: null, simplesI24: null, oroPremiumMeli: MELI_PAQUETE.oroPremium, publicacionesMeli: MELI_PAQUETE.publicaciones };
     try {
         const r = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ASIGNACION}/gviz/tq?tqx=out:csv&sheet=Calculadora`, { cache: 'no-store' });
         if (!r.ok) return { ...vacio, nota: `El Sheet respondió ${r.status}` };
@@ -141,7 +142,8 @@ export async function planContratado(): Promise<PlanContratado> {
             bolsaI24: pesos(celda('Bolsa disponible hoy', 11)),
             premier: ultimoNum('Premier / plan propio', 11),
             simplesI24: fSimple ? pesos(fSimple[16]) : null,
-            oroPremiumMeli: pesos(celda('Destaques Oro Premium incluidos', 1)),
+            // El paquete nuevo de MeLi (23-nov-2026) manda sobre la Calculadora, que sigue con los 1,600 del deal viejo
+            oroPremiumMeli: MELI_PAQUETE.oroPremium, publicacionesMeli: MELI_PAQUETE.publicaciones,
             precios,
         };
     } catch (e) {
@@ -258,5 +260,5 @@ async function calcular(): Promise<PublicacionView> {
 /** La foto de hoy (caché 1 h). */
 export async function publicacionView(fresco = false): Promise<PublicacionView> {
     if (fresco) return calcular();
-    return unstable_cache(calcular, ['portales-publicacion-v2'], { revalidate: 3600, tags: ['portales-publicacion'] })();
+    return unstable_cache(calcular, ['portales-publicacion-v3'], { revalidate: 3600, tags: ['portales-publicacion'] })();
 }

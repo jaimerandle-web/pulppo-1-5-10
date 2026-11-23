@@ -834,6 +834,7 @@ function Publicacion({ pub, filtro }: { pub: PublicacionView | null; filtro: Fil
     const simplesNuestros = nuestras.filter(([, nv]) => nv === 'Simple').reduce((a, x) => a + x[2], 0);
     const propias = pub.cuentasI24.filter(([cta]) => !CUENTAS_PULPPO.has(cta));
     const opMeli = pub.filas.filter((f) => f[1] === 'MercadoLibre' && f[2] === 'Oro Premium').reduce((a, f) => a + f[4], 0);
+    const pubMeli = pub.filas.filter((f) => f[1] === 'MercadoLibre').reduce((a, f) => a + f[4], 0);
     const colorTipo: Record<string, string> = { 'Súper destacado ZD': '#8C3F14', 'Súper destacado': '#C8642A', 'Destacado ZD': '#B9865A', Destacado: '#E0B48A' };
 
     // ── 3. por inmobiliaria ──
@@ -902,6 +903,7 @@ function Publicacion({ pub, filtro }: { pub: PublicacionView | null; filtro: Fil
                 </div>
                 <div style={{ border: `1px solid ${LGT}`, borderTop: `3px solid ${PORTAL.meli.color}`, borderRadius: R, padding: '12px 14px' }}>
                     <div style={{ fontWeight: 800, fontSize: 13 }}>MercadoLibre · Oro Premium incluidos</div>
+                    <div style={{ fontSize: 10.5, color: '#888', marginTop: 2 }}>Paquete desde ago-2026: $57,009 al mes con IVA · 14,000 publicaciones + 1,020 Oro Premium</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '6px 0' }}>
                         <span style={{ fontFamily: 'EB Garamond, serif', fontSize: 30 }}>{plan.oroPremiumMeli ? `${Math.round((100 * opMeli) / plan.oroPremiumMeli)}%` : '—'}</span>
                         <span style={{ fontSize: 12, color: '#666' }}>{f0(opMeli)} en línea de {f0(plan.oroPremiumMeli)}</span>
@@ -910,8 +912,16 @@ function Publicacion({ pub, filtro }: { pub: PublicacionView | null; filtro: Fil
                     <div style={{ fontSize: 11.5, marginTop: 8, color: '#555', lineHeight: 1.5 }}>
                         {plan.oroPremiumMeli && opMeli < plan.oroPremiumMeli
                             ? <>Quedan <b>{f0(plan.oroPremiumMeli - opMeli)} Oro Premium</b> que el deal ya incluye y no estamos usando. Asignados en el tool: {f0(tot('MercadoLibre', ['Oro Premium']).cupo)}.</>
-                            : 'Se usan todos los Oro Premium incluidos.'}
+                            : plan.oroPremiumMeli && opMeli > plan.oroPremiumMeli
+                                ? <>Nos pasamos por <b>{f0(opMeli - plan.oroPremiumMeli)} Oro Premium</b> del paquete. Asignados en el tool: {f0(tot('MercadoLibre', ['Oro Premium']).cupo)}.</>
+                                : 'Se usan todos los Oro Premium incluidos.'}
                     </div>
+                    {plan.publicacionesMeli != null && (
+                        <div style={{ borderTop: `1px solid ${LGT}`, marginTop: 8, paddingTop: 8, fontSize: 11.5 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Publicaciones (todos los niveles)</span><b>{f0(pubMeli)} de {f0(plan.publicacionesMeli)} · {Math.round((100 * pubMeli) / plan.publicacionesMeli)}%</b></div>
+                            <div style={{ marginTop: 4 }}><Barra alto={8} total={Math.max(plan.publicacionesMeli, pubMeli)} partes={[{ v: pubMeli, c: PORTAL.meli.color, t: 'en línea' }, { v: Math.max(0, plan.publicacionesMeli - pubMeli), c: YEL, t: 'sin usar' }]} /></div>
+                        </div>
+                    )}
                 </div>
             </div>
 

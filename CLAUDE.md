@@ -591,6 +591,9 @@ vista». Es la portada de /portales; las pestañas de antes quedan abajo en el m
   pesos para elevados + Premier, precio de lista por nivel, simples contratados, Oro Premium incluidos de MeLi. Usado =
   avisos en línea en NUESTRAS cuentas (ANUNCIO_SIMPLE, ANUNCIOS_DEGOHOUSE, ANUNCIO_PREMIERE) × precio; el Premier va a
   su costo fijo. 🔴 El cupo «super-destacado» de Diamond House (130) ES el Premier: cuenta como súper destacado.
+- **MeLi, paquete nuevo** (23-nov-2026, retroactivo a ago-2026): $57,009 al mes CON IVA por 14,000 publicaciones + 1,020
+  Oro Premium, SIN 6% (`MELI_PAQUETE` en inversion.ts). Manda sobre la Calculadora (que sigue con 1,600) y sobre «base + 6%»
+  en `dealMes`; «Mi página» y ads se facturan aparte y no están en la inversión.
 - **Caídos** se cuentan por aviso (una propiedad caída en 3 portales suma 3), con motivo y quién lo corrige. MeLi
   OFFLINE sin error en una inmobiliaria con cupo 0 = «por regla» (20-nov-2026: 362 de 583).
 - **Siguiente:** fase 2 = descargable para portales (top 3 bueno / top 3 riesgos + desglose); fase 3 = asignación
