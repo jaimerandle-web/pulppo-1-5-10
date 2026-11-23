@@ -596,5 +596,21 @@ vista». Es la portada de /portales; las pestañas de antes quedan abajo en el m
   en `dealMes`; «Mi página» y ads se facturan aparte y no están en la inversión.
 - **Caídos** se cuentan por aviso (una propiedad caída en 3 portales suma 3), con motivo y quién lo corrige. MeLi
   OFFLINE sin error en una inmobiliaria con cupo 0 = «por regla» (20-nov-2026: 362 de 583).
-- **Siguiente:** fase 2 = descargable para portales (top 3 bueno / top 3 riesgos + desglose); fase 3 = asignación
-  editable con las reglas (SD/D % del inventario en venta y tope de reinversión por modelo).
+- **Siguiente:** fase 2 = descargable para portales (top 3 bueno / top 3 riesgos + desglose).
+
+## /portales → Asignación (fase 3, nov-2026)
+
+La hoja de Ale para escribir el número de avisos de cada inmobiliaria en vivo, con las mismas columnas que
+tools.pulppo.com → Asignación de avisos (ZD SD · SD · ZD D · D · Simple · Oro Premium · Oro · Plata). Sólo internos.
+- **Datos** (`lib/portales/asignacion.ts`, API `/api/portales/asignacion`, caché 30 min): modelo, % regalía, regalía /mes y
+  excepciones SD/D de la pestaña «Asignación» del Sheet `1EzkDZ…` leída por `export?format=csv&gid=839916250` (🔴 gviz por
+  nombre devuelve SÓLO una parte de esa pestaña: adivina encabezados). Encabezados por NOMBRE. Mongo: cupo de hoy
+  (`adassignmentcompanycupos`, último por compañía y portal), inventario en venta y ZD (4 alcaldías), en línea por nivel
+  (i24 sólo en NUESTRAS cuentas; OFFLINE fuera, igual que Publicación).
+- **Reglas** (`lib/portales/asignacionReglas.ts`, pura, corre en el navegador y se mueve en vivo): Equipos Premium 35% SD +
+  15% D de la venta, tope 50% de su regalía; Equipos 15% + 10%, tope 40%; Premium al 15% usa el tope de Equipos; si no
+  cabe se recorta parejo; excepciones del Sheet mandan; Red/SaaS sólo simples; Diamond aparte (205 SD fijos, 130 = Premier
+  con costo fijo fuera de la bolsa). Gasto sin IVA: i24 a precio de lista + su parte del paquete MeLi (Oro Premium = 2 Platas).
+- **Borrador compartido** (`lib/portales/asignacionStore.ts`): Blob en Vercel (sin Blob = sólo lectura y lo dice), local en
+  `.portales/asignacion.json`. Uno solo, gana el último que guarda; historial de quién guardó. Lo no guardado vive en
+  localStorage. NO escribe en la herramienta de i24: se descarga CSV en el orden de la herramienta (A–Z ASCII).

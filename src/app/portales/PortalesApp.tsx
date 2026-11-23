@@ -9,6 +9,7 @@ import type { PulseView } from '@/lib/portales/pulse';
 import type { HistoricoView } from '@/lib/portales/historico';
 import InmobiliariasTab from './InmobiliariasTab';
 import VistaAnual, { type VistaA } from './VistaAnual';
+import Asignacion from './Asignacion';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
 const R = 2;
@@ -24,7 +25,7 @@ const mesLargo = (mk: string) => `${MESL[mk.slice(5)]} ${mk.slice(0, 4)}`;
 
 // Menú por PREGUNTA (Ale, 5-oct-2026). Las cuatro primeras comparten una sola consulta y una sola
 // barra de filtros (InmobiliariasTab): así un número es el mismo en todas las pestañas.
-export type Section = 'tablero' | 'portal' | 'inmos' | 'publicacion' | 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias' | 'pulso' | 'historico' | 'comoleer';
+export type Section = 'tablero' | 'portal' | 'inmos' | 'publicacion' | 'asignacion' | 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias' | 'pulso' | 'historico' | 'comoleer';
 export type SeccionV2 = 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias';
 const V2: Section[] = ['resumen', 'inversion', 'leads', 'embudo', 'inmobiliarias'];
 // La vista del año (nov-2026): cuatro secciones sobre los mismos datos y la misma barra de filtros (VistaAnual).
@@ -88,6 +89,9 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
     // una vez que se abre la vista del año se queda montada (sus 13 meses no se vuelven a pedir)
     const [anualVisto, setAnualVisto] = useState(false);
     useEffect(() => { if (ANUAL.includes(section)) setAnualVisto(true); }, [section]);
+    // la asignación tampoco se desmonta: lo que se está escribiendo no se pierde al cambiar de pestaña
+    const [asigVista, setAsigVista] = useState(false);
+    useEffect(() => { if (section === 'asignacion') setAsigVista(true); }, [section]);
 
     const tth: CSSProperties = { textAlign: 'right', padding: '7px 8px', borderBottom: `1px solid ${BLK}`, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.5px', color: '#666', whiteSpace: 'nowrap' };
     const tth0: CSSProperties = { ...tth, textAlign: 'left' };
@@ -119,6 +123,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                 {nav('portal', 'Por portal')}
                 {nav('inmos', 'Por inmobiliaria')}
                 {nav('publicacion', 'Publicación')}
+                {nav('asignacion', 'Asignación')}
                 <div className="pa-sep" style={{ fontSize: 9.5, color: GRY, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', padding: '16px 8px 6px' }}>Detalle de un periodo</div>
                 {nav('resumen', 'Resumen')}
                 {nav('inversion', 'Inversión y retorno')}
@@ -138,7 +143,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                         </button>
                     </div>
                 )}
-                <div className="pa-sep" style={{ marginTop: 20, padding: '0 8px', display: V2.includes(section) || ANUAL.includes(section) ? 'none' : 'block' }}>
+                <div className="pa-sep" style={{ marginTop: 20, padding: '0 8px', display: V2.includes(section) || ANUAL.includes(section) || section === 'asignacion' ? 'none' : 'block' }}>
                     <button onClick={onRefresh} disabled={cargando}
                         style={{ width: '100%', padding: '8px 10px', borderRadius: R, border: `1px solid ${BLK}`, background: cargando ? LGT : '#fff', color: BLK, fontSize: 11.5, fontWeight: 700, cursor: cargando ? 'default' : 'pointer', fontFamily: 'inherit' }}>
                         {cargando ? 'Consultando Mongo…' : 'Recargar datos'}
@@ -159,6 +164,10 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                     <div style={{ display: ANUAL.includes(section) ? 'block' : 'none' }}>
                         <VistaAnual vista={(ANUAL.includes(section) ? section : 'tablero') as VistaA} setVista={(v) => setSection(v)} />
                     </div>
+                )}
+
+                {(section === 'asignacion' || asigVista) && (
+                    <div style={{ display: section === 'asignacion' ? 'block' : 'none' }}><Asignacion /></div>
                 )}
 
                 {/* Las cuatro secciones nuevas: UNA instancia (mismo lugar del árbol) → comparten filtros y datos. */}

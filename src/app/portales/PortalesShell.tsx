@@ -20,7 +20,7 @@ type Datos = { pulsoQ?: string; historicoQ?: string; pulso?: PulseView; historic
 // Sólo el pulso y el histórico usan vistas propias; las cinco secciones de arriba consultan su
 // propia API compartida (InmobiliariasTab), igual que el modo presentación.
 const DE_SECCION: Record<Section, Vista | null> = {
-    tablero: null, portal: null, inmos: null, publicacion: null,
+    tablero: null, portal: null, inmos: null, publicacion: null, asignacion: null,
     resumen: null, inversion: null, leads: null, embudo: null, inmobiliarias: null,
     pulso: 'pulso', historico: 'historico', comoleer: null,
 };
