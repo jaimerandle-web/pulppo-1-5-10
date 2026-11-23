@@ -50,7 +50,10 @@ export async function GET(req: NextRequest) {
             correo: s(l.contact?.email) || s(l.email) || null,
             fuente: KEY2NAME[canal] ?? (s(l.source) || 'Sin fuente'),
             medio: MEDIO[canalContacto({ medium: l.medium, message: l.message })],
-            asesor: nom(l.agent) ?? nom(p?.agent) ?? 'Sin asesor',
+            // Sin asesor en el lead = la asignación no se lo pasó a nadie: NO es culpa del asesor de la propiedad.
+            // Antes caía al de la propiedad y OV Bienes Raíces veía a David Mompala con 5 leads que nunca le llegaron
+            // (hueco de asignación del 13 al 15-nov-2026; el bot le decía al cliente «estamos buscando un asesor»).
+            asesor: nom(l.agent) ?? 'Sin asignar',
             codigo: s(p?.internalId) || null,
             operacion: p?.listing?.operation === 'rent' ? 'Renta' : 'Venta',
             direccion: [s(p?.address?.street), s(p?.address?.neighborhood?.name)].filter(Boolean).join(', ') || null,
