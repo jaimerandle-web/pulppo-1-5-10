@@ -11,6 +11,7 @@
  */
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Diploma, Ganador, Metrica, NivelKey, Premio, Reconocimientos, TuAnio } from '@/lib/tu2026';
+import { PresentacionKam } from './tu2026Presentacion';
 import { ensureFonts, loadImg } from '@/app/plus/rankingRender';
 
 const BLK = '#212322', YEL = '#F6BE00', LINE = '#D0D3D4', LGT = '#F3F3F3', SEA = '#529999', RED = '#A52003';
@@ -99,13 +100,15 @@ function TuAnioView({ companyId, interno }: { companyId: string; interno: boolea
     const grupos = [...new Set(d.metricas.map((m) => m.grupo))];
     const ant = d.años[1];
     const sinAnterior = d.metricas.every((m) => !m.valores[ant]);
-    const marca = new Map<string, 'logro' | 'falto'>([...d.logros.map((h) => [h.metrica, 'logro'] as const), ...d.falto.map((h) => [h.metrica, 'falto'] as const)]);
+    // sólo los hallazgos contra el año pasado marcan la tarjeta (los del trimestre o el récord no son ese número)
+    const marca = new Map<string, 'logro' | 'falto'>([...d.logros.filter((h) => h.vs === 'año').map((h) => [h.metrica, 'logro'] as const), ...d.falto.map((h) => [h.metrica, 'falto'] as const)]);
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 18 }}>
                 <div style={{ fontSize: 13, color: MUTED, maxWidth: 680 }}>
                     Tu inmobiliaria contra sí misma, con el mismo periodo en los tres años: <b style={{ color: BLK }}>{d.corte}</b>.
                 </div>
+                {interno && <PresentacionKam d={d} companyId={companyId} />}
                 {interno && d.pares && (
                     <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', color: MUTED }}>
                         <input type="checkbox" checked={conPares} onChange={(e) => setConPares(e.target.checked)} />
@@ -122,7 +125,7 @@ function TuAnioView({ companyId, interno }: { companyId: string; interno: boolea
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 34 }}>
                 <Hallazgos titulo="Logros del año" color={SEA} items={d.logros}
-                    vacio={sinAnterior ? 'Es tu primer año completo en Pulppo: el próximo ya tendrás contra qué compararte.' : `Ninguna métrica creció 5% o más contra ${ant}.`} />
+                    vacio={sinAnterior ? 'Es tu primer año completo en Pulppo: el próximo ya tendrás contra qué compararte.' : `Ninguna métrica creció 5% o más contra ${ant}, ni 15% o más dentro del año.`} />
                 <Hallazgos titulo="Lo que faltó para romperla" color={RED} items={d.falto}
                     vacio={sinAnterior ? '—' : `Nada quedó 5% o más por debajo de ${ant}.`} />
             </div>
@@ -137,7 +140,163 @@ function TuAnioView({ companyId, interno }: { companyId: string; interno: boolea
                     </div>
                 </div>
             ))}
+
+            <MesAMes d={d} />
+            <EmbudoView d={d} />
+            {d.inventario && <InventarioView inv={d.inventario} />}
+            <EquipoView d={d} />
         </div>
+    );
+}
+
+const Seccion = ({ titulo, sub, children }: { titulo: string; sub?: ReactNode; children: ReactNode }) => (
+    <div style={{ marginTop: 40, borderTop: `1px solid ${BLK}`, paddingTop: 22 }}>
+        <div style={{ fontFamily: serif, fontSize: 26, lineHeight: 1.15 }}>{titulo}</div>
+        {sub && <div style={{ fontSize: 13, color: MUTED, marginTop: 4, marginBottom: 16, maxWidth: 760 }}>{sub}</div>}
+        {children}
+    </div>
+);
+const Tile = ({ label, valor, nota, oscuro }: { label: string; valor: ReactNode; nota?: ReactNode; oscuro?: boolean }) => (
+    <div style={{ background: oscuro ? BLK : LGT, color: oscuro ? '#fff' : BLK, padding: '16px 18px' }}>
+        <div style={{ ...tag }}>{label}</div>
+        <div style={{ fontFamily: serif, fontSize: 36, lineHeight: 1.1, marginTop: 10 }}>{valor}</div>
+        {nota && <div style={{ fontSize: 12, color: oscuro ? 'rgba(255,255,255,.7)' : MUTED, marginTop: 4, lineHeight: 1.4 }}>{nota}</div>}
+    </div>
+);
+
+/** Leads, visitas y cierres por mes; el mejor mes (más cierres) en amarillo en las tres. */
+function MesAMes({ d }: { d: TuAnio }) {
+    const m = d.mensual;
+    const ix = m.mejorMes?.i ?? -1;
+    const H = 64;
+    return (
+        <Seccion titulo="Mes a mes" sub={<>Para ver si una caída fue de todo el año o de unos meses.{m.mejorMes ? <> Tu mejor mes fue <b style={{ color: BLK }}>{m.mejorMes.mes.toLowerCase()}</b>, en amarillo.</> : null}{m.parcial ? ` ${m.meses[m.meses.length - 1]}* va a medias (hasta el corte).` : ''}</>}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+                    {m.series.filter((x) => ['leads', 'visitas', 'cierres'].includes(x.key)).map((se) => {
+                        const max = Math.max(...se.vals, 1);
+                        return (
+                            <div key={se.key}>
+                                <div style={{ ...tag, marginBottom: 6 }}>{se.label}</div>
+                                <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: H + 16 }}>
+                                    {se.vals.map((v, i) => (
+                                        <div key={i} title={`${m.meses[i]}: ${fmt(v, se.fmt)}`} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'stretch' }}>
+                                            {(i === ix || v === max) && <div style={{ fontSize: 10, fontWeight: 700, textAlign: 'center', marginBottom: 2 }}>{fmt(v, se.fmt)}</div>}
+                                            <div style={{ height: Math.max(2, Math.round((v / max) * H)), background: i === ix ? YEL : FAINT }} />
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={{ display: 'flex', gap: 4, borderTop: `1px solid ${LINE}`, paddingTop: 3 }}>
+                                    {m.meses.map((x, i) => <div key={x} style={{ flex: 1, minWidth: 0, fontSize: 10, color: MUTED, textAlign: 'center' }}>{x}{m.parcial && i === m.meses.length - 1 ? '*' : ''}</div>)}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {m.mejorMes && <Tile label="Mejor mes" valor={m.mejorMes.mes} nota={`${m.mejorMes.cierres} cierres`} />}
+                    {m.mayor && <Tile label="Venta más grande" valor={fmt(m.mayor.valor, 'money')} nota={[m.mayor.tipo, m.mayor.codigo, m.mayor.fecha].filter(Boolean).join(' · ')} />}
+                </div>
+            </div>
+        </Seccion>
+    );
+}
+
+/** Embudo por PERSONAS y las tres tasas contra el promedio de Pulppo (sólo tasas: en volumen sería spoiler). */
+function EmbudoView({ d }: { d: TuAnio }) {
+    const e = d.embudo, top = Math.max(e.pasos[0]?.n ?? 0, 1);
+    return (
+        <Seccion titulo="Cómo convierte tu equipo" sub="Personas que te escribieron en el periodo y hasta dónde llegaron. Contra el promedio de Pulppo sólo se comparan tasas, nunca volumen.">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 28 }}>
+                <div>
+                    {e.pasos.map((p, i) => (
+                        <div key={p.label} style={{ marginBottom: 14 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                                <span style={{ fontSize: 13, fontWeight: 700 }}>{p.label}</span>
+                                <span><span style={{ fontFamily: serif, fontSize: 22 }}>{p.n.toLocaleString('es-MX')}</span>
+                                    {i > 0 && e.pasos[i - 1].n > 0 && <span style={{ fontSize: 12, color: MUTED }}> · {fmt(p.n / e.pasos[i - 1].n, 'pct')} del paso anterior</span>}</span>
+                            </div>
+                            <div style={{ background: LGT, height: 14, marginTop: 4 }}>
+                                <div style={{ width: `${Math.max(0.6, (100 * p.n) / top)}%`, height: '100%', background: i === e.pasos.length - 1 ? BLK : FAINT }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ border: `0.5px solid ${LINE}`, padding: '14px 18px', alignSelf: 'start' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '10px 18px', alignItems: 'baseline' }}>
+                        <span style={tag}>Contra Pulppo</span><span style={{ ...tag, textAlign: 'right' }}>Tú</span><span style={{ ...tag, textAlign: 'right', color: MUTED }}>Pulppo</span>
+                        {e.tasas.map((t) => {
+                            const arriba = t.yo != null && t.red != null && t.yo > t.red;
+                            return [
+                                <span key={t.key + 'l'} style={{ fontSize: 13, borderTop: `0.5px solid ${LINE}`, paddingTop: 8 }}>{t.label}</span>,
+                                <span key={t.key + 'y'} style={{ fontSize: 14, fontWeight: 700, textAlign: 'right', borderTop: `0.5px solid ${LINE}`, paddingTop: 8, color: t.yo == null ? MUTED : arriba ? SEA : BLK }}>
+                                    {t.yo == null ? '—' : <>{arriba && <span style={{ fontSize: 10 }}>▲ </span>}{fmt(t.yo, 'pct')}</>}
+                                </span>,
+                                <span key={t.key + 'r'} style={{ fontSize: 13, color: MUTED, textAlign: 'right', borderTop: `0.5px solid ${LINE}`, paddingTop: 8 }}>{fmt(t.red, 'pct')}</span>,
+                            ];
+                        })}
+                    </div>
+                    <div style={{ fontSize: 11, color: MUTED, marginTop: 10, lineHeight: 1.4 }}>Promedio de las inmobiliarias de Pulppo con al menos 30 personas (o 10 que visitaron). Con menos que eso no se compara.</div>
+                </div>
+            </div>
+        </Seccion>
+    );
+}
+
+function InventarioView({ inv }: { inv: NonNullable<TuAnio['inventario']> }) {
+    const hoy = inv.hoy.venta + inv.hoy.renta, ene = inv.ene.venta + inv.ene.renta, dif = hoy - ene;
+    const max = Math.max(inv.hoy.venta, inv.hoy.renta, inv.ene.venta, inv.ene.renta, 1);
+    const barra = (v: number, c: string) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: `${(70 * v) / max}%`, height: 12, background: c }} /><span style={{ fontSize: 13, fontWeight: 700 }}>{v}</span>
+        </div>
+    );
+    return (
+        <Seccion titulo="Tu inventario" sub={`Hoy tienes ${hoy.toLocaleString('es-MX')} propiedades publicadas en Pulppo. Calidad y precio son la foto de hoy, con el mismo cálculo de la pestaña Propiedades.`}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                <Tile label="Publicadas hoy" valor={hoy.toLocaleString('es-MX')} nota={`Venta ${inv.hoy.venta} · renta ${inv.hoy.renta}. Al 1 de enero: ${ene} (${dif >= 0 ? '+' : '−'}${Math.abs(dif)})`} />
+                <Tile label="Calidad alta" valor={fmt(inv.calidadAlta, 'pct')} nota="De tus fichas publicadas. Lo que más separa Media de Alta es el video." />
+                <Tile label="En precio de mercado" valor={fmt(inv.enPrecio, 'pct')} nota={`Precio «Óptimo» contra las comparables de su zona (de ${inv.conPrecio} con comparables).`} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 1fr', gap: '8px 16px', marginTop: 18, alignItems: 'center', maxWidth: 640 }}>
+                <span /><span style={{ ...tag, color: MUTED }}>Al 1 de enero</span><span style={tag}>Hoy</span>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>Venta</span>{barra(inv.ene.venta, FAINT)}{barra(inv.hoy.venta, BLK)}
+                <span style={{ fontSize: 13, fontWeight: 700 }}>Renta</span>{barra(inv.ene.renta, FAINT)}{barra(inv.hoy.renta, BLK)}
+            </div>
+        </Seccion>
+    );
+}
+
+const NIV_CORTO: Record<NivelKey, string> = { elite: 'Élite', professional: 'Profesional', standard: 'Estándar' };
+function EquipoView({ d }: { d: TuAnio }) {
+    const e = d.equipo;
+    const [todos, setTodos] = useState(false);
+    const filas = todos ? e.filas : e.filas.slice(0, 8);
+    const th: CSSProperties = { ...tag, textAlign: 'right', padding: '6px 0 6px 12px', borderBottom: `1px solid ${BLK}`, whiteSpace: 'nowrap' };
+    const td: CSSProperties = { fontSize: 13, textAlign: 'right', padding: '7px 0 7px 12px', borderBottom: `0.5px solid ${LINE}` };
+    return (
+        <Seccion titulo="Tu equipo" sub={`${e.activos} asesores activos hoy. Lo que hizo cada uno en el año y lo que hay que corregir.`}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignSelf: 'start' }}>
+                    <Tile label="Sin leads 3 meses o más" valor={e.sinLeads.length}
+                        nota={e.sinLeads.length ? e.sinLeads.map((x) => `${x.nombre}${x.ultimo ? ` (último: ${x.ultimo})` : ' (sin leads en el año)'}`).join(' · ') : 'Todo tu equipo recibe leads.'} />
+                    <Tile label="Tareas vencidas hoy" valor={e.tareasVencidas.toLocaleString('es-MX')} nota={`${e.tareasPendientes.toLocaleString('es-MX')} pendientes en total.`} />
+                    <div style={{ gridColumn: '1 / -1', fontSize: 11, color: MUTED, lineHeight: 1.4 }}>
+                        «Sin leads» no cuenta al master broker ni a las cuentas administrativas.
+                    </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr><th style={{ ...th, textAlign: 'left', paddingLeft: 0 }}>Asesor</th><th style={th}>Leads</th><th style={th}>Visitas</th><th style={th}>Cierres</th><th style={th}>Nivel</th></tr></thead>
+                        <tbody>{filas.map((f) => (
+                            <tr key={f.nombre}><td style={{ ...td, textAlign: 'left', paddingLeft: 0, fontWeight: 700 }}>{f.nombre}</td><td style={td}>{f.leads.toLocaleString('es-MX')}</td>
+                                <td style={td}>{f.visitas.toLocaleString('es-MX')}</td><td style={td}>{f.cierres}</td><td style={{ ...td, color: MUTED }}>{NIV_CORTO[f.nivel]}</td></tr>
+                        ))}</tbody>
+                    </table>
+                    {e.filas.length > 8 && <button style={{ ...link, marginTop: 8 }} onClick={() => setTodos((x) => !x)}>{todos ? 'Ver menos' : `Ver los ${e.filas.length}`}</button>}
+                </div>
+            </div>
+        </Seccion>
     );
 }
 

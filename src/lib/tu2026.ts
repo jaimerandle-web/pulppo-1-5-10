@@ -12,17 +12,20 @@
 //   · Comisión COBRADA (payments por paymentDate, como /plus) — la de la inmobiliaria dueña del deal.
 //   · Inmobiliaria = la lista canónica de las 102 (opcionesInmobiliarias: junta las compañías con el mismo
 //     nombre y los alias). Pares = cuartil de inventario publicado HOY dentro de esa lista.
-//   · Leads únicos por contacto + propiedad dentro del periodo, sin «formulario de contacto» (spam).
+//   · Leads únicos: contacto + propiedad = 1 lead POR MES, por la compañía del lead, sin «formulario de contacto»
+//     (la definición del reporte mensual de las KAMs, 23-nov).
 //   · Una sola pasada por año para TODA la red (los pares la necesitan): ~30 s en frío, caché 12 h.
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { agentMaps, paymentDate, splitByRole, type AgentMaps } from './plus';
 import { asesoresDeBaja } from './premios';
 import { opcionesInmobiliarias } from './portales/inmobiliaria';
+import { fetchInmobiliaria } from './mb';
 
 export const AÑO = 2026;
 const MX = 6 * 3600 * 1000;
 const DIA = 86_400_000;
+const MES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const ORD: Record<string, number> = { standard: 1, professional: 2, elite: 3 };
 const LVL: Record<string, string> = { standard: 'Estándar', professional: 'Profesional', elite: 'Élite' };
@@ -60,7 +63,12 @@ interface Inmo {
     leads: number; respondidos: number; resp: number[]; visitas: number;
     contactos: Set<string>; contactosVisita: Set<string>; contactosCierre: Set<string>;
     captaciones: number; exclusivas: number; firmadas: number; asesoresCobro: Set<string>; ascensos: number;
+    ofertas: number; contactosOferta: Set<string>;
+    /** por mes (0 = enero) del año de la pasada: para «mes a mes» y para los logros dentro del año */
+    mes: Record<SerieKey, number[]>;
 }
+export type SerieKey = 'leads' | 'visitas' | 'cierres' | 'cobrada' | 'captaciones' | 'firmadas';
+const mesDe = (d: Date) => new Date(d.getTime() - MX).getUTCMonth();
 interface Asesor { cobrada: number; ops: Set<string>; leads: number; contactos: Set<string>; cierres: Set<string>; resp: number[]; visitas: number; exclusivas: number; firmadas: number; cerradas: Set<string>; captaciones: number }
 interface Venta { e: string | null; v: number; codigo: string | null; closed: Date; created: Date | null; cid: string | null; raw: unknown; tipo: string }
 interface Red { inmo: Map<string, Inmo>; asesor: Map<string, Asesor>; ventas: Map<string, Venta[]> }
@@ -68,7 +76,8 @@ interface Red { inmo: Map<string, Inmo>; asesor: Map<string, Asesor>; ventas: Ma
 const nuevaInmo = (): Inmo => ({
     cobrada: 0, opsCobradas: new Set(), cierresVenta: 0, cierresRenta: 0, ventas: [], leads: 0, respondidos: 0, resp: [], visitas: 0,
     contactos: new Set(), contactosVisita: new Set(), contactosCierre: new Set(), captaciones: 0, exclusivas: 0, firmadas: 0,
-    asesoresCobro: new Set(), ascensos: 0,
+    asesoresCobro: new Set(), ascensos: 0, ofertas: 0, contactosOferta: new Set(),
+    mes: { leads: Array(12).fill(0), visitas: Array(12).fill(0), cierres: Array(12).fill(0), cobrada: Array(12).fill(0), captaciones: Array(12).fill(0), firmadas: Array(12).fill(0) },
 });
 const nuevoAsesor = (): Asesor => ({ cobrada: 0, ops: new Set(), leads: 0, contactos: new Set(), cierres: new Set(), resp: [], visitas: 0, exclusivas: 0, firmadas: 0, cerradas: new Set(), captaciones: 0 });
 
@@ -141,7 +150,7 @@ async function barrer(y: number, c: [number, number]): Promise<Red> {
                     const v = num(dig(p, 'comission', 'value'));
                     if (v <= 0) continue;
                     const r = I(k);
-                    r.cobrada += v; r.opsCobradas.add(String(o.id ?? o._id));
+                    r.cobrada += v; r.opsCobradas.add(String(o.id ?? o._id)); r.mes.cobrada[mesDe(d)] += v;
                     for (const [e, x] of splitByRole(o, v, am.pulppo)) {
                         if (agenteInmo.get(e) !== k) continue;
                         const s = S(e); s.cobrada += x; s.ops.add(String(o.id ?? o._id));
@@ -167,6 +176,7 @@ async function barrer(y: number, c: [number, number]): Promise<Red> {
                 const op = dig(o, 'property', 'listing', 'operation');
                 const cv = num(dig(o, 'closeValue', 'value'));
                 if (op === 'sale') { r.cierresVenta += 1; if (cv > 0) r.ventas.push(cv); } else if (op === 'rent') r.cierresRenta += 1;
+                if (op === 'sale' || op === 'rent') r.mes.cierres[mesDe(o.closedAt as Date)] += 1;
                 const raw = dig(o, 'buyer', 'contact', '_id');
                 const cid = raw ? String(raw) : null;
                 if (cid) r.contactosCierre.add(cid);
@@ -183,21 +193,24 @@ async function barrer(y: number, c: [number, number]): Promise<Red> {
                 });
             }
         })(),
-        // leads únicos (contacto + propiedad) del periodo, respuesta y contactos para las cohortes
+        // leads únicos: misma persona + misma propiedad = 1 lead POR MES (definición del reporte mensual de las KAMs,
+        // Ale 23-nov: así el total del año es la suma de los meses y la gráfica mes a mes cuadra)
         (async () => {
             const vistos = new Set<string>();
             for await (const l of db.collection('leads').find({ createdAt: { $gte: A, $lt: B } },
                 { projection: { 'company._id': 1, 'agent.uid': 1, 'contact._id': 1, 'property._id': 1, createdAt: 1, answeredAt: 1, source: 1 } })) {
                 if (String(l.source ?? '').trim().toLowerCase() === 'formulario de contacto') continue;
                 const cid = dig(l, 'contact', '_id'), pid = dig(l, 'property', '_id');
-                const key = cid && pid ? `${String(cid)}|${String(pid)}` : String(l._id);
+                const m = mesDe(l.createdAt as Date);
+                const key = cid && pid ? `${String(cid)}|${String(pid)}|${m}` : String(l._id);
                 if (vistos.has(key)) continue;
                 vistos.add(key);
                 const e = am.uidEmail.get(String(dig(l, 'agent', 'uid') ?? ''));
-                const k = deComp(l.company) ?? (e ? agenteInmo.get(e) : undefined);
+                // sólo por la compañía del lead, como el reporte mensual (Arpa cuadra al lead: 6,998)
+                const k = deComp(l.company);
                 if (!k) continue;
                 const r = I(k);
-                r.leads += 1;
+                r.leads += 1; r.mes.leads[m] += 1;
                 if (cid) r.contactos.add(String(cid));
                 const s = e && agenteInmo.get(e) === k ? S(e) : null;
                 if (s) { s.leads += 1; if (cid) s.contactos.add(String(cid)); }
@@ -212,12 +225,13 @@ async function barrer(y: number, c: [number, number]): Promise<Red> {
         // visitas por fecha de la visita (confirmadas + pendientes)
         (async () => {
             for await (const v of db.collection('visits').find({ startTime: { $gte: A, $lt: B }, 'status.last': { $in: ['confirmed', 'pending'] } },
-                { projection: { 'agent.email': 1, 'agent.company._id': 1, 'contact._id': 1 } })) {
+                { projection: { 'agent.email': 1, 'agent.company._id': 1, 'contact._id': 1, startTime: 1 } })) {
                 const e = String(dig(v, 'agent', 'email') ?? '');
                 const k = deComp(dig(v, 'agent', 'company')) ?? agenteInmo.get(e);
                 if (!k) continue;
                 const r = I(k);
                 r.visitas += 1;
+                if (isDate(v.startTime)) r.mes.visitas[mesDe(v.startTime)] += 1;
                 const cid = dig(v, 'contact', '_id');
                 if (cid) r.contactosVisita.add(String(cid));
                 if (e && agenteInmo.get(e) === k) S(e).visitas += 1;
@@ -231,19 +245,36 @@ async function barrer(y: number, c: [number, number]): Promise<Red> {
                 if (!k) continue;
                 const r = I(k);
                 const ea = String(dig(p, 'agent', 'email') ?? '');
-                if (isDate(p.createdAt) && p.createdAt >= A && p.createdAt < B) { r.captaciones += 1; if (ea && agenteInmo.get(ea) === k) S(ea).captaciones += 1; }
+                if (isDate(p.createdAt) && p.createdAt >= A && p.createdAt < B) { r.captaciones += 1; r.mes.captaciones[mesDe(p.createdAt)] += 1; if (ea && agenteInmo.get(ea) === k) S(ea).captaciones += 1; }
                 const ex = dig(p, 'contract', 'exclusive', 'start');
                 if (isDate(ex) && ex >= A && ex < B) {
                     const firm = dig(p, 'contract', 'status') === 'completed';
-                    r.exclusivas += 1; if (firm) r.firmadas += 1;
+                    r.exclusivas += 1; if (firm) { r.firmadas += 1; r.mes.firmadas[mesDe(ex)] += 1; }
                     const e = String(dig(p, 'agent', 'email') ?? '');
                     if (e && agenteInmo.get(e) === k) { const s = S(e); s.exclusivas += 1; if (firm) s.firmadas += 1; }
                 }
             }
         })(),
+        // ofertas del periodo (una operación nace como oferta): para el embudo leads → visitas → ofertas → cierres
+        (async () => {
+            const vistas = new Set<string>();
+            for await (const o of db.collection('operations').find({ createdAt: { $gte: A, $lt: B } },
+                { projection: { company: 1, 'property._id': 1, 'buyer.contact._id': 1 } })) {
+                const k = deComp(o.company);
+                if (!k) continue;
+                const p = dig(o, 'property', '_id'), cid = dig(o, 'buyer', 'contact', '_id');
+                const key = `${k}|${p && cid ? `${String(p)}|${String(cid)}` : String(o._id)}`;
+                if (vistas.has(key)) continue;
+                vistas.add(key);
+                const r = I(k);
+                r.ofertas += 1;
+                if (cid) r.contactosOferta.add(String(cid));
+            }
+        })(),
     ]);
     // cohortes: sólo cuentan los contactos que también fueron lead de la inmobiliaria en el periodo
     for (const r of inmo.values()) {
+        r.contactosOferta = new Set([...r.contactosOferta].filter((x) => r.contactos.has(x)));
         r.contactosVisita = new Set([...r.contactosVisita].filter((x) => r.contactos.has(x)));
         r.contactosCierre = new Set([...r.contactosCierre].filter((x) => r.contactos.has(x)));
     }
@@ -298,13 +329,44 @@ export interface Metrica {
     /** 0–100: qué porcentaje de sus pares queda por debajo (ya orientado: 100 = la mejor) */
     pctl: number | null;
 }
-export interface Hallazgo { titulo: string; texto: string; metrica: string }
+export interface Hallazgo {
+    titulo: string; texto: string; metrica: string;
+    /** contra qué se midió: el año pasado (marca la tarjeta), el arranque del año, o el mejor de los tres años */
+    vs: 'año' | 'trimestre' | 'récord';
+}
+export interface Serie { key: SerieKey; label: string; fmt: Fmt; vals: number[] }
+export interface Mensual {
+    /** meses que entran (0 = enero … último del corte) y si el último va a medias */
+    meses: string[]; parcial: boolean;
+    series: Serie[];
+    mejorMes: { mes: string; cierres: number; i: number } | null;
+    mayor: { valor: number; tipo: string; fecha: string; codigo: string | null } | null;
+}
+export interface Embudo {
+    /** PERSONAS (no leads): quienes escribieron, y de ellas cuántas visitaron, ofertaron y cerraron */
+    pasos: { label: string; n: number }[];
+    /** tasas contra el promedio de Pulppo: SÓLO tasas (en volumen las grandes siempre ganan y sería spoiler) */
+    tasas: { key: string; label: string; yo: number | null; red: number | null }[];
+}
+export interface Inventario {
+    hoy: { venta: number; renta: number }; ene: { venta: number; renta: number };
+    /** foto de hoy (Pulppo no guarda su historial): % en calidad Alta y % en precio Óptimo como en Propiedades */
+    calidadAlta: number | null; enPrecio: number | null; conPrecio: number;
+}
+export interface FilaEquipo { nombre: string; nivel: NivelKey; leads: number; visitas: number; cierres: number }
+export interface Equipo {
+    activos: number; filas: FilaEquipo[];
+    /** asesores activos (sin administrativos) sin un solo lead en 90 días o más */
+    sinLeads: { nombre: string; ultimo: string | null }[];
+    tareasVencidas: number; tareasPendientes: number;
+}
 export interface TuAnio {
     inmobiliaria: string; corte: string; años: number[];
     /** null para la inmobiliaria: los pares sólo los ve el equipo Pulppo */
     pares: { n: number; desde: number; hasta: number; publicadas: number } | null;
     metricas: Metrica[];
     logros: Hallazgo[]; falto: Hallazgo[];
+    mensual: Mensual; embudo: Embudo; inventario: Inventario | null; equipo: Equipo;
     generado: string;
 }
 
@@ -334,7 +396,7 @@ const DEF: Array<{ key: string; label: string; grupo: string; fmt: Fmt; dir: 1 |
         ayuda: 'Exclusivas nuevas del periodo con el contrato firmado y cargado en Pulppo.' },
     { key: 'asesoresCobro', frase: (v) => `${v} asesores cobrando`,  label: 'Asesores que cobraron', grupo: 'Inventario y equipo', fmt: 'int', dir: 1, peso: 1, f: (r) => r?.asesoresCobro.size ?? 0,
         ayuda: 'Cuántos de tus asesores cobraron al menos una comisión en el periodo.' },
-    { key: 'ascensos', frase: (v) => `${v} asesores subieron de nivel`,  label: 'Asesores que subieron de nivel', grupo: 'Inventario y equipo', fmt: 'int', dir: 1, peso: 0.9, f: (r) => r?.ascensos ?? 0,
+    { key: 'ascensos', frase: (v) => (v === '1' ? '1 asesor subió de nivel' : `${v} asesores subieron de nivel`),  label: 'Asesores que subieron de nivel', grupo: 'Inventario y equipo', fmt: 'int', dir: 1, peso: 0.9, f: (r) => r?.ascensos ?? 0,
         ayuda: 'Asesores que terminan el periodo en un nivel más alto (Estándar → Profesional → Élite) que el que tenían el 1 de enero.' },
 ];
 
@@ -382,6 +444,46 @@ export async function tuAnio(companyId: string): Promise<TuAnio | null> {
     //    no dice nada (Diamond House está lejísimos de las de su cuartil). Un veredicto por métrica, ±5% o más
     //    (el mismo umbral que pinta de verde/rojo las tarjetas). ──
     const r26i = R[AÑO].inmo.get(k);
+
+    // ── mes a mes (sólo el año en curso) ──
+    const finCorte = new Date(Date.UTC(AÑO, c[0], c[1]) - DIA);
+    const ultimo = finCorte.getUTCMonth();
+    const parcial = new Date(finCorte.getTime() + DIA).getUTCDate() !== 1;
+    const SER: Array<[SerieKey, string, Fmt]> = [['leads', 'Leads', 'int'], ['visitas', 'Visitas', 'int'], ['cierres', 'Cierres', 'int'],
+        ['cobrada', 'Comisión cobrada', 'money'], ['captaciones', 'Propiedades captadas', 'int'], ['firmadas', 'Exclusivas firmadas', 'int']];
+    const series: Serie[] = SER.map(([key, label, fmt]) => ({ key, label, fmt, vals: (r26i?.mes[key] ?? Array(12).fill(0)).slice(0, ultimo + 1) }));
+    const cier = series.find((x) => x.key === 'cierres')!.vals, cob = series.find((x) => x.key === 'cobrada')!.vals;
+    let mm = -1;
+    cier.forEach((x, i) => { if (x > 0 && (mm < 0 || x > cier[mm] || (x === cier[mm] && cob[i] > cob[mm]))) mm = i; });
+    const vs26 = R[AÑO].ventas.get(k) ?? [];
+    const big = vs26.reduce<Venta | null>((a, b) => (!a || b.v > a.v ? b : a), null);
+    const fecha = (d: Date) => { const x = new Date(d.getTime() - MX); return `${x.getUTCDate()} ${MES_C[x.getUTCMonth()]}`; };
+    const mensual: Mensual = {
+        meses: MES_C.slice(0, ultimo + 1), parcial, series,
+        mejorMes: mm >= 0 ? { mes: MES[mm].charAt(0).toUpperCase() + MES[mm].slice(1), cierres: cier[mm], i: mm } : null,
+        mayor: big ? { valor: big.v, tipo: big.tipo, fecha: fecha(big.closed), codigo: big.codigo } : null,
+    };
+
+    // ── embudo por personas y tasas contra el promedio de Pulppo (muestra mínima: 30 personas / 10 que visitaron) ──
+    const visCierre = (r: Inmo) => [...r.contactosCierre].filter((x) => r.contactosVisita.has(x)).length;
+    let sc = 0, sv = 0, scc = 0, svv = 0, svc = 0;
+    for (const r of R[AÑO].inmo.values()) {
+        if (r.contactos.size >= 30) { sc += r.contactos.size; sv += r.contactosVisita.size; scc += r.contactosCierre.size; }
+        if (r.contactosVisita.size >= 10) { svv += r.contactosVisita.size; svc += visCierre(r); }
+    }
+    const tasas: Embudo['tasas'] = [
+        { key: 'tasaVisita', label: 'Lead → visita', yo: r26i && r26i.contactos.size >= 30 ? r26i.contactosVisita.size / r26i.contactos.size : null, red: sc ? sv / sc : null },
+        { key: 'visitaCierre', label: 'Visita → cierre', yo: r26i && r26i.contactosVisita.size >= 10 ? visCierre(r26i) / r26i.contactosVisita.size : null, red: svv ? svc / svv : null },
+        { key: 'leadCierre', label: 'Lead → cierre', yo: r26i && r26i.contactos.size >= 30 ? r26i.contactosCierre.size / r26i.contactos.size : null, red: sc ? scc / sc : null },
+    ];
+    const embudo: Embudo = {
+        pasos: [
+            { label: 'Te escribieron', n: r26i?.contactos.size ?? 0 }, { label: 'Visitaron', n: r26i?.contactosVisita.size ?? 0 },
+            { label: 'Hicieron una oferta', n: r26i?.contactosOferta.size ?? 0 }, { label: 'Compraron o rentaron', n: r26i?.contactosCierre.size ?? 0 },
+        ],
+        tasas,
+    };
+
     const UMBRAL = 0.05;
     const cand: Array<Hallazgo & { s: number; tipo: 'logro' | 'falto' }> = [];
     for (const m of metricas) {
@@ -396,7 +498,7 @@ export async function tuAnio(companyId: string): Promise<TuAnio | null> {
         if (Math.round(Math.abs(cambio) * 100) < UMBRAL * 100) {
             // sin cambio claro contra el año pasado, pero el mejor de los tres años: también es logro (con menos peso)
             if (ant2 != null && ant2 > 0 && v * m.dir > Math.max(ant, ant2) * m.dir && ((v - ant2) / ant2) * m.dir >= UMBRAL)
-                cand.push({ tipo: 'logro', s: 0.02 * d.peso, metrica: m.key, titulo: m.label,
+                cand.push({ tipo: 'logro', vs: 'récord', s: 0.02 * d.peso, metrica: m.key, titulo: m.label,
                     texto: `${Dicho}: tu mejor cifra de los tres años, ${sigPct((v - ant2) / ant2)} contra ${AÑO - 2}.` });
             continue;
         }
@@ -408,30 +510,133 @@ export async function tuAnio(companyId: string): Promise<TuAnio | null> {
             if (n >= 1) t += m.key === 'tasaVisita'
                 ? (sube ? ` Son ~${n.toLocaleString('es-MX')} personas más visitando que con la tasa de ${AÑO - 1}.` : ` Con la tasa de ${AÑO - 1} serían ~${n.toLocaleString('es-MX')} personas más visitando.`)
                 : (sube ? ` Son ~${n} cierres más que con la conversión de ${AÑO - 1}.` : ` Con la conversión de ${AÑO - 1} serían ~${n} cierres más.`);
+            // bajó contra sí misma pero sigue arriba de la red: se dice, para que el mensaje sea justo (feedback de Karen)
+            const rd = tasas.find((x) => x.key === m.key)?.red;
+            if (!sube && rd != null && v > rd) t += ` Aun así, sigue arriba del promedio de Pulppo (${F(rd)}).`;
         } else t = `${Dicho}, ${sigPct((v - ant) / ant)} contra el mismo periodo de ${AÑO - 1} (${F(Math.abs(v - ant))} ${v > ant ? 'más' : 'menos'}).`;
-        cand.push({ tipo: sube ? 'logro' : 'falto', s: Math.min(Math.abs(cambio), 1.5) * d.peso, metrica: m.key, titulo: m.label, texto: t });
+        cand.push({ tipo: sube ? 'logro' : 'falto', vs: 'año', s: Math.min(Math.abs(cambio), 1.5) * d.peso, metrica: m.key, titulo: m.label, texto: t });
     }
-    // leads respondidos: NO se compara contra 2025 (problemas de WhatsApp en 2026 y casi toda la red está en ~99%),
-    // pero si el equipo le contestó a casi todos, se presume como logro.
-    if (r26i && r26i.leads >= 50 && r26i.respondidos / r26i.leads >= 0.95)
-        cand.push({ tipo: 'logro', s: 0.01, metrica: 'respondidos', titulo: 'Leads respondidos',
-            texto: `Tu equipo le respondió al ${fmtVal(r26i.respondidos / r26i.leads, 'pct')} de los ${r26i.leads.toLocaleString('es-MX')} leads del año.` });
+    // Logros DENTRO del año (Ale, 23-nov): los últimos 3 meses completos contra los 3 primeros (o los 3 primeros con
+    // actividad, para las que llegaron a media año). Así hay logros aunque no haya año pasado contra qué medir.
+    // Umbral más alto (+15%) porque un trimestre es más ruidoso que un año. Sin respuesta: en 2026 hubo problemas de WhatsApp.
+    if (r26i) {
+        const nComp = mensual.parcial ? mensual.meses.length - 1 : mensual.meses.length;
+        const ini = r26i.mes.leads.findIndex((x, i) => x > 0 || r26i.mes.cierres[i] > 0);
+        if (ini >= 0 && nComp - ini >= 6) {
+            const q0 = [ini, ini + 1, ini + 2], q1 = [nComp - 3, nComp - 2, nComp - 1];
+            const rango = (q: number[]) => `${MES_C[q[0]]}–${MES_C[q[2]]}`;
+            for (const se of mensual.series) {
+                const a = q0.reduce((x, i) => x + se.vals[i], 0), b = q1.reduce((x, i) => x + se.vals[i], 0);
+                if (a <= 0 || (se.fmt === 'int' && b < 6)) continue;
+                const ch = (b - a) / a;
+                if (ch < 0.15) continue;
+                const peso = DEF.find((x) => x.key === se.key)?.peso ?? 1.2;
+                const F = (x: number) => fmtVal(x, se.fmt);
+                cand.push({ tipo: 'logro', vs: 'trimestre', s: Math.min(ch, 1.5) * peso * 0.5, metrica: se.key, titulo: `${se.label}: cerraste más fuerte`,
+                    texto: `${F(b)} en ${rango(q1)} contra ${F(a)} en ${rango(q0)} (${sigPct(ch)}). El equipo terminó el año con más ritmo del que lo empezó.` });
+            }
+        }
+    }
     const elegir = (t: 'logro' | 'falto', max: number) => {
         const usados = new Set<string>(), out: Hallazgo[] = [];
-        for (const h of cand.filter((x) => x.tipo === t).sort((a, b) => b.s - a.s)) {
+        // primero lo que se mide contra el año pasado; lo del trimestre y el récord sólo completan (Ale, 23-nov)
+        const orden = (h: Hallazgo) => (h.vs === 'año' ? 0 : 1);
+        for (const h of cand.filter((x) => x.tipo === t).sort((a, b) => orden(a) - orden(b) || b.s - a.s)) {
             if (usados.has(h.metrica) || out.length >= max) continue;
-            usados.add(h.metrica); out.push({ titulo: h.titulo, texto: h.texto, metrica: h.metrica });
+            usados.add(h.metrica); out.push({ titulo: h.titulo, texto: h.texto, metrica: h.metrica, vs: h.vs });
         }
         return out;
     };
     // parejos: tantos pendientes como logros (Ale no quería 1 logro contra 3 pendientes); al menos uno si lo hay
     const logros = elegir('logro', 3);
     const falto = elegir('falto', Math.max(1, logros.length));
+    const [inventario, equipo] = await Promise.all([inventarioDe(k, companyId), equipoDe(k)]);
     return {
         inmobiliaria: k, corte: corteTexto(c), años,
         pares: { n: grupo.length, desde: grupo[0]?.[1] ?? 0, hasta: grupo[grupo.length - 1]?.[1] ?? 0, publicadas: inv.get(k) ?? 0 },
-        metricas, logros, falto, generado: new Date().toISOString(),
+        metricas, logros, falto, mensual, embudo, inventario, equipo, generado: new Date().toISOString(),
     };
+}
+
+/** Compañías de la inmobiliaria (lista canónica) y su equipo activo, sin bajas ni cuentas de servicio. */
+async function activosDe(k: string) {
+    const { compInmo, bajas } = await base();
+    const db = await getDb();
+    const comps = [...compInmo.entries()].filter(([, n]) => n === k).map(([id]) => new ObjectId(id));
+    const todos = await db.collection('agents').find({ 'company._id': { $in: comps }, status: 'active', email: { $exists: true } },
+        { projection: { email: 1, type: 1, firstName: 1, lastName: 1, uid: 1 } }).toArray();
+    // fuera cuentas de servicio que no son brokers («Operaciones Temp» en DH)
+    const servicio = (a: Document) => /\b(temp|prueba|test|operaciones|demo)\b/i.test(`${a.firstName ?? ''} ${a.lastName ?? ''}`);
+    return { comps, todos, equipo: todos.filter((a) => !bajas.has(a.email as string) && !servicio(a)) };
+}
+
+/** Inventario publicado hoy contra el 1-ene (reconstruido con el historial de status), y calidad/precio de hoy con
+ *  el mismo cálculo de la pestaña Propiedades de /mb (para que el dueño vea el mismo número en los dos lados). */
+async function inventarioDe(k: string, companyId: string): Promise<Inventario | null> {
+    try {
+        const db = await getDb();
+        const { comps } = await activosDe(k);
+        const ene = new Date(Date.UTC(AÑO, 0, 1) + MX).getTime();
+        const hoy = { venta: 0, renta: 0 }, alIni = { venta: 0, renta: 0 };
+        for await (const p of db.collection('properties').find({ 'company._id': { $in: comps }, 'status.history.status': 'published' },
+            { projection: { 'status.last': 1, 'status.history': 1, 'listing.operation': 1 } })) {
+            const op = dig(p, 'listing', 'operation') === 'sale' ? 'venta' : dig(p, 'listing', 'operation') === 'rent' ? 'renta' : null;
+            if (!op) continue;
+            if (dig(p, 'status', 'last') === 'published') hoy[op] += 1;
+            let st: string | null = null, t0 = -Infinity;
+            for (const h of (dig(p, 'status', 'history') as Document[] | undefined) ?? []) {
+                const t = new Date(h?.timestamp as string | Date).getTime();
+                if (!isNaN(t) && t <= ene && t >= t0) { t0 = t; st = String(h.status); }
+            }
+            if (st === 'published') alIni[op] += 1;
+        }
+        const mb = await fetchInmobiliaria(companyId).catch(() => null);
+        const props = mb?.props ?? [];
+        const conPrecio = props.filter((x) => x.estado !== 'Haz ACM');
+        return {
+            hoy, ene: alIni,
+            calidadAlta: props.length ? props.filter((x) => x.calidad === 'Alta').length / props.length : null,
+            enPrecio: conPrecio.length ? conPrecio.filter((x) => x.estado === 'Óptimo').length / conPrecio.length : null,
+            conPrecio: conPrecio.length,
+        };
+    } catch { return null; }
+}
+
+/** Equipo: tabla del año por asesor, red flags (sin leads 90+ días, sin administrativos) y tareas vencidas hoy. */
+async function equipoDe(k: string): Promise<Equipo> {
+    const { am } = await base();
+    const db = await getDb();
+    const { equipo } = await activosDe(k);
+    const r = await red(AÑO, corte());
+    const emailUid = new Map([...am.uidEmail.entries()].map(([u, e]) => [e, u]));
+    const nombre = (a: Document) => limpio(am.name.get(a.email as string) ?? `${a.firstName ?? ''} ${a.lastName ?? ''}`);
+    const nivel = (e: string): NivelKey => { const l = am.level.get(e); return l === 'elite' || l === 'professional' ? l : 'standard'; };
+    const filas: FilaEquipo[] = equipo.map((a) => {
+        const e = a.email as string, s = r.asesor.get(e);
+        return { nombre: nombre(a), nivel: nivel(e), leads: s?.leads ?? 0, visitas: s?.visitas ?? 0, cierres: s?.cerradas.size ?? 0 };
+    }).sort((a, b) => b.cierres - a.cierres || b.leads - a.leads);
+
+    // sin leads: los que atienden clientes (no master ni staff: ésos pueden ser administrativos)
+    const brokers = equipo.filter((a) => a.type !== 'master' && a.type !== 'staff');
+    const uids = brokers.map((a) => (a.uid as string) ?? emailUid.get(a.email as string)).filter(Boolean) as string[];
+    const ult = new Map<string, Date>();
+    for (const x of await db.collection('leads').aggregate([
+        { $match: { 'agent.uid': { $in: uids }, createdAt: { $gte: new Date(Date.now() - 400 * DIA) } } },
+        { $group: { _id: '$agent.uid', u: { $max: '$createdAt' } } },
+    ]).toArray()) ult.set(String(x._id), x.u as Date);
+    const lim = Date.now() - 90 * DIA;
+    const sinLeads = brokers.map((a) => {
+        const u = ult.get((a.uid as string) ?? emailUid.get(a.email as string) ?? '');
+        return { nombre: nombre(a), u };
+    }).filter((x) => !x.u || x.u.getTime() < lim)
+        .map((x) => ({ nombre: x.nombre, ultimo: x.u ? `${MES[mesDe(x.u)]} ${new Date(x.u.getTime() - MX).getUTCFullYear()}` : null }));
+
+    const emails = equipo.map((a) => a.email as string);
+    const [tareasPendientes, tareasVencidas] = await Promise.all([
+        db.collection('tasks').countDocuments({ 'agent.email': { $in: emails }, status: 'pending' }),
+        db.collection('tasks').countDocuments({ 'agent.email': { $in: emails }, status: 'pending', dueDate: { $lt: new Date() } }),
+    ]);
+    return { activos: equipo.length, filas, sinLeads, tareasVencidas, tareasPendientes };
 }
 
 // ── RECONOCIMIENTOS ───────────────────────────────────────────────────────────
@@ -484,9 +689,9 @@ export async function reconocimientos(companyId: string): Promise<Reconocimiento
 
     const premios: Premio[] = [];
     premios.push({ key: 'broker', titulo: 'Broker del año', porque: 'Por ser quien más comisión cobró este año.',
-        regla: 'Comisión cobrada en el año, repartida por rol en cada operación (como en los premios de la gala). En redes sólo se muestran las operaciones.',
+        regla: 'Comisión cobrada en el año, repartida por rol en cada operación (como en los premios de la gala). En redes no va el monto.',
         podio: top3(mios.filter(([, s]) => s.cobrada > 0).sort((a, b) => b[1].cobrada - a[1].cobrada))
-            .map(([e, s], i) => persona(e, i + 1, money(s.cobrada), ops(s.ops.size), ops(s.ops.size), 'cobradas en el año')) });
+            .map(([e, s], i) => persona(e, i + 1, money(s.cobrada), ops(s.ops.size), i ? '' : 'Mayor comisión', i ? '' : `cobrada en ${k} este año`)) });
     premios.push({ key: 'captacion', titulo: 'Captación del año', porque: 'Por firmar más exclusivas que nadie en el equipo.',
         regla: 'Exclusivas que arrancaron en el año con contrato completo en la plataforma; desempata el total de exclusivas.',
         podio: top3(mios.filter(([, s]) => s.firmadas > 0).sort((a, b) => b[1].firmadas - a[1].firmadas || b[1].exclusivas - a[1].exclusivas))
@@ -544,13 +749,9 @@ export async function reconocimientos(companyId: string): Promise<Reconocimiento
         podio: asc.sort((a, b) => b.valor.localeCompare(a.valor)) });
 
     // diplomas: todo el equipo activo, con su nivel de HOY
-    const comps = [...compInmo.entries()].filter(([, n]) => n === k).map(([id]) => new ObjectId(id));
-    const activos = await db.collection('agents').find({ 'company._id': { $in: comps }, status: 'active', email: { $exists: true } },
-        { projection: { email: 1, type: 1, firstName: 1, lastName: 1 } }).toArray();
+    const { todos: activos, equipo: eqActivo } = await activosDe(k);
     const masters = activos.filter((a) => a.type === 'master').map((a) => limpio(`${a.firstName ?? ''} ${a.lastName ?? ''}`)).filter(Boolean);
-    // fuera cuentas de servicio que no son brokers («Operaciones Temp» en DH)
-    const servicio = (a: Document) => /\b(temp|prueba|test|operaciones|demo)\b/i.test(`${a.firstName ?? ''} ${a.lastName ?? ''}`);
-    const equipo: Diploma[] = activos.filter((a) => !bajas.has(a.email as string) && !servicio(a)).map((a) => {
+    const equipo: Diploma[] = eqActivo.map((a) => {
         const e = a.email as string, s = r.asesor.get(e);
         const g = persona(e, 1, '', '');
         const lv = am.level.get(e);
