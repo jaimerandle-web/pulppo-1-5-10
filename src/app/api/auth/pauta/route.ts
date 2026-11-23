@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PAUTA_EMAILS } from '@/lib/accesoPauta';
+import { isAllowed } from '@/lib/access';
 import { pautaToken, userToken } from '@/lib/token';
 
 // GET /api/auth/pauta?t=<token> — liga personal de un externo de pauta (Habi). El email no va en la
@@ -17,6 +18,12 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(url);
     }
     url.pathname = '/1-5-10/pauta';
+    // Un interno que abre la liga (para probarla antes de mandarla) NO pierde su sesión: antes se le
+    // pisaba la cookie con la de Habi y quedaba encerrado en /pauta 90 días (Ale, 23-nov-2026).
+    const actual = (req.cookies.get('cm-user')?.value || '').trim().toLowerCase();
+    if (actual && isAllowed(actual) && req.cookies.get('cm-sig')?.value === (await userToken(actual))) {
+        return NextResponse.redirect(url);
+    }
     const res = NextResponse.redirect(url);
     const opts = { httpOnly: false, sameSite: 'lax' as const, secure: true, path: '/', maxAge: 60 * 60 * 24 * 90 };
     res.cookies.set('cm-user', mail, opts);
