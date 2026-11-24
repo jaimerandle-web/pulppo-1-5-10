@@ -172,5 +172,5 @@ async function calcular(): Promise<AsignacionView> {
 /** Datos de la asignación (caché 30 min: el cupo de la herramienta cambia pocas veces al día). */
 export async function asignacionView(fresco = false): Promise<AsignacionView> {
     if (fresco) return calcular();
-    return unstable_cache(calcular, ['portales-asignacion-v1'], { revalidate: 1800, tags: ['portales-asignacion'] })();
+    return unstable_cache(calcular, ['portales-asignacion-v2'], { revalidate: 1800, tags: ['portales-asignacion'] })();
 }

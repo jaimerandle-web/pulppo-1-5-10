@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import type { AsignacionView, Cuenta, FilaAsig, Nivel } from '@/lib/portales/asignacion';
 import type { Borrador } from '@/lib/portales/asignacionStore';
 import {
-    REGLAS_DEFAULT, costoElevados, esDiamond, preciosDe, sugerida, topeDe, unidadesMeli, type Reglas, type Sugerida,
+    REGLAS_DEFAULT, costoElevados, esDiamond, preciosDe, sugerida, topeDe, costoMeli, type Reglas, type Sugerida,
 } from '@/lib/portales/asignacionReglas';
 
 const BLK = '#212322', YEL = '#F6BE00', GRY = '#B7B7B7', LGT = '#F3F3F3', RED = '#A52003', SEA = '#529999';
@@ -68,18 +68,15 @@ export default function Asignacion() {
     const precios = useMemo(() => preciosDe(datos?.plan.precios), [datos]);
     const final = (f: FilaAsig): Cuenta => ({ ...f.hoy, ...(valores[f.nombre] ?? {}) });
 
-    // costo del paquete de MeLi sin IVA (la Calculadora es sin IVA), repartido por unidades: Oro Premium = 2
+    // MeLi a costo literal del paquete, sin IVA (la Calculadora es sin IVA): $1 por publicación + $42.17 por Oro Premium
     const calc = useMemo(() => {
         if (!datos) return null;
-        const meliSinIva = datos.meli.monto / 1.16;
         const fin = new Map(datos.filas.map((f) => [f.nombre, { ...f.hoy, ...(valores[f.nombre] ?? {}) } as Cuenta]));
-        const unidades = [...fin.values()].reduce((a, c) => a + unidadesMeli(c), 0);
-        const porUnidad = unidades ? meliSinIva / unidades : 0;
         const filas = datos.filas.map((f) => {
             const c = fin.get(f.nombre)!;
             const premier = esDiamond(f) ? Math.min(PREMIER_SD, c.sd) : 0;
             const elev = costoElevados({ ...c, sd: c.sd - premier }, precios);
-            const meli = unidadesMeli(c) * porUnidad;
+            const meli = costoMeli(c, datos.meli);
             const fijos = c.simple * precios.simple + meli;
             const sug = sugerida(f, reglas, precios, fijos);
             const gasto = elev + fijos + (premier ? (datos.plan.premier ?? 0) : 0);
@@ -93,7 +90,7 @@ export default function Asignacion() {
             filas.reduce((a, x) => a + sel(base === 'c' ? x.c : base === 'hoy' ? x.f.hoy : x.f.enLinea), 0);
         const bolsaUsada = filas.reduce((a, x) => a + x.elev, 0);
         const bolsaHoy = datos.filas.reduce((a, f) => a + costoElevados({ ...f.hoy, sd: f.hoy.sd - (esDiamond(f) ? Math.min(PREMIER_SD, f.hoy.sd) : 0) }, precios), 0);
-        return { filas, tot, bolsaUsada, bolsaHoy, porUnidad };
+        return { filas, tot, bolsaUsada, bolsaHoy };
     }, [datos, valores, reglas, precios]);
 
     if (error) return <Aviso>No se pudo cargar la asignación: {error}</Aviso>;
@@ -253,7 +250,7 @@ export default function Asignacion() {
             </div>
 
             {/* ── la hoja ── */}
-            <H2 sub={<>Amarillo = cambiaste el número (abajo, en gris, lo de hoy). Rojo en la barra = el gasto se pasa de su tope. «Regla» es lo que le toca con las reglas de arriba; el botón ↺ la aplica a esa fila. Gasto al mes sin IVA: i24 a precio de lista + su parte del paquete de MeLi ({money(calc.porUnidad)} por Plata, el doble por Oro Premium).</>}>
+            <H2 sub={<>Amarillo = cambiaste el número (abajo, en gris, lo de hoy). Rojo en la barra = el gasto se pasa de su tope. «Regla» es lo que le toca con las reglas de arriba; el botón ↺ la aplica a esa fila. Gasto al mes sin IVA: i24 a precio de lista + MeLi a costo literal del paquete ($1 por publicación y $42.17 más por Oro Premium, con IVA; aquí sin IVA).</>}>
                 Por inmobiliaria
             </H2>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 8 }}>

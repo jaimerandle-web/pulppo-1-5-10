@@ -610,7 +610,7 @@ tools.pulppo.com → Asignación de avisos (ZD SD · SD · ZD D · D · Simple �
 - **Reglas** (`lib/portales/asignacionReglas.ts`, pura, corre en el navegador y se mueve en vivo): Equipos Premium 35% SD +
   15% D de la venta, tope 50% de su regalía; Equipos 15% + 10%, tope 40%; Premium al 15% usa el tope de Equipos; si no
   cabe se recorta parejo; excepciones del Sheet mandan; Red/SaaS sólo simples; Diamond aparte (205 SD fijos, 130 = Premier
-  con costo fijo fuera de la bolsa). Gasto sin IVA: i24 a precio de lista + su parte del paquete MeLi (Oro Premium = 2 Platas).
+  con costo fijo fuera de la bolsa). Gasto sin IVA: i24 a precio de lista + MeLi a costo literal ($1 por publicación, +$42.17 por Oro Premium, con IVA).
 - **Borrador compartido** (`lib/portales/asignacionStore.ts`): Blob en Vercel (sin Blob = sólo lectura y lo dice), local en
   `.portales/asignacion.json`. Uno solo, gana el último que guarda; historial de quién guardó. Lo no guardado vive en
   localStorage. NO escribe en la herramienta de i24: se descarga CSV en el orden de la herramienta (A–Z ASCII).

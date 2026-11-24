@@ -48,8 +48,13 @@ export function topeDe(f: FilaAsig, r: Reglas): number | null {
 export const costoI24 = (c: Pick<Cuenta, 'sdzd' | 'sd' | 'dzd' | 'd' | 'simple'>, p: Precios) =>
     c.sdzd * p.sdzd + c.sd * p.sd + c.dzd * p.dzd + c.d * p.d + c.simple * p.simple;
 export const costoElevados = (c: Pick<Cuenta, 'sdzd' | 'sd' | 'dzd' | 'd'>, p: Precios) => c.sdzd * p.sdzd + c.sd * p.sd + c.dzd * p.dzd + c.d * p.d;
-/** Unidades de MeLi para repartir el paquete: Plata y Oro = 1, Oro Premium = 2 (como la Calculadora). */
-export const unidadesMeli = (c: Pick<Cuenta, 'op' | 'oro' | 'plata'>) => 2 * c.op + c.oro + c.plata;
+/**
+ * Costo LITERAL de MeLi de una cuenta, sin IVA (como los precios de i24 de la Calculadora): cada publicación $1 y cada
+ * Oro Premium $42.17 encima (el paquete: $14,000 de publicaciones + $43,009 de destaques, con IVA). Antes se repartía el
+ * paquete completo entre lo asignado con Oro Premium = 2 Platas, y a NURA le salían $6,300 en vez de $3,358 con IVA.
+ */
+export const costoMeli = (c: Pick<Cuenta, 'op' | 'oro' | 'plata'>, m: { precioPublicacion: number; precioOroPremium: number }) =>
+    ((c.op + c.oro + c.plata) * m.precioPublicacion + c.op * m.precioOroPremium) / 1.16;
 
 export interface Sugerida {
     cuenta: Pick<Cuenta, 'sdzd' | 'sd' | 'dzd' | 'd'>;

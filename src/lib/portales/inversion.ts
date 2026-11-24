@@ -53,7 +53,12 @@ export const NOTA_MELI =
  * 2026. Reemplaza «base + 6%»: desde `desde` la inversión del canal es este monto fijo. «Mi página» y ads
  * se facturan aparte y no tenemos su monto.
  */
-export const MELI_PAQUETE = { desde: '2026-08', monto: 57_009, publicaciones: 14_000, oroPremium: 1_020 } as const;
+// Costo literal por aviso (Ale, 23-nov-2026): $14,000 son las 14,000 publicaciones ($1 cada una) y el resto
+// ($43,009) los 1,020 destaques Oro Premium (≈$42.17 cada uno, ENCIMA de su $1 de publicación). Con IVA.
+export const MELI_PAQUETE = {
+    desde: '2026-08', monto: 57_009, publicaciones: 14_000, oroPremium: 1_020,
+    precioPublicacion: 1, precioOroPremium: (57_009 - 14_000) / 1_020,
+} as const;
 
 /** Base fija mensual del contrato con MercadoLibre (MXN). El 6% se calcula aparte. */
 export const MELI_BASE = 152_800;
