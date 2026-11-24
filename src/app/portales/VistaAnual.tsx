@@ -903,7 +903,7 @@ function Publicacion({ pub, filtro }: { pub: PublicacionView | null; filtro: Fil
                 </div>
                 <div style={{ border: `1px solid ${LGT}`, borderTop: `3px solid ${PORTAL.meli.color}`, borderRadius: R, padding: '12px 14px' }}>
                     <div style={{ fontWeight: 800, fontSize: 13 }}>MercadoLibre · Oro Premium incluidos</div>
-                    <div style={{ fontSize: 10.5, color: '#888', marginTop: 2 }}>Paquete desde ago-2026: $57,009 al mes con IVA · 14,000 publicaciones + 1,020 Oro Premium</div>
+                    <div style={{ fontSize: 10.5, color: '#888', marginTop: 2 }}>Paquete desde dic-2026: $57,009 al mes con IVA · 14,000 publicaciones + 1,020 Oro Premium</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '6px 0' }}>
                         <span style={{ fontFamily: 'EB Garamond, serif', fontSize: 30 }}>{plan.oroPremiumMeli ? `${Math.round((100 * opMeli) / plan.oroPremiumMeli)}%` : '—'}</span>
                         <span style={{ fontSize: 12, color: '#666' }}>{f0(opMeli)} en línea de {f0(plan.oroPremiumMeli)}</span>

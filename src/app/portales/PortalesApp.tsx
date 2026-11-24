@@ -428,7 +428,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                             ['ROI sólo con la red completa y meses completos',
                              'Los portales cobran por aviso, no por inmobiliaria ni por venta/renta: con una inmobiliaria elegida o con Venta/Renta, CPL, CPA y ROI se apagan. Con fechas que no empiezan el día 1, también. ROI = regalía que retiene Pulppo ÷ inversión, no la comisión total.'],
                             ['MeLi se revisa a mano',
-                             'Desde agosto 2026 es un paquete fijo de $57,009 al mes con IVA (14,000 publicaciones + 1,020 Oro Premium), sin 6%. Hasta julio era base $152,800 + 6% de la comisión del deal. «Mi página» y ads van aparte.'],
+                             'Hasta julio 2026: base $152,800 + 6% de la comisión del deal. Agosto–noviembre: lo que factura MeLi (sin 6%, con ads). Desde diciembre: paquete fijo de $57,009 al mes con IVA (14,000 publicaciones + 1,020 Oro Premium).'],
                             ['Habi y las cuentas de prueba están fuera de todo',
                              'Habi se excluye por el email de la inmobiliaria (contiene tuhabi), nunca por el nombre: filtrar por nombre mataría inmobiliarias reales como Habitat o Habix.'],
                         ].map(([t, txt]) => (

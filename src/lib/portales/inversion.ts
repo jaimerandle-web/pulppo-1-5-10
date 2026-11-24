@@ -44,19 +44,27 @@ const CANAL_KEY: Record<string, string> = {
 export const GRATIS = new Set(['propiedades']);
 
 export const NOTA_MELI =
-    'MeLi: desde agosto 2026 es un paquete fijo de $57,009 al mes con IVA (14,000 publicaciones + 1,020 Oro Premium), ' +
-    'sin el 6%. Hasta julio era base $152,800 + 6% de la comisión del deal. «Mi página» y ads se facturan aparte y no están aquí.';
+    'MeLi: hasta julio 2026 base $152,800 + 6% de la comisión del deal; agosto–noviembre lo que factura MeLi (incluye ads); ' +
+    'desde diciembre paquete fijo de $57,009 al mes con IVA (14,000 publicaciones + 1,020 Oro Premium), sin 6%.';
+
+/**
+ * Lo que MeLi factura de agosto a noviembre 2026 (portal de facturación, captura de Ale 23-nov-2026): ya sin el 6% y con
+ * IVA, e INCLUYE ads (hubo inversión en ads esos meses). Ale: «es lo que vamos a pagar». Noviembre estaba EN CURSO
+ * ($67,080.71 al 23-nov): actualizarlo cuando cierre.
+ */
+export const MELI_FACTURADO: Record<string, number> = {
+    '2026-08': 140_499.73, '2026-09': 145_425.51, '2026-10': 166_954.70, '2026-11': 67_080.71,
+};
 
 /**
  * Paquete de MercadoLibre con precio especial (correo de MeLi a Ale, 23-nov-2026): 14,000 publicaciones
- * + 1,020 destaques Oro Premium por $57,009 al mes CON IVA, retroactivo a la facturación de agosto–noviembre
- * 2026. Reemplaza «base + 6%»: desde `desde` la inversión del canal es este monto fijo. «Mi página» y ads
- * se facturan aparte y no tenemos su monto.
+ * + 1,020 destaques Oro Premium por $57,009 al mes CON IVA, sin 6%. Ale: cerrado A PARTIR DE DICIEMBRE 2026
+ * (agosto–noviembre se paga lo facturado, `MELI_FACTURADO`). «Mi página» y ads se facturan aparte.
  */
 // Costo literal por aviso (Ale, 23-nov-2026): $14,000 son las 14,000 publicaciones ($1 cada una) y el resto
 // ($43,009) los 1,020 destaques Oro Premium (≈$42.17 cada uno, ENCIMA de su $1 de publicación). Con IVA.
 export const MELI_PAQUETE = {
-    desde: '2026-08', monto: 57_009, publicaciones: 14_000, oroPremium: 1_020,
+    desde: '2026-12', monto: 57_009, publicaciones: 14_000, oroPremium: 1_020,
     precioPublicacion: 1, precioOroPremium: (57_009 - 14_000) / 1_020,
 } as const;
 
@@ -215,7 +223,7 @@ export async function inversionMeses(meses: string[]): Promise<Record<string, In
  * Inversión de cada canal SUMADA sobre varios meses (para «Inversión y retorno» con cualquier
  * periodo de meses completos). Mismas reglas que el scorecard:
  *   · propiedades.com es gratis de verdad (0);
- *   · MeLi = paquete fijo desde ago-2026 (MELI_PAQUETE); antes base fija + 6% del deal (ver deal.ts);
+ *   · MeLi = facturado ago–nov 2026, paquete fijo desde dic-2026; antes base fija + 6% del deal (ver deal.ts);
  *   · un canal con CUALQUIER mes sin cargar en el Sheet sale null (s/d), nunca un total parcial
  *     que parezca completo.
  */
@@ -224,7 +232,7 @@ export interface InversionRango {
     porCanal: Record<string, number | null>;
     /** meses cuyo tab del Sheet todavía no existe o está en ceros */
     faltantes: string[];
-    meli: Array<{ mes: string; inversion: number; fuente: 'conciliado' | 'calculado' | 'paquete' }>;
+    meli: Array<{ mes: string; inversion: number; fuente: 'conciliado' | 'calculado' | 'paquete' | 'facturado' }>;
     /** meses cuyo tab trae el plan del mes anterior copiado: [mes, mes del que se copió] */
     copiados: Array<[string, string]>;
 }

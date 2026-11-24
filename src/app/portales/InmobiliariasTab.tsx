@@ -88,7 +88,7 @@ const DEF = {
     regalia: <>Lo que retiene Pulppo de la comisión de los cierres del periodo. No es la comisión total, que es del broker.</>,
     roi: <>Regalía de los cierres de canales pagados ÷ inversión de esos canales. Sólo se calcula con meses completos, sin inmobiliaria y con «Todo» en operación: la inversión es de toda la red.</>,
     cpl: <>Inversión ÷ leads de los canales que cuestan (WhatsApp, Pulppo, sitio, etc. no entran).</>,
-    inversion: <>Sale del Sheet «Investment Strategy 2026», bloque de resultados de cada mes. MeLi = paquete fijo $57,009 al mes con IVA desde agosto 2026; antes base $152,800 + 6% de la comisión del deal.</>,
+    inversion: <>Sale del Sheet «Investment Strategy 2026», bloque de resultados de cada mes. MeLi = hasta jul-2026 base $152,800 + 6% del deal; ago–nov lo facturado por MeLi (con ads); desde dic paquete fijo $57,009 con IVA.</>,
     sinRespuesta: <>De los leads que llegaron por <b>WhatsApp o formulario</b>, en cuántos el cliente nunca escribió ni llamó (teléfono válido, sin conversación). Es confiable: cuando el cliente escribe, el mensaje queda guardado. <b>Por teléfono</b> se mide aparte y no es comparable: el cliente ve el número y llama al celular del asesor, y esa llamada no se registra (sólo ~5% de los «ver teléfono» de Inmuebles24 tienen llamada en el call center). Ahí el % es «sin contacto visible», no «no contestó».</>,
     brokers: <>Leads cuyo contacto está etiquetado como broker en Pulppo: no son compradores finales.</>,
     respuesta: <>Mediana de minutos a la primera respuesta, sólo de leads que entraron de 8 am a 8 pm (hora de México).</>,
@@ -910,13 +910,13 @@ export default function InmobiliariasTab({ section = 'inmobiliarias', op, setOp 
                 </Seccion>
 
                 {!v.inmobiliaria && v.filtro.operacion === 'todas' && (
-                    <Seccion titulo="Deal MercadoLibre" sub="Desde agosto 2026: paquete fijo de $57,009 al mes (sin 6%). Hasta julio: base $152,800 + 6% de la comisión del deal; las banderas dicen qué revisar."
+                    <Seccion titulo="Deal MercadoLibre" sub="Hasta julio 2026: base $152,800 + 6% de la comisión del deal (las banderas dicen qué revisar). Agosto–noviembre: lo facturado por MeLi. Desde diciembre: paquete fijo de $57,009."
                         info={<>Ninguna regla de Mongo reproduce los meses ya conciliados, así que la tabla es una <b>lista de revisión</b>, no el monto a pagar.</>}>
                         {ia && <Tabla head={['Mes', 'Inversión MeLi', 'De dónde sale']} min={420}>
                             {ia.meli.map((m) => (
                                 <tr key={m.mes} onClick={() => setMesDeal(m.mes)} style={{ cursor: 'pointer', background: m.mes === mesDeal ? LGT : '#fff' }}>
                                     <td style={td0}>{mesLargo(m.mes)}{m.mes === mesDeal ? ' ◂' : ''}</td><td style={td}>{money(m.inversion)}</td>
-                                    <td style={{ ...td0, color: m.fuente === 'conciliado' ? SEA : '#8A6D00' }}>{m.fuente === 'paquete' ? 'paquete fijo (sin 6%)' : m.fuente === 'conciliado' ? 'base + 6% conciliado a mano' : 'base + 6% calculado (sin revisar)'}</td>
+                                    <td style={{ ...td0, color: m.fuente === 'conciliado' ? SEA : '#8A6D00' }}>{m.fuente === 'paquete' ? 'paquete fijo (sin 6%)' : m.fuente === 'facturado' ? 'facturado por MeLi (con ads)' : m.fuente === 'conciliado' ? 'base + 6% conciliado a mano' : 'base + 6% calculado (sin revisar)'}</td>
                                 </tr>
                             ))}
                         </Tabla>}

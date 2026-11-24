@@ -24,7 +24,7 @@
 import { type Document } from 'mongodb';
 import { getDb } from '../data';
 import { classifySource, dig, isDate, monthWindow, num, oid, NOTP } from './metrics';
-import { MELI_BASE, MELI_CONFIRMADO, MELI_PAQUETE } from './inversion';
+import { MELI_BASE, MELI_CONFIRMADO, MELI_FACTURADO, MELI_PAQUETE } from './inversion';
 
 const SRC = { $regex: 'mercadolibre', $options: 'i' } as const;
 
@@ -60,7 +60,7 @@ export interface DealMes {
     /** Inversión total del canal en el mes = base fija + el 6% que aplique. */
     inversion: number;
     /** De dónde salió `inversion`. 'paquete' = precio fijo desde ago-2026 (sin 6%). */
-    fuente: 'conciliado' | 'calculado' | 'paquete';
+    fuente: 'conciliado' | 'calculado' | 'paquete' | 'facturado';
 }
 
 /**
@@ -188,16 +188,17 @@ export async function dealMes(mes: string): Promise<DealMes> {
     const comisionR2 = ops.reduce((s, o) => s + o.comision, 0);
     const comisionR1 = ops.filter((o) => o.r1).reduce((s, o) => s + o.comision, 0);
     const conf = MELI_CONFIRMADO[mes] ?? null;
-    // Desde el paquete (ago-2026) el canal cuesta un fijo: las operaciones siguen listadas como
+    // Desde el paquete (dic-2026) el canal cuesta un fijo; ago–nov, lo facturado: las operaciones siguen listadas como
     // referencia, pero ya no suman 6%.
     const paquete = mes >= MELI_PAQUETE.desde;
+    const facturado = MELI_FACTURADO[mes] ?? null;   // ago–nov 2026: lo que cobra MeLi (sin 6%, con ads)
 
     return {
         mes, ops,
         comisionR2, seisR2: comisionR2 * 0.06,
         comisionR1, seisR1: comisionR1 * 0.06,
         seisConfirmado: conf,
-        inversion: paquete ? MELI_PAQUETE.monto : MELI_BASE + (conf ?? comisionR2 * 0.06),
-        fuente: paquete ? 'paquete' : conf === null ? 'calculado' : 'conciliado',
+        inversion: paquete ? MELI_PAQUETE.monto : facturado ?? MELI_BASE + (conf ?? comisionR2 * 0.06),
+        fuente: paquete ? 'paquete' : facturado != null ? 'facturado' : conf === null ? 'calculado' : 'conciliado',
     };
 }
