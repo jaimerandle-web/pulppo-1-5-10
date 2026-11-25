@@ -12,7 +12,7 @@ const R = 2;
 const f0 = (n: number) => n.toLocaleString('es-MX');
 
 type Resumen = {
-    generado: string;
+    generado: string; asesores_generado: string; asesores_vigencia_dias: number;
     conteos: { propiedades: number; publicadas: number; leads: number; asesores: number };
     urls_agente: Record<'propiedades' | 'leads' | 'asesores', string>;
 };
@@ -20,7 +20,7 @@ type Resumen = {
 const JUEGOS: { tipo: 'propiedades' | 'leads' | 'asesores'; titulo: string; que: string; filtros: string }[] = [
     {
         tipo: 'propiedades', titulo: 'Propiedades',
-        que: 'Todo el inventario, en cualquier estado, con fotos, planos, videos, recorrido virtual, ligas a portales, productor y vendedor. Sin ningún dato del propietario.',
+        que: 'Todo el inventario, en cualquier estado: textos, precio, características, ubicación, fotos, planos, videos, recorrido virtual, productor y vendedor. Sin ningún dato del propietario.',
         filtros: '&estado=published para sólo las publicadas',
     },
     {
@@ -30,7 +30,7 @@ const JUEGOS: { tipo: 'propiedades' | 'leads' | 'asesores'; titulo: string; que:
     },
     {
         tipo: 'asesores', titulo: 'Asesores externos',
-        que: 'Brokers de fuera de la inmobiliaria: los que nos mandaron clientes y los que estuvieron del otro lado de una operación. Con su nivel: cerró, ofertó, recurrente u ocasional.',
+        que: 'Brokers de fuera de la inmobiliaria: los que nos mandaron clientes y los que estuvieron del otro lado de una operación. Con su nivel (cerró, ofertó, recurrente u ocasional) y lo que mueve: zonas, tipo de propiedad y presupuesto.',
         filtros: '',
     },
 ];
@@ -59,13 +59,15 @@ export default function MBDatos({ companyId }: { companyId: string }) {
     if (!r) return <div style={{ color: MUTED, fontSize: 13 }}>Leyendo la base en vivo… (la primera vez tarda unos 20 segundos)</div>;
 
     const n = { propiedades: r.conteos.propiedades, leads: r.conteos.leads, asesores: r.conteos.asesores };
+    const dia = (x: string) => new Date(x).toLocaleDateString('es-MX', { dateStyle: 'medium', timeZone: 'America/Mexico_City' });
     const hora = new Date(r.generado).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Mexico_City' });
     const base = `/api/mb-datos?company=${companyId}`;
 
     return (
         <div>
             <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
-                Leída de la base el {hora}. Se actualiza sola cada 10 minutos.
+                Propiedades y leads: leídos de la base el {hora}, se actualizan solos cada 10 minutos. Asesores externos: foto
+                del {dia(r.asesores_generado)}, se renueva cada {Math.round(r.asesores_vigencia_dias / 30)} meses.
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
                 {JUEGOS.map((j) => (
@@ -73,6 +75,7 @@ export default function MBDatos({ companyId }: { companyId: string }) {
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22 }}>{j.titulo}</div>
                         <div style={{ fontSize: 30, fontWeight: 800, margin: '4px 0' }}>{f0(n[j.tipo])}</div>
                         {j.tipo === 'propiedades' && <div style={{ fontSize: 12, color: MUTED }}>{f0(r.conteos.publicadas)} publicadas hoy</div>}
+                        {j.tipo === 'asesores' && <div style={{ fontSize: 12, color: MUTED }}>Foto del {dia(r.asesores_generado)}</div>}
                         <div style={{ fontSize: 13, color: '#444', margin: '10px 0 4px', lineHeight: 1.45 }}>{j.que}</div>
                         <a href={`${base}&tipo=${j.tipo}&formato=xlsx`} style={btn(true)}>Descargar Excel</a>
                         <a href={`${base}&tipo=${j.tipo}&descargar=1`} style={btn(false)}>Descargar JSON</a>

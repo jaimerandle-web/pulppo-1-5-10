@@ -15,6 +15,7 @@ import ExcelJS from 'exceljs';
 import { PassThrough, Readable } from 'node:stream';
 import { canAccessCompany } from '@/lib/companyAccess';
 import { tieneDatos, tokenValido, datosToken } from '@/lib/datosPiloto';
+import { VIGENCIA_DIAS } from '@/lib/datosFoto';
 import { base, filasAsesores, filasLeads, filasPropiedades, type Base } from '@/lib/datosExport';
 
 export const dynamic = 'force-dynamic';
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest) {
         const token = await datosToken(company);
         const raiz = `${req.nextUrl.origin}/api/mb-datos?company=${company}&token=${token}`;
         return NextResponse.json({
-            generado: d.generado,
+            generado: d.generado, asesores_generado: d.asesores_generado, asesores_vigencia_dias: VIGENCIA_DIAS,
             conteos: {
                 propiedades: d.propiedades.length, publicadas: d.propiedades.filter((p) => p.estado === 'published').length,
                 leads: d.leads.length, asesores: d.asesores.length,
@@ -103,7 +104,8 @@ export async function GET(req: NextRequest) {
     if (tipo === 'propiedades' && estado) datos = d.propiedades.filter((p) => p.estado === estado);
     if (tipo === 'leads' && (desde || estatus)) datos = d.leads.filter((l) => (!desde || String(l.fecha) >= desde) && (!estatus || l.estatus === estatus));
 
-    const fecha = d.generado.slice(0, 10);
+    const generado = tipo === 'asesores' ? d.asesores_generado : d.generado;
+    const fecha = generado.slice(0, 10);
     const archivo = `diamond-house_${tipo}_${fecha}`;
     if (q.get('formato') === 'xlsx') {
         const filas = tipo === 'propiedades' ? filasPropiedades(datos as Base['propiedades'])
@@ -112,7 +114,12 @@ export async function GET(req: NextRequest) {
             headers: { ...headers, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${archivo}.xlsx"` },
         });
     }
-    const meta = { generado: d.generado, tipo, total: datos.length, nota: tipo === 'propiedades' ? 'Sin datos del propietario. productor = asesor que captó; vendedor = asesor a cargo de la venta.' : undefined };
+    const meta = {
+        generado, tipo, total: datos.length,
+        nota: tipo === 'propiedades' ? 'Sin datos del propietario. productor = asesor que captó; vendedor = asesor a cargo de la venta.'
+            : tipo === 'asesores' ? `Foto que se renueva cada ${VIGENCIA_DIAS} días. patrones = zonas, tipos y presupuesto (MXN, USD × 18.5; típico = percentil 25–75) de las propiedades por las que preguntó u operó.`
+            : undefined,
+    };
     const descarga: Record<string, string> = q.get('descargar') === '1' ? { 'Content-Disposition': `attachment; filename="${archivo}.json"` } : {};
     return new Response(jsonStream(meta, datos), { headers: { ...headers, ...descarga, 'Content-Type': 'application/json; charset=utf-8' } });
 }
