@@ -20,7 +20,7 @@ type Datos = { pulsoQ?: string; historicoQ?: string; pulso?: PulseView; historic
 // Sólo el pulso y el histórico usan vistas propias; las cinco secciones de arriba consultan su
 // propia API compartida (InmobiliariasTab), igual que el modo presentación.
 const DE_SECCION: Record<Section, Vista | null> = {
-    tablero: null, portal: null, inmos: null, publicacion: null, asignacion: null,
+    dashboard: null, tablero: null, portal: null, inmos: null, publicacion: null, asignacion: null,
     resumen: null, inversion: null, leads: null, embudo: null, inmobiliarias: null,
     pulso: 'pulso', historico: 'historico', comoleer: null,
 };
@@ -31,7 +31,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function PortalesShell() {
     const hoy = useMemo(() => new Date(Date.now() - 6 * 3600 * 1000), []);
-    const [section, setSection] = useState<Section>('tablero');
+    const [section, setSection] = useState<Section>('dashboard');
     const [modo, setModo] = useState<'analisis' | 'presentacion'>('analisis');
     const [portal, setPortal] = useState('i24');
     const [secs, setSecs] = useState<Set<SeccionP>>(new Set(['volumen', 'mezcla', 'atencion', 'contacto', 'embudo']));

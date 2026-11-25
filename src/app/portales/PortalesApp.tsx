@@ -25,11 +25,11 @@ const mesLargo = (mk: string) => `${MESL[mk.slice(5)]} ${mk.slice(0, 4)}`;
 
 // Menú por PREGUNTA (Ale, 5-oct-2026). Las cuatro primeras comparten una sola consulta y una sola
 // barra de filtros (InmobiliariasTab): así un número es el mismo en todas las pestañas.
-export type Section = 'tablero' | 'portal' | 'inmos' | 'publicacion' | 'asignacion' | 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias' | 'pulso' | 'historico' | 'comoleer';
+export type Section = 'dashboard' | 'tablero' | 'portal' | 'inmos' | 'publicacion' | 'asignacion' | 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias' | 'pulso' | 'historico' | 'comoleer';
 export type SeccionV2 = 'resumen' | 'inversion' | 'leads' | 'embudo' | 'inmobiliarias';
 const V2: Section[] = ['resumen', 'inversion', 'leads', 'embudo', 'inmobiliarias'];
 // La vista del año (nov-2026): cuatro secciones sobre los mismos datos y la misma barra de filtros (VistaAnual).
-const ANUAL: Section[] = ['tablero', 'portal', 'inmos', 'publicacion'];
+const ANUAL: Section[] = ['dashboard', 'tablero', 'portal', 'inmos', 'publicacion'];
 
 /** Mini-barras horizontales para una serie semanal. Sin librería: son 8 divs. */
 function Spark({ vals, color = BLK }: { vals: number[]; color?: string }) {
@@ -119,12 +119,14 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
             <div className="pa-nav" style={{ width: 208, flexShrink: 0, borderRight: `1px solid ${LGT}`, padding: '22px 12px', position: 'sticky', top: 0, alignSelf: 'flex-start' }}>
                 <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 21, lineHeight: 1.1, padding: '0 8px 4px' }}>Análisis de portales</div>
                 <div className="pa-sub" style={{ fontSize: 10.5, color: GRY, padding: '0 8px 16px' }}>Leads, costo y resultados de cada portal</div>
+                {nav('dashboard', 'Dashboard')}
+                {nav('publicacion', 'Publicación')}
+                {nav('asignacion', 'Asignación')}
+                {/* Ale (25-nov-2026): un solo dashboard con filtros. Lo de abajo queda mientras lo valida y luego se borra. */}
+                <div className="pa-sep" style={{ fontSize: 9.5, color: GRY, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', padding: '16px 8px 6px' }}>Vistas anteriores (se van)</div>
                 {nav('tablero', 'Tablero')}
                 {nav('portal', 'Por portal')}
                 {nav('inmos', 'Por inmobiliaria')}
-                {nav('publicacion', 'Publicación')}
-                {nav('asignacion', 'Asignación')}
-                <div className="pa-sep" style={{ fontSize: 9.5, color: GRY, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', padding: '16px 8px 6px' }}>Detalle de un periodo</div>
                 {nav('resumen', 'Resumen')}
                 {nav('inversion', 'Inversión y retorno')}
                 {nav('leads', 'Leads y calidad')}
@@ -162,7 +164,7 @@ export default function PortalesApp({ pulso, hist, section, setSection, cacheAt,
                 {/* La vista del año: montada una sola vez (no recalcula al ir y volver), escondida en las demás. */}
                 {(ANUAL.includes(section) || anualVisto) && (
                     <div style={{ display: ANUAL.includes(section) ? 'block' : 'none' }}>
-                        <VistaAnual vista={(ANUAL.includes(section) ? section : 'tablero') as VistaA} setVista={(v) => setSection(v)} />
+                        <VistaAnual vista={(ANUAL.includes(section) ? section : 'dashboard') as VistaA} setVista={(v) => setSection(v)} />
                     </div>
                 )}
 

@@ -17,17 +17,31 @@
 import type { CeldaMes, CierreMes, InvFila } from './anual';
 
 // ── portales (grupos de canales) ──────────────────────────────────────────────────────────────────
-export interface PortalDef { key: string; nombre: string; canales: string[]; fuentes: string[]; color: string }
+// Ale (25-nov-2026): «todas las fuentes de leads, no sólo las que pagamos». Antes WhatsApp, Pulppo, Tokko, Doorvel,
+// teléfono y sitio iban juntos en «Canales propios y otros», y Monopolio / TuPortalOnline caían en «otros».
+// `pagado` = hay línea en el Sheet de inversión (los demás no tienen CPL ni ROI).
+export interface PortalDef { key: string; nombre: string; canales: string[]; fuentes: string[]; color: string; pagado?: boolean }
 export const PORTALES: PortalDef[] = [
-    { key: 'i24', nombre: 'Inmuebles24', canales: ['i24', 'i24nura', 'i24premier'], fuentes: ['Inmuebles24', 'Inmuebles24 · NURA', 'Inmuebles24 · Premier'], color: '#C8642A' },
-    { key: 'meli', nombre: 'MercadoLibre', canales: ['meli'], fuentes: ['MercadoLibre'], color: '#2E3A78' },
-    { key: 'pcom', nombre: 'Propiedades.com', canales: ['propiedades'], fuentes: ['Propiedades.com'], color: '#B4473A' },
-    { key: 'eb', nombre: 'EasyBroker', canales: ['easybroker'], fuentes: ['EasyBroker'], color: '#2F6A9E' },
-    { key: 'cyt', nombre: 'Casas y Terrenos', canales: ['cyt'], fuentes: ['Casas y Terrenos'], color: '#3F7F5C' },
-    { key: 'meta', nombre: 'Meta (FB/IG)', canales: ['facebook'], fuentes: ['Meta (FB/IG)'], color: '#4A5FA8' },
-    { key: 'otros', nombre: 'Canales propios y otros', canales: ['whatsapp', 'pulppo', 'tokko', 'telefono', 'sitio', 'doorvel', 'otros'],
-        fuentes: ['WhatsApp', 'Pulppo', 'Tokko', 'Teléfono Pulppo', 'Sitio propio', 'Doorvel', 'Otras fuentes'], color: '#8A8C8B' },
+    { key: 'i24', nombre: 'Inmuebles24', canales: ['i24', 'i24nura', 'i24premier'], fuentes: ['Inmuebles24', 'Inmuebles24 · NURA', 'Inmuebles24 · Premier'], color: '#C8642A', pagado: true },
+    { key: 'meli', nombre: 'MercadoLibre', canales: ['meli'], fuentes: ['MercadoLibre'], color: '#2E3A78', pagado: true },
+    { key: 'pcom', nombre: 'Propiedades.com', canales: ['propiedades'], fuentes: ['Propiedades.com'], color: '#B4473A', pagado: true },
+    { key: 'eb', nombre: 'EasyBroker', canales: ['easybroker'], fuentes: ['EasyBroker'], color: '#2F6A9E', pagado: true },
+    { key: 'cyt', nombre: 'Casas y Terrenos', canales: ['cyt'], fuentes: ['Casas y Terrenos'], color: '#3F7F5C', pagado: true },
+    { key: 'meta', nombre: 'Meta (FB/IG)', canales: ['facebook'], fuentes: ['Meta (FB/IG)'], color: '#4A5FA8', pagado: true },
+    { key: 'doorvel', nombre: 'Doorvel', canales: ['doorvel'], fuentes: ['Doorvel'], color: '#6C8A3A', pagado: true },
+    { key: 'monopolio', nombre: 'Monopolio', canales: ['monopolio'], fuentes: ['Monopolio'], color: '#8A4F7D' },
+    { key: 'tuportal', nombre: 'TuPortalOnline', canales: ['tuportal'], fuentes: ['TuPortalOnline'], color: '#B08A5A' },
+    { key: 'tokko', nombre: 'Tokko', canales: ['tokko'], fuentes: ['Tokko'], color: '#7A5C3E' },
+    { key: 'whatsapp', nombre: 'WhatsApp directo', canales: ['whatsapp'], fuentes: ['WhatsApp'], color: '#529999' },
+    { key: 'pulppo', nombre: 'Pulppo (sitio y app)', canales: ['pulppo'], fuentes: ['Pulppo'], color: '#E0A800' },
+    { key: 'telefono', nombre: 'Teléfono Pulppo', canales: ['telefono'], fuentes: ['Teléfono Pulppo'], color: '#5B5D5C' },
+    { key: 'sitio', nombre: 'Sitio propio', canales: ['sitio'], fuentes: ['Sitio propio'], color: '#9A9C9B' },
+    { key: 'otros', nombre: 'Otras fuentes', canales: ['otros'], fuentes: ['Otras fuentes'], color: '#CFCFCF' },
 ];
+/** clave de canal del Sheet de inversión → portal (las de i24 suman a Inmuebles24) */
+export const PORTAL_DE_INVERSION: Record<string, string> = {
+    i24: 'i24', i24nura: 'i24', i24premier: 'i24', meli: 'meli', propiedades: 'pcom', easybroker: 'eb', cyt: 'cyt', facebook: 'meta', doorvel: 'doorvel',
+};
 export const PORTAL = Object.fromEntries(PORTALES.map((p) => [p.key, p])) as Record<string, PortalDef>;
 const PORTAL_DE_CANAL = new Map(PORTALES.flatMap((p) => p.canales.map((c) => [c, p.key] as const)));
 export const portalDeCanal = (c: string) => PORTAL_DE_CANAL.get(c) ?? 'otros';
@@ -36,10 +50,12 @@ const PORTAL_DE_FUENTE = new Map(PORTALES.flatMap((p) => p.fuentes.map((f) => [f
 // ── filtro y agregado ─────────────────────────────────────────────────────────────────────────────
 export interface Filtro { portales: string[]; inmos: string[] | null; op: 'todas' | 'sale' | 'rent' }
 export interface Agg {
-    leads: number; hor: number; r1h: number; resp: number; vis: number; ofe: number; clo: number;
-    cierres: number; regalia: number; inventario: number | null;
+    leads: number; hor: number; r1h: number; resp: number; vis: number; ofe: number; clo: number; minSum: number; minN: number;
+    venta: number; renta: number;
+    cierres: number; regalia: number; comision: number; valor: number; inventario: number | null;
 }
-export const vacio = (): Agg => ({ leads: 0, hor: 0, r1h: 0, resp: 0, vis: 0, ofe: 0, clo: 0, cierres: 0, regalia: 0, inventario: null });
+export const vacio = (): Agg => ({ leads: 0, hor: 0, r1h: 0, resp: 0, vis: 0, ofe: 0, clo: 0, minSum: 0, minN: 0, venta: 0, renta: 0, cierres: 0, regalia: 0, comision: 0, valor: 0, inventario: null });
+const SUMABLES = ['leads', 'hor', 'r1h', 'resp', 'vis', 'ofe', 'clo', 'minSum', 'minN', 'venta', 'renta', 'cierres', 'regalia', 'comision', 'valor'] as const;
 const opOk = (o: string, f: Filtro) => f.op === 'todas' || (f.op === 'sale' ? o === 's' : o === 'r');
 
 export function agregarCeldas(celdas: CeldaMes[], f: Filtro, por?: (c: CeldaMes) => string): Map<string, Agg> {
@@ -53,13 +69,16 @@ export function agregarCeldas(celdas: CeldaMes[], f: Filtro, por?: (c: CeldaMes)
         const k = por ? por(c) : '';
         const a = out.get(k) ?? out.set(k, vacio()).get(k)!;
         a.leads += c[3]; a.hor += c[4]; a.r1h += c[5]; a.resp += c[6]; a.vis += c[7]; a.ofe += c[8]; a.clo += c[9];
+        a.minSum += c[10] ?? 0; a.minN += c[11] ?? 0;
+        if (c[2] === 's') a.venta += c[3]; else if (c[2] === 'r') a.renta += c[3];
     }
     return out;
 }
 /** cierres del mes que pasan el filtro. Con portales elegidos sólo cuentan los de esa fuente; con inmobiliaria,
  *  los que la tienen de cualquiera de los dos lados. `por` reparte (un cierre de dos inmobiliarias va a las dos). */
-export function agregarCierres(cierres: CierreMes[], f: Filtro, por?: (c: CierreMes) => string[]): Map<string, { n: number; regalia: number }> {
-    const out = new Map<string, { n: number; regalia: number }>();
+export interface AggCierre { n: number; regalia: number; comision: number; valor: number; venta: number; renta: number }
+export function agregarCierres(cierres: CierreMes[], f: Filtro, por?: (c: CierreMes) => string[]): Map<string, AggCierre> {
+    const out = new Map<string, AggCierre>();
     const pset = f.portales.length ? new Set(f.portales) : null;
     const iset = f.inmos ? new Set(f.inmos) : null;
     for (const c of cierres) {
@@ -67,8 +86,9 @@ export function agregarCierres(cierres: CierreMes[], f: Filtro, por?: (c: Cierre
         if (iset && !iset.has(c[1]) && !iset.has(c[2])) continue;
         if (!opOk(c[3], f)) continue;
         for (const k of por ? por(c) : ['']) {
-            const a = out.get(k) ?? out.set(k, { n: 0, regalia: 0 }).get(k)!;
-            a.n += 1; a.regalia += c[4];
+            const a = out.get(k) ?? out.set(k, { n: 0, regalia: 0, comision: 0, valor: 0, venta: 0, renta: 0 }).get(k)!;
+            a.n += 1; a.regalia += c[4]; a.comision += c[5]; a.valor += c[7] ?? 0;
+            if (c[3] === 's') a.venta += 1; else if (c[3] === 'r') a.renta += 1;
         }
     }
     return out;
@@ -92,6 +112,10 @@ export const tasa = {
     vis: (a: Agg) => p1(a.vis, a.leads),
     ofe: (a: Agg) => p1(a.ofe, a.leads),
     lpp: (a: Agg) => (a.inventario ? Math.round((100 * a.leads) / a.inventario) / 100 : null),
+    /** lead-to-close de la cohorte: de los leads, cuántos cerraron (con esa inmobiliaria) */
+    l2c: (a: Agg) => (a.leads ? Math.round((10000 * a.clo) / a.leads) / 100 : null),
+    /** minutos promedio a la 1ª respuesta (leads de 8 a 20, cada uno topado a 24 h) */
+    minResp: (a: Agg) => (a.minN ? Math.round(a.minSum / a.minN) : null),
 };
 
 // ── meses de referencia ───────────────────────────────────────────────────────────────────────────
@@ -128,11 +152,10 @@ const pctTxt = (x: number) => `${x > 0 ? '+' : ''}${Math.round(x)}%`;
 export function promedio(xs: Agg[]): Agg {
     const k = Math.max(xs.length, 1), out = vacio();
     for (const x of xs) {
-        out.leads += x.leads; out.hor += x.hor; out.r1h += x.r1h; out.resp += x.resp; out.vis += x.vis; out.ofe += x.ofe; out.clo += x.clo;
-        out.cierres += x.cierres; out.regalia += x.regalia;
+        for (const c of SUMABLES) out[c] += x[c];
         if (x.inventario != null) out.inventario = (out.inventario ?? 0) + x.inventario;
     }
-    for (const c of ['leads', 'hor', 'r1h', 'resp', 'vis', 'ofe', 'clo', 'cierres', 'regalia'] as const) out[c] = out[c] / k;
+    for (const c of SUMABLES) out[c] = out[c] / k;
     if (out.inventario != null) out.inventario = out.inventario / k;
     return out;
 }
@@ -140,7 +163,7 @@ export function promedio(xs: Agg[]): Agg {
 export function sumar(xs: Agg[]): Agg {
     const k = xs.length, p = promedio(xs);
     const out = { ...p };
-    for (const c of ['leads', 'hor', 'r1h', 'resp', 'vis', 'ofe', 'clo', 'cierres', 'regalia'] as const) out[c] = Math.round(p[c] * k);
+    for (const c of SUMABLES) out[c] = Math.round(p[c] * k);
     return out;
 }
 /** periodo elegido: índices [a, b] dentro de los meses (por default, el último mes cerrado) */

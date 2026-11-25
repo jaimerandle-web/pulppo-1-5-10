@@ -25,6 +25,9 @@ export const CANALES: Array<[string, string]> = [
     ['Propiedades.com', 'propiedades'], ['Casas y Terrenos', 'cyt'], ['Meta (FB/IG)', 'facebook'],
     ['WhatsApp', 'whatsapp'], ['Pulppo', 'pulppo'],
     ['Tokko', 'tokko'], ['Teléfono Pulppo', 'telefono'], ['Doorvel', 'doorvel'], ['Sitio propio', 'sitio'],
+    // Monopolio y TuPortalOnline caían en «otros» (Ale, 25-nov-2026: «todas las fuentes, no sólo las pagadas»).
+    // Jun–nov 2026: Monopolio 453 leads, TuPortalOnline 63.
+    ['Monopolio', 'monopolio'], ['TuPortalOnline', 'tuportal'],
 ];
 /** Canales sin factura (propios o integraciones gratis): su ROI en blanco no es un faltante. */
 export const SIN_COSTO = new Set(['whatsapp', 'pulppo', 'tokko', 'telefono', 'sitio']);
@@ -69,8 +72,10 @@ const SRC_REGEX: Record<string, string> = {
     telefono: 'tel[eé]fono principal',
     doorvel: 'doorvel',
     sitio: '^(sitio web|website)$',
+    monopolio: 'monopolio',
+    tuportal: 'tuportal',
 };
-const ORDEN = ['i24', 'meli', 'easybroker', 'propiedades', 'cyt', 'facebook', 'whatsapp', 'pulppo', 'tokko', 'telefono', 'doorvel', 'sitio'];
+const ORDEN = ['i24', 'meli', 'easybroker', 'propiedades', 'cyt', 'facebook', 'whatsapp', 'pulppo', 'tokko', 'telefono', 'doorvel', 'sitio', 'monopolio', 'tuportal'];
 const COMP: Record<string, RegExp> = Object.fromEntries(
     Object.entries(SRC_REGEX).map(([k, v]) => [k, new RegExp(v, 'i')]));
 

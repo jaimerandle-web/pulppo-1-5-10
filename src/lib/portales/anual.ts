@@ -30,11 +30,12 @@ const HISTORIA = 400;
 const CERRADA = new Set(['closed', 'paying']);
 
 /** fila del cubo: canal · inmobiliaria ('' = fuera de la lista) · operación ('s' venta, 'r' renta, '' sin dato) ·
- *  leads · leads en horario · respondidos en <1 h (de los de horario) · respondidos · visitaron · ofertaron · cerraron */
-export type CeldaMes = [string, string, 's' | 'r' | '', number, number, number, number, number, number, number];
-export const C = { canal: 0, inmo: 1, op: 2, leads: 3, hor: 4, r1h: 5, resp: 6, vis: 7, ofe: 8, clo: 9 } as const;
-/** cierre del mes: fuente · inmobiliaria vendedora · compradora · operación · regalía · comisión · estatus */
-export type CierreMes = [string, string, string, 's' | 'r' | '', number, number, 'closed' | 'paying'];
+ *  leads · leads en horario · respondidos en <1 h (de los de horario) · respondidos · visitaron · ofertaron · cerraron ·
+ *  minutos a la 1ª respuesta (suma, de los de horario respondidos, cada uno topado a 24 h) · cuántos entran en esa suma */
+export type CeldaMes = [string, string, 's' | 'r' | '', number, number, number, number, number, number, number, number, number];
+export const C = { canal: 0, inmo: 1, op: 2, leads: 3, hor: 4, r1h: 5, resp: 6, vis: 7, ofe: 8, clo: 9, minSum: 10, minN: 11 } as const;
+/** cierre del mes: fuente · inmobiliaria vendedora · compradora · operación · regalía · comisión · estatus · valor de la operación */
+export type CierreMes = [string, string, string, 's' | 'r' | '', number, number, 'closed' | 'paying', number];
 /** operación VIVA creada en el mes (el forecast): fuente · vendedora · compradora · operación · estatus · comisión */
 export type PipeMes = [string, string, string, 's' | 'r' | '', 'offer' | 'offer_blocked' | 'contract', number];
 export interface MesCubo {
@@ -139,7 +140,7 @@ async function calcularMes(mes: string): Promise<MesCubo> {
         const canal = canalDeLead(l.source, dig(l, 'company', 'name'), cuentaI24DeLead(l));
         const op = opDe(dig(l, 'property', 'listing', 'operation'));
         const k = `${canal}|${inmo}|${op}`;
-        const c = cubo.get(k) ?? cubo.set(k, [canal, inmo, op, 0, 0, 0, 0, 0, 0, 0]).get(k)!;
+        const c = cubo.get(k) ?? cubo.set(k, [canal, inmo, op, 0, 0, 0, 0, 0, 0, 0, 0, 0]).get(k)!;
         const t = (l.createdAt as Date).getTime();
         const ans = l.answeredAt;
         c[C.leads] += 1;
@@ -147,6 +148,8 @@ async function calcularMes(mes: string): Promise<MesCubo> {
         if (enHorario(l.createdAt as Date)) {
             c[C.hor] += 1;
             if (isDate(ans) && ans.getTime() - t < 3600_000) c[C.r1h] += 1;
+            // tiempo medio a la 1ª respuesta: topado a 24 h (un lead contestado a la semana no se come el promedio)
+            if (isDate(ans) && ans.getTime() >= t) { c[C.minSum] += Math.min((ans.getTime() - t) / 60000, 1440); c[C.minN] += 1; }
         }
         const cid = String(dig(l, 'contact', '_id') ?? '');
         if (!cid || !comp) continue;
@@ -163,7 +166,7 @@ async function calcularMes(mes: string): Promise<MesCubo> {
     const cierres: CierreMes[] = out.map((x) => [
         x.fuente, nombreDe.get(x.vendeId ?? '') ?? '', nombreDe.get(x.compraId ?? '') ?? '',
         x.operacion === 'Venta' ? 's' : x.operacion === 'Renta' ? 'r' : '', Math.round(x.regalia), Math.round(x.comision),
-        x.estatus === 'Cobrando' ? 'paying' : 'closed',
+        x.estatus === 'Cobrando' ? 'paying' : 'closed', Math.round(x.valor),
     ]);
 
     // 7) el forecast: operaciones que siguen vivas (oferta, oferta aceptada, contrato) y se crearon en el mes. La fuente es
@@ -182,7 +185,7 @@ async function calcularMes(mes: string): Promise<MesCubo> {
 
     return {
         mes, desde: A.toISOString(), hasta: B.toISOString(), parcial: B.getTime() < inicioMes(sigMes(mes)).getTime(),
-        generado: new Date().toISOString(), celdas: [...cubo.values()], cierres, pipeline,
+        generado: new Date().toISOString(), celdas: [...cubo.values()].map((c) => { c[C.minSum] = Math.round(c[C.minSum]); return c; }), cierres, pipeline,
     };
 }
 
@@ -190,7 +193,7 @@ async function calcularMes(mes: string): Promise<MesCubo> {
 export async function mesCubo(mes: string, fresco = false): Promise<MesCubo> {
     if (fresco) return calcularMes(mes);
     const enCurso = mes >= mesActual();
-    return unstable_cache(() => calcularMes(mes), ['portales-anual-mes-v2', mes], { revalidate: enCurso ? 1800 : 43200, tags: ['portales-anual'] })();
+    return unstable_cache(() => calcularMes(mes), ['portales-anual-mes-v3', mes], { revalidate: enCurso ? 1800 : 43200, tags: ['portales-anual'] })();
 }
 
 // ── inventario publicado en Pulppo por mes ────────────────────────────────────────────────────────
@@ -230,4 +233,70 @@ async function calcularInventario(meses: string[]): Promise<InventarioMeses> {
 export async function inventarioMeses(meses: string[], fresco = false): Promise<InventarioMeses> {
     if (fresco) return calcularInventario(meses);
     return unstable_cache(() => calcularInventario(meses), ['portales-anual-inv-v1', meses.join(',')], { revalidate: 43200, tags: ['portales-anual'] })();
+}
+
+// ── inversión por mes y canal (Sheet «Investment Strategy» + deal de MeLi) ────────────────────────
+/** inversión de cada mes por clave de canal del Sheet (i24, i24nura, i24premier, meli, facebook, …). null = mes sin cargar. */
+export interface InversionMeses { meses: Record<string, { porCanal: Record<string, number | null>; faltante: boolean; copiaDe?: string }> }
+export async function inversionPorMes(meses: string[]): Promise<InversionMeses> {
+    const { inversionRango } = await import('./inversion');
+    const out: InversionMeses['meses'] = {};
+    // de uno en uno: cada mes trae su deal de MeLi (facturado / paquete / base + 6%)
+    await Promise.all(meses.map(async (m) => {
+        // 🔴 el Sheet es «Investment Strategy - 2026»: un tab por NOMBRE de mes, sin año. Nov-2025 leía el tab
+        // «Noviembre» de 2026. Antes de 2026 no hay fuente: sin dato.
+        if (m < '2026-01') { out[m] = { porCanal: {}, faltante: true }; return; }
+        const r = await inversionRango([m]);
+        out[m] = { porCanal: r.porCanal, faltante: r.faltantes.length > 0, ...(r.copiados.length ? { copiaDe: r.copiados[0][1] } : {}) };
+    }));
+    return { meses: out };
+}
+
+// ── cobertura del inventario publicado HOY ────────────────────────────────────────────────────────
+/** inmobiliaria · operación · tipo de inmueble · propiedades · con ≥1 lead 30 d · 60 d · 90 d · leads 30 d · 60 d · 90 d ·
+ *  zombies (publicada hace 30+ días y sin ningún lead en 30 días) */
+export type CobFila = [string, 's' | 'r' | '', string, number, number, number, number, number, number, number, number];
+export interface CoberturaView { generado: string; filas: CobFila[] }
+async function calcularCobertura(): Promise<CoberturaView> {
+    const db = await getDb();
+    const { nombreDe } = await mapaInmo();
+    const ahora = Date.now();
+    const D = (d: number) => new Date(ahora - d * DIA);
+    // leads únicos (contacto + propiedad) de los últimos 90 días: el más reciente de cada par
+    const ult = new Map<string, number[]>();
+    for await (const g of db.collection('leads').aggregate([
+        { $match: { createdAt: { $gte: D(90) }, ...NOT, 'property._id': { $ne: null } } },
+        { $group: { _id: { p: '$property._id', c: '$contact._id' }, t: { $max: '$createdAt' } } },
+    ], { allowDiskUse: true })) {
+        const p = String(g._id.p);
+        (ult.get(p) ?? ult.set(p, []).get(p)!).push((g.t as Date).getTime());
+    }
+    const acc = new Map<string, CobFila>();
+    for await (const p of db.collection('properties').find({ 'status.last': 'published' },
+        { projection: { 'company._id': 1, 'listing.operation': 1, type: 1, 'status.history.status': 1, 'status.history.timestamp': 1, 'status.history.date': 1, 'status.history.createdAt': 1 } })) {
+        const inmo = nombreDe.get(String(dig(p, 'company', '_id') ?? ''));
+        if (!inmo) continue;
+        const op = opDe(dig(p, 'listing', 'operation'));
+        const tipo = String(p.type ?? '') || 'Sin tipo';
+        // desde cuándo está publicada (la última vez que entró a published)
+        const hist = ((dig(p, 'status', 'history') as Document[]) ?? []).map((e) => ({ t: fechaH(e), s: String(e.status ?? '') }))
+            .filter((e): e is { t: number; s: string } => e.t != null).sort((a, b) => a.t - b.t);
+        let desde: number | null = null;
+        for (const e of hist) { if (e.s === 'published') { if (desde == null) desde = e.t; } else desde = null; }
+        const ts = ult.get(String(p._id)) ?? [];
+        const n = (d: number) => ts.filter((t) => t >= ahora - d * DIA).length;
+        const l30 = n(30), l60 = n(60), l90 = ts.length;
+        const k = `${inmo}|${op}|${tipo}`;
+        const f = acc.get(k) ?? acc.set(k, [inmo, op, tipo, 0, 0, 0, 0, 0, 0, 0, 0]).get(k)!;
+        f[3] += 1;
+        if (l30) f[4] += 1; if (l60) f[5] += 1; if (l90) f[6] += 1;
+        f[7] += l30; f[8] += l60; f[9] += l90;
+        if (!l30 && desde != null && desde <= ahora - 30 * DIA) f[10] += 1;
+    }
+    return { generado: new Date().toISOString(), filas: [...acc.values()] };
+}
+/** Cobertura de hoy (caché 6 h). */
+export async function coberturaView(fresco = false): Promise<CoberturaView> {
+    if (fresco) return calcularCobertura();
+    return unstable_cache(() => calcularCobertura(), ['portales-anual-cob-v1'], { revalidate: 21600, tags: ['portales-anual'] })();
 }

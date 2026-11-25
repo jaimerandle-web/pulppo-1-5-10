@@ -598,6 +598,36 @@ vista». Es la portada de /portales; las pestañas de antes quedan abajo en el m
   OFFLINE sin error en una inmobiliaria con cupo 0 = «por regla» (20-nov-2026: 362 de 583).
 - **Siguiente:** fase 2 = descargable para portales (top 3 bueno / top 3 riesgos + desglose).
 
+## /portales → Dashboard (25-nov-2026): UN solo tablero con filtros
+
+Ale: «¿por portal y por inmobiliaria o un solo dashboard completo con filtros?» → uno solo. Portada de /portales
+(`src/app/portales/Dashboard.tsx`, montado por VistaAnual con la misma barra de filtros y los mismos cubos). Menú:
+**Dashboard · Publicación · Asignación**; Tablero / Por portal / Por inmobiliaria y «Detalle de un periodo» quedan abajo como
+«Vistas anteriores (se van)» hasta que Ale lo valide.
+- **Secciones = áreas de la tabla de KPIs** (Marketing + Success): ¿Cómo vamos en el mes? (ritmo y proyección del mes en curso)
+  → KPIs → 1 Volumen · 2 Operacional · 3 Calidad / Funnel · 4 Eficiencia · 5 Cobertura · 6 Anuncios · 7 Focos rojos (AL FINAL,
+  Ale: «para que no ensucie»). Cada área: cifra global + tabla con selector **Por canal / Por inmobiliaria**.
+- **Todas las fuentes** (Ale): cada canal es su propio chip/serie (`PORTALES` en focos.ts, `pagado` = tiene línea en el Sheet).
+  Monopolio (`monopolio`) y TuPortalOnline (`tuportal`) eran «otros» (jun–nov 2026: 453 y 63 leads). Canales sin línea en el
+  Sheet salen «sin costo», no «gratis».
+- **Cubo v3** (`portales-anual-mes-v3`): la celda suma minutos a la 1ª respuesta (leads de 8–20 respondidos, cada uno topado a
+  24 h) → «tiempo medio»; el cierre trae el VALOR de la operación (ticket). Agg suma venta/renta, comisión y valor.
+- **Madurez**: tasa de visita en meses cerrados hace 30+ días; lead-to-close (cohorte: cerraron ÷ leads) en meses cerrados hace
+  90+ días. Benchmarks: visita 14%, lead→cierre 1.6% venta / 6% renta.
+- **Inversión por mes** (`?view=inversion`, `inversionPorMes`): `inversionRango` de cada mes; claves del Sheet → portal con
+  `PORTAL_DE_INVERSION`. 🔴 El Sheet es de 2026 y sus tabs son por NOMBRE de mes: antes de 2026 = sin dato (nov-2025 leía el
+  tab de nov-2026). Mes en curso prorrateado a días corridos (MeLi no: lo facturado ya va a la fecha). Tabs copiados de otro
+  mes (`copiaDe`) se avisan en la tarjeta. ROI = regalía de cierres de portales pagados ÷ inversión.
+- **ROA por inmobiliaria** (Eficiencia, por inmobiliaria): regalía de cierres de portales pagados ÷ costo de lista de sus
+  avisos de HOY (Publicación: i24 por nivel a precio de la Calculadora, MeLi a costo literal del paquete) × meses. Aproximado.
+  Se descartó «ROI por nivel de broker» (élite/pro/estándar): el aviso es de la inmobiliaria, no hay costo por asesor.
+- **Cobertura** (`?view=cobertura`, caché 6 h): foto de HOY de las propiedades publicadas de la lista: leads únicos (contacto +
+  propiedad) en 30/60/90 d, L/L, % con ≥1 lead y zombies (publicada hace 30+ días sin un lead en 30 d). No depende del canal:
+  «por canal» se desglosa por tipo de inmueble. 25-nov-2026: 8,279 publicadas, 40% con lead en 30 d, 4,393 zombies.
+- **Anuncios**: avisos en línea hoy por nivel × tier de la lista (TOP/MID/BOTTOM) con % con lead en 30 d (de Publicación).
+- Pendiente: % contacto (con conversación) no está en el cubo (vive en Leads y calidad); correo de recapitulación semanal
+  (volumen, operación, visita, CPL) y mensual (revenue, ticket, ROI, cobertura) — idea de Ale para la columna «Frecuencia».
+
 ## /portales → Asignación (fase 3, nov-2026)
 
 La hoja de Ale para escribir el número de avisos de cada inmobiliaria en vivo, con las mismas columnas que
