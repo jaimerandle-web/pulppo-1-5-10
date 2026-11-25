@@ -4,6 +4,7 @@ import { isAllowed } from '@/lib/access';
 import { fichaToken, userToken } from '@/lib/token';
 import { previewDe } from '@/lib/preview';
 import { rutaPauta, soloPauta } from '@/lib/accesoPauta';
+import { tokenValido } from '@/lib/datosPiloto';
 
 // Enforcea el acceso en TODAS las rutas/API (no solo en el login). Dos tipos de usuario:
 //  - Interno (equipo Pulppo, allowlist) → acceso total.
@@ -29,6 +30,12 @@ export async function middleware(req: NextRequest) {
         url.pathname = '/1-5-10/pauta';
         url.search = '';
         return NextResponse.redirect(url);
+    }
+
+    // Pestaña Datos: la URL con clave entra sin sesión (la usa un agente de IA). La API vuelve a validarla.
+    if (req.nextUrl.pathname === '/api/mb-datos') {
+        const q = req.nextUrl.searchParams;
+        if (await tokenValido(q.get('company') || '', q.get('token'))) return NextResponse.next();
     }
 
     // Acceso público a una ficha (y su "ver más" de comparables) con token válido (link para brokers, sin login).

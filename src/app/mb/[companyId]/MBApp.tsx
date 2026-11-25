@@ -14,6 +14,8 @@ import { MARKETING_EMPRESAS } from '@/lib/marketingAcceso';
 import { NURA_ID } from '@/lib/nura';
 import MBMercado from './MBMercado';
 import { tieneMercado } from '@/lib/mercadoPiloto';
+import { tieneDatos } from '@/lib/datosPiloto';
+import MBDatos from './MBDatos';
 import { ABIERTA as TU2026_ABIERTA, verTu2026 } from '@/lib/tu2026Piloto';
 import MBTu2026 from './MBTu2026';
 import MB1510 from './MB1510';
@@ -58,11 +60,11 @@ const RESP_RANGO: Record<RespKey, string> = { flash: '≤ 5 min', rapida: '≤ 1
 // minutos → texto corto legible
 const dur = (m: number | null) => (m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} días`);
 
-type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'busquedas' | 'marketing' | 'consultas' | 'mercado' | 'tu2026' | 'p1510' | 'analisis' | 'comoleer';
+type Section = 'overview' | 'props' | 'destacados' | 'desempeno' | 'busquedas' | 'marketing' | 'consultas' | 'mercado' | 'datos' | 'tu2026' | 'p1510' | 'analisis' | 'comoleer';
 // El botón de menú en celular muestra en qué sección estás; sin esto sólo dice "Menú" y te
 // pierdes al navegar.
 const SECTION_LABEL: Record<Section, string> = {
-    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño', busquedas: 'Búsquedas', marketing: 'Marketing', consultas: 'Consultas', mercado: 'Mercado', tu2026: 'Tu 2026',
+    overview: 'Overview', props: 'Propiedades', destacados: 'Destacados', desempeno: 'Desempeño', busquedas: 'Búsquedas', marketing: 'Marketing', consultas: 'Consultas', mercado: 'Mercado', datos: 'Datos', tu2026: 'Tu 2026',
     p1510: '1·5·10', analisis: 'Generador de análisis', comoleer: 'Cómo leer esto',
 };
 
@@ -624,7 +626,7 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                     <span style={{ fontSize: 13.5, fontWeight: 600 }}>{SECTION_LABEL[section]}</span>
                 </button>
                 <div className={`mb-nav${menuAbierto ? ' abierto' : ''}`}>
-                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{conDesempeno(d.companyId) && nav('desempeno', 'Desempeño')}{conBusquedas(d.companyId) && nav('busquedas', 'Búsquedas')}{verMarketing && nav('marketing', 'Marketing')}{verMarketing && nav('consultas', 'Consultas')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{verTu2026(d.companyId, interno) && nav('tu2026', 'Tu 2026')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
+                    {nav('overview', 'Overview')}{nav('props', 'Propiedades')}{CON_DESTACADOS.has(d.companyId) && nav('destacados', 'Destacados')}{conDesempeno(d.companyId) && nav('desempeno', 'Desempeño')}{conBusquedas(d.companyId) && nav('busquedas', 'Búsquedas')}{verMarketing && nav('marketing', 'Marketing')}{verMarketing && nav('consultas', 'Consultas')}{tieneMercado(d.companyId) && nav('mercado', 'Mercado')}{tieneDatos(d.companyId) && nav('datos', 'Datos')}{verTu2026(d.companyId, interno) && nav('tu2026', 'Tu 2026')}{nav('p1510', '1·5·10')}{nav('analisis', 'Generador de análisis')}{nav('comoleer', 'Cómo leer esto')}
                 </div>
                 <div className="mb-side-pie" style={{ marginTop: 18, padding: '0 8px', fontSize: 9, color: GRY }}>Borrador · datos en vivo</div>
             </aside>
@@ -1035,6 +1037,20 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                             por zona y tipo para ver el $/m² y hacia dónde se mueve.
                         </div>
                         <MBMercado companyId={d.companyId} />
+                    </div>
+                )}
+
+                {montada('datos') && tieneDatos(d.companyId) && (
+                    <div style={oculta('datos')}>
+                        <div style={eyebrow}>Datos</div><div style={accent} />
+                        <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 26, lineHeight: 1.15, marginBottom: 4 }}>
+                            Tu base completa, para descargar o conectar
+                        </div>
+                        <div style={{ color: '#6f6f6d', fontSize: 13, marginBottom: 16, maxWidth: 660 }}>
+                            Propiedades, leads y asesores externos, en vivo desde la plataforma. Descárgalos en Excel o JSON, o
+                            conecta un agente de IA con su URL.
+                        </div>
+                        <MBDatos companyId={d.companyId} />
                     </div>
                 )}
 
