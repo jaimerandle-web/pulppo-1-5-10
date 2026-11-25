@@ -1,7 +1,8 @@
 // Datos: la base de la inmobiliaria para descargar o para un agente de IA.
 //
 //   GET /api/mb-datos?company=<id>                              → resumen (conteos, fecha, URLs)
-//   GET /api/mb-datos?company=<id>&tipo=propiedades|leads|asesores[&formato=json|xlsx]
+//   GET /api/mb-datos?company=<id>&tipo=propiedades|publicadas|leads|asesores|operaciones|demanda[&formato=json|xlsx]
+//   operaciones y demanda (lib/datosOperaciones.ts) son para los flujos de contenido/emailing sin Mongo.
 //   Filtros (opcionales, útiles para el agente):
 //     propiedades: &estado=published        leads: &desde=2026-11-01  &estatus=descartado
 //
@@ -17,6 +18,7 @@ import { canAccessCompany } from '@/lib/companyAccess';
 import { tieneDatos, tokenValido, datosToken } from '@/lib/datosPiloto';
 import { VIGENCIA } from '@/lib/datosFoto';
 import { base, filasAsesores, filasLeads, filasPropiedades, type Base } from '@/lib/datosExport';
+import { demanda, operaciones } from '@/lib/datosOperaciones';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -34,8 +36,19 @@ function cargar(company: string, forzar: boolean): Promise<Base> {
     return d;
 }
 
-const TIPOS = { propiedades: 'Propiedades', publicadas: 'Propiedades publicadas', leads: 'Leads', asesores: 'Asesores externos' } as const;
+const TIPOS = { propiedades: 'Propiedades', publicadas: 'Propiedades publicadas', leads: 'Leads', asesores: 'Asesores externos', operaciones: 'Operaciones', demanda: 'Demanda' } as const;
 type Tipo = keyof typeof TIPOS;
+
+// Juegos sueltos (no entran en base()): se calculan sólo cuando se piden, con su propia caché de 10 min.
+const extras = new Map<string, { t: number; d: Promise<unknown[]> }>();
+function extra(company: string, tipo: 'operaciones' | 'demanda', forzar: boolean): Promise<unknown[]> {
+    const k = `${company}:${tipo}`, c = extras.get(k);
+    if (c && !forzar && Date.now() - c.t < CACHE_MS) return c.d;
+    const d: Promise<unknown[]> = tipo === 'operaciones' ? operaciones(company) : demanda(company);
+    extras.set(k, { t: Date.now(), d });
+    d.catch(() => extras.delete(k));
+    return d;
+}
 
 function jsonStream(meta: Record<string, unknown>, datos: unknown[]): ReadableStream<Uint8Array> {
     const enc = new TextEncoder();
@@ -75,6 +88,23 @@ export async function GET(req: NextRequest) {
     const conClave = await tokenValido(company, q.get('token'));
     if (!conClave && !(await canAccessCompany(company))) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
+    const headers = { 'Cache-Control': 'private, no-store' };
+    const tipo = q.get('tipo') as Tipo | null;
+    if (tipo === 'operaciones' || tipo === 'demanda') {
+        let datos: unknown[];
+        try { datos = await extra(company, tipo, q.get('refresh') === '1'); } catch (e) {
+            console.error('[mb-datos]', e);
+            return NextResponse.json({ error: 'no se pudo leer la base' }, { status: 500 });
+        }
+        const generado = new Date().toISOString();
+        const archivo = `diamond-house_${tipo}_${generado.slice(0, 10)}`;
+        const meta = { generado, tipo, total: datos.length, nota: tipo === 'operaciones'
+            ? 'Operaciones de la inmobiliaria (cualquier lado), sin datos de clientes. asesores = sólo los de la inmobiliaria. dias_publicada_a_oferta = del inicio del ciclo publicado a la oferta firme (completed). cambios_precio = precios anteriores registrados.'
+            : 'Búsquedas de toda la red Pulppo de los últimos 180 días en las colonias donde la inmobiliaria tiene inventario. Sin personas: conteos y presupuestos máximos (MXN).' };
+        const descarga: Record<string, string> = q.get('descargar') === '1' ? { 'Content-Disposition': `attachment; filename="${archivo}.json"` } : {};
+        return new Response(jsonStream(meta, datos), { headers: { ...headers, ...descarga, 'Content-Type': 'application/json; charset=utf-8' } });
+    }
+
     let d: Base;
     try {
         d = await cargar(company, q.get('refresh') === '1');
@@ -82,8 +112,6 @@ export async function GET(req: NextRequest) {
         console.error('[mb-datos]', e);
         return NextResponse.json({ error: 'no se pudo leer la base' }, { status: 500 });
     }
-    const headers = { 'Cache-Control': 'private, no-store' };
-    const tipo = q.get('tipo') as Tipo | null;
 
     if (!tipo) {
         const token = await datosToken(company);
@@ -97,7 +125,7 @@ export async function GET(req: NextRequest) {
             urls_agente: Object.fromEntries(Object.keys(TIPOS).map((t) => [t, `${raiz}&tipo=${t}`])),
         }, { headers });
     }
-    if (!(tipo in TIPOS)) return NextResponse.json({ error: 'tipo inválido (propiedades | publicadas | leads | asesores)' }, { status: 400 });
+    if (!(tipo in TIPOS)) return NextResponse.json({ error: 'tipo inválido (propiedades | publicadas | leads | asesores | operaciones | demanda)' }, { status: 400 });
 
     if (tipo === 'asesores' && d.asesores_preparando) {
         return NextResponse.json({ preparando: true, mensaje: 'La base de asesores externos se está preparando (tarda unos minutos la primera vez). Intenta de nuevo en un rato.' }, { status: 503, headers: { ...headers, 'Retry-After': '300' } });
