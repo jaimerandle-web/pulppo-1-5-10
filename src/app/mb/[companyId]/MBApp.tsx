@@ -16,7 +16,7 @@ import MBMercado from './MBMercado';
 import { tieneMercado } from '@/lib/mercadoPiloto';
 import { tieneDatos } from '@/lib/datosPiloto';
 import MBDatos from './MBDatos';
-import { ABIERTA as TU2026_ABIERTA, verTu2026 } from '@/lib/tu2026Piloto';
+import { tu2026Abierta, verTu2026 } from '@/lib/tu2026Piloto';
 import MBTu2026 from './MBTu2026';
 import MB1510 from './MB1510';
 import PrintRoot from './PrintRoot';
@@ -1064,7 +1064,7 @@ export default function MBApp({ d, verMarketing = false, interno = false }: { d:
                             Tu año contra los dos anteriores, y los reconocimientos de tu equipo con su carta, sus piezas
                             para redes y un diploma para cada broker.
                         </div>
-                        <MBTu2026 companyId={d.companyId} abierta={TU2026_ABIERTA} interno={interno} />
+                        <MBTu2026 companyId={d.companyId} abierta={tu2026Abierta()} interno={interno} />
                     </div>
                 )}
 

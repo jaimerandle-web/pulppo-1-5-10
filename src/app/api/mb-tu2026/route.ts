@@ -2,7 +2,7 @@
 //
 //   GET /api/mb-tu2026?company=<id>&vista=anio|reconocimientos
 //
-// Barrera doble: `canAccessCompany` y el piloto (`lib/tu2026Piloto.ts`: hasta el 3-dic sólo internos).
+// Barrera doble: `canAccessCompany` y el piloto (`lib/tu2026Piloto.ts`: internos ya; masters desde el 3-dic).
 // El cálculo barre tres años de toda la red (los pares lo necesitan): ~25 s en frío; lib/tu2026.ts lo
 // cachea 12 h por año.
 import { NextRequest, NextResponse } from 'next/server';
