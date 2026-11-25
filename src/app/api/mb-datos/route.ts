@@ -15,7 +15,7 @@ import ExcelJS from 'exceljs';
 import { PassThrough, Readable } from 'node:stream';
 import { canAccessCompany } from '@/lib/companyAccess';
 import { tieneDatos, tokenValido, datosToken } from '@/lib/datosPiloto';
-import { VIGENCIA_DIAS } from '@/lib/datosFoto';
+import { VIGENCIA } from '@/lib/datosFoto';
 import { base, filasAsesores, filasLeads, filasPropiedades, type Base } from '@/lib/datosExport';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +34,7 @@ function cargar(company: string, forzar: boolean): Promise<Base> {
     return d;
 }
 
-const TIPOS = { propiedades: 'Propiedades', leads: 'Leads', asesores: 'Asesores externos' } as const;
+const TIPOS = { propiedades: 'Propiedades', publicadas: 'Propiedades publicadas', leads: 'Leads', asesores: 'Asesores externos' } as const;
 type Tipo = keyof typeof TIPOS;
 
 function jsonStream(meta: Record<string, unknown>, datos: unknown[]): ReadableStream<Uint8Array> {
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
         const token = await datosToken(company);
         const raiz = `${req.nextUrl.origin}/api/mb-datos?company=${company}&token=${token}`;
         return NextResponse.json({
-            generado: d.generado, asesores_generado: d.asesores_generado, asesores_preparando: d.asesores_preparando, asesores_vigencia_dias: VIGENCIA_DIAS,
+            generado: d.generado, asesores_generado: d.asesores_generado, asesores_preparando: d.asesores_preparando, asesores_vigencia: VIGENCIA,
             conteos: {
                 propiedades: d.propiedades.length, publicadas: d.propiedades.filter((p) => p.estado === 'published').length,
                 leads: d.leads.length, asesores: d.asesores.length,
@@ -97,12 +97,14 @@ export async function GET(req: NextRequest) {
             urls_agente: Object.fromEntries(Object.keys(TIPOS).map((t) => [t, `${raiz}&tipo=${t}`])),
         }, { headers });
     }
-    if (!(tipo in TIPOS)) return NextResponse.json({ error: 'tipo inválido (propiedades | leads | asesores)' }, { status: 400 });
+    if (!(tipo in TIPOS)) return NextResponse.json({ error: 'tipo inválido (propiedades | publicadas | leads | asesores)' }, { status: 400 });
 
     if (tipo === 'asesores' && d.asesores_preparando) {
         return NextResponse.json({ preparando: true, mensaje: 'La base de asesores externos se está preparando (tarda unos minutos la primera vez). Intenta de nuevo en un rato.' }, { status: 503, headers: { ...headers, 'Retry-After': '300' } });
     }
-    let datos: unknown[] = tipo === 'propiedades' ? d.propiedades : tipo === 'leads' ? d.leads : d.asesores;
+    // publicadas = propiedades con estatus «published» (su propia liga, Excel y JSON).
+    let datos: unknown[] = tipo === 'propiedades' ? d.propiedades : tipo === 'publicadas' ? d.propiedades.filter((p) => p.estado === 'published')
+        : tipo === 'leads' ? d.leads : d.asesores;
     const estado = q.get('estado'), desde = q.get('desde'), estatus = q.get('estatus');
     // Asesores: &zona=polanco (colonia o municipio) · &con_nosotros=1 · &nivel=cerró
     const zona = q.get('zona')?.toLowerCase(), nivel = q.get('nivel')?.toLowerCase();
@@ -116,7 +118,7 @@ export async function GET(req: NextRequest) {
     const fecha = (generado ?? d.generado).slice(0, 10);
     const archivo = `diamond-house_${tipo}_${fecha}`;
     if (q.get('formato') === 'xlsx') {
-        const filas = tipo === 'propiedades' ? filasPropiedades(datos as Base['propiedades'])
+        const filas = tipo === 'propiedades' || tipo === 'publicadas' ? filasPropiedades(datos as Base['propiedades'])
             : tipo === 'leads' ? filasLeads(datos as Base['leads']) : filasAsesores(datos as Base['asesores']);
         return new Response(xlsxStream(TIPOS[tipo], filas), {
             headers: { ...headers, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${archivo}.xlsx"` },
@@ -124,8 +126,8 @@ export async function GET(req: NextRequest) {
     }
     const meta = {
         generado, tipo, total: datos.length,
-        nota: tipo === 'propiedades' ? 'Sin datos del propietario. productor = asesor que captó; vendedor = asesor a cargo de la venta.'
-            : tipo === 'asesores' ? `Brokers externos de toda la red Pulppo (no son asesores de ninguna inmobiliaria Pulppo). Foto que se renueva cada ${VIGENCIA_DIAS} días. contigo = su relación con esta inmobiliaria. patrones = zonas, tipos y presupuesto (MXN, USD × 18.5; típico = percentil 25–75) de TODAS las propiedades de la red por las que preguntó u operó.`
+        nota: tipo === 'propiedades' || tipo === 'publicadas' ? 'Sin datos del propietario. productor = asesor que captó; vendedor = asesor a cargo de la venta.'
+            : tipo === 'asesores' ? `Brokers externos de toda la red Pulppo (no son asesores de ninguna inmobiliaria Pulppo). Foto que se renueva ${VIGENCIA}. contigo = su relación con esta inmobiliaria. patrones = zonas, tipos y presupuesto (MXN, USD × 18.5; típico = percentil 25–75) de TODAS las propiedades de la red por las que preguntó u operó.`
             : undefined,
     };
     const descarga: Record<string, string> = q.get('descargar') === '1' ? { 'Content-Disposition': `attachment; filename="${archivo}.json"` } : {};

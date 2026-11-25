@@ -12,16 +12,21 @@ const R = 2;
 const f0 = (n: number) => n.toLocaleString('es-MX');
 
 type Resumen = {
-    generado: string; asesores_generado: string | null; asesores_preparando: boolean; asesores_vigencia_dias: number;
+    generado: string; asesores_generado: string | null; asesores_preparando: boolean; asesores_vigencia: string;
     conteos: { propiedades: number; publicadas: number; leads: number; asesores: number };
-    urls_agente: Record<'propiedades' | 'leads' | 'asesores', string>;
+    urls_agente: Record<'propiedades' | 'publicadas' | 'leads' | 'asesores', string>;
 };
 
-const JUEGOS: { tipo: 'propiedades' | 'leads' | 'asesores'; titulo: string; que: string; filtros: string }[] = [
+const JUEGOS: { tipo: 'propiedades' | 'publicadas' | 'leads' | 'asesores'; titulo: string; que: string; filtros: string }[] = [
     {
         tipo: 'propiedades', titulo: 'Propiedades',
         que: 'Todo el inventario, en cualquier estado: textos, precio, características, ubicación, fotos, planos, videos, recorrido virtual, productor y vendedor. Sin ningún dato del propietario.',
         filtros: '&estado=published para sólo las publicadas',
+    },
+    {
+        tipo: 'publicadas', titulo: 'Propiedades publicadas',
+        que: 'Sólo lo que está publicado hoy, con los mismos datos que Propiedades. Es la liga para un agente que recomienda o comparte inventario.',
+        filtros: '',
     },
     {
         tipo: 'leads', titulo: 'Leads',
@@ -58,7 +63,7 @@ export default function MBDatos({ companyId }: { companyId: string }) {
     if (err) return <div style={{ color: RED, fontSize: 13 }}>{err}</div>;
     if (!r) return <div style={{ color: MUTED, fontSize: 13 }}>Leyendo la base en vivo… (la primera vez tarda unos 20 segundos)</div>;
 
-    const n = { propiedades: r.conteos.propiedades, leads: r.conteos.leads, asesores: r.conteos.asesores };
+    const n = { propiedades: r.conteos.propiedades, publicadas: r.conteos.publicadas, leads: r.conteos.leads, asesores: r.conteos.asesores };
     const dia = (x: string | null) => !x ? '—' : new Date(x).toLocaleDateString('es-MX', { dateStyle: 'medium', timeZone: 'America/Mexico_City' });
     const hora = new Date(r.generado).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Mexico_City' });
     const base = `/api/mb-datos?company=${companyId}`;
@@ -68,14 +73,14 @@ export default function MBDatos({ companyId }: { companyId: string }) {
             <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
                 Propiedades y leads: leídos de la base el {hora}, se actualizan solos cada 10 minutos. Asesores externos: {r.asesores_preparando
                     ? 'se está preparando la base de toda la red (unos minutos); vuelve a abrir la pestaña en un rato.'
-                    : `foto del ${dia(r.asesores_generado)}, se renueva cada mes.`}
+                    : `foto del ${dia(r.asesores_generado)}, se renueva ${r.asesores_vigencia}.`}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
                 {JUEGOS.map((j) => (
                     <div key={j.tipo} style={{ border: `1px solid ${LGT}`, borderTop: `3px solid ${YEL}`, borderRadius: R, padding: 16, background: '#fff' }}>
                         <div style={{ fontFamily: 'EB Garamond, serif', fontSize: 22 }}>{j.titulo}</div>
                         <div style={{ fontSize: 30, fontWeight: 800, margin: '4px 0' }}>{f0(n[j.tipo])}</div>
-                        {j.tipo === 'propiedades' && <div style={{ fontSize: 12, color: MUTED }}>{f0(r.conteos.publicadas)} publicadas hoy</div>}
+                        {j.tipo === 'propiedades' && <div style={{ fontSize: 12, color: MUTED }}>En cualquier estatus · {f0(r.conteos.publicadas)} publicadas hoy</div>}
                         {j.tipo === 'asesores' && <div style={{ fontSize: 12, color: MUTED }}>{r.asesores_preparando ? 'Preparando…' : `Toda la red · foto del ${dia(r.asesores_generado)}`}</div>}
                         <div style={{ fontSize: 13, color: '#444', margin: '10px 0 4px', lineHeight: 1.45 }}>{j.que}</div>
                         <a href={`${base}&tipo=${j.tipo}&formato=xlsx`} style={btn(true)}>Descargar Excel</a>

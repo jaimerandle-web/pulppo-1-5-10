@@ -32,6 +32,9 @@ export async function middleware(req: NextRequest) {
         return NextResponse.redirect(url);
     }
 
+    // Cron mensual de la foto de asesores externos: se autentica solo (CRON_SECRET o vercel-cron) y no devuelve datos.
+    if (req.nextUrl.pathname === '/api/mb-datos/renovar') return NextResponse.next();
+
     // Pestaña Datos: la URL con clave entra sin sesión (la usa un agente de IA). La API vuelve a validarla.
     if (req.nextUrl.pathname === '/api/mb-datos') {
         const q = req.nextUrl.searchParams;
