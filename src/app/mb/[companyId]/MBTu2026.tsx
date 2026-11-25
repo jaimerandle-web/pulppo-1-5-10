@@ -380,6 +380,8 @@ function Barras({ vals, años, f }: { vals: (number | null)[]; años: number[]; 
 interface Firmas {
     dueno: string; duenoCargo: string; pulppo: string; pulppoCargo: string; lugarFecha: string; cierre: string;
     msgElite: string; msgProfessional: string; msgStandard: string;
+    /** diploma de quien no tuvo actividad en el año (recién llegados): sin cifras, de bienvenida (Ale, 25-nov) */
+    msgBienvenida: string;
 }
 const FIRMAS0: Firmas = {
     dueno: '', duenoCargo: 'Master Broker', pulppo: '', pulppoCargo: 'Pulppo',
@@ -387,6 +389,7 @@ const FIRMAS0: Firmas = {
     msgElite: 'Terminas 2026 como Broker Élite, el nivel más alto de Pulppo. Tu forma de trabajar marca la pauta para tu equipo y para toda la red. Que 2027 sea para sostenerlo y llevar a otros contigo.',
     msgProfessional: 'Terminas 2026 como Broker Profesional. Ya tienes el volumen; el salto a Élite está en la velocidad, en más visitas y en tickets más altos. 2027 es el año para darlo.',
     msgStandard: 'Terminas 2026 como Broker Estándar y con la base puesta. El camino a Profesional se construye con constancia: captar, atender cada lead y convertirlo en visita. En 2027 vamos por ese siguiente nivel.',
+    msgBienvenida: 'Te damos la bienvenida al equipo. Este diploma marca tu punto de partida: 2027 es el año para que tus primeras operaciones aparezcan aquí.',
 };
 const NIVEL: Record<NivelKey, { label: string; img: string; msg: 'msgElite' | 'msgProfessional' | 'msgStandard' }> = {
     elite: { label: 'Broker Élite', img: '/tu2026/nivel-elite.png', msg: 'msgElite' },
@@ -439,6 +442,8 @@ function RecView({ companyId }: { companyId: string }) {
                         <label key={n}><span style={lbl}>Diploma · {NIVEL[n].label}</span>
                             <textarea style={{ ...inp, minHeight: 92, resize: 'vertical' }} value={f[NIVEL[n].msg]} onChange={(e) => set(NIVEL[n].msg, e.target.value)} /></label>
                     ))}
+                    <label><span style={lbl}>Diploma · Sin actividad en el año</span>
+                        <textarea style={{ ...inp, minHeight: 92, resize: 'vertical' }} value={f.msgBienvenida} onChange={(e) => set('msgBienvenida', e.target.value)} /></label>
                 </div>
             </details>
 
@@ -467,14 +472,16 @@ function Foto({ g, size }: { g: { first: string; last: string; photo: string | n
 }
 
 const link: CSSProperties = { background: 'none', border: 'none', padding: 0, fontSize: 12, fontWeight: 700, color: BLK, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit' };
-function Acciones({ p, g, d, f, compactas }: { p: Premio; g: Ganador; d: Reconocimientos; f: Firmas; compactas?: boolean }) {
+/** `redes` = quiénes salen en el post y la historia: el podio completo del premio, o la persona sola en «Ascenso del año».
+ *  Sin `redes` sólo va la carta (2º y 3º lugar salen en la pieza del podio). */
+function Acciones({ p, g, d, f, compactas, redes }: { p: Premio; g: Ganador; d: Reconocimientos; f: Firmas; compactas?: boolean; redes?: Ganador[] }) {
     const btn: CSSProperties = { padding: '6px 10px', fontSize: 12, fontWeight: 700, border: `1px solid ${BLK}`, background: '#fff', cursor: 'pointer', borderRadius: 2, fontFamily: 'inherit', whiteSpace: 'nowrap' };
     const st = compactas ? link : btn;
     return (
         <div style={{ display: 'flex', gap: compactas ? 12 : 6, flexWrap: 'wrap', marginTop: compactas ? 4 : 10 }}>
             <button style={st} onClick={() => imprimir([cartaHtml(p, g, d, f)], `Reconocimiento · ${g.nombre}`, 'portrait')}>Carta</button>
-            <button style={st} onClick={() => descargarPieza(p, g, d, 'post')}>Post 4:5</button>
-            <button style={st} onClick={() => descargarPieza(p, g, d, 'historia')}>Historia 9:16</button>
+            {redes && <button style={st} onClick={() => descargarPieza(p, redes, d, 'post')}>Post 4:5{redes.length > 1 ? ' · podio' : ''}</button>}
+            {redes && <button style={st} onClick={() => descargarPieza(p, redes, d, 'historia')}>Historia 9:16{redes.length > 1 ? ' · podio' : ''}</button>}
         </div>
     );
 }
@@ -493,7 +500,7 @@ function PremioCard({ p, d, f }: { p: Premio; d: Reconocimientos; f: Firmas }) {
                         <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontSize: 14, fontWeight: 700 }}>{g.nombre}</div>
                             <div style={{ fontSize: 12, color: MUTED }}>{g.valor} · {g.detalle}</div>
-                            <Acciones p={p} g={g} d={d} f={f} compactas />
+                            <Acciones p={p} g={g} d={d} f={f} compactas redes={[g]} />
                         </div>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         {g.badge && <img src={NIVEL[g.badge].img} alt={NIVEL[g.badge].label} title={NIVEL[g.badge].label} style={{ width: 52, height: 52, objectFit: 'contain', flex: 'none' }} />}
@@ -509,7 +516,7 @@ function PremioCard({ p, d, f }: { p: Premio; d: Reconocimientos; f: Firmas }) {
                             <div style={{ fontSize: 12, color: MUTED }}>{g1.detalle}</div>
                         </div>
                     </div>
-                    <Acciones p={p} g={g1} d={d} f={f} />
+                    <Acciones p={p} g={g1} d={d} f={f} redes={p.podio} />
                     {resto.length > 0 && (
                         <div style={{ marginTop: 14, borderTop: `0.5px solid ${LINE}`, paddingTop: 4 }}>
                             {resto.map((g) => (
@@ -529,9 +536,15 @@ function PremioCard({ p, d, f }: { p: Premio; d: Reconocimientos; f: Firmas }) {
     );
 }
 
+const sinActividad = (x: Diploma) => !x.cierres && !x.visitas && !x.captaciones && !x.exclusivas;
 function Diplomas({ d, f }: { d: Reconocimientos; f: Firmas }) {
     const [filtro, setFiltro] = useState<NivelKey | 'todos'>('todos');
+    // el master elige cuáles imprime: todos marcados de entrada
+    const [fuera, setFuera] = useState<Set<string>>(new Set());
     const lista = d.equipo.filter((x) => filtro === 'todos' || x.nivel === filtro);
+    const elegidos = lista.filter((x) => !fuera.has(x.email));
+    const alternar = (e: string) => setFuera((s) => { const n = new Set(s); if (n.has(e)) n.delete(e); else n.add(e); return n; });
+    const todos = (marcar: boolean) => setFuera((s) => { const n = new Set(s); for (const x of lista) { if (marcar) n.delete(x.email); else n.add(x.email); } return n; });
     const n = (k: NivelKey) => d.equipo.filter((x) => x.nivel === k).length;
     const chip = (k: NivelKey | 'todos', l: string): ReactNode => (
         <button key={k} onClick={() => setFiltro(k)} style={{ padding: '5px 10px', fontSize: 12, fontWeight: 600, borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
@@ -542,23 +555,29 @@ function Diplomas({ d, f }: { d: Reconocimientos; f: Firmas }) {
             <div style={{ fontFamily: serif, fontSize: 26, lineHeight: 1.15 }}>Un diploma para todo el equipo</div>
             <div style={{ fontSize: 13, color: MUTED, marginTop: 4, marginBottom: 14, maxWidth: 720 }}>
                 Cada broker activo se lleva su diploma de cierre de año con el badge del nivel en el que termina 2026, lo que hizo
-                en el año (sin montos) y un mensaje para 2027. Los mensajes se editan en «Firmas y textos».
+                en el año (sin montos) y un mensaje para 2027. Quien no tuvo actividad en el año recibe uno de bienvenida, sin
+                cifras. Desmarca los que no quieras imprimir; los mensajes se editan en «Firmas y textos».
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
                 {chip('todos', `Todos (${d.equipo.length})`)}{chip('elite', `Élite (${n('elite')})`)}{chip('professional', `Profesional (${n('professional')})`)}{chip('standard', `Estándar (${n('standard')})`)}
-                <button onClick={() => imprimir(lista.map((x) => diplomaHtml(x, d, f)), `Diplomas ${d.año} · ${d.inmobiliaria}`, 'landscape')}
-                    style={{ marginLeft: 'auto', padding: '8px 14px', fontSize: 13, fontWeight: 700, background: BLK, color: '#fff', border: 'none', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    Imprimir {lista.length === d.equipo.length ? 'todos' : 'estos'} ({lista.length})
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
+                    <button style={link} onClick={() => todos(true)}>Marcar todos</button>
+                    <button style={link} onClick={() => todos(false)}>Quitar todos</button>
+                </span>
+                <button disabled={!elegidos.length} onClick={() => imprimir(elegidos.map((x) => diplomaHtml(x, d, f)), `Diplomas ${d.año} · ${d.inmobiliaria}`, 'landscape')}
+                    style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, background: elegidos.length ? BLK : LINE, color: '#fff', border: 'none', borderRadius: 2, cursor: elegidos.length ? 'pointer' : 'default', fontFamily: 'inherit' }}>
+                    Imprimir {elegidos.length === 1 ? '1 diploma' : `${elegidos.length} diplomas`}
                 </button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
                 {lista.map((x) => (
-                    <div key={x.email} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 12px', border: `0.5px solid ${LINE}` }}>
+                    <div key={x.email} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 12px', border: `0.5px solid ${LINE}`, opacity: fuera.has(x.email) ? 0.5 : 1 }}>
+                        <input type="checkbox" checked={!fuera.has(x.email)} onChange={() => alternar(x.email)} aria-label={`Imprimir el diploma de ${x.nombre}`} style={{ accentColor: BLK, flex: 'none' }} />
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={NIVEL[x.nivel].img} alt={NIVEL[x.nivel].label} style={{ width: 34, height: 34, objectFit: 'contain', flex: 'none' }} />
                         <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.nombre}</div>
-                            <div style={{ fontSize: 11, color: MUTED }}>{NIVEL[x.nivel].label}{x.subio ? ' · subió este año' : ''}</div>
+                            <div style={{ fontSize: 11, color: MUTED }}>{NIVEL[x.nivel].label}{x.subio ? ' · subió este año' : ''}{sinActividad(x) ? ' · bienvenida (sin actividad en el año)' : ''}</div>
                         </div>
                         <button style={link} onClick={() => imprimir([diplomaHtml(x, d, f)], `Diploma · ${x.nombre}`, 'landscape')}>Diploma</button>
                     </div>
@@ -615,6 +634,8 @@ function diplomaHtml(x: Diploma, d: Reconocimientos, f: Firmas): string {
         x.captaciones ? pl(x.captaciones, 'propiedad captada', 'propiedades captadas') : '',
         x.exclusivas ? pl(x.exclusivas, 'exclusiva', 'exclusivas') : '',
     ].filter(Boolean);
+    // sin actividad en el año (recién llegados): diploma de bienvenida, sin cifras ni ceros
+    const texto = hechos.length ? f[nv.msg] : f.msgBienvenida;
     return `<div class="hoja diploma">
 <div class="badge"><img src="${o}${nv.img}" alt=""><div class="nivel">${esc(nv.label)}</div></div>
 <div class="cuerpo">${encabezado(d, o)}
@@ -622,7 +643,7 @@ function diplomaHtml(x: Diploma, d: Reconocimientos, f: Firmas): string {
 <div class="otorga">Se otorga a</div>
 <div class="nombre">${esc(x.nombre)}</div>
 ${x.subio ? `<div class="subio">Este año subió de nivel: ${esc(x.subio)}</div>` : ''}
-<div class="texto">${esc(f[nv.msg])}</div>
+<div class="texto">${esc(texto)}</div>
 ${hechos.length ? `<div class="hechos">En ${d.año}: ${esc(hechos.join(' · '))}</div>` : ''}
 <div class="pie"><div class="lugar">${esc(f.lugarFecha)}</div>
 <div class="firmas">${firma(f.dueno, `${f.duenoCargo} · ${d.inmobiliaria}`)}${sello(o, f, d.año)}</div></div>
@@ -689,107 +710,142 @@ h1 { font-family: 'Heldane', 'EB Garamond', serif; font-weight: 400; font-size: 
 }
 
 // ── piezas para redes (canvas → PNG), SIN montos ──
-async function descargarPieza(p: Premio, g: Ganador, d: Reconocimientos, tipo: 'post' | 'historia') {
+// Mismo lenguaje que el «Ranking Pulppo» de /plus (plantillas de Polotno de Ale, oct-2026): fondo blanco, encabezado
+// con filetes, panel gris, cinta del premio y PODIO de tres alturas con la foto redonda encima de cada bloque.
+// Un premio de un solo ganador (o «Ascenso del año», que es de cada uno) usa un solo bloque al centro.
+const ORO = { centro: '#C1863B', izq: '#D4A978', der: '#E0C2A0', foto: '#8B572A', panel: '#E8E9E8' };
+type Lay = {
+    H: number; linea: number; titulo: number; anio: number; panelY: number; panelX: number; panelW: number; panelB: number;
+    cintaY: number; cintaH: number; cintaF: number; subY: number; subF: number;
+    base: number; alto: [number, number, number]; bx: [number, number, number]; bw: number; foto: number;
+    nomF: number; valF: number; feliz: number; felizY: number; pieY: number; logoH: number;
+};
+const LAY: Record<'post' | 'historia', Lay> = {
+    // 4:5 — la del ranking (1:1) estirada hacia abajo
+    post: {
+        H: 1350, linea: 101, titulo: 46, anio: 22, panelY: 156, panelX: 75, panelW: 930, panelB: 1150,
+        cintaY: 135, cintaH: 45, cintaF: 34, subY: 228, subF: 22,
+        base: 1181, alto: [380, 580, 300], bx: [115, 403, 690], bw: 282, foto: 220,
+        nomF: 36, valF: 17, feliz: 48, felizY: 1292, pieY: 1240, logoH: 76,
+    },
+    // 9:16 — la historia del ranking
+    historia: {
+        H: 1920, linea: 200, titulo: 64, anio: 31, panelY: 353, panelX: 24, panelW: 1031, panelB: 1496,
+        cintaY: 331, cintaH: 72, cintaF: 55, subY: 470, subF: 35,
+        base: 1427, alto: [364, 599, 272], bx: [0, 362, 725], bw: 355, foto: 300,
+        nomF: 41, valF: 21, feliz: 95, felizY: 1640, pieY: 1760, logoH: 110,
+    },
+};
+
+async function descargarPieza(p: Premio, gs: Ganador[], d: Reconocimientos, tipo: 'post' | 'historia') {
     await ensureFonts();
     await document.fonts.load('700 40px "Nunito Sans"');
-    const W = 1080, H = tipo === 'post' ? 1350 : 1920;
+    const L = LAY[tipo], W = 1080, H = L.H;
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const ctx = cv.getContext('2d')! as CanvasRenderingContext2D & { letterSpacing?: string };
     const HEL = '"HeldaneTextRegular", "EB Garamond", serif', NUN = '"Nunito Sans", Arial, sans-serif';
-    ctx.fillStyle = BLK; ctx.fillRect(0, 0, W, H);
-    const k = tipo === 'post' ? 1 : 1.25;       // la historia respira más
-    const top = tipo === 'post' ? 110 : 250;
-    const pieY = H - (tipo === 'post' ? 150 : 260);
-    const conDato = !!g.valorRed;
-    const lugar = g.lugar > 1 && !p.varios;
-    // alto del bloque (foto + premio + lugar + nombre + dato) para centrarlo entre el eyebrow y el pie
-    ctx.font = `400 ${Math.round(92 * k)}px ${HEL}`;
-    const lTit = partir(ctx, p.titulo, W - 160);
-    ctx.font = `700 ${Math.round(50 * k)}px ${NUN}`;
-    const lNom = partir(ctx, g.nombre, W - 160);
-    const R = Math.round(180 * k);
-    const alto = 2 * R + 20 + Math.round(120 * k) + lTit.length * Math.round(100 * k) + (lugar ? Math.round(56 * k) : 0) + Math.round(10 * k)
-        + lNom.length * Math.round(60 * k) + (conDato ? Math.round(94 * k) : 0);
-    const y0 = top + 40 + Math.max(0, (pieY - 60 - (top + 40) - alto) / 2);
+    const ls = (v: string) => { ctx.letterSpacing = v; };
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+    ctx.textBaseline = 'alphabetic';
 
-    ctx.fillStyle = YEL; ctx.font = `700 28px ${NUN}`; ctx.textAlign = 'center';
-    ctx.letterSpacing = '6px';
-    ctx.fillText(`RECONOCIMIENTOS ${d.año}`, W / 2, top);
-    ctx.letterSpacing = '0px';
+    // encabezado: «Reconocimientos» + logo de Pulppo, el año a la derecha, filete
+    const hy = L.linea - (tipo === 'post' ? 18 : 40);
+    ctx.fillStyle = BLK; ctx.textAlign = 'left'; ctx.font = `400 ${L.titulo}px ${HEL}`;
+    ctx.fillText('Reconocimientos', 47, hy);
+    const tw = ctx.measureText('Reconocimientos').width;
+    const pl = await loadImg('/tu2026/pulppo-negro.png');
+    if (pl) { const h = L.titulo * 0.78, w = (pl.naturalWidth * h) / pl.naturalHeight; ctx.drawImage(pl, 47 + tw + L.titulo * 0.3, hy - h * 0.92, w, h); }
+    ctx.textAlign = 'right'; ctx.font = `400 ${L.anio}px ${NUN}`; ls('4px');
+    ctx.fillText(String(d.año), W - 47, hy - 4); ls('0px');
+    ctx.fillStyle = BLK; ctx.fillRect(47, L.linea, W - 94, 1);
 
-    const cy = y0 + 10 + R;
-    ctx.beginPath(); ctx.arc(W / 2, cy, R + 10, 0, Math.PI * 2); ctx.fillStyle = YEL; ctx.fill();
-    ctx.save(); ctx.beginPath(); ctx.arc(W / 2, cy, R, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
-    const im = g.photo ? await loadImg(g.photo) : null;
-    if (im) {
-        const s = Math.max((2 * R) / im.naturalWidth, (2 * R) / im.naturalHeight);
-        const w = im.naturalWidth * s, h = im.naturalHeight * s;
-        ctx.drawImage(im, W / 2 - w / 2, cy - h / 2, w, h);
-    } else {
-        ctx.fillStyle = LGT; ctx.fillRect(W / 2 - R, cy - R, 2 * R, 2 * R);
-        ctx.fillStyle = BLK; ctx.font = `700 ${Math.round(R * 0.7)}px ${NUN}`; ctx.textBaseline = 'middle';
-        ctx.fillText(iniciales(g), W / 2, cy); ctx.textBaseline = 'alphabetic';
-    }
-    ctx.restore();
-    if (g.badge) {
-        const bd = await loadImg(NIVEL[g.badge].img);
-        if (bd) { const b = Math.round(R * 0.95), bh = (b * bd.naturalHeight) / bd.naturalWidth; ctx.drawImage(bd, W / 2 + R * 0.62, cy + R * 0.62 - bh * 0.75, b, bh); }
+    // panel gris
+    ctx.fillStyle = ORO.panel; ctx.fillRect(L.panelX, L.panelY, L.panelW, L.panelB - L.panelY);
+
+    // cinta con el nombre del premio (si no cabe, baja la letra)
+    let cf = L.cintaF;
+    ctx.font = `400 ${cf}px ${HEL}`;
+    const maxC = L.panelW - 120;
+    while (ctx.measureText(p.titulo).width > maxC - 44 && cf > 20) { cf -= 2; ctx.font = `400 ${cf}px ${HEL}`; }
+    const cx0 = L.panelX + (tipo === 'post' ? 38 : 48);
+    ctx.fillStyle = ORO.centro; ctx.fillRect(cx0, L.cintaY, ctx.measureText(p.titulo).width + 44, L.cintaH);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+    ctx.fillText(p.titulo, cx0 + 22, L.cintaY + L.cintaH / 2 + cf * 0.34);
+    ctx.fillStyle = BLK; ctx.font = `400 ${L.subF}px ${NUN}`; ls('2px');
+    ctx.fillText(`/${d.inmobiliaria.toUpperCase()}`, cx0 + 22, L.subY); ls('0px');
+
+    // podio: 1º al centro, 2º a la izquierda, 3º a la derecha; uno solo = bloque central más ancho
+    const solo = gs.length === 1;
+    const slots = solo
+        ? [{ g: gs[0], x: (W - L.bw * 1.5) / 2, w: L.bw * 1.5, h: L.alto[1], color: ORO.centro, oscuro: false }]
+        : gs.slice(0, 3).map((g) => {
+            const i = g.lugar === 1 ? 1 : g.lugar === 2 ? 0 : 2;
+            return { g, x: L.bx[i], w: L.bw, h: L.alto[i], color: [ORO.izq, ORO.centro, ORO.der][i], oscuro: i === 2 };
+        });
+    for (const s of slots) { ctx.fillStyle = s.color; ctx.fillRect(s.x, L.base - s.h, s.w, s.h); }
+    for (const s of slots) {
+        const top = L.base - s.h, R = (solo ? L.foto * 1.25 : L.foto) / 2, fx = s.x + s.w / 2, fy = top - R * 0.1;
+        // foto redonda (o iniciales) montada sobre el bloque
+        ctx.save(); ctx.beginPath(); ctx.arc(fx, fy, R, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+        const im = s.g.photo ? await loadImg(s.g.photo) : null;
+        if (im) {
+            const k = Math.max((2 * R) / im.naturalWidth, (2 * R) / im.naturalHeight);
+            ctx.drawImage(im, fx - (im.naturalWidth * k) / 2, fy - (im.naturalHeight * k) / 2, im.naturalWidth * k, im.naturalHeight * k);
+        } else {
+            ctx.fillStyle = ORO.foto; ctx.fillRect(fx - R, fy - R, 2 * R, 2 * R);
+            ctx.fillStyle = '#fff'; ctx.font = `400 ${Math.round(R * 0.5)}px ${HEL}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(iniciales(s.g), fx, fy); ctx.textBaseline = 'alphabetic';
+        }
+        ctx.restore();
+        if (s.g.badge) {
+            const bd = await loadImg(NIVEL[s.g.badge].img);
+            if (bd) { const b = R * 0.8, bh = (b * bd.naturalHeight) / bd.naturalWidth; ctx.drawImage(bd, fx + R * 0.45, fy + R * 0.55 - bh / 2, b, bh); }
+        }
+        // nombre (nombre / apellido) y el dato sin montos, abajo del bloque como en el ranking
+        const pad = 16, maxW = s.w - 2 * pad;
+        const color = s.oscuro ? '#4A4A4A' : '#fff';
+        const lineas = [s.g.first, s.g.last].filter(Boolean);
+        let nf = solo ? Math.round(L.nomF * 1.3) : L.nomF;
+        ctx.font = `400 ${nf}px ${HEL}`;
+        while (lineas.some((x) => ctx.measureText(x).width > maxW) && nf > 18) { nf -= 1; ctx.font = `400 ${nf}px ${HEL}`; }
+        const dato = (s.g.valorRed || (solo ? '' : LUGAR[s.g.lugar])).toUpperCase();
+        const valF = solo ? Math.round(L.valF * 1.3) : L.valF;
+        let y = L.base - pad - (dato ? valF + 18 : 0) - (lineas.length - 1) * nf * 1.05;
+        ctx.fillStyle = color; ctx.textAlign = solo ? 'center' : 'left';
+        const tx = solo ? s.x + s.w / 2 : s.x + pad;
+        for (const ln of lineas) { ctx.fillText(ln, tx, y); y += nf * 1.05; }
+        if (dato) {
+            ctx.font = `400 ${valF}px ${NUN}`; ls('1px');
+            let t = `/${dato}`;
+            while (ctx.measureText(t).width > maxW && t.length > 4) t = `${t.slice(0, -2)}…`;
+            ctx.fillText(t, tx, L.base - pad); ls('0px');
+        }
     }
 
-    let y = cy + R + Math.round(120 * k);
-    ctx.fillStyle = '#fff'; ctx.font = `400 ${Math.round(92 * k)}px ${HEL}`;
-    for (const ln of lTit) { ctx.fillText(ln, W / 2, y); y += Math.round(100 * k); }
-    if (lugar) {
-        ctx.fillStyle = YEL; ctx.font = `700 ${Math.round(30 * k)}px ${NUN}`; ctx.letterSpacing = '4px';
-        ctx.fillText(LUGAR[g.lugar].toUpperCase(), W / 2, y - Math.round(30 * k)); ctx.letterSpacing = '0px';
-        y += Math.round(56 * k);
-    }
-    y += Math.round(10 * k);
-    ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.round(50 * k)}px ${NUN}`;
-    for (const ln of lNom) { ctx.fillText(ln, W / 2, y); y += Math.round(60 * k); }
-    if (conDato) {
-        y += Math.round(40 * k);
-        ctx.fillStyle = YEL; ctx.font = `400 ${Math.round(64 * k)}px ${HEL}`;
-        ctx.fillText(g.valorRed, W / 2, y);
-        y += Math.round(54 * k);
-        ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `400 ${Math.round(30 * k)}px ${NUN}`;
-        ctx.fillText(g.detalleRed, W / 2, y);
-    }
-
-    // pie: logo de la inmobiliaria (en caja blanca: hay logos oscuros) + Pulppo
-    ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.fillRect(80, pieY - 40, W - 160, 1);
+    // pie: filete, logo de la inmobiliaria a la izquierda y «¡Felicidades!» a la derecha
+    ctx.fillStyle = BLK; ctx.fillRect(47, L.pieY - (tipo === 'post' ? 40 : 60), W - 94, 1);
     const logo = d.logo ? await loadImg(d.logo) : null;
+    const ly = L.pieY - (tipo === 'post' ? 20 : 30);
     if (logo) {
-        const bh = 96, pad = 14;
-        const s = Math.min((bh - 2 * pad) / logo.naturalHeight, 300 / logo.naturalWidth);
-        const lw = logo.naturalWidth * s, lh = logo.naturalHeight * s;
-        ctx.fillStyle = '#fff'; ctx.fillRect(80, pieY, lw + 2 * pad, bh);
-        ctx.drawImage(logo, 80 + pad, pieY + (bh - lh) / 2, lw, lh);
+        const k = Math.min(L.logoH / logo.naturalHeight, 320 / logo.naturalWidth);
+        ctx.drawImage(logo, 47, ly + (L.logoH - logo.naturalHeight * k) / 2, logo.naturalWidth * k, logo.naturalHeight * k);
     } else {
-        ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = `700 34px ${NUN}`;
-        ctx.fillText(d.inmobiliaria, 80, pieY + 60); ctx.textAlign = 'center';
+        ctx.fillStyle = BLK; ctx.textAlign = 'left'; ctx.font = `700 ${Math.round(L.logoH * 0.32)}px ${NUN}`;
+        ctx.fillText(d.inmobiliaria, 47, ly + L.logoH * 0.6);
     }
-    const pl = await loadImg('/tu2026/pulppo-blanco.png');
-    if (pl) { const h = 62, w = (pl.naturalWidth * h) / pl.naturalHeight; ctx.drawImage(pl, W - 80 - w, pieY + (96 - h) / 2, w, h); }
+    ctx.fillStyle = BLK; ctx.textAlign = 'right'; ctx.font = `400 ${L.feliz}px ${HEL}`;
+    // en el post va en la fila del logo; en la historia, entre el panel y el pie (como en el ranking)
+    ctx.fillText('¡Felicidades!', W - 47, L.felizY);
 
+    const quien = solo ? ` - ${gs[0].nombre}` : '';
     cv.toBlob((b) => {
         if (!b) return;
         const a = document.createElement('a');
         a.href = URL.createObjectURL(b);
-        a.download = `${p.titulo}${lugar ? ` (${g.lugar}º)` : ''} - ${g.nombre} (${tipo === 'post' ? '4x5' : '9x16'}).png`;
+        a.download = `${p.titulo}${quien} (${tipo === 'post' ? '4x5' : '9x16'}).png`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     }, 'image/png');
 }
 
-function partir(ctx: CanvasRenderingContext2D, t: string, maxW: number): string[] {
-    const out: string[] = [];
-    let cur = '';
-    for (const w of t.split(/\s+/)) {
-        const n = cur ? `${cur} ${w}` : w;
-        if (ctx.measureText(n).width > maxW && cur) { out.push(cur); cur = w; } else cur = n;
-    }
-    if (cur) out.push(cur);
-    return out;
-}
