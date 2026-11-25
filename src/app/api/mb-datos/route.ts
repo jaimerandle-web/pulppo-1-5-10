@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
         const token = await datosToken(company);
         const raiz = `${req.nextUrl.origin}/api/mb-datos?company=${company}&token=${token}`;
         return NextResponse.json({
-            generado: d.generado, asesores_generado: d.asesores_generado, asesores_vigencia_dias: VIGENCIA_DIAS,
+            generado: d.generado, asesores_generado: d.asesores_generado, asesores_preparando: d.asesores_preparando, asesores_vigencia_dias: VIGENCIA_DIAS,
             conteos: {
                 propiedades: d.propiedades.length, publicadas: d.propiedades.filter((p) => p.estado === 'published').length,
                 leads: d.leads.length, asesores: d.asesores.length,
@@ -99,13 +99,21 @@ export async function GET(req: NextRequest) {
     }
     if (!(tipo in TIPOS)) return NextResponse.json({ error: 'tipo inválido (propiedades | leads | asesores)' }, { status: 400 });
 
+    if (tipo === 'asesores' && d.asesores_preparando) {
+        return NextResponse.json({ preparando: true, mensaje: 'La base de asesores externos se está preparando (tarda unos minutos la primera vez). Intenta de nuevo en un rato.' }, { status: 503, headers: { ...headers, 'Retry-After': '300' } });
+    }
     let datos: unknown[] = tipo === 'propiedades' ? d.propiedades : tipo === 'leads' ? d.leads : d.asesores;
     const estado = q.get('estado'), desde = q.get('desde'), estatus = q.get('estatus');
+    // Asesores: &zona=polanco (colonia o municipio) · &con_nosotros=1 · &nivel=cerró
+    const zona = q.get('zona')?.toLowerCase(), nivel = q.get('nivel')?.toLowerCase();
+    if (tipo === 'asesores' && (zona || nivel || q.get('con_nosotros') === '1')) datos = d.asesores.filter((a) =>
+        (!zona || a.patrones.zonas.some((z) => `${z.colonia} ${z.municipio ?? ''}`.toLowerCase().includes(zona)) || a.patrones.municipios.some((m) => m.municipio.toLowerCase().includes(zona)))
+        && (!nivel || a.nivel_red.toLowerCase().includes(nivel)) && (q.get('con_nosotros') !== '1' || !!a.contigo.nivel));
     if (tipo === 'propiedades' && estado) datos = d.propiedades.filter((p) => p.estado === estado);
     if (tipo === 'leads' && (desde || estatus)) datos = d.leads.filter((l) => (!desde || String(l.fecha) >= desde) && (!estatus || l.estatus === estatus));
 
     const generado = tipo === 'asesores' ? d.asesores_generado : d.generado;
-    const fecha = generado.slice(0, 10);
+    const fecha = (generado ?? d.generado).slice(0, 10);
     const archivo = `diamond-house_${tipo}_${fecha}`;
     if (q.get('formato') === 'xlsx') {
         const filas = tipo === 'propiedades' ? filasPropiedades(datos as Base['propiedades'])
@@ -117,7 +125,7 @@ export async function GET(req: NextRequest) {
     const meta = {
         generado, tipo, total: datos.length,
         nota: tipo === 'propiedades' ? 'Sin datos del propietario. productor = asesor que captó; vendedor = asesor a cargo de la venta.'
-            : tipo === 'asesores' ? `Foto que se renueva cada ${VIGENCIA_DIAS} días. patrones = zonas, tipos y presupuesto (MXN, USD × 18.5; típico = percentil 25–75) de las propiedades por las que preguntó u operó.`
+            : tipo === 'asesores' ? `Brokers externos de toda la red Pulppo (no son asesores de ninguna inmobiliaria Pulppo). Foto que se renueva cada ${VIGENCIA_DIAS} días. contigo = su relación con esta inmobiliaria. patrones = zonas, tipos y presupuesto (MXN, USD × 18.5; típico = percentil 25–75) de TODAS las propiedades de la red por las que preguntó u operó.`
             : undefined,
     };
     const descarga: Record<string, string> = q.get('descargar') === '1' ? { 'Content-Disposition': `attachment; filename="${archivo}.json"` } : {};

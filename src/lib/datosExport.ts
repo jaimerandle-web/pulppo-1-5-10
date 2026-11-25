@@ -15,6 +15,8 @@
 import { ObjectId, type Document } from 'mongodb';
 import { getDb } from './data';
 import { fotoAsesores } from './datosFoto';
+import { brokersRed, type BrokerRed } from './brokersRed';
+import type { Rango } from './datosPatrones';
 
 type D = Document;
 const g = (o: unknown, ...ks: string[]): unknown => ks.reduce<unknown>((a, k) => (a && typeof a === 'object' ? (a as D)[k] : undefined), o);
@@ -158,138 +160,23 @@ export async function leads(companyId: string, props?: Propiedad[]): Promise<Lea
 }
 
 // ------------------------------------------------------------------------- asesores externos
-export type AsesorExterno = {
-    id: string; nombre: string | null; inmobiliaria: string | null; telefonos: string[]; emails: string[];
-    nivel: string; leads_a_la_inmobiliaria: number; operaciones: number; cierres: number;
-    propiedades: string[]; asesor_interno_principal: string | null; primer_contacto: string | null; ultimo_contacto: string | null;
-    patrones: Patrones;
-};
-
-// Qué mueve cada broker, sacado de las propiedades por las que preguntó o con las que operó.
-// Precios en MXN (USD × USD_MXN). Rango típico = percentil 25 a 75.
-export type Rango = { n: number; mediana: number; tipico_min: number; tipico_max: number };
-export type Patrones = {
-    zonas: { colonia: string; municipio: string | null; n: number }[];
-    municipios: { municipio: string; n: number }[];
-    operacion: { venta: number; renta: number };
-    tipos: { tipo: string; n: number }[];
-    presupuesto: { venta: Rango | null; renta: Rango | null };
-    recamaras_mediana: number | null;
-};
-const USD_MXN = 18.5;
-const pct = (xs: number[], q: number) => { const a = [...xs].sort((x, y) => x - y); const i = (a.length - 1) * q, lo = Math.floor(i); return a[lo] + (a[Math.ceil(i)] - a[lo]) * (i - lo); };
-const rango = (xs: number[]): Rango | null => xs.length ? { n: xs.length, mediana: Math.round(pct(xs, 0.5)), tipico_min: Math.round(pct(xs, 0.25)), tipico_max: Math.round(pct(xs, 0.75)) } : null;
-const top = <T extends string>(xs: (T | null)[], k: number) => {
-    const m = new Map<T, number>();
-    for (const x of xs) if (x) m.set(x, (m.get(x) || 0) + 1);
-    return [...m].sort((a, b) => b[1] - a[1]).slice(0, k);
-};
-
-function patrones(ps: Propiedad[]): Patrones {
-    const mxn = (p: Propiedad) => (p.precio && p.precio > 1 ? p.precio * (String(p.moneda).toUpperCase() === 'USD' ? USD_MXN : 1) : null);
-    const precios = (op: string) => ps.filter((p) => p.operacion === op).map(mxn).filter((x): x is number => x != null);
-    const zonas = top(ps.map((p) => (p.ubicacion.colonia ? `${p.ubicacion.colonia}|${p.ubicacion.municipio ?? ''}` : null)), 5)
-        .map(([k, n]) => { const [colonia, municipio] = k.split('|'); return { colonia, municipio: municipio || null, n }; });
-    const rec = ps.map((p) => p.recamaras).filter((x): x is number => typeof x === 'number' && x > 0);
-    return {
-        zonas,
-        municipios: top(ps.map((p) => p.ubicacion.municipio), 3).map(([municipio, n]) => ({ municipio, n })),
-        operacion: { venta: ps.filter((p) => p.operacion === 'venta').length, renta: ps.filter((p) => p.operacion === 'renta').length },
-        tipos: top(ps.map((p) => p.tipo), 3).map(([tipo, n]) => ({ tipo, n })),
-        presupuesto: { venta: rango(precios('venta')), renta: rango(precios('renta')) },
-        recamaras_mediana: rec.length ? pct(rec, 0.5) : null,
-    };
-}
-export const NIVELES = ['cerró con nosotros', 'ofertó con nosotros', 'recurrente (3+ leads)', 'ocasional'];
-const digitos = (t: string) => t.replace(/\D/g, '').slice(-10);
-
-export async function asesoresExternos(companyId: string, ls?: Lead[], props?: Propiedad[]): Promise<AsesorExterno[]> {
-    const db = await getDb();
-    const company = new ObjectId(companyId);
-    const L = ls ?? (await leads(companyId));
-    const P = props ?? (await propiedades(companyId));
-    const porId = new Map(P.map((p) => [p.id, p])), porCodigo = new Map(P.map((p) => [p.codigo, p]));
-    type B = { vistas: Propiedad[]; nombre: string | null; inmobiliaria: string | null; tels: Set<string>; mails: Set<string>; leads: number; ops: number; cierres: number; props: Set<string>; internos: Map<string, number>; ini: string | null; fin: string | null };
-    const M = new Map<string, B>();
-    const get = (id: string) => {
-        let b = M.get(id);
-        if (!b) { b = { vistas: [], nombre: null, inmobiliaria: null, tels: new Set(), mails: new Set(), leads: 0, ops: 0, cierres: 0, props: new Set(), internos: new Map(), ini: null, fin: null }; M.set(id, b); }
-        return b;
-    };
-    const toca = (b: B, f: string | null) => { if (f) { if (!b.ini || f < b.ini) b.ini = f; if (!b.fin || f > b.fin) b.fin = f; } };
-
-    for (const l of L) {
-        if (!l.contacto.es_broker || !l.contacto.id) continue;
-        const b = get(l.contacto.id);
-        b.nombre ||= l.contacto.nombre; b.leads++;
-        if (l.propiedad?.codigo) b.props.add(l.propiedad.codigo);
-        const pv = l.propiedad && porId.get(l.propiedad.id);
-        if (pv) b.vistas.push(pv);
-        if (l.contacto.telefono) b.tels.add(l.contacto.telefono);
-        if (l.contacto.email) b.mails.add(l.contacto.email);
-        if (l.asesor?.nombre) b.internos.set(l.asesor.nombre, (b.internos.get(l.asesor.nombre) || 0) + 1);
-        toca(b, l.fecha);
-    }
-    for (const c of await enLotes([...M.keys()].map((x) => new ObjectId(x)), (lote) => db.collection('contacts').find({ _id: { $in: lote as ObjectId[] } }, { projection: { 'company.name': 1 } }).toArray())) {
-        const n = s(g(c, 'company', 'name'));
-        if (n) get(String(c._id)).inmobiliaria = n;
-    }
-    const ops = await db.collection('operations').find(
-        { $or: [{ 'seller.company._id': company }, { 'buyer.company._id': company }] },
-        { projection: { seller: 1, buyer: 1, 'status.last': 1, closedAt: 1, createdAt: 1, 'property.internalId': 1 } },
-    ).toArray();
-    for (const o of ops) {
-        for (const lado of ['buyer', 'seller']) {
-            const co = g(o, lado, 'company') as D | undefined, br = g(o, lado, 'broker') as D | undefined;
-            if (!br?._id || String(co?._id) === companyId) continue;
-            const b = get(String(br._id));
-            b.nombre ||= nombre(br);
-            b.inmobiliaria = s(co?.name) ?? b.inmobiliaria;
-            if (s(br.phone)) b.tels.add(String(br.phone));
-            if (s(br.email)) b.mails.add(String(br.email));
-            b.ops++;
-            if (['closed', 'paying'].includes(String(g(o, 'status', 'last')))) b.cierres++;
-            const cod = s(g(o, 'property', 'internalId'));
-            if (cod) b.props.add(cod);
-            const pv = cod ? porCodigo.get(cod) : undefined;
-            if (pv) b.vistas.push(pv);
-            toca(b, iso(o.closedAt || o.createdAt));
-        }
-    }
-    // Fuera: los asesores de la propia inmobiliaria marcados como broker y las cuentas de prueba.
-    const propios = new Set<string>();
-    for (const a of await db.collection('agents').find({ 'company._id': company }, { projection: { phone: 1, email: 1 } }).toArray()) {
-        if (s(a.phone)) propios.add(digitos(String(a.phone)));
-        if (s(a.email)) propios.add(String(a.email).toLowerCase());
-    }
-    const nombreCo = s(g(await db.collection('companies').findOne({ _id: company }, { projection: { name: 1 } }), 'name'))?.toLowerCase();
-
-    const out: AsesorExterno[] = [];
-    for (const [id, b] of M) {
-        const inm = (b.inmobiliaria || '').toLowerCase();
-        if (inm === nombreCo || inm === 'inmobiliaria demo') continue;
-        if ([...b.tels].some((t) => propios.has(digitos(t))) || [...b.mails].some((m) => propios.has(m.toLowerCase()))) continue;
-        const nivel = b.cierres ? NIVELES[0] : b.ops ? NIVELES[1] : b.leads >= 3 ? NIVELES[2] : NIVELES[3];
-        const masInterno = [...b.internos].sort((x, y) => y[1] - x[1])[0];
-        out.push({
-            id, nombre: b.nombre, inmobiliaria: b.inmobiliaria, telefonos: [...b.tels].sort(), emails: [...b.mails].sort(),
-            nivel, leads_a_la_inmobiliaria: b.leads, operaciones: b.ops, cierres: b.cierres, propiedades: [...b.props].sort(),
-            asesor_interno_principal: masInterno ? masInterno[0] : null, primer_contacto: b.ini, ultimo_contacto: b.fin,
-            patrones: patrones(b.vistas),
-        });
-    }
-    return out.sort((a, b) => NIVELES.indexOf(a.nivel) - NIVELES.indexOf(b.nivel) || b.cierres - a.cierres || b.leads_a_la_inmobiliaria - a.leads_a_la_inmobiliaria);
-}
+// Ya no salen de aquí: son los brokers de toda la red (lib/brokersRed.ts), en foto mensual (lib/datosFoto.ts).
+export type AsesorExterno = BrokerRed;
 
 // --------------------------------------------------------------------------------- todo junto
-export type Base = { generado: string; propiedades: Propiedad[]; leads: Lead[]; asesores: AsesorExterno[]; asesores_generado: string };
+export type Base = {
+    generado: string; propiedades: Propiedad[]; leads: Lead[];
+    asesores: AsesorExterno[]; asesores_generado: string | null; asesores_preparando: boolean;
+};
 
 export async function base(companyId: string): Promise<Base> {
-    const P = await propiedades(companyId);
+    // Asesores externos (toda la red): foto mensual. Va en paralelo y, si no hay foto, se prepara en segundo plano.
+    const [P, A] = await Promise.all([propiedades(companyId), fotoAsesores(companyId, () => brokersRed(companyId))]);
     const L = await leads(companyId, P);
-    // Asesores externos: foto que se renueva cada 3 meses (lib/datosFoto.ts), no en vivo.
-    const A = await fotoAsesores(companyId, () => asesoresExternos(companyId, L, P));
-    return { generado: new Date().toISOString(), propiedades: P, leads: L, asesores: A.datos, asesores_generado: A.generado };
+    return {
+        generado: new Date().toISOString(), propiedades: P, leads: L,
+        asesores: A.datos, asesores_generado: A.generado, asesores_preparando: A.preparando,
+    };
 }
 
 // Para Excel: una fila plana por registro, con encabezados en español.
@@ -321,19 +208,19 @@ export function filasLeads(L: Lead[]): Fila[] {
 }
 
 export function filasAsesores(A: AsesorExterno[]): Fila[] {
+    const rg = (r: Rango | null) => (r ? `${mxnCorto(r.tipico_min)} – ${mxnCorto(r.tipico_max)}` : null);
     return A.map((a) => ({
-        'Nombre': a.nombre, 'Inmobiliaria': a.inmobiliaria, 'Teléfonos': lista(a.telefonos), 'Correos': lista(a.emails), 'Nivel': a.nivel,
-        'Leads que nos mandó': a.leads_a_la_inmobiliaria, 'Operaciones': a.operaciones, 'Cierres': a.cierres,
+        'Nombre': a.nombre, 'Inmobiliaria (declarada)': a.inmobiliaria_declarada, 'Teléfonos': lista(a.telefonos), 'Correos': lista(a.emails),
+        'Con nosotros': a.contigo.nivel, 'Leads que nos mandó': a.contigo.leads, 'Operaciones con nosotros': a.contigo.operaciones,
+        'Cierres con nosotros': a.contigo.cierres, 'Nivel en la red': a.nivel_red, 'Leads a la red': a.leads_a_la_red,
+        'Operaciones en la red': a.operaciones_red, 'Cierres en la red': a.cierres_red, 'Inmobiliarias con las que trabaja': a.inmobiliarias_pulppo,
         'Zonas': lista(a.patrones.zonas.map((z) => `${z.colonia}${z.municipio ? `, ${z.municipio}` : ''} (${z.n})`)),
         'Municipios': lista(a.patrones.municipios.map((m) => `${m.municipio} (${m.n})`)),
         'Venta / renta': `${a.patrones.operacion.venta} / ${a.patrones.operacion.renta}`,
         'Tipos': lista(a.patrones.tipos.map((t) => `${t.tipo} (${t.n})`)),
-        'Presupuesto venta (mediana)': a.patrones.presupuesto.venta?.mediana ?? null,
-        'Presupuesto venta típico': a.patrones.presupuesto.venta ? `${mxnCorto(a.patrones.presupuesto.venta.tipico_min)} – ${mxnCorto(a.patrones.presupuesto.venta.tipico_max)}` : null,
-        'Presupuesto renta (mediana)': a.patrones.presupuesto.renta?.mediana ?? null,
-        'Presupuesto renta típico': a.patrones.presupuesto.renta ? `${mxnCorto(a.patrones.presupuesto.renta.tipico_min)} – ${mxnCorto(a.patrones.presupuesto.renta.tipico_max)}` : null,
+        'Presupuesto venta (mediana)': a.patrones.presupuesto.venta?.mediana ?? null, 'Presupuesto venta típico': rg(a.patrones.presupuesto.venta),
+        'Presupuesto renta (mediana)': a.patrones.presupuesto.renta?.mediana ?? null, 'Presupuesto renta típico': rg(a.patrones.presupuesto.renta),
         'Recámaras (mediana)': a.patrones.recamaras_mediana,
-        'Propiedades': lista(a.propiedades), 'Asesor interno principal': a.asesor_interno_principal,
         'Primer contacto': a.primer_contacto, 'Último contacto': a.ultimo_contacto, 'ID': a.id,
     }));
 }
