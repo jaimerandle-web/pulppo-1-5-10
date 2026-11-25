@@ -1,0 +1,6257 @@
+{
+ "generado": "2026-11-25T18:33:17.398Z",
+ "desde": "2026-08-01",
+ "insights": [
+  {
+   "campaign_id": "120247572286510750",
+   "campaign_name": "B2C_DHU-306_mx_exc_cp_sw_departamento-HaciendaCiervo7a",
+   "spend": "481.86",
+   "impressions": "7622",
+   "inline_link_clicks": "162",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "162"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "86"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "89"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "89"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "1810"
+    },
+    {
+     "action_type": "like",
+     "value": "3"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "13"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "1813"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "86"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "11"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "86"
+    },
+    {
+     "action_type": "view_content",
+     "value": "86"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "10"
+    },
+    {
+     "action_type": "lead",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "86"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "5"
+    },
+    {
+     "action_type": "video_view",
+     "value": "1635"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "86"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "86"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120247578929660750",
+   "campaign_name": "B2C_DCI-165_mx_exc_lp_sw_departamento-PaseoLaureles444",
+   "spend": "470.19",
+   "impressions": "3279",
+   "inline_link_clicks": "134",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "134"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "33"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "89"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "89"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "1114"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "15"
+    },
+    {
+     "action_type": "comment",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "1114"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "33"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "14"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "33"
+    },
+    {
+     "action_type": "post",
+     "value": "5"
+    },
+    {
+     "action_type": "view_content",
+     "value": "33"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "4"
+    },
+    {
+     "action_type": "lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "33"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "5"
+    },
+    {
+     "action_type": "video_view",
+     "value": "965"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "33"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "33"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120249205520940750",
+   "campaign_name": "B2C_DZL-209_Yucatán_exc_cp_sw_Nura_departamento-Awah",
+   "spend": "792.6",
+   "impressions": "5907",
+   "inline_link_clicks": "107",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "107"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "13"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "47"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "55"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "55"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "1433"
+    },
+    {
+     "action_type": "like",
+     "value": "3"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "14"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "1436"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "47"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "13"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "47"
+    },
+    {
+     "action_type": "view_content",
+     "value": "47"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "47"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "5"
+    },
+    {
+     "action_type": "video_view",
+     "value": "1312"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "5"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "47"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "47"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120249206369240750",
+   "campaign_name": "B2C_TZA-292_Yucatán_exc_cp_sw_Nura_departamento-Tamankaya",
+   "spend": "1205.26",
+   "impressions": "13701",
+   "inline_link_clicks": "222",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "222"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "20"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "135"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "115"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "6"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "115"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3494"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "28"
+    },
+    {
+     "action_type": "comment",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3495"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "135"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "26"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "135"
+    },
+    {
+     "action_type": "view_content",
+     "value": "135"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "18"
+    },
+    {
+     "action_type": "lead",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "135"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "3"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "9"
+    },
+    {
+     "action_type": "video_view",
+     "value": "3244"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "6"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "135"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "135"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120249620277280750",
+   "campaign_name": "B2C_MX_Catalogo",
+   "spend": "3113.09",
+   "impressions": "90848",
+   "inline_link_clicks": "4593",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "4593"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "45"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "38"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "45"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "22"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "529"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "2353"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "21"
+    },
+    {
+     "action_type": "onsite_conversion.view_content",
+     "value": "15"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "2353"
+    },
+    {
+     "action_type": "onsite_app_view_content",
+     "value": "15"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "5"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "4702"
+    },
+    {
+     "action_type": "like",
+     "value": "5"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "25"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "4707"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "544"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "45"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "20"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "544"
+    },
+    {
+     "action_type": "post",
+     "value": "3"
+    },
+    {
+     "action_type": "view_content",
+     "value": "529"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "45"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "17"
+    },
+    {
+     "action_type": "lead",
+     "value": "21"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "529"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "3"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "38"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "45"
+    },
+    {
+     "action_type": "video_view",
+     "value": "84"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "45"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "21"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "21"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "544"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "529"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120249697413510750",
+   "campaign_name": "B2C_DKT-193_Yucatán_exc_cp_sw_Nura_departamento-Navela",
+   "spend": "1363.12",
+   "impressions": "11401",
+   "inline_link_clicks": "212",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "212"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "17"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "132"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "120"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "6"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "120"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "2730"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "20"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "2730"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "132"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "20"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "132"
+    },
+    {
+     "action_type": "post",
+     "value": "2"
+    },
+    {
+     "action_type": "view_content",
+     "value": "132"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "17"
+    },
+    {
+     "action_type": "lead",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "132"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "10"
+    },
+    {
+     "action_type": "video_view",
+     "value": "2498"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "6"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "132"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "132"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120250477579640750",
+   "campaign_name": "B2C_DLI-815_mx_exc_BosqueTabachines327",
+   "spend": "3119.26",
+   "impressions": "24309",
+   "inline_link_clicks": "460",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "460"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "24"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "162"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "324"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "14"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "324"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "11"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "3"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "5592"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "36"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "5593"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "162"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "33"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "162"
+    },
+    {
+     "action_type": "post",
+     "value": "6"
+    },
+    {
+     "action_type": "view_content",
+     "value": "162"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "21"
+    },
+    {
+     "action_type": "lead",
+     "value": "14"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "162"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "11"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "19"
+    },
+    {
+     "action_type": "video_view",
+     "value": "5096"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "14"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "14"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "162"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "162"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120251364896840750",
+   "campaign_name": "2026-mx-b2b-sql-meta-leads-masterbroker-v3",
+   "spend": "38778.72",
+   "impressions": "203217",
+   "inline_link_clicks": "2359",
+   "actions": [
+    {
+     "action_type": "offsite_complete_registration_add_meta_leads",
+     "value": "343"
+    },
+    {
+     "action_type": "link_click",
+     "value": "2359"
+    },
+    {
+     "action_type": "offsite_search_add_meta_leads",
+     "value": "343"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "158"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "741"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "2"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "237"
+    },
+    {
+     "action_type": "onsite_conversion.view_content",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "237"
+    },
+    {
+     "action_type": "onsite_app_view_content",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_block",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "41"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "46922"
+    },
+    {
+     "action_type": "like",
+     "value": "45"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "922"
+    },
+    {
+     "action_type": "comment",
+     "value": "57"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "46967"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "879"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "1"
+    },
+    {
+     "action_type": "post",
+     "value": "17"
+    },
+    {
+     "action_type": "onsite_conversion.post_unsave",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "107"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "57"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "105"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "700"
+    },
+    {
+     "action_type": "lead",
+     "value": "343"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "343"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "7"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "158"
+    },
+    {
+     "action_type": "onsite_conversion.lead_grouped",
+     "value": "343"
+    },
+    {
+     "action_type": "video_view",
+     "value": "43641"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120252280025010750",
+   "campaign_name": "B2C_Nura_mx_cp_WA",
+   "spend": "366.35",
+   "impressions": "4198",
+   "inline_link_clicks": "89",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "89"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "18"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "523"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "11"
+    },
+    {
+     "action_type": "comment",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "524"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "11"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "14"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "14"
+    },
+    {
+     "action_type": "video_view",
+     "value": "423"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120252636208680750",
+   "campaign_name": "B2C_MX_Proyecto_Queretaro_Catalogo",
+   "spend": "1951.89",
+   "impressions": "15743",
+   "inline_link_clicks": "808",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "808"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "11"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "315"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "509"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "509"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "3"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "826"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "18"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "827"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "315"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "15"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "315"
+    },
+    {
+     "action_type": "post",
+     "value": "4"
+    },
+    {
+     "action_type": "view_content",
+     "value": "315"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "8"
+    },
+    {
+     "action_type": "lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "315"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "315"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "315"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120252673586030750",
+   "campaign_name": "B2C_CJF-239_Merida_Nura_casa_VentaDeCasa2HabitacionesEnElCentro",
+   "spend": "339.03",
+   "impressions": "2320",
+   "inline_link_clicks": "58",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "58"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "28"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "7"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "32"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "32"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "922"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "35"
+    },
+    {
+     "action_type": "comment",
+     "value": "5"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "922"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "34"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "7"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "27"
+    },
+    {
+     "action_type": "lead",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "7"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "video_view",
+     "value": "829"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "7"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "7"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120252673890430750",
+   "campaign_name": "B2C_CZN-143_Merida_Itzimna_Nura_Casa_VentadeCasaenColoniaItzimna",
+   "spend": "342.85",
+   "impressions": "2161",
+   "inline_link_clicks": "62",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "62"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "14"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "48"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "40"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "40"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "850"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "18"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "851"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "48"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "17"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "48"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "48"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "13"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "48"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "video_view",
+     "value": "770"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "48"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "48"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120252753617910750",
+   "campaign_name": "B2C_MX_Proyecto_Lighting_House_Mazatlán",
+   "spend": "2337.73",
+   "impressions": "16807",
+   "inline_link_clicks": "283",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "283"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "54"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "200"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "128"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "128"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "2663"
+    },
+    {
+     "action_type": "like",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "65"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "2665"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "200"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "63"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "200"
+    },
+    {
+     "action_type": "post",
+     "value": "10"
+    },
+    {
+     "action_type": "view_content",
+     "value": "200"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "52"
+    },
+    {
+     "action_type": "lead",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "200"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "2"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "6"
+    },
+    {
+     "action_type": "video_view",
+     "value": "2315"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "200"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "200"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120252756056550750",
+   "campaign_name": "B2C_MX_Proyecto_Industrialist_CDMX",
+   "spend": "398.53",
+   "impressions": "2494",
+   "inline_link_clicks": "54",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "54"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "8"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "38"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "39"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "2"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "39"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "477"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "11"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "477"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "38"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "11"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "38"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "38"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "8"
+    },
+    {
+     "action_type": "lead",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "38"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "6"
+    },
+    {
+     "action_type": "video_view",
+     "value": "412"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "38"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "38"
+    }
+   ],
+   "date_start": "2026-08-01",
+   "date_stop": "2026-08-31"
+  },
+  {
+   "campaign_id": "120249205520940750",
+   "campaign_name": "B2C_DZL-209_Yucatán_exc_cp_sw_Nura_departamento-Awah",
+   "spend": "5.02",
+   "impressions": "283",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "74"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "74"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "2"
+    },
+    {
+     "action_type": "video_view",
+     "value": "73"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "2"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120249206369240750",
+   "campaign_name": "B2C_TZA-292_Yucatán_exc_cp_sw_Nura_departamento-Tamankaya",
+   "spend": "84.56",
+   "impressions": "992",
+   "inline_link_clicks": "9",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "9"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "6"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "5"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "5"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "232"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "232"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "6"
+    },
+    {
+     "action_type": "view_content",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "222"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "6"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120249620277280750",
+   "campaign_name": "B2C_MX_Catalogo",
+   "spend": "3016.77",
+   "impressions": "56690",
+   "inline_link_clicks": "3842",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "3842"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "49"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "16"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "49"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "14"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "427"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "2221"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "26"
+    },
+    {
+     "action_type": "onsite_conversion.view_content",
+     "value": "5"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "2221"
+    },
+    {
+     "action_type": "onsite_app_view_content",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3862"
+    },
+    {
+     "action_type": "like",
+     "value": "4"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "16"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3866"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "432"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "49"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "14"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "432"
+    },
+    {
+     "action_type": "post",
+     "value": "2"
+    },
+    {
+     "action_type": "view_content",
+     "value": "427"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "49"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "12"
+    },
+    {
+     "action_type": "lead",
+     "value": "26"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "427"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "16"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "49"
+    },
+    {
+     "action_type": "video_view",
+     "value": "4"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "49"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "26"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "26"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "432"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "427"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120249697413510750",
+   "campaign_name": "B2C_DKT-193_Yucatán_exc_cp_sw_Nura_departamento-Navela",
+   "spend": "433.58",
+   "impressions": "2183",
+   "inline_link_clicks": "44",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "44"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "4"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "24"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "25"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "25"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "556"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "9"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "557"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "24"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "4"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "9"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "24"
+    },
+    {
+     "action_type": "view_content",
+     "value": "24"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "9"
+    },
+    {
+     "action_type": "lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "24"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "4"
+    },
+    {
+     "action_type": "video_view",
+     "value": "503"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "24"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "24"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120250477579640750",
+   "campaign_name": "B2C_DLI-815_mx_exc_BosqueTabachines327",
+   "spend": "3104.73",
+   "impressions": "15281",
+   "inline_link_clicks": "407",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "407"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "8"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "8"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "17"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "103"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "320"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.view_content",
+     "value": "5"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "320"
+    },
+    {
+     "action_type": "onsite_app_view_content",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3474"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "30"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3474"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "108"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "8"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "29"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "108"
+    },
+    {
+     "action_type": "post",
+     "value": "6"
+    },
+    {
+     "action_type": "view_content",
+     "value": "103"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "16"
+    },
+    {
+     "action_type": "lead",
+     "value": "7"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "103"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "4"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "8"
+    },
+    {
+     "action_type": "video_view",
+     "value": "3037"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "8"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "7"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "7"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "108"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "103"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120252636208680750",
+   "campaign_name": "B2C_MX_Proyecto_Queretaro_Catalogo",
+   "spend": "7061.21",
+   "impressions": "59893",
+   "inline_link_clicks": "3400",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "3400"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "21"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "21"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "26"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "1708"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "2474"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "20"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "2474"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3444"
+    },
+    {
+     "action_type": "like",
+     "value": "7"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "44"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3451"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "1708"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "21"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "41"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "1708"
+    },
+    {
+     "action_type": "post",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.post_unsave",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "1708"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "9"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "21"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "24"
+    },
+    {
+     "action_type": "lead",
+     "value": "20"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "1708"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "21"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "21"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "20"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "20"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "1708"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "1708"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120252673586030750",
+   "campaign_name": "B2C_CJF-239_Merida_Nura_casa_VentaDeCasa2HabitacionesEnElCentro",
+   "spend": "1250.86",
+   "impressions": "8937",
+   "inline_link_clicks": "280",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "280"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "67"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "24"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "165"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "5"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "165"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3446"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "107"
+    },
+    {
+     "action_type": "comment",
+     "value": "26"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3446"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "24"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "105"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "24"
+    },
+    {
+     "action_type": "post",
+     "value": "6"
+    },
+    {
+     "action_type": "view_content",
+     "value": "24"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "26"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "65"
+    },
+    {
+     "action_type": "lead",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "24"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "9"
+    },
+    {
+     "action_type": "video_view",
+     "value": "3059"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "5"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "24"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "24"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120252673816630750",
+   "campaign_name": "B2C_CLU-491_Merida_Cholul_Nura_Casa_VentaDeCasaDe3NivelesConRoofGardenEnCholul",
+   "spend": "992.97",
+   "impressions": "14640",
+   "inline_link_clicks": "241",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "241"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "30"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "110"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "134"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "134"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "4444"
+    },
+    {
+     "action_type": "like",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "34"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "4446"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "110"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "33"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "110"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "110"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "29"
+    },
+    {
+     "action_type": "lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "110"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "7"
+    },
+    {
+     "action_type": "video_view",
+     "value": "4169"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "110"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "110"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120252673890430750",
+   "campaign_name": "B2C_CZN-143_Merida_Itzimna_Nura_Casa_VentadeCasaenColoniaItzimna",
+   "spend": "1228.54",
+   "impressions": "13058",
+   "inline_link_clicks": "284",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "284"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "24"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "53"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "343"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "155"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "4"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "155"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3910"
+    },
+    {
+     "action_type": "like",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "69"
+    },
+    {
+     "action_type": "comment",
+     "value": "6"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3912"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "343"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "68"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "343"
+    },
+    {
+     "action_type": "post",
+     "value": "4"
+    },
+    {
+     "action_type": "view_content",
+     "value": "343"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "52"
+    },
+    {
+     "action_type": "lead",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "343"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "2"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "24"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "10"
+    },
+    {
+     "action_type": "video_view",
+     "value": "3557"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "4"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "343"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "343"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120252753617910750",
+   "campaign_name": "B2C_MX_Proyecto_Lighting_House_Mazatlán",
+   "spend": "5711.61",
+   "impressions": "65073",
+   "inline_link_clicks": "735",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "735"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "22"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "58"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "769"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "419"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "12"
+    },
+    {
+     "action_type": "onsite_conversion.view_content",
+     "value": "4"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "419"
+    },
+    {
+     "action_type": "onsite_app_view_content",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "10"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "12125"
+    },
+    {
+     "action_type": "like",
+     "value": "5"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "69"
+    },
+    {
+     "action_type": "comment",
+     "value": "4"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "12130"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "773"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "67"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "773"
+    },
+    {
+     "action_type": "post",
+     "value": "2"
+    },
+    {
+     "action_type": "view_content",
+     "value": "769"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "56"
+    },
+    {
+     "action_type": "lead",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "769"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "8"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "22"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "12"
+    },
+    {
+     "action_type": "video_view",
+     "value": "11321"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "12"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "773"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "769"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120252756056550750",
+   "campaign_name": "B2C_MX_Proyecto_Industrialist_CDMX",
+   "spend": "1599.15",
+   "impressions": "13655",
+   "inline_link_clicks": "211",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "211"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "20"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "231"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "153"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "9"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "153"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3105"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "42"
+    },
+    {
+     "action_type": "comment",
+     "value": "7"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3106"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "231"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "41"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "231"
+    },
+    {
+     "action_type": "post",
+     "value": "3"
+    },
+    {
+     "action_type": "view_content",
+     "value": "231"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "12"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "12"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "19"
+    },
+    {
+     "action_type": "lead",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "231"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "12"
+    },
+    {
+     "action_type": "video_view",
+     "value": "2852"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "9"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "231"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "231"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120253056554720750",
+   "campaign_name": "B2C_MX_Proyecto_Lighting_House_Mazatlán_leadads",
+   "spend": "5786.71",
+   "impressions": "16193",
+   "inline_link_clicks": "249",
+   "actions": [
+    {
+     "action_type": "offsite_complete_registration_add_meta_leads",
+     "value": "14"
+    },
+    {
+     "action_type": "link_click",
+     "value": "249"
+    },
+    {
+     "action_type": "offsite_search_add_meta_leads",
+     "value": "14"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "14"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "56"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "12"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "12"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3885"
+    },
+    {
+     "action_type": "like",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "60"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3887"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "58"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "2"
+    },
+    {
+     "action_type": "post",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "54"
+    },
+    {
+     "action_type": "lead",
+     "value": "14"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "14"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "3"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "14"
+    },
+    {
+     "action_type": "onsite_conversion.lead_grouped",
+     "value": "14"
+    },
+    {
+     "action_type": "video_view",
+     "value": "3576"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120253258168740750",
+   "campaign_name": "B2C_MX_Proyecto_Lighting_House_Mazatlán_WA",
+   "spend": "517.81",
+   "impressions": "2265",
+   "inline_link_clicks": "12",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "12"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "5"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "3"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "297"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "6"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "297"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "5"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "5"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "4"
+    },
+    {
+     "action_type": "video_view",
+     "value": "279"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "5"
+    }
+   ],
+   "date_start": "2026-09-01",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120249206369240750",
+   "campaign_name": "B2C_TZA-292_Yucatán_exc_cp_sw_Nura_departamento-Tamankaya",
+   "spend": "1083.57",
+   "impressions": "8920",
+   "inline_link_clicks": "367",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "367"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "7"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "134"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "240"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "4"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "240"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "2902"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "15"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "2902"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "134"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "14"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "134"
+    },
+    {
+     "action_type": "view_content",
+     "value": "134"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "11"
+    },
+    {
+     "action_type": "lead",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "134"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "7"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "9"
+    },
+    {
+     "action_type": "video_view",
+     "value": "2520"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "4"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "134"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "134"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120249620277280750",
+   "campaign_name": "B2C_MX_Catalogo",
+   "spend": "3504.66",
+   "impressions": "44504",
+   "inline_link_clicks": "3626",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "3626"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "44"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "44"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "426"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "2155"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "23"
+    },
+    {
+     "action_type": "onsite_conversion.view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "2155"
+    },
+    {
+     "action_type": "onsite_app_view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3640"
+    },
+    {
+     "action_type": "like",
+     "value": "6"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "14"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3646"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "428"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "44"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "14"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "428"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "426"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "44"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "10"
+    },
+    {
+     "action_type": "lead",
+     "value": "23"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "426"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "44"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "44"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "23"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "23"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "428"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "426"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120249697413510750",
+   "campaign_name": "B2C_DKT-193_Yucatán_exc_cp_sw_Nura_departamento-Navela",
+   "spend": "1112.8",
+   "impressions": "7773",
+   "inline_link_clicks": "225",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "225"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "17"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "132"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "132"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "132"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "2283"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "17"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "2283"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "132"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "15"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "132"
+    },
+    {
+     "action_type": "view_content",
+     "value": "132"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "15"
+    },
+    {
+     "action_type": "lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "132"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "2"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "6"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "video_view",
+     "value": "2041"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "132"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "132"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120250477579640750",
+   "campaign_name": "B2C_DLI-815_mx_exc_BosqueTabachines327",
+   "spend": "3564.95",
+   "impressions": "17007",
+   "inline_link_clicks": "493",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "493"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "15"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "11"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "15"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "15"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "228"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "379"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "13"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "379"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "3"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3320"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "26"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3320"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "228"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "15"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "25"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "228"
+    },
+    {
+     "action_type": "post",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_unsave",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "228"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "15"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "15"
+    },
+    {
+     "action_type": "lead",
+     "value": "13"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "228"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "2"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "11"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "15"
+    },
+    {
+     "action_type": "video_view",
+     "value": "2801"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "15"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "13"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "13"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "228"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "228"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120252636208680750",
+   "campaign_name": "B2C_MX_Proyecto_Queretaro_Catalogo",
+   "spend": "7759.5",
+   "impressions": "54048",
+   "inline_link_clicks": "3520",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "3520"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "60"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "1814"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "2341"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "10"
+    },
+    {
+     "action_type": "onsite_conversion.view_content",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "2341"
+    },
+    {
+     "action_type": "onsite_app_view_content",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3592"
+    },
+    {
+     "action_type": "like",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "72"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3594"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "1817"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "71"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "1817"
+    },
+    {
+     "action_type": "post",
+     "value": "4"
+    },
+    {
+     "action_type": "view_content",
+     "value": "1814"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "59"
+    },
+    {
+     "action_type": "lead",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "1814"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "2"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "19"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "10"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "10"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "1817"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "1814"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120252673586030750",
+   "campaign_name": "B2C_CJF-239_Merida_Nura_casa_VentaDeCasa2HabitacionesEnElCentro",
+   "spend": "1503.71",
+   "impressions": "7925",
+   "inline_link_clicks": "237",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "237"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "70"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "25"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "153"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "153"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "3"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3212"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "89"
+    },
+    {
+     "action_type": "comment",
+     "value": "11"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3213"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "25"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "89"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "25"
+    },
+    {
+     "action_type": "post",
+     "value": "2"
+    },
+    {
+     "action_type": "view_content",
+     "value": "25"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "11"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "70"
+    },
+    {
+     "action_type": "lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "25"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "3"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "7"
+    },
+    {
+     "action_type": "video_view",
+     "value": "2886"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "7"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "25"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "25"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120252673816630750",
+   "campaign_name": "B2C_CLU-491_Merida_Cholul_Nura_Casa_VentaDeCasaDe3NivelesConRoofGardenEnCholul",
+   "spend": "1510.28",
+   "impressions": "23661",
+   "inline_link_clicks": "803",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "803"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "43"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "43"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "35"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "289"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "519"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "19"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "519"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "8566"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "37"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "8567"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "289"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "43"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "37"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "289"
+    },
+    {
+     "action_type": "view_content",
+     "value": "289"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "43"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "35"
+    },
+    {
+     "action_type": "lead",
+     "value": "19"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "289"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "43"
+    },
+    {
+     "action_type": "video_view",
+     "value": "7726"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "43"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "19"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "19"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "289"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "289"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120252673890430750",
+   "campaign_name": "B2C_CZN-143_Merida_Itzimna_Nura_Casa_VentadeCasaenColoniaItzimna",
+   "spend": "1517.26",
+   "impressions": "16252",
+   "inline_link_clicks": "879",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "879"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "13"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "13"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "45"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "867"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "608"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "608"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "6362"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "55"
+    },
+    {
+     "action_type": "comment",
+     "value": "3"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "6363"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "867"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "13"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "54"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "867"
+    },
+    {
+     "action_type": "post",
+     "value": "3"
+    },
+    {
+     "action_type": "view_content",
+     "value": "867"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "13"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "44"
+    },
+    {
+     "action_type": "lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "867"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "2"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "12"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "13"
+    },
+    {
+     "action_type": "video_view",
+     "value": "5428"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "13"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "867"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "867"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120252756056550750",
+   "campaign_name": "B2C_MX_Proyecto_Industrialist_CDMX",
+   "spend": "54.41",
+   "impressions": "412",
+   "inline_link_clicks": "5",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "5"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "27"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "27"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "1"
+    },
+    {
+     "action_type": "lead",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "21"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "2"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120253056554720750",
+   "campaign_name": "B2C_MX_Proyecto_Lighting_House_Mazatlán_leadads",
+   "spend": "6433.62",
+   "impressions": "11756",
+   "inline_link_clicks": "167",
+   "actions": [
+    {
+     "action_type": "offsite_complete_registration_add_meta_leads",
+     "value": "11"
+    },
+    {
+     "action_type": "link_click",
+     "value": "167"
+    },
+    {
+     "action_type": "offsite_search_add_meta_leads",
+     "value": "11"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "10"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "31"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "2"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "10"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "2186"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "35"
+    },
+    {
+     "action_type": "comment",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "2186"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "35"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "5"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "31"
+    },
+    {
+     "action_type": "lead",
+     "value": "11"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "11"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "6"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "10"
+    },
+    {
+     "action_type": "onsite_conversion.lead_grouped",
+     "value": "11"
+    },
+    {
+     "action_type": "video_view",
+     "value": "1984"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120253258168740750",
+   "campaign_name": "B2C_MX_Proyecto_Lighting_House_Mazatlán_WA",
+   "spend": "6488.37",
+   "impressions": "105548",
+   "inline_link_clicks": "487",
+   "actions": [
+    {
+     "action_type": "onsite_conversion.lead",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_complete_registration_add_meta_leads",
+     "value": "2"
+    },
+    {
+     "action_type": "link_click",
+     "value": "487"
+    },
+    {
+     "action_type": "offsite_search_add_meta_leads",
+     "value": "2"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "110"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "26"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_block",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "76"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "11"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "4607"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "122"
+    },
+    {
+     "action_type": "comment",
+     "value": "3"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "4608"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "26"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "110"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "19"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "59"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "26"
+    },
+    {
+     "action_type": "post",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.post_unsave",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "26"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "10"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "99"
+    },
+    {
+     "action_type": "lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "28"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "65"
+    },
+    {
+     "action_type": "onsite_conversion.lead_grouped",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "video_view",
+     "value": "3998"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "1"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "26"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "26"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-31"
+  },
+  {
+   "campaign_id": "120249620277280750",
+   "campaign_name": "B2C_MX_Catalogo",
+   "spend": "711.09",
+   "impressions": "12303",
+   "inline_link_clicks": "601",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "601"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "24"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "22"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "195"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "313"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "14"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "313"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "625"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "24"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "626"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "195"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "22"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "195"
+    },
+    {
+     "action_type": "post",
+     "value": "2"
+    },
+    {
+     "action_type": "view_content",
+     "value": "195"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "20"
+    },
+    {
+     "action_type": "lead",
+     "value": "14"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "195"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "24"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "19"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "19"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "14"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "14"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "195"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "195"
+    }
+   ],
+   "date_start": "2026-11-01",
+   "date_stop": "2026-11-25"
+  },
+  {
+   "campaign_id": "120250477579640750",
+   "campaign_name": "B2C_DLI-815_mx_exc_BosqueTabachines327",
+   "spend": "1503.88",
+   "impressions": "11014",
+   "inline_link_clicks": "366",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "366"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "14"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "236"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "256"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "5"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "256"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "774"
+    },
+    {
+     "action_type": "like",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "9"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "775"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "236"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "236"
+    },
+    {
+     "action_type": "onsite_conversion.post_unsave",
+     "value": "1"
+    },
+    {
+     "action_type": "view_content",
+     "value": "236"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "0"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "9"
+    },
+    {
+     "action_type": "lead",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "236"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "14"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "9"
+    },
+    {
+     "action_type": "video_view",
+     "value": "399"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "9"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "5"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "5"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "236"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "236"
+    }
+   ],
+   "date_start": "2026-11-01",
+   "date_stop": "2026-11-25"
+  },
+  {
+   "campaign_id": "120252636208680750",
+   "campaign_name": "B2C_MX_Proyecto_Queretaro_Catalogo",
+   "spend": "0",
+   "impressions": "0",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "offsite_content_view_add_20_s_calls",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_web_view_content",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_web_app_view_content",
+     "value": "4"
+    },
+    {
+     "action_type": "view_content",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "4"
+    },
+    {
+     "action_type": "omni_view_content",
+     "value": "4"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_view_content",
+     "value": "4"
+    }
+   ],
+   "date_start": "2026-11-01",
+   "date_stop": "2026-11-25"
+  },
+  {
+   "campaign_id": "120253056554720750",
+   "campaign_name": "B2C_MX_Proyecto_Lighting_House_Mazatlán_leadads",
+   "spend": "1553.63",
+   "impressions": "1707",
+   "inline_link_clicks": "33",
+   "actions": [
+    {
+     "action_type": "offsite_complete_registration_add_meta_leads",
+     "value": "3"
+    },
+    {
+     "action_type": "link_click",
+     "value": "33"
+    },
+    {
+     "action_type": "offsite_search_add_meta_leads",
+     "value": "3"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "7"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "540"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "8"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "540"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "8"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "7"
+    },
+    {
+     "action_type": "lead",
+     "value": "3"
+    },
+    {
+     "action_type": "offsite_content_view_add_meta_leads",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.lead_grouped",
+     "value": "3"
+    },
+    {
+     "action_type": "video_view",
+     "value": "499"
+    }
+   ],
+   "date_start": "2026-11-01",
+   "date_stop": "2026-11-25"
+  }
+ ],
+ "estados": {
+  "120253258168740750": "PAUSED",
+  "120253056554720750": "ACTIVE",
+  "120252756056550750": "PAUSED",
+  "120252753617910750": "PAUSED",
+  "120252673890430750": "PAUSED",
+  "120252673816630750": "PAUSED",
+  "120252673586030750": "PAUSED",
+  "120252636208680750": "ACTIVE",
+  "120252280025010750": "PAUSED",
+  "120251364896840750": "PAUSED",
+  "120250477579640750": "ACTIVE",
+  "120249697413510750": "PAUSED",
+  "120249620277280750": "ACTIVE",
+  "120249553942920750": "PAUSED",
+  "120249373409690750": "PAUSED",
+  "120249296899770750": "PAUSED",
+  "120249295309770750": "PAUSED",
+  "120249207732180750": "PAUSED",
+  "120249207028150750": "PAUSED",
+  "120249206369240750": "PAUSED",
+  "120249205520940750": "ACTIVE",
+  "120249134752790750": "PAUSED",
+  "120249103554880750": "PAUSED",
+  "120248149694130750": "PAUSED",
+  "120248148486770750": "PAUSED",
+  "120248147087830750": "PAUSED",
+  "120248007000520750": "PAUSED",
+  "120247794572480750": "PAUSED",
+  "120247792302750750": "PAUSED",
+  "120247787007010750": "PAUSED",
+  "120247580205570750": "PAUSED",
+  "120247578929660750": "ACTIVE",
+  "120247574533600750": "PAUSED",
+  "120247572286510750": "ACTIVE",
+  "120247512911040750": "PAUSED",
+  "120247510815000750": "PAUSED",
+  "120247271700070750": "PAUSED",
+  "120245592600010750": "PAUSED",
+  "120245089925700750": "PAUSED",
+  "120244817187380750": "PAUSED",
+  "120244813603980750": "PAUSED",
+  "120244804527800750": "PAUSED",
+  "120243443828090750": "ACTIVE",
+  "120243443081950750": "PAUSED",
+  "120243442687750750": "ACTIVE",
+  "120243442324530750": "ACTIVE",
+  "120243355494720750": "ACTIVE",
+  "120243167617320750": "ACTIVE",
+  "120243126431940750": "ACTIVE",
+  "120243126012750750": "ACTIVE",
+  "120243125535780750": "ACTIVE",
+  "120243123351400750": "ACTIVE",
+  "120243122822190750": "ACTIVE",
+  "120243122261740750": "ACTIVE",
+  "120243119305670750": "ACTIVE",
+  "120243039543960750": "ACTIVE",
+  "120241769818130750": "PAUSED",
+  "120241734840420750": "PAUSED",
+  "120241728229370750": "PAUSED",
+  "120239850255360750": "PAUSED",
+  "120238435451580750": "PAUSED",
+  "120237190686480750": "PAUSED",
+  "120234846049780750": "PAUSED",
+  "120234126793870750": "PAUSED",
+  "120233501058590750": "PAUSED",
+  "120229968634620750": "PAUSED",
+  "120229108942470750": "PAUSED",
+  "120228087818400750": "PAUSED",
+  "120227591862310750": "PAUSED",
+  "120227262765520750": "PAUSED",
+  "120220579194560750": "PAUSED",
+  "120220454007130750": "PAUSED",
+  "120220052576120750": "PAUSED",
+  "120219735754080750": "PAUSED",
+  "120218857949910750": "PAUSED",
+  "120218102008710750": "PAUSED",
+  "120217379705820750": "PAUSED",
+  "120217342913630750": "PAUSED",
+  "120216845729290750": "PAUSED",
+  "120216817112940750": "PAUSED",
+  "120215797901040750": "PAUSED",
+  "120215776239250750": "PAUSED",
+  "120215280005720750": "PAUSED",
+  "120215185191290750": "PAUSED",
+  "120215116674230750": "PAUSED",
+  "120214765860010750": "PAUSED",
+  "120214411917220750": "PAUSED",
+  "120214334908300750": "PAUSED",
+  "120214334272150750": "PAUSED",
+  "120214331928320750": "PAUSED",
+  "120214330284670750": "PAUSED",
+  "120213918367480750": "PAUSED",
+  "120213797211250750": "PAUSED",
+  "120213197041620750": "PAUSED",
+  "120213144933220750": "PAUSED",
+  "120212946260850750": "PAUSED",
+  "120212857301870750": "PAUSED",
+  "120212856861450750": "PAUSED",
+  "120212715199060750": "PAUSED",
+  "120212669808930750": "PAUSED",
+  "120212669118750750": "PAUSED",
+  "120212585983120750": "PAUSED",
+  "120212585920480750": "PAUSED",
+  "120212504480600750": "PAUSED",
+  "120212361891000750": "PAUSED",
+  "120212292198140750": "PAUSED",
+  "120212264873210750": "PAUSED",
+  "120212264850310750": "PAUSED",
+  "120211835677010750": "PAUSED",
+  "120211748897290750": "PAUSED",
+  "120211709495130750": "PAUSED",
+  "120211667197300750": "PAUSED",
+  "120211534134170750": "PAUSED",
+  "120211501110080750": "PAUSED",
+  "120211414747010750": "PAUSED",
+  "120211391830200750": "PAUSED",
+  "120211270478090750": "PAUSED",
+  "120211270350490750": "PAUSED",
+  "120211269911660750": "PAUSED",
+  "120211258365430750": "PAUSED",
+  "120211239792590750": "PAUSED",
+  "120211235573170750": "PAUSED",
+  "120210974657150750": "PAUSED",
+  "120210807183180750": "PAUSED",
+  "120210764340630750": "PAUSED",
+  "120210758729110750": "PAUSED",
+  "120210758280800750": "PAUSED",
+  "120210034997670750": "PAUSED",
+  "120209968065280750": "PAUSED",
+  "120208383920250750": "PAUSED",
+  "120208383731940750": "PAUSED",
+  "120206996465640750": "PAUSED",
+  "120206996341670750": "PAUSED",
+  "120206996234240750": "PAUSED",
+  "120206995176890750": "PAUSED",
+  "120206995109110750": "PAUSED",
+  "120206994876050750": "PAUSED",
+  "120206790634630750": "PAUSED",
+  "120206749808040750": "PAUSED",
+  "120206749688200750": "PAUSED",
+  "120206071724820750": "PAUSED",
+  "120205725871090750": "PAUSED",
+  "120205558232420750": "PAUSED",
+  "120205399652470750": "PAUSED",
+  "120205054260320750": "PAUSED",
+  "120204375722730750": "PAUSED",
+  "120202813280470750": "PAUSED",
+  "120202705522860750": "PAUSED",
+  "120202666354660750": "PAUSED",
+  "120202329421460750": "PAUSED",
+  "120201773383190750": "PAUSED",
+  "120200417261840750": "PAUSED",
+  "120200085437480750": "PAUSED",
+  "23859678575090749": "PAUSED",
+  "23859676375510749": "PAUSED",
+  "23859674518610749": "PAUSED",
+  "23859674061600749": "PAUSED",
+  "23859502810990749": "PAUSED",
+  "23859363042890749": "PAUSED",
+  "23859220582430749": "PAUSED",
+  "23859220388320749": "PAUSED",
+  "23859218659970749": "PAUSED",
+  "23859217755770749": "PAUSED",
+  "23859217655740749": "PAUSED",
+  "23859217608790749": "PAUSED",
+  "23859217579640749": "PAUSED",
+  "23859217363240749": "PAUSED",
+  "23859217208420749": "PAUSED",
+  "23859217061590749": "PAUSED",
+  "23858810390300749": "PAUSED",
+  "23858773311650749": "PAUSED",
+  "23858773177530749": "PAUSED",
+  "23858396192770749": "PAUSED",
+  "23858296690240749": "PAUSED",
+  "23858296626390749": "PAUSED",
+  "23858270970670749": "PAUSED",
+  "23858270950950749": "PAUSED",
+  "23858270938740749": "PAUSED",
+  "23858068599500749": "PAUSED",
+  "23858068480090749": "PAUSED",
+  "23858068388400749": "PAUSED",
+  "23858068325170749": "PAUSED",
+  "23857220770460749": "PAUSED",
+  "23857140202220749": "PAUSED",
+  "23856494454050749": "PAUSED",
+  "23856442327110749": "PAUSED",
+  "23856350407810749": "PAUSED",
+  "23855821692210749": "PAUSED",
+  "23855757026310749": "PAUSED",
+  "23855737365290749": "PAUSED",
+  "23855721173010749": "PAUSED",
+  "23855719569540749": "PAUSED",
+  "23855603616870749": "PAUSED",
+  "23855576874540749": "PAUSED",
+  "23855576373150749": "PAUSED",
+  "23855368470430749": "PAUSED",
+  "23855293996960749": "PAUSED",
+  "23855262356240749": "PAUSED",
+  "23855262211860749": "PAUSED",
+  "23855130545160749": "PAUSED",
+  "23855130307780749": "PAUSED",
+  "23855102607700749": "PAUSED",
+  "23855102331380749": "PAUSED",
+  "23855102311120749": "PAUSED",
+  "23855102258900749": "PAUSED",
+  "23855102243360749": "PAUSED",
+  "23855102100670749": "PAUSED",
+  "23855102052210749": "PAUSED",
+  "23855101951770749": "PAUSED",
+  "23855101800460749": "PAUSED",
+  "23854983217890749": "PAUSED",
+  "23854983207020749": "PAUSED",
+  "23854983162080749": "PAUSED",
+  "23854983094310749": "PAUSED",
+  "23854983071210749": "PAUSED",
+  "23854983045950749": "PAUSED",
+  "23854983020100749": "PAUSED",
+  "23854982937620749": "PAUSED",
+  "23854872625130749": "PAUSED",
+  "23854858104800749": "PAUSED",
+  "23854858052600749": "PAUSED",
+  "23854857982790749": "PAUSED",
+  "23854768306400749": "PAUSED",
+  "23854693122130749": "PAUSED",
+  "23854692525950749": "PAUSED",
+  "23854689653250749": "PAUSED",
+  "23854532462230749": "PAUSED",
+  "23854438189900749": "PAUSED",
+  "23854320935340749": "PAUSED",
+  "23854310986090749": "PAUSED",
+  "23854246100390749": "PAUSED",
+  "23854246049390749": "PAUSED",
+  "23854246004280749": "PAUSED",
+  "23854245965030749": "PAUSED",
+  "23854245936630749": "PAUSED",
+  "23854245437750749": "PAUSED",
+  "23854002486120749": "PAUSED",
+  "23853863733280749": "PAUSED",
+  "23853845850740749": "PAUSED",
+  "23853757689280749": "PAUSED",
+  "23853756686240749": "PAUSED",
+  "23853754806170749": "PAUSED",
+  "23853031737300749": "PAUSED",
+  "23852787696720749": "PAUSED",
+  "23852706726670749": "PAUSED",
+  "23852706150830749": "PAUSED",
+  "23852649693410749": "PAUSED",
+  "23852649666080749": "PAUSED",
+  "23852580271110749": "PAUSED",
+  "23852400778990749": "PAUSED",
+  "23852383991920749": "PAUSED",
+  "23852383318890749": "PAUSED",
+  "23852360720470749": "PAUSED",
+  "23852360340180749": "PAUSED",
+  "23852360087610749": "PAUSED",
+  "23852264704310749": "PAUSED",
+  "23852235628310749": "PAUSED",
+  "23852202802400749": "PAUSED",
+  "23852193541070749": "PAUSED",
+  "23852193471930749": "PAUSED",
+  "23852179524040749": "PAUSED",
+  "23852178837940749": "PAUSED",
+  "23852150727190749": "PAUSED",
+  "23852140940570749": "PAUSED",
+  "23852126473940749": "PAUSED",
+  "23852124250930749": "PAUSED",
+  "23851519000120749": "PAUSED",
+  "23851498771590749": "PAUSED",
+  "23851440686950749": "PAUSED",
+  "23851382866520749": "PAUSED",
+  "23851359375980749": "PAUSED",
+  "23851352576160749": "PAUSED",
+  "23851323837820749": "PAUSED",
+  "23851321708710749": "PAUSED",
+  "23851313266740749": "PAUSED"
+ }
+}

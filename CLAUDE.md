@@ -614,3 +614,17 @@ tools.pulppo.com → Asignación de avisos (ZD SD · SD · ZD D · D · Simple �
 - **Borrador compartido** (`lib/portales/asignacionStore.ts`): Blob en Vercel (sin Blob = sólo lectura y lo dice), local en
   `.portales/asignacion.json`. Uno solo, gana el último que guarda; historial de quién guardó. Lo no guardado vive en
   localStorage. NO escribe en la herramienta de i24: se descarga CSV en el orden de la herramienta (A–Z ASCII).
+
+## /1-5-10/pauta → «Meta vs CRM» (25-nov-2026)
+
+Para Habi: por campaña B2C y mes, lo que reporta Ads Manager contra lo que llegó al CRM. Motor
+`src/lib/pauta/desempeno.ts`, API `/api/pauta/desempeno`, UI `src/app/1-5-10/pauta/MetaVsCrm.tsx` (botón «Meta vs CRM»
+junto a los programas).
+- **Meta**: con `META_ACCESS_TOKEN` en Vercel va en vivo (caché 1 h); sin él lee `src/lib/pauta/metaFoto.json`, que se
+  refresca con `node scripts/meta_snapshot.mjs` (token en `~/pulppo-automation/creds/meta_token.txt`).
+  «Resultado» de Meta = clic a WhatsApp (pixel Lead = el CLIC) + formulario instantáneo + conversación iniciada.
+- **CRM**: cruce por nombre EXACTO en `leads.campaign` (y el id numérico de may–jul). Personas = contactos únicos por
+  campaña y mes MX; visitaron/ofertaron = después del primer lead, cualquier propiedad. «Sin etiqueta» sólo en
+  campañas de una propiedad: pulppo.com/WhatsApp sin campaña ni lead de portal sobre ella; posibles, no se suman.
+- Ago–nov 2026: Meta 422 resultados vs 91 personas (22%). La brecha grande: formularios instantáneos (Lighting House)
+  y conversaciones de WhatsApp directo NO entran al CRM.

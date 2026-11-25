@@ -14,6 +14,7 @@ import type { CampanaPlan, FueraMes } from '@/lib/pauta/plan';
 import type { Mes } from '@/lib/pauta/mes';
 import { PLANES_INMO, type PlanInmo } from '@/lib/pauta/inmobiliarias';
 import type { Excluida } from '@/lib/pauta/excluidas';
+import MetaVsCrm from './MetaVsCrm';
 
 interface Payload {
     props: PautaProp[];
@@ -518,7 +519,7 @@ export default function PautaApp() {
             </div>
 
             <div className="mb-6 flex flex-wrap gap-2 text-sm">
-                {[['1510', 'Exclusivas 1·5·10'], ...PLANES_INMO.map((p) => [p.slug, p.nombre])].map(([id, label]) => (
+                {[['1510', 'Exclusivas 1·5·10'], ...PLANES_INMO.map((p) => [p.slug, p.nombre]), ['meta-crm', 'Meta vs CRM']].map(([id, label]) => (
                     <button key={id} type="button" onClick={() => setPrograma(id)}
                         className={`rounded-full border px-3 py-1.5 ${programa === id ? 'border-transparent bg-soft text-white' : 'border-neutral-300 hover:bg-neutral-50'}`}>
                         {label}
@@ -526,7 +527,8 @@ export default function PautaApp() {
                 ))}
             </div>
 
-            {programa !== '1510' && <PlanInmoVista slug={programa} />}
+            {programa === 'meta-crm' && <MetaVsCrm />}
+            {programa !== '1510' && programa !== 'meta-crm' && <PlanInmoVista slug={programa} />}
 
             {programa === '1510' && <>
             {error && <p className="text-brand-red">{error}</p>}
