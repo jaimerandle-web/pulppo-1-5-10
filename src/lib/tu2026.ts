@@ -691,7 +691,7 @@ export async function reconocimientos(companyId: string): Promise<Reconocimiento
     premios.push({ key: 'broker', titulo: 'Broker del año', porque: 'Por ser quien más comisión cobró este año.',
         regla: 'Comisión cobrada en el año, repartida por rol en cada operación (como en los premios de la gala). En redes no va el monto.',
         podio: top3(mios.filter(([, s]) => s.cobrada > 0).sort((a, b) => b[1].cobrada - a[1].cobrada))
-            .map(([e, s], i) => persona(e, i + 1, money(s.cobrada), ops(s.ops.size), i ? '' : 'Mayor comisión', i ? '' : `cobrada en ${k} este año`)) });
+            .map(([e, s], i) => persona(e, i + 1, money(s.cobrada), ops(s.ops.size), i ? '' : 'Mayor comisión', i ? '' : `cobrada de la inmobiliaria ${k}`)) });
     premios.push({ key: 'captacion', titulo: 'Captación del año', porque: 'Por firmar más exclusivas que nadie en el equipo.',
         regla: 'Exclusivas que arrancaron en el año con contrato completo en la plataforma; desempata el total de exclusivas.',
         podio: top3(mios.filter(([, s]) => s.firmadas > 0).sort((a, b) => b[1].firmadas - a[1].firmadas || b[1].exclusivas - a[1].exclusivas))

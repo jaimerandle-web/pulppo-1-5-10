@@ -378,13 +378,13 @@ function Barras({ vals, años, f }: { vals: (number | null)[]; años: number[]; 
 
 // ── RECONOCIMIENTOS ───────────────────────────────────────────────────────────
 interface Firmas {
-    dueno: string; duenoCargo: string; pulppo: string; pulppoCargo: string; lugarFecha: string; cierre: string;
+    dueno: string; duenoCargo: string; lugarFecha: string; cierre: string;
     msgElite: string; msgProfessional: string; msgStandard: string;
     /** diploma de quien no tuvo actividad en el año (recién llegados): sin cifras, de bienvenida (Ale, 25-nov) */
     msgBienvenida: string;
 }
 const FIRMAS0: Firmas = {
-    dueno: '', duenoCargo: 'Master Broker', pulppo: '', pulppoCargo: 'Pulppo',
+    dueno: '', duenoCargo: 'Master Broker',
     lugarFecha: 'Ciudad de México, 3 de diciembre de 2026', cierre: 'Gracias por tu trabajo y tu compromiso durante 2026.',
     msgElite: 'Terminas 2026 como Broker Élite, el nivel más alto de Pulppo. Tu forma de trabajar marca la pauta para tu equipo y para toda la red. Que 2027 sea para sostenerlo y llevar a otros contigo.',
     msgProfessional: 'Terminas 2026 como Broker Profesional. Ya tienes el volumen; el salto a Élite está en la velocidad, en más visitas y en tickets más altos. 2027 es el año para darlo.',
@@ -432,8 +432,6 @@ function RecView({ companyId }: { companyId: string }) {
                             : <input style={inp} value={f.dueno} placeholder="Master broker" onChange={(e) => set('dueno', e.target.value)} />}
                     </label>
                     <label><span style={lbl}>Cargo</span><input style={inp} value={f.duenoCargo} onChange={(e) => set('duenoCargo', e.target.value)} /></label>
-                    <label><span style={lbl}>Firma de Pulppo</span><input style={inp} value={f.pulppo} placeholder="Nombre" onChange={(e) => set('pulppo', e.target.value)} /></label>
-                    <label><span style={lbl}>Cargo</span><input style={inp} value={f.pulppoCargo} onChange={(e) => set('pulppoCargo', e.target.value)} /></label>
                     <label><span style={lbl}>Lugar y fecha</span><input style={inp} value={f.lugarFecha} onChange={(e) => set('lugarFecha', e.target.value)} /></label>
                     <label><span style={lbl}>Cierre de las cartas</span><input style={inp} value={f.cierre} onChange={(e) => set('cierre', e.target.value)} /></label>
                 </div>
@@ -588,20 +586,8 @@ function Diplomas({ d, f }: { d: Reconocimientos; f: Firmas }) {
 // ── documentos para imprimir (se guardan como PDF desde el diálogo de impresión) ──
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const firma = (n: string, c: string) => `<div class="firma"><div class="raya"></div><div class="fn">${esc(n || ' ')}</div><div class="fc">${esc(c)}</div></div>`;
-/** Sello de Pulppo en lugar de una firma de persona: anillo con texto + el pulpo al centro sobre un disco amarillo.
- *  Si en «Firmas y textos» escriben un nombre para Pulppo, va debajo del sello. */
-let nSello = 0;
-function sello(o: string, f: Firmas, año: number): string {
-    const id = `anillo${++nSello}`;
-    return `<div class="sello"><svg viewBox="0 0 200 200" aria-label="Sello Pulppo">
-<defs><path id="${id}" d="M100,100 m-75,0 a75,75 0 1,1 150,0 a75,75 0 1,1 -150,0"/></defs>
-<circle cx="100" cy="100" r="97" fill="none" stroke="${BLK}" stroke-width="2.5"/>
-<circle cx="100" cy="100" r="90" fill="none" stroke="${BLK}" stroke-width="0.8"/>
-<circle cx="100" cy="100" r="58" fill="${YEL}"/>
-<text font-family="Nunito Sans, Arial, sans-serif" font-weight="700" font-size="14.5" fill="${BLK}"><textPath href="#${id}" textLength="465" lengthAdjust="spacing">PULPPO · MASTER EXPERIENCE · ${año} ·</textPath></text>
-<image href="${o}/tu2026/pulppo-icon.png" x="70" y="70" width="60" height="60"/></svg>
-${f.pulppo ? `<div class="fn">${esc(f.pulppo)}</div><div class="fc">${esc(f.pulppoCargo)}</div>` : ''}</div>`;
-}
+/** Sello «Certificado por Pulppo» en lugar de una firma de persona (diseño final de Ale en Polotno, 25-nov). */
+const sello = (o: string) => `<img class="sello" src="${o}/tu2026/sello-pulppo.png" alt="Certificado por Pulppo">`;
 const encabezado = (d: Reconocimientos, origen: string) =>
     `<div class="top">${d.logo ? `<img src="${esc(d.logo)}" alt="">` : `<b style="font-size:14pt">${esc(d.inmobiliaria)}</b>`}<img class="pulppo" src="${origen}/tu2026/pulppo-negro.png" alt="Pulppo"></div>`;
 
@@ -618,7 +604,7 @@ ${g.badge ? `<img class="badge-asc" src="${o}${NIVEL[g.badge].img}" alt="${esc(N
 <div class="texto">${esc(`De parte de ${d.inmobiliaria} y Pulppo, ${motivo}.`)} ${esc(f.cierre)}</div>
 <div class="dato"><span class="v">${esc(g.valor)}</span><span class="s">${esc(g.detalle)}</span></div>
 <div class="pie"><div class="lugar">${esc(f.lugarFecha)}</div>
-<div class="firmas">${firma(f.dueno, `${f.duenoCargo} · ${d.inmobiliaria}`)}${sello(o, f, d.año)}</div></div>
+<div class="firmas">${firma(f.dueno, `${f.duenoCargo} · ${d.inmobiliaria}`)}${sello(o)}</div></div>
 <div class="barra"></div></div>`;
 }
 
@@ -642,10 +628,10 @@ function diplomaHtml(x: Diploma, d: Reconocimientos, f: Firmas): string {
 <div class="nombre">${esc(x.nombre)}</div>
 ${x.subio ? `<div class="subio">Este año subió de nivel: ${esc(x.subio)}</div>` : ''}
 <div class="texto">${esc(texto)}</div>
-${hechos.length ? `<div class="hechos">En ${d.año}: ${esc(hechos.join(' · '))}</div>` : ''}
+${hechos.length ? `<div class="hechos">${esc(hechos.join(' · '))}</div>` : ''}
 <div class="pie"><div class="lugar">${esc(f.lugarFecha)}</div>
-<div class="firmas">${firma(f.dueno, `${f.duenoCargo} · ${d.inmobiliaria}`)}${sello(o, f, d.año)}</div></div>
-</div><div class="barra"></div></div>`;
+<div class="firmas">${firma(f.dueno, `${f.duenoCargo} · ${d.inmobiliaria}`)}${sello(o)}</div></div>
+</div><div class="barra negra"></div></div>`;
 }
 
 function imprimir(hojas: string[], titulo: string, orient: 'portrait' | 'landscape') {
@@ -678,11 +664,9 @@ h1 { font-family: 'Heldane', 'EB Garamond', serif; font-weight: 400; font-size: 
 .dato .s, .hechos, .subio { font-size: 11pt; color: ${MUTED}; }
 .pie { margin-top: auto; }
 .lugar { font-size: 11pt; color: ${MUTED}; margin-bottom: 0.6in; }
-.firmas { display: flex; gap: 0.6in; align-items: flex-end; }
-.firma { flex: 1; }
-.sello { flex: none; text-align: center; transform: rotate(-8deg); }
-.sello svg { width: 1.25in; height: 1.25in; display: block; margin: 0 auto; }
-.sello .fn { margin-top: 6px; }
+.firmas { display: flex; justify-content: space-between; align-items: flex-end; }
+.firma { width: 4.85in; }
+.sello { flex: none; width: 1.12in; margin: 0 -0.32in -0.15in 0; }
 .badge-asc { position: absolute; top: 2.55in; right: 0.9in; width: 1.6in; height: 1.6in; object-fit: contain; }
 .raya { border-top: 0.5pt solid ${BLK}; margin-bottom: 8px; }
 .fn { font-size: 12pt; font-weight: 700; min-height: 16pt; }
@@ -699,7 +683,9 @@ h1 { font-family: 'Heldane', 'EB Garamond', serif; font-weight: 400; font-size: 
 .diploma .texto { margin-top: 0.22in; max-width: 6in; }
 .diploma .hechos { margin-top: 0.18in; }
 .diploma .lugar { margin-bottom: 0.2in; }
-.diploma .sello svg { width: 1.1in; height: 1.1in; }
+.diploma .firma { width: 4.5in; }
+.diploma .sello { width: 1.22in; margin: 0 -0.23in -0.1in 0; }
+.barra.negra { background: ${BLK}; }
 @media screen { body { background: ${LGT}; } .hoja { margin: 24px auto; background: #fff; } }
 </style></head><body>${hojas.join('\n')}
 <script>Promise.all([document.fonts.ready, ...[...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))]).then(() => setTimeout(() => window.print(), 250));</script>
@@ -708,37 +694,45 @@ h1 { font-family: 'Heldane', 'EB Garamond', serif; font-weight: 400; font-size: 
 }
 
 // ── piezas para redes (canvas → PNG), SIN montos ──
+// Medidas del diseño final de Ale en Polotno (25-nov): aro y línea en bronce, eyebrow gris, sin dato grande:
+// el logro va en una sola frase («Mayor comisión cobrada de la inmobiliaria X»).
+const BRONCE = '#85612E';
+const PIEZA = {
+    post: { eyeY: 110, R: 180, aro: 10, cy: 437, gapTit: 41, fT: 92, lT: 100, gapNom: 43, fN: 45, lN: 54, wN: 760, gapLin: 69, lin: 66, gapDet: 31, fD: 30, lD: 36, wD: 504, pie: 1200 },
+    historia: { eyeY: 197, R: 211, aro: 12, cy: 646, gapTit: 49, fT: 108, lT: 118, gapNom: 49, fN: 53, lN: 64, wN: 892, gapLin: 81, lin: 78, gapDet: 41, fD: 37, lD: 44, wD: 592, pie: 1670 },
+};
 async function descargarPieza(p: Premio, g: Ganador, d: Reconocimientos, tipo: 'post' | 'historia') {
     await ensureFonts();
     await document.fonts.load('700 40px "Nunito Sans"');
-    const W = 1080, H = tipo === 'post' ? 1350 : 1920;
+    const W = 1080, H = tipo === 'post' ? 1350 : 1920, c = PIEZA[tipo];
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const ctx = cv.getContext('2d')! as CanvasRenderingContext2D & { letterSpacing?: string };
     const HEL = '"HeldaneTextRegular", "EB Garamond", serif', NUN = '"Nunito Sans", Arial, sans-serif';
     ctx.fillStyle = BLK; ctx.fillRect(0, 0, W, H);
-    const k = tipo === 'post' ? 1 : 1.25;       // la historia respira más
-    const top = tipo === 'post' ? 110 : 250;
-    const pieY = H - (tipo === 'post' ? 150 : 260);
-    const conDato = !!g.valorRed;
+    ctx.textAlign = 'center';
     const lugar = g.lugar > 1 && !p.varios;
-    // alto del bloque (foto + premio + lugar + nombre + dato) para centrarlo entre el eyebrow y el pie
-    ctx.font = `400 ${Math.round(92 * k)}px ${HEL}`;
-    const lTit = partir(ctx, p.titulo, W - 160);
-    ctx.font = `700 ${Math.round(50 * k)}px ${NUN}`;
-    const lNom = partir(ctx, g.nombre, W - 160);
-    const R = Math.round(180 * k);
-    const alto = 2 * R + 20 + Math.round(120 * k) + lTit.length * Math.round(100 * k) + (lugar ? Math.round(56 * k) : 0) + Math.round(10 * k)
-        + lNom.length * Math.round(60 * k) + (conDato ? Math.round(94 * k) : 0);
-    const y0 = top + 40 + Math.max(0, (pieY - 60 - (top + 40) - alto) / 2);
+    const detalle = `${g.valorRed} ${g.detalleRed}`.trim();
 
-    ctx.fillStyle = YEL; ctx.font = `700 28px ${NUN}`; ctx.textAlign = 'center';
+    ctx.font = `400 ${c.fT}px ${HEL}`;
+    const lTit = partir(ctx, p.titulo, W - 160);
+    ctx.font = `700 ${c.fN}px ${NUN}`;
+    const lNom = partir(ctx, g.nombre, c.wN);
+    ctx.font = `400 ${c.fD}px ${NUN}`;
+    const lDet = detalle ? partir(ctx, detalle, c.wD) : [];
+    const lugarH = lugar ? Math.round(c.fT * 0.5) : 0;
+    // si el premio o el nombre ocupan más renglones, todo sube para no chocar con el pie
+    const fin = c.cy + c.R + c.aro + c.gapTit + lTit.length * c.lT + lugarH + c.gapNom + lNom.length * c.lN
+        + (lDet.length ? c.gapLin + c.lin + c.gapDet + lDet.length * c.lD : 0);
+    const sube = Math.min(Math.max(0, fin - (c.pie - 80)), c.cy - c.R - c.aro - (c.eyeY + 40));
+    const cy = c.cy - sube, R = c.R;
+
+    ctx.fillStyle = '#4A4A4A'; ctx.font = `700 28px ${NUN}`;
     ctx.letterSpacing = '6px';
-    ctx.fillText(`RECONOCIMIENTOS ${d.año}`, W / 2, top);
+    ctx.fillText(`RECONOCIMIENTOS ${d.año}`, W / 2, c.eyeY);
     ctx.letterSpacing = '0px';
 
-    const cy = y0 + 10 + R;
-    ctx.beginPath(); ctx.arc(W / 2, cy, R + 10, 0, Math.PI * 2); ctx.fillStyle = YEL; ctx.fill();
+    ctx.beginPath(); ctx.arc(W / 2, cy, R + c.aro, 0, Math.PI * 2); ctx.fillStyle = BRONCE; ctx.fill();
     ctx.save(); ctx.beginPath(); ctx.arc(W / 2, cy, R, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
     const im = g.photo ? await loadImg(g.photo) : null;
     if (im) {
@@ -747,7 +741,7 @@ async function descargarPieza(p: Premio, g: Ganador, d: Reconocimientos, tipo: '
         ctx.drawImage(im, W / 2 - w / 2, cy - h / 2, w, h);
     } else {
         ctx.fillStyle = LGT; ctx.fillRect(W / 2 - R, cy - R, 2 * R, 2 * R);
-        ctx.fillStyle = BLK; ctx.font = `700 ${Math.round(R * 0.7)}px ${NUN}`; ctx.textBaseline = 'middle';
+        ctx.fillStyle = BLK; ctx.font = `700 ${Math.round(R * 0.56)}px ${NUN}`; ctx.textBaseline = 'middle';
         ctx.fillText(iniciales(g), W / 2, cy); ctx.textBaseline = 'alphabetic';
     }
     ctx.restore();
@@ -756,25 +750,28 @@ async function descargarPieza(p: Premio, g: Ganador, d: Reconocimientos, tipo: '
         if (bd) { const b = Math.round(R * 0.95), bh = (b * bd.naturalHeight) / bd.naturalWidth; ctx.drawImage(bd, W / 2 + R * 0.62, cy + R * 0.62 - bh * 0.75, b, bh); }
     }
 
-    let y = cy + R + Math.round(120 * k);
-    ctx.fillStyle = '#fff'; ctx.font = `400 ${Math.round(92 * k)}px ${HEL}`;
-    for (const ln of lTit) { ctx.fillText(ln, W / 2, y); y += Math.round(100 * k); }
+    // textos con la caja de renglón de Polotno: cada línea centrada en su alto
+    ctx.textBaseline = 'middle';
+    let y = cy + R + c.aro + c.gapTit;
+    ctx.fillStyle = '#fff'; ctx.font = `400 ${c.fT}px ${HEL}`;
+    for (const ln of lTit) { ctx.fillText(ln, W / 2, y + c.lT / 2); y += c.lT; }
     if (lugar) {
-        ctx.fillStyle = YEL; ctx.font = `700 ${Math.round(30 * k)}px ${NUN}`; ctx.letterSpacing = '4px';
-        ctx.fillText(LUGAR[g.lugar].toUpperCase(), W / 2, y - Math.round(30 * k)); ctx.letterSpacing = '0px';
-        y += Math.round(56 * k);
+        ctx.fillStyle = BRONCE; ctx.font = `700 ${Math.round(c.fT * 0.32)}px ${NUN}`; ctx.letterSpacing = '4px';
+        ctx.fillText(LUGAR[g.lugar].toUpperCase(), W / 2, y + lugarH / 2); ctx.letterSpacing = '0px';
+        y += lugarH;
     }
-    y += Math.round(10 * k);
-    ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.round(50 * k)}px ${NUN}`;
-    for (const ln of lNom) { ctx.fillText(ln, W / 2, y); y += Math.round(60 * k); }
-    if (conDato) {
-        y += Math.round(40 * k);
-        ctx.fillStyle = YEL; ctx.font = `400 ${Math.round(64 * k)}px ${HEL}`;
-        ctx.fillText(g.valorRed, W / 2, y);
-        y += Math.round(54 * k);
-        ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `400 ${Math.round(30 * k)}px ${NUN}`;
-        ctx.fillText(g.detalleRed, W / 2, y);
+    y += c.gapNom;
+    ctx.fillStyle = '#fff'; ctx.font = `700 ${c.fN}px ${NUN}`;
+    for (const ln of lNom) { ctx.fillText(ln, W / 2, y + c.lN / 2); y += c.lN; }
+    if (lDet.length) {
+        y += c.gapLin;
+        ctx.fillStyle = BRONCE; ctx.fillRect(W / 2 - 0.5, y, tipo === 'post' ? 1 : 1.2, c.lin);
+        y += c.lin + c.gapDet;
+        ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `400 ${c.fD}px ${NUN}`;
+        for (const ln of lDet) { ctx.fillText(ln, W / 2, y + c.lD / 2); y += c.lD; }
     }
+    ctx.textBaseline = 'alphabetic';
+    const pieY = c.pie;
 
     // pie: logo de la inmobiliaria (en caja blanca: hay logos oscuros) + Pulppo
     ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.fillRect(80, pieY - 40, W - 160, 1);
